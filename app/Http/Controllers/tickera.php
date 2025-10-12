@@ -987,6 +987,13 @@ class tickera extends Controller
                 $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
             //}
         }
+        if($codigo_origen=="altagraciadeorituco"){
+            //if ($caja=="caja1"||$caja=="caja2") {
+                $nombre_equipo = "caja2";
+                $ipReal = gethostbyname($nombre_equipo);
+                $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
+            //}
+        }
         
         if($codigo_origen=="elsombrero"){
             //if ($caja=="caja1"||$caja=="caja2") {
@@ -1029,9 +1036,6 @@ class tickera extends Controller
             }
             
             $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
-            \Log::info('Respuesta de Fiscal Terminal', [
-                'response' => $response->body()
-            ]);
         }
         
         //shell_exec("C:/IntTFHKA/IntTFHKA.exe ".$parametros);
@@ -1225,6 +1229,23 @@ class tickera extends Controller
         $cop = $get_moneda["cop"];
         $bs = $get_moneda["bs"];
         $pedido = (new PedidosController)->getPedidoFun($id, "todos", $cop, $bs, $bs);
+
+        // Verificar si hay items con cantidad negativa
+        $tieneCantidadNegativa = false;
+        foreach ($pedido->items as $item) {
+            if ($item->cantidad < 0) {
+                $tieneCantidadNegativa = true;
+                break;
+            }
+        }
+
+        // Si hay items con cantidad negativa, no procesar
+        if ($tieneCantidadNegativa) {
+            return Response::json([
+                "msj" => "Error: No se puede emitir factura fiscal con cantidades negativas (devoluciones)",
+                "estado" => false,
+            ]);
+        }
 
         $devolucion = false;
         if (!$pedido->fiscal) {
