@@ -120,39 +120,37 @@ class PagoPedidosController extends Controller
 
         try {
             $metodos_pago = [];
-            $metodos_pago_dev = [];
-        if ($req->efectivo && floatval($req->efectivo) > 0) {
+        if ($req->efectivo && floatval($req->efectivo)) {
             $metodos_pago[] = ['tipo' => 'efectivo', 'monto' => floatval($req->efectivo)];
         }
-        if ($req->debito && floatval($req->debito) > 0) {
+        if ($req->debito && floatval($req->debito)) {
             $metodos_pago[] = ['tipo' => 'debito', 'monto' => floatval($req->debito)];
         }
-        if ($req->transferencia && floatval($req->transferencia) > 0) {
+        if ($req->transferencia && floatval($req->transferencia)) {
             $metodos_pago[] = ['tipo' => 'transferencia', 'monto' => floatval($req->transferencia)];
         }
-        if ($req->biopago && floatval($req->biopago) > 0) {
+        if ($req->biopago && floatval($req->biopago)) {
             $metodos_pago[] = ['tipo' => 'biopago', 'monto' => floatval($req->biopago)];
         }
-        if ($req->credito && floatval($req->credito) > 0) {
+        if ($req->credito && floatval($req->credito)) {
             $metodos_pago[] = ['tipo' => 'credito', 'monto' => floatval($req->credito)];
         }
 
-        if ($req->efectivo && floatval($req->efectivo) < 0) {
-            $metodos_pago_dev[] = ['tipo' => 'efectivo', 'monto' => floatval($req->efectivo)];
-        }
-        if ($req->debito && floatval($req->debito) < 0) {
-            $metodos_pago_dev[] = ['tipo' => 'debito', 'monto' => floatval($req->debito)];
-        }
-        if ($req->transferencia && floatval($req->transferencia) < 0) {
-            $metodos_pago_dev[] = ['tipo' => 'transferencia', 'monto' => floatval($req->transferencia)];
-        }
-        if ($req->biopago && floatval($req->biopago) < 0) {
-            $metodos_pago_dev[] = ['tipo' => 'biopago', 'monto' => floatval($req->biopago)];
-        }
-        if ($req->credito && floatval($req->credito) < 0) {
-            $metodos_pago_dev[] = ['tipo' => 'credito', 'monto' => floatval($req->credito)];
-        }
 
+        if (count($metodos_pago) > 1) {
+            $montos = array_column($metodos_pago, 'monto');
+            $tienePositivos = count(array_filter($montos, function($monto) { return $monto > 0; })) > 0;
+            $tieneNegativos = count(array_filter($montos, function($monto) { return $monto < 0; })) > 0;
+
+            
+            if ($tienePositivos && $tieneNegativos) {
+                \DB::rollback();
+                return Response::json([
+                    "msj" => "Error: No se pueden mezclar métodos de pago positivos y negativos en la misma transacción",
+                    "estado" => false
+                ]);
+            }
+        }
         // Si el usuario es admin, no permitir el pago
         if (session('tipo_usuario')==1) {
             \DB::rollback();
@@ -163,30 +161,8 @@ class PagoPedidosController extends Controller
         }
 
         // Validar que todos los métodos de pago tengan el mismo signo (todos positivos o todos negativos)
-        if (count($metodos_pago) > 1) {
-            $montos = array_column($metodos_pago, 'monto');
-            $tienePositivos = count(array_filter($montos, function($monto) { return $monto > 0; })) > 0;
-            $tieneNegativos = count(array_filter($montos, function($monto) { return $monto < 0; })) > 0;
-            
-            if ($tienePositivos && $tieneNegativos) {
-                \DB::rollback();
-                return Response::json([
-                    "msj" => "Error: No se pueden mezclar métodos de pago positivos y negativos en la misma transacción",
-                    "estado" => false
-                ]);
-            }
-        }
 
-        // Si hay un pago en débito y es negativo, arrojar error
-       /*  foreach ($metodos_pago_dev as $mp) {
-            if ($mp['tipo'] === 'debito' && $mp['monto'] < 0) {
-                \DB::rollback();
-                return Response::json([
-                    "msj" => "Error: No se permite monto negativo en método de pago débito",
-                    "estado" => false
-                ]);
-            }
-        } */
+       
 
 
 
@@ -582,13 +558,21 @@ class PagoPedidosController extends Controller
 
                     // Commit de transacción solo cuando cambie el estado del pedido
                     \DB::commit();
+                    $isFullFiscal = (new SucursalController)->isFullFiscal();
 
-                    if ($req->debito && !$req->efectivo && !$req->transferencia) {
-                        
+                    if ($isFullFiscal) {
                         try {
                             (new tickera)->sendReciboFiscalFun($req->id);
                         } catch (\Exception $e) {
                             \Log::error('Error al enviar recibo fiscal: ' . $e->getMessage());
+                        }
+                    } else {
+                        if ($req->debito && !$req->efectivo && !$req->transferencia) {
+                            try {
+                                (new tickera)->sendReciboFiscalFun($req->id);
+                            } catch (\Exception $e) {
+                                \Log::error('Error al enviar recibo fiscal: ' . $e->getMessage());
+                            }
                         }
                     }
                 }

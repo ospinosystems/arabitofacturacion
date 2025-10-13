@@ -65,7 +65,7 @@
                     <a href="{{ route('reports.view', 'tasks') }}" class="list-group-item list-group-item-action">
                         Ver Reporte de Tareas
                     </a>
-                    <a href="{{ route('reports.view', 'inventory') }}" class="list-group-item list-group-item-action">
+                    <a href="{{ route('reports.view', 'global') }}" class="list-group-item list-group-item-action">
                         Ver Reporte de Inventario
                     </a>
                 </div>

@@ -256,6 +256,7 @@ export default function ModalRefPago({
                                         banco_referenciapago == "ZELLE" ? e.target.value : number(e.target.value)
                                     )}
                                     onKeyPress={handleKeyPress}
+                                    data-ref-input="true"
                                     className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
                                         errors.descripcion ? 'border-red-300' : 'border-gray-200'
                                     }`}

@@ -367,9 +367,9 @@ class PagosReferenciasController extends Controller
     private function generarClaveDesdecodigo($codigo)
     {
         // Algoritmo simple para generar clave desde código
-        // Tomar los últimos 4 dígitos, sumar 1234 y tomar los últimos 4 dígitos del resultado
+        // Tomar los últimos 4 dígitos, sumar 1227 y tomar los últimos 4 dígitos del resultado
         $ultimosCuatro = substr($codigo, -4);
-        $suma = intval($ultimosCuatro) + 1234;
+        $suma = intval($ultimosCuatro) + 1227;
         return substr(strval($suma), -4);
     }
     public function addRefPago(Request $req)

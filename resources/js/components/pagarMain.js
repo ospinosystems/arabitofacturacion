@@ -490,12 +490,7 @@ export default function PagarMain({
     };
 
     // Función para generar la clave desde el código mostrado
-    const generarClaveDesdecodigo = (codigo) => {
-        // Algoritmo simple: tomar los últimos 4 dígitos, sumar 1234 y tomar los últimos 4 dígitos del resultado
-        const ultimosCuatro = codigo.toString().slice(-4);
-        const suma = parseInt(ultimosCuatro) + 1234;
-        return suma.toString().slice(-4);
-    };
+    
 
     useEffect(() => {
         sumRecibido();
@@ -545,6 +540,11 @@ export default function PagarMain({
                 return;
             }
 
+            // No ejecutar si estamos en el input de referencia de pago
+            if (event.target?.getAttribute("data-ref-input") === "true") {
+                return;
+            }
+
             event.preventDefault();
             event.stopPropagation();
 
@@ -573,6 +573,11 @@ export default function PagarMain({
 
             // No ejecutar si estamos en el modal de carnet
             if (event.target?.getAttribute("data-carnet-input") === "true") {
+                return;
+            }
+
+            // No ejecutar si estamos en el input de referencia de pago
+            if (event.target?.getAttribute("data-ref-input") === "true") {
                 return;
             }
 
@@ -607,6 +612,11 @@ export default function PagarMain({
                 return;
             }
 
+            // No ejecutar si estamos en el input de referencia de pago
+            if (event.target?.getAttribute("data-ref-input") === "true") {
+                return;
+            }
+
             event.preventDefault();
             event.stopPropagation();
 
@@ -638,6 +648,11 @@ export default function PagarMain({
                 return;
             }
 
+            // No ejecutar si estamos en el input de referencia de pago
+            if (event.target?.getAttribute("data-ref-input") === "true") {
+                return;
+            }
+
             event.preventDefault();
             event.stopPropagation();
 
@@ -666,6 +681,11 @@ export default function PagarMain({
 
             // No ejecutar si estamos en el modal de carnet
             if (event.target?.getAttribute("data-carnet-input") === "true") {
+                return;
+            }
+
+            // No ejecutar si estamos en el input de referencia de pago
+            if (event.target?.getAttribute("data-ref-input") === "true") {
                 return;
             }
 

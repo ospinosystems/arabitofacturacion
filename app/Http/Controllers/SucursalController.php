@@ -7,6 +7,30 @@ use Illuminate\Http\Request;
 
 class SucursalController extends Controller
 {
+    /**
+     * Determina si la sucursal es 'fullfiscal' según el código
+     * del primer registro de la tabla sucursal.
+     *
+     * @return bool
+     */
+    public static function isFullFiscal()
+    {
+        // Lista de códigos de sucursales tipo fullfiscal
+        $fullfiscalCodes = [
+            'cantaura',
+            // Agrega aquí otros códigos de sucursales si es necesario, ej: 'otro_codigo'
+        ];
+
+        $firstSucursal = sucursal::orderBy('id', 'asc')->first();
+
+        if (!$firstSucursal) {
+            return false;
+        }
+
+        $codigo = strtolower($firstSucursal->codigo);
+
+        return in_array($codigo, $fullfiscalCodes);
+    }
     public function getSucursal()
     {
         return sucursal::all()->first();

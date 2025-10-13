@@ -1488,6 +1488,14 @@ class InventarioController extends Controller
                 }
             }
 
+            
+            if ($req_id) {
+                $existeInventario = inventario::find($req_id);
+                if (!$existeInventario) {
+                    $arr_produc['push'] = 1;
+                }
+            }
+
             $insertOrUpdateInv = inventario::updateOrCreate(
                 ($req_id === 'id_vinculacion') ? ['id_vinculacion' => $id_vinculacion] : ['id' => $req_id],
                 $arr_produc

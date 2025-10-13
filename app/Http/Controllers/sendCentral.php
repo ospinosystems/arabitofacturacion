@@ -185,7 +185,7 @@ class sendCentral extends Controller
             \Log::info('Iniciando proceso de sincronización de inventario');
             
             $codigo_origen = $this->getOrigen();
-            $reportController = new ReportController();
+            // $reportController = new ReportController(); // Ya no se usa, se utiliza $this->generateReport()
 
             $idsSuccess = [];
             
@@ -455,7 +455,7 @@ class sendCentral extends Controller
                         }
 
                         // Generate task report
-                        $reportController->generateReport('tasks', $taskChanges);
+                        $this->generateReport('tasks', $taskChanges);
                     }
 
                     \Log::info('Procesando inventario de la respuesta');
@@ -501,9 +501,13 @@ class sendCentral extends Controller
                                             // Track inventory changes
                                             $inventoryChanges[] = [
                                                 'product_id' => $producto->id,
+                                                'descripcion' => $producto->descripcion,
+                                                'codigo_barras' => $producto->codigo_barras,
+                                                'codigo_proveedor' => $producto->codigo_proveedor,
                                                 'field' => $field,
                                                 'old_value' => $producto->$field,
-                                                'new_value' => $inv[$field]
+                                                'new_value' => $inv[$field],
+                                                'date' => date('Y-m-d H:i:s')
                                             ];
 
                                             $producto->$field = $inv[$field];
@@ -544,7 +548,7 @@ class sendCentral extends Controller
 
                             // Generate inventory report
                             if (!empty($inventoryChanges)) {
-                                $reportController->generateReport('inventory', $inventoryChanges);
+                                $this->generateReport('inventory', $inventoryChanges);
                             }
                         }
                     }
@@ -3499,28 +3503,28 @@ class sendCentral extends Controller
                         <td>{$item['date']}</td>
                     </tr>";
                 }
-            } else if ($type === 'product_changes') {
+            } else if ($type === 'product_changes' || $type === 'inventory') {
                 $html .= "<table>
                     <tr>
-                        <th>Producto</th>
-                        <th>Campo</th>
+                        <th>ID Producto</th>
+                        <th>Descripción</th>
+                        <th>Código Barras</th>
+                        <th>Código Proveedor</th>
+                        <th>Campo Modificado</th>
                         <th>Valor Anterior</th>
                         <th>Valor Nuevo</th>
                         <th>Fecha</th>
                     </tr>";
                 foreach ($data as $item) {
-                    $producto = inventario::find($item['product_id']);
                     $html .= "<tr>
-                        <td>
-                            ID: {$item['product_id']}<br>
-                            Descripción: {@$producto[descripcion]}<br>
-                            Código: {@$producto[codigo_barras]}<br>
-                            Precio: {@$producto[precio]}
-                        </td>
+                        <td>{$item['product_id']}</td>
+                        <td>" . ($item['descripcion'] ?? 'N/A') . "</td>
+                        <td>" . ($item['codigo_barras'] ?? 'N/A') . "</td>
+                        <td>" . ($item['codigo_proveedor'] ?? 'N/A') . "</td>
                         <td>{$item['field']}</td>
                         <td>{$item['old_value']}</td>
                         <td>{$item['new_value']}</td>
-                        <td>{$item['date']}</td>
+                        <td>" . ($item['date'] ?? date('Y-m-d H:i:s')) . "</td>
                     </tr>";
                 }
             } else if ($type === 'product_movement') {
@@ -3547,6 +3551,24 @@ class sendCentral extends Controller
                     <td>{$data['descripcion']}</td>
                     <td>" . date('Y-m-d H:i:s') . "</td>
                 </tr>";
+            } else if ($type === 'tasks') {
+                $html .= "<table>
+                    <tr>
+                        <th>ID Tarea</th>
+                        <th>Producto Original</th>
+                        <th>Producto Reemplazo</th>
+                        <th>Estado</th>
+                        <th>Detalles</th>
+                    </tr>";
+                foreach ($data as $item) {
+                    $html .= "<tr>
+                        <td>{$item['id']}</td>
+                        <td>{$item['original_product']}</td>
+                        <td>{$item['replacement_product']}</td>
+                        <td>{$item['status']}</td>
+                        <td>{$item['details']}</td>
+                    </tr>";
+                }
             }
 
             $html .= "</table></div>";
