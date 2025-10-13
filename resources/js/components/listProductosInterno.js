@@ -564,6 +564,7 @@ export default function ListProductosInterno({
           getPedido();
           setproductoSelectinternouno(null);
           closeQuantityInput();
+          setNum(20);
 
           // Limpiar input de búsqueda y hacer foco después de que termine la búsqueda
           if (refaddfast?.current) {
