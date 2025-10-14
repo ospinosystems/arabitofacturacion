@@ -76,7 +76,7 @@ export default function Facturar({
 
     const [dropprintprice, setdropprintprice] = useState(false);
 
-    const [num, setNum] = useState(20);
+    const [num, setNum] = useState(15);
     const [showOptionQMain, setshowOptionQMain] = useState(false);
     const [itemCero, setItemCero] = useState(true);
     const [qProductosMain, setQProductosMain] = useState("");

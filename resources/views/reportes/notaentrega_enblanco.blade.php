@@ -245,9 +245,7 @@
 				</div>
 				
 				<div class="client-section">
-					<h4>INFORMACIÓN DE PAGO</h4>
 					<div class="client-field">
-						<span class="client-label">Método de Pago:</span><br>
 						@foreach($pedido->pagos as $ee)
 							@if($ee->tipo==1&&$ee->monto!=0)<span class="status-badge" style="background-color: #17a2b8;">Trans. {{$ee->monto}}</span> @endif
 							@if($ee->tipo==2&&$ee->monto!=0)<span class="status-badge" style="background-color: #6c757d;">Deb. {{$ee->monto}}</span> @endif

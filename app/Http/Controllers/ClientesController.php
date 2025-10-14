@@ -23,12 +23,12 @@ class ClientesController extends Controller
     {   
         try{
             // Solo permitir crear clientes, no editar
-            if ($req->id) {
+           /*  if ($req->id) {
                 return Response::json([
                     "msj" => "Error: No se permite editar clientes existentes", 
                     "estado" => false
                 ]);
-            }
+            } */
 
             // Verificar si ya existe un cliente con esa identificación
             $clienteExistente = clientes::where("identificacion", $req->clienteInpidentificacion)->first();
