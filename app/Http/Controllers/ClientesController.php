@@ -31,16 +31,18 @@ class ClientesController extends Controller
             } */
 
             // Verificar si ya existe un cliente con esa identificación
-            $clienteExistente = clientes::where("identificacion", $req->clienteInpidentificacion)->first();
+         /*    $clienteExistente = clientes::where("identificacion", $req->clienteInpidentificacion)->first();
             if ($clienteExistente) {
                 return Response::json([
                     "msj" => "Error: Ya existe un cliente con esa identificación", 
                     "estado" => false
                 ]);
-            }
+            } */
 
             // Crear nuevo cliente
-            $cli = clientes::create([
+            $cli = clientes::updateOrcreate([
+                "id"=>$req->id,
+            ],[
                 "identificacion" => $req->clienteInpidentificacion,
                 "nombre" => $req->clienteInpnombre,
                 "correo" => $req->clienteInpcorreo,
