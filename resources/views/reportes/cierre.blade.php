@@ -181,41 +181,6 @@
 						<span class="">COP <span class="fs-3">{{($cierre->efectivo_guardado_cop)}}</span></span><br>
 						<span class="">BS <span class="fs-3">{{($cierre->efectivo_guardado_bs)}}</span></span><br>
 						
-						<hr>
-						<h3>GANANCIA</h3>
-						<table>
-							<tr>
-								<td>
-									BASE:
-									<hr/>
-									% Gan.
-									<hr/>
-									VENTA:
-									<hr/>
-									con DESC.
-									<hr/>
-									GANANCIA:
-									
-								</td>
-								<td>
-									{{($precio_base)}}
-									<hr/>
-									{{($porcentaje)}}
-									<hr/>
-									{{($precio)}}
-									<hr/>
-									{{($desc_total)}}
-									<hr/>
-									{{($ganancia)}}
-									
-								</td>
-							</tr>
-						</table>
-						<div>
-							
-						</div>
-						<div>
-						</div>
 					</th>
 				</tr>
 				
