@@ -717,12 +717,29 @@ function Pedidos({
 																	ee.tipo == 5 ? "fa-mobile" : 
 																	"fa-ban"
 																}`}></i>
-																{ee.tipo == 1 ? "T" : 
-																	ee.tipo == 2 ? "D" : 
-																	ee.tipo == 3 ? "E" : 
-																	ee.tipo == 4 ? "C" : 
-																	ee.tipo == 5 ? "B" : 
-																	"V"}.{ee.monto}
+																{ee.tipo == 1 ? (
+																	<>
+																		T.{ee.monto}
+																		{ee.bs !== undefined && (
+																			<span className="ml-1 text-xs text-blue-800">/Bs {ee.bs}</span>
+																		)}
+																	</>
+																) : ee.tipo == 2 ? (
+																	<>
+																		D.{ee.monto}
+																		{ee.bs !== undefined && (
+																			<span className="ml-1 text-xs text-gray-800">/Bs {ee.bs}</span>
+																		)}
+																	</>
+																) : ee.tipo == 3 ? (
+																	"E." + ee.monto
+																) : ee.tipo == 4 ? (
+																	"C." + ee.monto
+																) : ee.tipo == 5 ? (
+																	"B." + ee.monto
+																) : (
+																	"V." + ee.monto
+																)}
 															</span>
 														)
 													))}

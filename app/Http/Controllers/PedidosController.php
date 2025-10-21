@@ -618,6 +618,16 @@ class PedidosController extends Controller
             ->limit($limit)
             ->get();
 
+            // Agrega monto en bs para cada pago de cada pedido
+            $bs_rate = $this->get_moneda()['bs'] ?? 1;
+            foreach ($fact as $pedido) {
+                if (isset($pedido->pagos)) {
+                    foreach ($pedido->pagos as $pago) {
+                        $pago->bs = number_format($pago->monto * $bs_rate, 2, ".", ",");
+                    }
+                }
+            }
+
             $totaltotal = $fact->sum("totales");
         }
 
