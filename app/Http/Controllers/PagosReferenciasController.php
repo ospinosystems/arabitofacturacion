@@ -60,7 +60,14 @@ class PagosReferenciasController extends Controller
             $client = new \GuzzleHttp\Client();
             $montoFormatted = number_format($ref->monto, 2, '', '');
             
-            $response = $client->post('http://localhost:8085/vpos/metodo', [
+            // Obtener la IP del cliente que realizó la petición (la caja)
+            $clientIp = request()->ip();
+            // Si la IP es 127.0.0.1, usar "localhost"
+            if ($clientIp === '127.0.0.1') {
+                $clientIp = 'localhost';
+            }
+            
+            $response = $client->post('http://' . $clientIp . ':8085/vpos/metodo', [
                 'json' => [
                     'accion' => "tarjeta",
                     'montoTransaccion' => $montoFormatted,
