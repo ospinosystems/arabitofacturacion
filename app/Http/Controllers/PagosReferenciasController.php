@@ -30,6 +30,14 @@ class PagosReferenciasController extends Controller
         $modo_transferencia = $sucursal->modo_transferencia ?? 'codigo';
 
         // Lógica condicional basada en modo_transferencia
+
+        // Si la sucursal es guacara y el usuario es caja5, pasa por procesarMegasoft
+        if (
+            isset($sucursal->codigo) && strtolower($sucursal->codigo) === 'guacara'
+            && strtolower(session('usuario')) === 'caja5'
+        ) {
+            return $this->procesarMegasoft($ref);
+        }
         switch ($modo_transferencia) {
             case 'megasoft':
                 return $this->procesarMegasoft($ref);
