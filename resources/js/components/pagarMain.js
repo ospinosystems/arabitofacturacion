@@ -408,12 +408,63 @@ export default function PagarMain({
             id_ref: id_ref,
         })
             .then((res) => {
-                // Verificar si se requiere código de aprobación
-                if (res.data.estado === "codigo_required") {
+                // Verificar si se requiere procesamiento Megasoft desde el frontend
+                if (res.data.estado === "megasoft_required") {
+                    // Obtener datos para la petición Megasoft
+                    const datosMegasoft = res.data.datos_megasoft;
+                    
+                    // Hacer la petición directamente a Megasoft desde el frontend
+                    fetch('http://localhost:8085/vpos/metodo', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            accion: datosMegasoft.accion,
+                            montoTransaccion: datosMegasoft.montoTransaccion,
+                            cedula: datosMegasoft.cedula,
+                        })
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(megasoftResponse => {
+                        // Enviar la respuesta de Megasoft al backend para que la procese
+                        return db.procesarRespuestaMegasoft({
+                            id_ref: datosMegasoft.id_ref,
+                            response_megasoft: megasoftResponse
+                        });
+                    })
+                    .then(backendResponse => {
+                        // Mostrar la respuesta del backend
+                        notificar(backendResponse.data.msj);
+                        
+                        // Refrescar los datos del pedido
+                        setTimeout(() => {
+                            getPedido(null, null, false);
+                        }, 500);
+                    })
+                    .catch(error => {
+                        console.error('Error en proceso Megasoft:', error);
+                        notificar({
+                            msj: "Error al procesar con Megasoft: " + error.message,
+                            estado: false
+                        });
+                    })
+                    .finally(() => {
+                        setValidatingRef(null);
+                    });
+                    
+                } else if (res.data.estado === "codigo_required") {
+                    // Código de aprobación requerido
                     setCodigoGenerado(res.data.codigo_generado);
                     setCurrentRefId(id_ref);
                     setShowCodigoModal(true);
                     setClaveIngresada("");
+                    setValidatingRef(null);
                 } else {
                     // Mostrar la respuesta exacta del backend
                     notificar(res.data.msj);
@@ -423,6 +474,7 @@ export default function PagarMain({
                     setTimeout(() => {
                         getPedido(null, null, false);
                     }, 500);
+                    setValidatingRef(null);
                 }
             })
             .catch((error) => {
@@ -432,8 +484,6 @@ export default function PagarMain({
                         (error.response?.data?.msj || error.message),
                     estado: false,
                 });
-            })
-            .finally(() => {
                 setValidatingRef(null);
             });
     };

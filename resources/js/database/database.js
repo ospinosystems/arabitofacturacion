@@ -22,6 +22,7 @@ const db = {
   logout: ()=>axios.get(host+"logout"),
   closeAllSession: ()=>axios.get(host+"closeAllSession"),
   sendRefToMerchant: data=>axios.post(host+"sendRefToMerchant",data),
+  procesarRespuestaMegasoft: data=>axios.post(host+"procesarRespuestaMegasoft",data),
   validarCodigoAprobacion: data=>axios.post(host+"validarCodigoAprobacion",data),
   
   sendClavemodal: data=>axios.post(host+"sendClavemodal",data),
