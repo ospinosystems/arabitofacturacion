@@ -32,21 +32,15 @@ class PagosReferenciasController extends Controller
         // Lógica condicional basada en modo_transferencia
 
         // Si la sucursal es guacara y el usuario es caja5, pasa por procesarMegasoft
-       
+        if (
+            isset($sucursal->codigo) && strtolower($sucursal->codigo) === 'guacara'
+            && strtolower(session('usuario')) === 'caja5'
+        ) {
+            return $this->procesarMegasoft($ref);
+        }
         switch ($modo_transferencia) {
             case 'megasoft':
-                // En lugar de procesar, devolver datos para que el frontend haga la petición
-                $montoFormatted = number_format($ref->monto, 2, '', '');
-                return Response::json([
-                    "estado" => "megasoft_required",
-                    "msj" => "Se requiere procesamiento Megasoft desde el frontend",
-                    "datos_megasoft" => [
-                        "id_ref" => $ref->id,
-                        "accion" => "tarjeta",
-                        "montoTransaccion" => $montoFormatted,
-                        "cedula" => $ref->cedula,
-                    ]
-                ]);
+                return $this->procesarMegasoft($ref);
             case 'central':
                 // Validar que la referencia tenga descripción y banco para modo central
                 if (empty($ref->descripcion) || empty($ref->banco)) {
@@ -158,83 +152,6 @@ class PagosReferenciasController extends Controller
             }
         } catch (\Exception $e) {
             return Response::json(["estado" => false, "msj" => "Error: " . $e->getMessage()]);
-        }
-    }
-
-    // Nuevo método para procesar la respuesta de Megasoft recibida desde el frontend
-    public function procesarRespuestaMegasoft(Request $req)
-    {
-        try {
-            $id_ref = $req->id_ref;
-            $responseBody = $req->response_megasoft;
-
-            $ref = pagos_referencias::find($id_ref);
-            if (!$ref) {
-                return Response::json(["estado" => false, "msj" => "Referencia no encontrada"]);
-            }
-
-            // La respuesta real está dentro del campo "response"
-            $responseData = $responseBody['response'] ?? $responseBody;
-            
-            // Log para debug
-            \Log::info("DEBUG - Validación referencia desde frontend:", [
-                'responseBody_completo' => $responseBody,
-                'responseData_extraido' => $responseData,
-                'codRespuesta' => $responseData['codRespuesta'] ?? 'NO_EXISTE',
-                'numeroReferencia' => $responseData['numeroReferencia'] ?? 'NO_EXISTE'
-            ]);
-            
-            // Determinar el estado basado en codRespuesta
-            $estatus = 'pendiente';
-            $mensaje = $responseData['mensajeRespuesta'] ?? 'Sin mensaje de respuesta';
-
-            if (isset($responseData['codRespuesta'])) {
-                if ($responseData['codRespuesta'] === '00') {
-                    $estatus = 'aprobada';
-                    
-                    // Guardar la numeroReferencia en el campo descripcion
-                    if (isset($responseData['numeroReferencia'])) {
-                        $ref->descripcion = $responseData['numeroReferencia'];
-                    }
-                    
-                    // Actualizar información del banco si está disponible
-                    if (isset($responseData['nombreAutorizador'])) {
-                        $ref->banco = $responseData['nombreAutorizador'];
-                    }
-                    
-                } elseif ($responseData['codRespuesta'] === 'VE') {
-                    $estatus = 'rechazada';
-                } elseif ($responseData['codRespuesta'] === 'VP') {
-                    $estatus = 'pendiente';
-                } else {
-                    $estatus = 'error';
-                }
-            } else {
-                // Si no hay codRespuesta, tratar como error
-                $estatus = 'error';
-                $mensaje = 'Respuesta inválida del servidor de pagos';
-            }
-
-            // Actualizar la referencia con la respuesta completa y el estado
-            $ref->response = json_encode($responseBody);
-            $ref->estatus = $estatus;
-            $ref->save();
-            
-            // Log para confirmar qué se guardó
-            \Log::info("DEBUG - Referencia guardada desde frontend:", [
-                'id_referencia' => $ref->id,
-                'estatus_guardado' => $ref->estatus,
-                'descripcion_guardada' => $ref->descripcion,
-                'banco_guardado' => $ref->banco
-            ]);
-            
-            return Response::json([
-                "estado" => true,
-                "msj" => $mensaje,
-                "estatus" => $estatus
-            ]);
-        } catch (\Exception $e) {
-            return Response::json(["estado" => false, "msj" => "Error al procesar respuesta: " . $e->getMessage()]);
         }
     }
 

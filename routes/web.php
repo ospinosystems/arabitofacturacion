@@ -160,11 +160,10 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('setconfigcredito', [PagoPedidosController::class,"setconfigcredito"]);
 		
 
-	Route::post('addRefPago', [PagosReferenciasController::class,"addRefPago"]);
-	Route::post('sendRefToMerchant', [PagosReferenciasController::class,"sendRefToMerchant"]);
-	Route::post('procesarRespuestaMegasoft', [PagosReferenciasController::class,"procesarRespuestaMegasoft"]);
-	Route::post('validarCodigoAprobacion', [PagosReferenciasController::class,"validarCodigoAprobacion"]);
-	Route::post('delRefPago', [PagosReferenciasController::class,"delRefPago"]);
+		Route::post('addRefPago', [PagosReferenciasController::class,"addRefPago"]);
+		Route::post('sendRefToMerchant', [PagosReferenciasController::class,"sendRefToMerchant"]);
+		Route::post('validarCodigoAprobacion', [PagosReferenciasController::class,"validarCodigoAprobacion"]);
+		Route::post('delRefPago', [PagosReferenciasController::class,"delRefPago"]);
 		
 		
 
