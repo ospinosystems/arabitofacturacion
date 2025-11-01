@@ -31,6 +31,32 @@ class inventario extends Model
         return $this->hasOne(\App\Models\depositos::class,"id","id_deposito"); 
     }
 
+    /**
+     * Ubicaciones de almacén donde está el producto
+     */
+    public function ubicaciones()
+    {
+        return $this->belongsToMany(Warehouse::class, 'warehouse_inventory', 'inventario_id', 'warehouse_id')
+                    ->withPivot('cantidad', 'lote', 'fecha_vencimiento', 'estado', 'observaciones')
+                    ->withTimestamps();
+    }
+
+    /**
+     * Inventario en ubicaciones
+     */
+    public function warehouseInventory()
+    {
+        return $this->hasMany(WarehouseInventory::class, 'inventario_id');
+    }
+
+    /**
+     * Movimientos de almacén
+     */
+    public function warehouseMovements()
+    {
+        return $this->hasMany(WarehouseMovement::class, 'inventario_id');
+    }
+
     protected $fillable = [
         "id",
         "super",
