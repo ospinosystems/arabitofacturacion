@@ -39,6 +39,14 @@
                     <span>Consultar Ubicación</span>
                 </a>
                 
+                <!-- Buscar por Código -->
+                <a href="{{ route('warehouse-inventory.buscar-codigo') }}" 
+                   class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('warehouse-inventory.buscar-codigo') ? 'bg-white text-blue-700 shadow-md' : 'bg-blue-800  hover:bg-blue-500' }}">
+                    <i class="fas fa-barcode mr-2"></i>
+                    <span class="hidden sm:inline">Buscar por Código</span>
+                    <span class="sm:hidden">Escanear</span>
+                </a>
+                
                 <!-- Historial -->
                 <a href="{{ route('warehouse-inventory.historial') }}" 
                    class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('warehouse-inventory.historial') ? 'bg-white text-blue-700 shadow-md' : 'bg-blue-800  hover:bg-blue-500' }}">

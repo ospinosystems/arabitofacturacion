@@ -233,11 +233,19 @@
                                     @endif
                                 </td>
                                 <td class="px-4 py-3">
-                                    <button onclick="verDetallesProducto({{ $inv->id }})" 
-                                            class="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition"
-                                            title="Ver detalles">
-                                        <i class="fas fa-eye text-sm"></i>
-                                    </button>
+                                    <div class="flex gap-1">
+                                        <button onclick="verDetallesProducto({{ $inv->id }})" 
+                                                class="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition"
+                                                title="Ver detalles">
+                                            <i class="fas fa-eye text-sm"></i>
+                                        </button>
+                                        <a href="{{ route('warehouse-inventory.ticket', $inv->id) }}" 
+                                           target="_blank"
+                                           class="p-1.5 text-green-600 hover:bg-green-50 rounded transition"
+                                           title="Imprimir ticket">
+                                            <i class="fas fa-print text-sm"></i>
+                                        </a>
+                                    </div>
                                 </td>
                             </tr>
                         @empty
@@ -300,10 +308,17 @@
                         </div>
                         
                         <!-- Acciones -->
-                        <button onclick="verDetallesProducto({{ $inv->id }})" 
-                                class="w-full px-3 py-2 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition">
-                            <i class="fas fa-eye mr-1"></i> Ver Detalles
-                        </button>
+                        <div class="flex gap-2 mt-3">
+                            <button onclick="verDetallesProducto({{ $inv->id }})" 
+                                    class="flex-1 px-3 py-2 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition">
+                                <i class="fas fa-eye mr-1"></i> Ver Detalles
+                            </button>
+                            <a href="{{ route('warehouse-inventory.ticket', $inv->id) }}" 
+                               target="_blank"
+                               class="flex-1 px-3 py-2 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition text-center">
+                                <i class="fas fa-print mr-1"></i> Ticket
+                            </a>
+                        </div>
                     </div>
                 @empty
                     <div class="p-8 text-center text-gray-500">

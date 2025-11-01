@@ -201,6 +201,12 @@
                                                 title="Mover">
                                             <i class="fas fa-exchange-alt text-sm"></i>
                                         </button>
+                                        <a href="{{ route('warehouse-inventory.ticket', $inventario->id) }}" 
+                                           target="_blank"
+                                           class="p-1.5 text-green-600 hover:bg-green-50 rounded transition"
+                                           title="Imprimir ticket">
+                                            <i class="fas fa-print text-sm"></i>
+                                        </a>
                                     </div>
                                 </td>
                             </tr>
@@ -273,6 +279,11 @@
                                     class="flex-1 px-3 py-2 text-xs font-medium text-yellow-600 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition">
                                 <i class="fas fa-exchange-alt mr-1"></i> Mover
                             </button>
+                            <a href="{{ route('warehouse-inventory.ticket', $inventario->id) }}" 
+                               target="_blank"
+                               class="flex-1 px-3 py-2 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition text-center">
+                                <i class="fas fa-print mr-1"></i> Ticket
+                            </a>
                         </div>
                     </div>
                 @empty
@@ -681,6 +692,12 @@ function limpiarFiltros() {
                                     title="Mover">
                                 <i class="fas fa-exchange-alt text-sm"></i>
                             </button>
+                            <a href="/warehouse-inventory/${inventario.id}/ticket" 
+                               target="_blank"
+                               class="p-1.5 text-green-600 hover:bg-green-50 rounded transition"
+                               title="Imprimir ticket">
+                                <i class="fas fa-print text-sm"></i>
+                            </a>
                         </div>
                     </td>
                 </tr>
@@ -734,6 +751,11 @@ function limpiarFiltros() {
                                 class="flex-1 px-3 py-2 text-xs font-medium text-yellow-600 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition">
                             <i class="fas fa-exchange-alt mr-1"></i> Mover
                         </button>
+                        <a href="/warehouse-inventory/${inventario.id}/ticket" 
+                           target="_blank"
+                           class="flex-1 px-3 py-2 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition text-center">
+                            <i class="fas fa-print mr-1"></i> Ticket
+                        </a>
                     </div>
                 </div>
             `;

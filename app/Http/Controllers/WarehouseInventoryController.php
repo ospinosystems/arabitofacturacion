@@ -112,6 +112,52 @@ class WarehouseInventoryController extends Controller
     }
 
     /**
+     * Imprimir ticket de ubicación
+     */
+    public function imprimirTicket($id)
+    {
+        $inventario = WarehouseInventory::with(['warehouse', 'inventario'])
+            ->findOrFail($id);
+        
+        return view('warehouse-inventory.ticket', compact('inventario'));
+    }
+
+    /**
+     * Buscar por código de barras (pistoleo)
+     */
+    public function buscarPorCodigo(Request $request)
+    {
+        $codigo = $request->codigo;
+        
+        if (!$codigo) {
+            return view('warehouse-inventory.buscar-codigo');
+        }
+        
+        // Extraer el ID del código (formato: WH-000123)
+        $id = null;
+        if (preg_match('/WH-?(\d+)/i', $codigo, $matches)) {
+            $id = (int) $matches[1];
+        }
+        
+        if (!$id) {
+            return view('warehouse-inventory.buscar-codigo', [
+                'error' => 'Código de barras no válido. Formato esperado: WH-000123'
+            ]);
+        }
+        
+        $inventario = WarehouseInventory::with(['warehouse', 'inventario.proveedor', 'inventario.categoria'])
+            ->find($id);
+        
+        if (!$inventario) {
+            return view('warehouse-inventory.buscar-codigo', [
+                'error' => 'No se encontró el registro con código: ' . $codigo
+            ]);
+        }
+        
+        return view('warehouse-inventory.buscar-codigo', compact('inventario', 'codigo'));
+    }
+
+    /**
      * Asignar producto a ubicación
      */
     public function asignar(Request $request)
