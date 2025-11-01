@@ -532,7 +532,11 @@
 
     // Cargar datos iniciales al cargar la página
     document.addEventListener('DOMContentLoaded', function() {
-        cargarInventarios();
+        // Solo cargar con AJAX si hay filtros aplicados
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('warehouse_id') || params.has('estado') || params.has('lote') || params.has('buscar')) {
+            cargarInventarios();
+        }
     });
 
 function aplicarFiltros() {
