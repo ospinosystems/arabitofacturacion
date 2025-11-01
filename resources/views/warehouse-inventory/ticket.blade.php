@@ -165,7 +165,13 @@
         <!-- Cantidad -->
         <div class="cantidad-box">
             <div class="cantidad-label">CANT</div>
-            <div class="cantidad-valor">{{ number_format($inventario->cantidad, 2) }}</div>
+            <div class="cantidad-valor">
+                @php
+                    $cantidad = $inventario->cantidad;
+                    $esEntero = floor($cantidad) == $cantidad;
+                @endphp
+                {{ $esEntero ? number_format($cantidad, 0) : number_format($cantidad, 2) }}
+            </div>
         </div>
         
         <!-- Footer -->
