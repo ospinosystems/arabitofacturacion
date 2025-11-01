@@ -22,6 +22,34 @@
         </div>
     </div>
 
+    <!-- Búsqueda Rápida por Código de Barras -->
+    <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-md border border-blue-700 mb-3 sm:mb-4 p-3 sm:p-4">
+        <form method="GET" action="{{ route('warehouse-inventory.buscar-codigo') }}" class="flex flex-col sm:flex-row gap-2 items-center">
+            <div class="flex items-center text-white flex-shrink-0">
+                <i class="fas fa-barcode text-2xl sm:text-3xl mr-3"></i>
+                <div class="hidden sm:block">
+                    <div class="font-bold text-sm">Buscar por Código de Barras</div>
+                    <div class="text-xs opacity-90">Escanea el ticket para ver información completa</div>
+                </div>
+                <div class="sm:hidden">
+                    <div class="font-bold text-sm">Escanear Código</div>
+                </div>
+            </div>
+            <div class="flex-1 w-full sm:w-auto flex gap-2">
+                <input type="text" 
+                       name="codigo" 
+                       placeholder="WH-000123 o escanea el código..."
+                       autocomplete="off"
+                       class="flex-1 px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-white focus:border-white transition">
+                <button type="submit" 
+                        class="px-4 py-2 bg-white text-blue-600 hover:bg-blue-50 font-medium rounded-lg shadow-sm transition flex-shrink-0">
+                    <i class="fas fa-search mr-1 sm:mr-2"></i>
+                    <span class="hidden sm:inline">Buscar</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
     <!-- Filtros Compactos para Móvil -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-3 sm:mb-4">
         <div class="p-3 sm:p-4">
