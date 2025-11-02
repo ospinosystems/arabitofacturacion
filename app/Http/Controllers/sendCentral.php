@@ -2744,7 +2744,7 @@ class sendCentral extends Controller
                     \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'FUMIGADORA%'");
                     \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MANGUERA%'");
                     
-                    $this->sendAllMovs();
+                    //$this->sendAllMovs();
                     return $setAll->json();
                 }else{
                     return "ERROR: ".$setAll;
@@ -2856,7 +2856,7 @@ class sendCentral extends Controller
                     
                     \Artisan::call('database:backup'); //Hacer respaldo Local
                     \Artisan::call('backup:run'); //Enviar Respaldo al correo
-                    $this->sendAllMovs();
+                    //$this->sendAllMovs();
 
                     \DB::statement("UPDATE `inventarios` SET iva=1");
                     \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MACHETE%'");
