@@ -74,15 +74,15 @@ class WarehouseController extends Controller
         $query = Warehouse::with(['inventarios.inventario']);
         
         // Filtros
-        if ($request->has('estado')) {
+        if ($request->has('estado') && trim($request->estado) !== '') {
             $query->where('estado', $request->estado);
         }
         
-        if ($request->has('tipo')) {
+        if ($request->has('tipo') && trim($request->tipo) !== '') {
             $query->where('tipo', $request->tipo);
         }
         
-        if ($request->has('zona')) {
+        if ($request->has('zona') && trim($request->zona) !== '') {
             $query->where('zona', $request->zona);
         }
         
