@@ -490,11 +490,12 @@ class PagosReferenciasController extends Controller
             }
             
             $check_exist = pagos_referencias::where("descripcion",$req->descripcion)->where("banco",$req->banco)->first();
-
-          /*   if ($check_exist) {
-                return Response::json(["msj"=>"Error: Ya existe Referencia en Banco. ".$req->descripcion." ".$req->banco." PEDIDO ".$req->id_pedido,"estado"=>false]);
-
-            } */
+            if($req->descripcion!="") {
+                if ($check_exist) {
+                    return Response::json(["msj"=>"Error: Ya existe Referencia en Banco. ".$req->descripcion." ".$req->banco." PEDIDO ".$req->id_pedido,"estado"=>false]);
+                }
+            }
+            
             if (floatval($req->monto) == 0) {
                 return Response::json(["msj" => "Error: El monto no puede ser cero", "estado" => false]);
             }

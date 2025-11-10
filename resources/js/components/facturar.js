@@ -5075,6 +5075,21 @@ export default function Facturar({
                         index
                     ].aprobado = true;
                 }
+            } else if (tipo == "selectall") {
+                // Verificar si todos están aprobados
+                const todosAprobados = pedidosCentral_copy[indexPedidoCentral].items.every(
+                    item => item.aprobado === true
+                );
+                
+                // Si todos están aprobados, deseleccionar todos
+                // Si no, aprobar todos
+                pedidosCentral_copy[indexPedidoCentral].items.forEach((item, idx) => {
+                    if (todosAprobados) {
+                        delete pedidosCentral_copy[indexPedidoCentral].items[idx].aprobado;
+                    } else {
+                        pedidosCentral_copy[indexPedidoCentral].items[idx].aprobado = true;
+                    }
+                });
             } else if (tipo == "changect_real") {
                 pedidosCentral_copy[indexPedidoCentral].items[index].ct_real =
                     number(e.currentTarget.value, 6);
@@ -5094,6 +5109,10 @@ export default function Facturar({
                 pedidosCentral_copy[indexPedidoCentral].items[
                     index
                 ].vinculo_real = e.currentTarget.value;
+            } else if (tipo == "changewarehouse") {
+                pedidosCentral_copy[indexPedidoCentral].items[
+                    index
+                ].warehouse_codigo = e.currentTarget.value;
             }
 
             setpedidoCentral(pedidosCentral_copy);

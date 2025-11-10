@@ -3,14 +3,22 @@
 @section('content')
 @include('warehouse-inventory.partials.nav')
 
+<!-- Agregar librería JsBarcode para generar códigos de barras -->
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+
 <div class="container-fluid">
     <div class="row mb-4">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center">
                 <h1 class="h3 mb-3"><i class="fas fa-warehouse"></i> Gestión de Ubicaciones</h1>
-                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createWarehouseModal">
-                    <i class="fas fa-plus"></i> Nueva Ubicación
-                </button>
+                <div>
+                    <button type="button" class="btn btn-warning me-2" onclick="imprimirSeleccionadas()" id="btnImprimirSeleccionadas" style="display: none;">
+                        <i class="fas fa-print"></i> Imprimir Seleccionadas (<span id="contadorSeleccionadas">0</span>)
+                    </button>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createWarehouseModal">
+                        <i class="fas fa-plus"></i> Nueva Ubicación
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -60,6 +68,9 @@
                 <table class="table table-hover">
                     <thead>
                         <tr>
+                            <th width="40">
+                                <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" class="form-check-input">
+                            </th>
                             <th>Código</th>
                             <th>Nombre</th>
                             <th>Tipo</th>
@@ -73,6 +84,11 @@
                     <tbody>
                         @forelse($warehouses as $warehouse)
                             <tr>
+                                <td>
+                                    <input type="checkbox" class="form-check-input warehouse-checkbox" 
+                                           value="{{ $warehouse->codigo }}" 
+                                           onchange="actualizarContador()">
+                                </td>
                                 <td><strong>{{ $warehouse->codigo }}</strong></td>
                                 <td>{{ $warehouse->nombre }}</td>
                                 <td>
@@ -113,6 +129,9 @@
                                 </td>
                                 <td>
                                     <div class="btn-group" role="group">
+                                        <button type="button" class="btn btn-sm btn-warning" onclick="imprimirEtiqueta('{{ $warehouse->codigo }}')" title="Imprimir etiqueta">
+                                            <i class="fas fa-print"></i>
+                                        </button>
                                         <a href="{{ route('warehouses.show', $warehouse->id) }}" class="btn btn-sm btn-info" title="Ver detalles">
                                             <i class="fas fa-eye"></i>
                                         </a>
@@ -130,7 +149,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="text-center text-muted">
+                                <td colspan="9" class="text-center text-muted">
                                     <i class="fas fa-inbox fa-3x mb-3"></i>
                                     <p>No se encontraron ubicaciones</p>
                                 </td>
@@ -163,38 +182,85 @@
             <form id="createWarehouseForm" onsubmit="createWarehouse(event)">
                 <div class="modal-body">
                     <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="codigo" class="form-label">Código *</label>
-                            <input type="text" class="form-control" id="codigo" name="codigo" required>
+                        <div class="col-md-3 mb-3">
+                            <label for="pasillo" class="form-label">Pasillo *</label>
+                            <input type="text" class="form-control" id="pasillo" name="pasillo" required placeholder="Ej: A, B, C" maxlength="10">
+                            <small class="text-muted">Letra o código del pasillo</small>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="nombre" class="form-label">Nombre *</label>
-                            <input type="text" class="form-control" id="nombre" name="nombre" required>
+                        <div class="col-md-3 mb-3">
+                            <label for="cara" class="form-label">Cara *</label>
+                            <input type="number" class="form-control" id="cara" name="cara" required min="1" placeholder="1, 2">
+                            <small class="text-muted">Número de cara</small>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="rack" class="form-label">Rack *</label>
+                            <input type="number" class="form-control" id="rack" name="rack" required min="1" placeholder="1-100">
+                            <small class="text-muted">Número de rack</small>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="nivel" class="form-label">Nivel *</label>
+                            <input type="number" class="form-control" id="nivel" name="nivel" required min="1" max="10" placeholder="1-4">
+                            <small class="text-muted">Nivel de altura</small>
                         </div>
                     </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>Código generado:</strong> <span id="codigoGenerado">Se generará automáticamente</span>
+                        <small class="d-block mt-1">Formato: PASILLO + CARA - RACK - NIVEL (Ej: A1-01-1)</small>
+                    </div>
+                    
                     <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="nombre" class="form-label">Nombre</label>
+                            <input type="text" class="form-control" id="nombre" name="nombre" placeholder="Nombre descriptivo (opcional)">
+                        </div>
                         <div class="col-md-6 mb-3">
                             <label for="tipo" class="form-label">Tipo *</label>
                             <select class="form-select" id="tipo" name="tipo" required>
                                 <option value="">Seleccione...</option>
-                                <option value="pasillo">Pasillo</option>
-                                <option value="estante">Estante</option>
-                                <option value="nivel">Nivel</option>
-                                <option value="zona">Zona</option>
+                                <option value="almacenamiento" selected>Almacenamiento</option>
+                                <option value="picking">Picking</option>
+                                <option value="recepcion">Recepción</option>
+                                <option value="despacho">Despacho</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="estado" class="form-label">Estado *</label>
+                            <select class="form-select" id="estado" name="estado" required>
+                                <option value="activa" selected>Activa</option>
+                                <option value="inactiva">Inactiva</option>
+                                <option value="mantenimiento">Mantenimiento</option>
+                                <option value="bloqueada">Bloqueada</option>
                             </select>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="capacidad_maxima" class="form-label">Capacidad Máxima</label>
-                            <input type="number" step="0.01" class="form-control" id="capacidad_maxima" name="capacidad_maxima">
+                            <label for="zona" class="form-label">Zona</label>
+                            <input type="text" class="form-control" id="zona" name="zona" placeholder="Ej: Zona A, Almacén Principal">
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <label for="ubicacion" class="form-label">Ubicación Física</label>
-                        <input type="text" class="form-control" id="ubicacion" name="ubicacion" placeholder="Ej: Pasillo A, Estante 1">
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="capacidad_peso" class="form-label">Capacidad Peso (Kg)</label>
+                            <input type="number" step="0.01" class="form-control" id="capacidad_peso" name="capacidad_peso" placeholder="Kg">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="capacidad_volumen" class="form-label">Capacidad Volumen (m³)</label>
+                            <input type="number" step="0.01" class="form-control" id="capacidad_volumen" name="capacidad_volumen" placeholder="m³">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="capacidad_unidades" class="form-label">Capacidad Unidades</label>
+                            <input type="number" class="form-control" id="capacidad_unidades" name="capacidad_unidades" placeholder="Unidades">
+                        </div>
                     </div>
+                    
                     <div class="mb-3">
                         <label for="descripcion" class="form-label">Descripción</label>
-                        <textarea class="form-control" id="descripcion" name="descripcion" rows="3"></textarea>
+                        <textarea class="form-control" id="descripcion" name="descripcion" rows="2" placeholder="Descripción adicional (opcional)"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -278,6 +344,340 @@
 </div>
 
 <script>
+// Función para seleccionar/deseleccionar todos los checkboxes
+function toggleSelectAll(checkbox) {
+    const checkboxes = document.querySelectorAll('.warehouse-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+    actualizarContador();
+}
+
+// Función para actualizar el contador de elementos seleccionados
+function actualizarContador() {
+    const checkboxes = document.querySelectorAll('.warehouse-checkbox:checked');
+    const contador = checkboxes.length;
+    const boton = document.getElementById('btnImprimirSeleccionadas');
+    const spanContador = document.getElementById('contadorSeleccionadas');
+    
+    spanContador.textContent = contador;
+    
+    if (contador > 0) {
+        boton.style.display = 'inline-block';
+    } else {
+        boton.style.display = 'none';
+    }
+    
+    // Actualizar el checkbox "Seleccionar todos"
+    const selectAll = document.getElementById('selectAll');
+    const allCheckboxes = document.querySelectorAll('.warehouse-checkbox');
+    selectAll.checked = allCheckboxes.length > 0 && contador === allCheckboxes.length;
+}
+
+// Función para imprimir múltiples etiquetas seleccionadas
+function imprimirSeleccionadas() {
+    const checkboxes = document.querySelectorAll('.warehouse-checkbox:checked');
+    const codigos = Array.from(checkboxes).map(cb => cb.value);
+    
+    if (codigos.length === 0) {
+        alert('Por favor, seleccione al menos una ubicación para imprimir');
+        return;
+    }
+    
+    imprimirMultiplesEtiquetas(codigos);
+}
+
+// Función para imprimir múltiples etiquetas en una sola ventana
+function imprimirMultiplesEtiquetas(codigos) {
+    const ventanaImpresion = window.open('', '_blank', 'width=600,height=800');
+    
+    // Generar el HTML para múltiples etiquetas
+    let etiquetasHTML = '';
+    codigos.forEach(codigo => {
+        etiquetasHTML += `
+            <div class="etiqueta-container">
+                <div class="etiqueta">
+                    <div class="codigo-texto">${codigo}</div>
+                    <svg class="barcode" data-codigo="${codigo}"></svg>
+                </div>
+            </div>
+        `;
+    });
+    
+    const contenido = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Etiquetas de Ubicaciones</title>
+            <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"><\/script>
+            <style>
+                @page {
+                    size: 57mm 44mm;
+                    margin: 0;
+                }
+                
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                
+                body {
+                    margin: 0;
+                    padding: 0;
+                    font-family: Arial, sans-serif;
+                    background: white;
+                }
+                
+                .etiqueta-container {
+                    width: 57mm;
+                    height: 44mm;
+                    page-break-after: always;
+                    break-after: page;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    padding: 2mm 3mm;
+                }
+                
+                .etiqueta-container:last-child {
+                    page-break-after: auto;
+                    break-after: auto;
+                }
+                
+                .etiqueta {
+                    width: 100%;
+                    height: 100%;
+                    max-width: 51mm;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    text-align: center;
+                }
+                
+                .codigo-texto {
+                    font-size: 28px;
+                    font-weight: bold;
+                    margin-bottom: 8px;
+                    letter-spacing: 1px;
+                }
+                
+                .barcode {
+                    margin: 5px 0;
+                    max-width: 100%;
+                    width: 100%;
+                }
+                
+                @media print {
+                    .etiqueta-container {
+                        width: 57mm;
+                        height: 44mm;
+                        padding: 2mm 3mm;
+                    }
+                    
+                    .etiqueta {
+                        max-width: 51mm;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            ${etiquetasHTML}
+            
+            <script>
+                // Generar códigos de barras para todas las etiquetas
+                document.addEventListener('DOMContentLoaded', function() {
+                    const barcodes = document.querySelectorAll('.barcode');
+                    barcodes.forEach(function(barcode) {
+                        const codigo = barcode.getAttribute('data-codigo');
+                        try {
+                            JsBarcode(barcode, codigo, {
+                                format: "CODE128",
+                                width: 1.5,
+                                height: 40,
+                                displayValue: false,
+                                margin: 0,
+                                marginLeft: 0,
+                                marginRight: 0
+                            });
+                        } catch (e) {
+                            console.error("Error generando código de barras:", e);
+                        }
+                    });
+                    
+                    // Imprimir automáticamente cuando se cargue todo
+                    setTimeout(function() {
+                        window.print();
+                        // Opcional: cerrar después de imprimir
+                        // window.onafterprint = function() { window.close(); };
+                    }, 800);
+                });
+            <\/script>
+        </body>
+        </html>
+    `;
+    
+    ventanaImpresion.document.write(contenido);
+    ventanaImpresion.document.close();
+}
+
+function imprimirEtiqueta(codigo) {
+    // Crear ventana emergente para impresión
+    const ventanaImpresion = window.open('', '_blank', 'width=400,height=300');
+    
+    // Contenido HTML de la etiqueta con medidas 57mm x 44mm
+    const contenido = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Etiqueta ${codigo}</title>
+            <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"><\/script>
+            <style>
+                @page {
+                    size: 57mm 44mm;
+                    margin: 0;
+                }
+                
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                
+                html {
+                    width: 57mm;
+                    height: 44mm;
+                }
+                
+                body {
+                    width: 57mm;
+                    height: 44mm;
+                    max-width: 57mm;
+                    max-height: 44mm;
+                    margin: 0;
+                    padding: 1.5mm;
+                    font-family: Arial, sans-serif;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    background: white;
+                    overflow: hidden;
+                }
+                
+                .etiqueta {
+                    width: 100%;
+                    height: 100%;
+                    max-width: 54mm;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    text-align: center;
+                }
+                
+                .codigo-texto {
+                    font-size: 26px;
+                    font-weight: bold;
+                    margin-bottom: 6px;
+                    letter-spacing: 0.5px;
+                    max-width: 100%;
+                    word-wrap: break-word;
+                }
+                
+                .barcode-container {
+                    width: 100%;
+                    max-width: 52mm;
+                    display: flex;
+                    justify-content: center;
+                    overflow: hidden;
+                }
+                
+                #barcode {
+                    max-width: 100%;
+                    height: auto;
+                }
+                
+                @media print {
+                    html, body {
+                        width: 57mm;
+                        height: 44mm;
+                    }
+                    
+                    body {
+                        padding: 1.5mm;
+                        overflow: hidden;
+                    }
+                    
+                    .etiqueta {
+                        max-width: 54mm;
+                    }
+                    
+                    .barcode-container {
+                        max-width: 52mm;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="etiqueta">
+                <div class="codigo-texto">${codigo}</div>
+                <div class="barcode-container">
+                    <svg id="barcode"></svg>
+                </div>
+            </div>
+            
+            <script>
+                // Esperar a que el DOM esté listo
+                document.addEventListener('DOMContentLoaded', function() {
+                    // Generar código de barras
+                    try {
+                        JsBarcode("#barcode", "${codigo}", {
+                            format: "CODE128",
+                            width: 0.9,
+                            height: 35,
+                            displayValue: false,
+                            margin: 0,
+                            marginLeft: 0,
+                            marginRight: 0
+                        });
+                        
+                        // Forzar que el SVG respete el ancho del contenedor
+                        const svgElement = document.getElementById('barcode');
+                        if (svgElement) {
+                            // Remover atributos width y height del SVG
+                            svgElement.removeAttribute('width');
+                            svgElement.removeAttribute('height');
+                            // Configurar estilos directamente
+                            svgElement.style.maxWidth = '100%';
+                            svgElement.style.width = '100%';
+                            svgElement.style.height = 'auto';
+                        }
+                    } catch (e) {
+                        console.error("Error generando código de barras:", e);
+                    }
+                });
+                
+                // Imprimir automáticamente cuando se cargue la página
+                window.onload = function() {
+                    setTimeout(function() {
+                        window.print();
+                        // Cerrar la ventana después de imprimir (opcional)
+                        // window.onafterprint = function() { window.close(); };
+                    }, 700);
+                };
+            <\/script>
+        </body>
+        </html>
+    `;
+    
+    ventanaImpresion.document.write(contenido);
+    ventanaImpresion.document.close();
+}
+
 function asignarProductoAUbicacion(warehouseId, codigo) {
     document.getElementById('warehouse_id_asignar').value = warehouseId;
     document.getElementById('ubicacionSeleccionada').textContent = codigo;
@@ -348,6 +748,35 @@ function createWarehouse(event) {
     });
 }
 
+// Función para actualizar el código generado en tiempo real
+function actualizarCodigoGenerado() {
+    const pasillo = document.getElementById('pasillo').value.toUpperCase();
+    const cara = document.getElementById('cara').value;
+    const rack = document.getElementById('rack').value;
+    const nivel = document.getElementById('nivel').value;
+    
+    if (pasillo && cara && rack && nivel) {
+        const rackPadded = String(rack).padStart(2, '0');
+        const codigoGenerado = `${pasillo}${cara}-${rackPadded}-${nivel}`;
+        document.getElementById('codigoGenerado').textContent = codigoGenerado;
+    } else {
+        document.getElementById('codigoGenerado').textContent = 'Se generará automáticamente';
+    }
+}
+
+// Agregar event listeners cuando se carga la página
+document.addEventListener('DOMContentLoaded', function() {
+    const camposPasillo = document.getElementById('pasillo');
+    const camposCara = document.getElementById('cara');
+    const camposRack = document.getElementById('rack');
+    const camposNivel = document.getElementById('nivel');
+    
+    if (camposPasillo) camposPasillo.addEventListener('input', actualizarCodigoGenerado);
+    if (camposCara) camposCara.addEventListener('input', actualizarCodigoGenerado);
+    if (camposRack) camposRack.addEventListener('input', actualizarCodigoGenerado);
+    if (camposNivel) camposNivel.addEventListener('input', actualizarCodigoGenerado);
+});
+
 function editWarehouse(id) {
     // Implementar la edición
     window.location.href = `/warehouses/${id}/edit`;
@@ -379,4 +808,5 @@ function deleteWarehouse(id) {
 }
 </script>
 @endsection
+
 

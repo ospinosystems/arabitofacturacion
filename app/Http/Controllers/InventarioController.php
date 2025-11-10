@@ -729,15 +729,56 @@ class InventarioController extends Controller
                                         'id_productosucursal' => $insertOrUpdateInv
                                     ]);
 
-                                    items_factura::updateOrCreate([
-                                        'id_factura' => $id_factura,
-                                        'id_producto' => $insertOrUpdateInv,
-                                    ], [
-                                        'cantidad' => $ctNew,
-                                        'tipo' => 'actualizacion',
-                                    ]);
+                                items_factura::updateOrCreate([
+                                    'id_factura' => $id_factura,
+                                    'id_producto' => $insertOrUpdateInv,
+                                ], [
+                                    'cantidad' => $ctNew,
+                                    'tipo' => 'actualizacion',
+                                ]);
 
-                                    $ids_to_csv[] = $insertOrUpdateInv;
+                                // NUEVO: Asignar warehouse si se proporcionó warehouse_codigo
+                                if (isset($item['warehouse_codigo']) && !empty($item['warehouse_codigo'])) {
+                                    $warehouse = \App\Models\Warehouse::where('codigo', $item['warehouse_codigo'])
+                                        ->where('estado', 'activa')
+                                        ->first();
+                                    
+                                    if ($warehouse) {
+                                        // Verificar si ya existe una asignación para este producto en este warehouse
+                                        $warehouseInventory = \App\Models\WarehouseInventory::where('warehouse_id', $warehouse->id)
+                                            ->where('inventario_id', $insertOrUpdateInv)
+                                            ->first();
+                                        
+                                        if ($warehouseInventory) {
+                                            // Si existe, actualizar la cantidad
+                                            $warehouseInventory->cantidad += $ctNew;
+                                            $warehouseInventory->save();
+                                        } else {
+                                            // Si no existe, crear nueva asignación
+                                            $warehouseInventory = new \App\Models\WarehouseInventory;
+                                            $warehouseInventory->warehouse_id = $warehouse->id;
+                                            $warehouseInventory->inventario_id = $insertOrUpdateInv;
+                                            $warehouseInventory->cantidad = $ctNew;
+                                            $warehouseInventory->estado = 'disponible';
+                                            $warehouseInventory->fecha_entrada = now();
+                                            $warehouseInventory->save();
+                                        }
+                                        
+                                        // Registrar el movimiento
+                                        $warehouseMovement = new \App\Models\WarehouseMovement;
+                                        $warehouseMovement->warehouse_id = $warehouse->id;
+                                        $warehouseMovement->inventario_id = $insertOrUpdateInv;
+                                        $warehouseMovement->tipo = 'entrada';
+                                        $warehouseMovement->cantidad = $ctNew;
+                                        $warehouseMovement->cantidad_anterior = $warehouseInventory->cantidad - $ctNew;
+                                        $warehouseMovement->cantidad_nueva = $warehouseInventory->cantidad;
+                                        $warehouseMovement->referencia = "Recepción TCR - Pedido #$id_pedido";
+                                        $warehouseMovement->usuario_id = session('id_usuario');
+                                        $warehouseMovement->save();
+                                    }
+                                }
+
+                                $ids_to_csv[] = $insertOrUpdateInv;
                                     $num++;
                                 } else {
                                     return $insertOrUpdateInv;
@@ -2102,5 +2143,303 @@ class InventarioController extends Controller
 
         $tipoString = (string) $tipo;
         return $iconos[$tipoString] ?? '💳';
+    }
+
+    /**
+     * Buscar producto por código de barras (simple para pistolas)
+     */
+    public function buscarPorCodigo(Request $request)
+    {
+        try {
+            $codigo = $request->codigo ?? $request->id;
+            
+            if (!$codigo) {
+                return Response::json([
+                    'estado' => false,
+                    'msj' => 'Código de producto requerido'
+                ]);
+            }
+
+            // Buscar por ID si se proporciona
+            if ($request->id) {
+                $producto = inventario::with(['proveedor', 'categoria', 'marca'])->find($codigo);
+            } else {
+                // Buscar por código de barras o código proveedor
+                $producto = inventario::with(['proveedor', 'categoria', 'marca'])
+                    ->where('codigo_barras', $codigo)
+                    ->orWhere('codigo_proveedor', $codigo)
+                    ->first();
+            }
+
+            if (!$producto) {
+                return Response::json([
+                    'estado' => false,
+                    'msj' => 'Producto no encontrado'
+                ]);
+            }
+
+            return Response::json([
+                'estado' => true,
+                'data' => [
+                    'id' => $producto->id,
+                    'descripcion' => $producto->descripcion,
+                    'codigo_barras' => $producto->codigo_barras,
+                    'codigo_proveedor' => $producto->codigo_proveedor,
+                    'precio' => $producto->precio,
+                    'cantidad' => $producto->cantidad,
+                    'stock' => $producto->cantidad,
+                    'categoria' => $producto->categoria ? $producto->categoria->descripcion : '',
+                    'proveedor' => $producto->proveedor ? $producto->proveedor->descripcion : '',
+                    'marca' => $producto->marca ? $producto->marca->descripcion : ''
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error al buscar producto: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Vista para inventariar productos en tres pasos
+     */
+    public function inventariar()
+    {
+        return view('inventario.inventariar');
+    }
+
+    /**
+     * Buscar producto por código de barras o código proveedor
+     */
+    public function buscarProductoInventariar(Request $request)
+    {
+        try {
+            $codigo = $request->codigo;
+            
+            if (!$codigo) {
+                return Response::json([
+                    'estado' => false,
+                    'msj' => 'Código requerido'
+                ]);
+            }
+
+            $producto = inventario::with(['proveedor', 'categoria', 'marca'])
+                ->where(function($query) use ($codigo) {
+                    $query->where('codigo_barras', $codigo)
+                          ->orWhere('codigo_proveedor', $codigo);
+                })
+                ->first();
+
+            if (!$producto) {
+                return Response::json([
+                    'estado' => false,
+                    'msj' => 'Producto no encontrado'
+                ]);
+            }
+
+            // Obtener información de ubicaciones
+            $warehouseInventories = \App\Models\WarehouseInventory::where('inventario_id', $producto->id)
+                ->where('cantidad', '>', 0)
+                ->with('warehouse')
+                ->get();
+
+            $totalEnUbicaciones = $warehouseInventories->sum('cantidad');
+            $numeroUbicaciones = $warehouseInventories->count();
+            $ubicacionesDetalle = $warehouseInventories->map(function($wi) {
+                return [
+                    'codigo' => $wi->warehouse->codigo ?? 'N/A',
+                    'cantidad' => $wi->cantidad
+                ];
+            });
+
+            return Response::json([
+                'estado' => true,
+                'producto' => [
+                    'id' => $producto->id,
+                    'codigo_barras' => $producto->codigo_barras,
+                    'codigo_proveedor' => $producto->codigo_proveedor,
+                    'descripcion' => $producto->descripcion,
+                    'cantidad_actual' => $producto->cantidad ?? 0,
+                    'cantidad_anterior' => $producto->cantidad ?? 0, // Se guardará antes de actualizar
+                    'proveedor' => $producto->proveedor->razonsocial ?? 'N/A',
+                    'categoria' => $producto->categoria->nombre ?? 'N/A',
+                    'marca' => $producto->marca->descripcion ?? null,
+                    'unidad' => $producto->unidad ?? 'N/A',
+                    'precio' => $producto->precio ?? 0,
+                    'precio_base' => $producto->precio_base ?? 0,
+                    'total_en_ubicaciones' => $totalEnUbicaciones,
+                    'numero_ubicaciones' => $numeroUbicaciones,
+                    'ubicaciones' => $ubicacionesDetalle,
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Buscar ubicación por código
+     */
+    public function buscarUbicacionInventariar(Request $request)
+    {
+        try {
+            $codigo = $request->codigo;
+            
+            if (!$codigo) {
+                return Response::json([
+                    'estado' => false,
+                    'msj' => 'Código requerido'
+                ]);
+            }
+
+            $warehouse = \App\Models\Warehouse::where('codigo', $codigo)
+                ->activas()
+                ->first();
+
+            if (!$warehouse) {
+                return Response::json([
+                    'estado' => false,
+                    'msj' => 'Ubicación no encontrada o no está activa'
+                ]);
+            }
+
+            return Response::json([
+                'estado' => true,
+                'warehouse' => [
+                    'id' => $warehouse->id,
+                    'codigo' => $warehouse->codigo,
+                    'nombre' => $warehouse->nombre,
+                    'capacidad' => $warehouse->capacidad,
+                    'capacidad_disponible' => $warehouse->capacidadDisponible(),
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Guardar inventario con ubicación
+     */
+    public function guardarInventarioConUbicacion(Request $request)
+    {
+        try {
+            $request->validate([
+                'producto_id' => 'required|exists:inventarios,id',
+                'warehouse_id' => 'required|exists:warehouses,id',
+                'cantidad' => 'required|numeric|min:0.01',
+            ]);
+
+            DB::beginTransaction();
+
+            $producto = inventario::findOrFail($request->producto_id);
+            $warehouse = \App\Models\Warehouse::findOrFail($request->warehouse_id);
+
+            // Obtener cantidad actual del producto (antes de actualizar)
+            $cantidadAnterior = $producto->cantidad ?? 0;
+            $cantidadActual = $cantidadAnterior;
+            $nuevaCantidad = $cantidadAnterior + $request->cantidad;
+
+            // Guardar producto con nueva cantidad usando guardarProducto
+            $resultado = $this->guardarProducto([
+                'id' => $producto->id,
+                'cantidad' => $nuevaCantidad,
+                'codigo_barras' => $producto->codigo_barras,
+                'codigo_proveedor' => $producto->codigo_proveedor,
+                'descripcion' => $producto->descripcion,
+                'unidad' => $producto->unidad,
+                'id_categoria' => $producto->id_categoria,
+                'iva' => $producto->iva,
+                'precio_base' => $producto->precio_base,
+                'precio' => $producto->precio,
+                'id_proveedor' => $producto->id_proveedor,
+                'id_marca' => $producto->id_marca,
+                'id_deposito' => $producto->id_deposito,
+                'origen' => 'inventariado',
+            ]);
+
+            if (is_array($resultado) && isset($resultado['estado']) && !$resultado['estado']) {
+                throw new \Exception($resultado['msj']);
+            }
+
+            $productoId = is_numeric($resultado) ? $resultado : $producto->id;
+
+            // Verificar capacidad de la ubicación
+            if (!$warehouse->tieneCapacidad($request->cantidad)) {
+                throw new \Exception('La ubicación no tiene capacidad suficiente');
+            }
+
+            // Buscar o crear WarehouseInventory
+            $warehouseInventory = \App\Models\WarehouseInventory::where('warehouse_id', $warehouse->id)
+                ->where('inventario_id', $productoId)
+                ->where(function($query) {
+                    $query->whereNull('lote')
+                          ->orWhere('lote', '');
+                })
+                ->first();
+
+            if ($warehouseInventory) {
+                // Actualizar cantidad existente
+                $warehouseInventory->cantidad += $request->cantidad;
+                $warehouseInventory->fecha_entrada = now();
+                $warehouseInventory->save();
+            } else {
+                // Crear nuevo registro
+                $warehouseInventory = \App\Models\WarehouseInventory::create([
+                    'warehouse_id' => $warehouse->id,
+                    'inventario_id' => $productoId,
+                    'cantidad' => $request->cantidad,
+                    'lote' => null,
+                    'fecha_entrada' => now(),
+                    'estado' => 'disponible',
+                ]);
+            }
+
+            // Registrar movimiento
+            \App\Models\WarehouseMovement::create([
+                'tipo' => 'entrada',
+                'inventario_id' => $productoId,
+                'warehouse_origen_id' => null,
+                'warehouse_destino_id' => $warehouse->id,
+                'cantidad' => $request->cantidad,
+                'lote' => null,
+                'usuario_id' => session('id_usuario'),
+                'observaciones' => 'Inventariado manual',
+                'fecha_movimiento' => now(),
+            ]);
+
+            DB::commit();
+
+            return Response::json([
+                'estado' => true,
+                'msj' => 'Producto inventariado exitosamente',
+                'producto' => [
+                    'id' => $productoId,
+                    'cantidad_anterior' => $cantidadAnterior,
+                    'cantidad_agregada' => $request->cantidad,
+                    'cantidad_total' => $nuevaCantidad,
+                ],
+                'warehouse' => [
+                    'codigo' => $warehouse->codigo,
+                    'cantidad_en_ubicacion' => $warehouseInventory->cantidad,
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

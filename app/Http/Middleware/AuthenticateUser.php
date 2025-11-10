@@ -58,7 +58,56 @@ class AuthenticateUser
         'inventario-ciclico/planillas/{id}',
         'inventario-ciclico/planillas/{id}/productos',
         'inventario-ciclico/planillas/{planillaId}/productos/{detalleId}',
-        'getUsuarios'
+        'getUsuarios',
+
+        "warehouses/generar-ubicaciones",
+        "warehouses/disponibles",
+        "warehouses/buscar-codigo",
+        "warehouses/sugerir-ubicacion",
+        "warehouses/reporte-ocupacion",
+        "warehouses/buscar",
+        "warehouses",
+        "warehouses",
+        "warehouses/{id}",
+        "warehouses/{id}",
+        "warehouses/{id}",
+        "warehouse-inventory/buscar-productos",
+        "warehouse-inventory/buscar-codigo",
+        "warehouse-inventory/producto/{inventarioId}",
+        "warehouse-inventory/ubicacion/{warehouseId}",
+        "warehouse-inventory/por-ubicacion",
+        "warehouse-inventory/{id}/ticket",
+        "warehouse-inventory/historial",
+        "warehouse-inventory/proximos-vencer",
+        "warehouse-inventory",
+        "warehouse-inventory/asignar",
+        "warehouse-inventory/transferir",
+        "warehouse-inventory/retirar",
+        "warehouse-inventory/{id}/estado",
+        "warehouse-inventory/stock-ubicacion",
+        "warehouse-inventory/ticket-producto/{productoId}",
+        
+        // Módulo TCR (nuevo sistema con chequeador y pasillero)
+        "warehouse-inventory/tcr",
+        "warehouse-inventory/tcr/pasillero",
+        "warehouse-inventory/tcr/get-pedidos-central",
+        "warehouse-inventory/tcr/get-pasilleros",
+        "warehouse-inventory/tcr/asignar-productos",
+        "warehouse-inventory/tcr/mis-asignaciones",
+        "warehouse-inventory/tcr/procesar-asignacion",
+        "warehouse-inventory/tcr/buscar-ubicacion",
+        "warehouse-inventory/tcr/asignaciones-por-pedido",
+        "warehouse-inventory/tcr/confirmar-pedido",
+        
+        // Inventariar productos (tres pasos: producto, ubicación, cantidad)
+        "inventario/inventariar",
+        "inventario/buscar-producto-inventariar",
+        "inventario/buscar-ubicacion-inventariar",
+        "inventario/guardar-inventario-con-ubicacion",
+        
+        // Cargar ubicaciones por rango
+        "warehouses/cargar-por-rango",
+        "warehouses/generar-por-rango",
     ];
 
     /**
@@ -141,12 +190,13 @@ class AuthenticateUser
     }
     
     /**
-     * Acceso para middleware 'login' - Tipos 1, 4, 6, 7 + tipo 7 con rutas específicas
+     * Acceso para middleware 'login' - Tipos 1, 4, 6, 7, 8 + tipo 7 con rutas específicas
      * 1 = GERENTE
      * 4 = CAJERO_VENDEDOR
      * 5 = SUPERVISOR DE CAJA (solo inventario y tickets)
      * 6 = SUPERADMIN
-     * 7 = DICI
+     * 7 = DICI (chequeador)
+     * 8 = PASILLERO
      */
     private function hasLoginAccess(int $userType, Request $request): bool
     {
@@ -157,18 +207,32 @@ class AuthenticateUser
         
         // Tipo 5 (SUPERVISOR DE CAJA) solo tiene acceso a inventario y tickets
         if ($userType == 5) {
+            $routeUri = $request->route() ? $request->route()->uri : $request->path();
             $allowedRoutes = [
                 'getinventario', // Consultar inventario
                 'imprimirTicked', // Aprobar impresiones de tickets
                 'resetPrintingState', // Resetear estado de impresión
             ];
             
-            return in_array($request->route()->uri, $allowedRoutes);
+            return in_array($routeUri, $allowedRoutes);
         }
         
-        // Tipo 7 (DICI) solo tiene acceso a rutas específicas
+        // Tipo 7 (DICI/Chequeador) solo tiene acceso a rutas específicas
         if ($userType == 7) {
-            return in_array($request->route()->uri, self::DICI_ALLOWED_ROUTES);
+            $routeUri = $request->route() ? $request->route()->uri : $request->path();
+            return in_array($routeUri, self::DICI_ALLOWED_ROUTES);
+        }
+        
+        // Tipo 8 (Pasillero) solo tiene acceso a rutas del pasillero
+        if ($userType == 8) {
+            $routeUri = $request->route() ? $request->route()->uri : $request->path();
+            $pasilleroRoutes = [
+                'warehouse-inventory/tcr/pasillero',
+                'warehouse-inventory/tcr/mis-asignaciones',
+                'warehouse-inventory/tcr/procesar-asignacion',
+                'warehouse-inventory/tcr/buscar-ubicacion',
+            ];
+            return in_array($routeUri, $pasilleroRoutes) || str_starts_with($routeUri, 'warehouse-inventory/tcr/pasillero');
         }
         
         return false;
@@ -189,7 +253,8 @@ class AuthenticateUser
         
         // Tipo 7 (DICI) solo tiene acceso a rutas específicas
         if ($userType == 7) {
-            return in_array($request->route()->uri, self::DICI_ALLOWED_ROUTES);
+            $routeUri = $request->route() ? $request->route()->uri : $request->path();
+            return in_array($routeUri, self::DICI_ALLOWED_ROUTES);
         }
         
         return false;

@@ -38,6 +38,10 @@ use App\Http\Controllers\ResponsablesController;
 use App\Http\Controllers\InventarioGarantiasController;
 use App\Http\Controllers\MonedasController;
 
+use App\Http\Controllers\WarehouseController;
+use App\Http\Controllers\WarehouseInventoryController;
+use App\Http\Controllers\TCRController;
+
 use App\Http\Controllers\CajasController;
 Route::get('checkroutes', [PedidosController::class,"checkroutes"]);
 Route::get('checkPed', [PedidosController::class,"checkPed"]);
@@ -46,6 +50,8 @@ Route::get('completePed', [PedidosController::class, "completePed"]);
 Route::get('repareId', [PedidosController::class, "repareId"]);
 
 
+// Ruta pública para imprimir ticket de producto (no requiere autenticación) - POST
+Route::post('warehouse-inventory/imprimir-ticket-producto', [WarehouseInventoryController::class, 'imprimirTicketProducto'])->name('warehouse-inventory.imprimir-ticket-producto');
 
 Route::get('/backup', function () {
     \Illuminate\Support\Facades\Artisan::call('database:backup');
@@ -231,6 +237,9 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		
 		// Obtener producto específico por ID
 		Route::get('producto/{id}', [InventarioController::class,"getProductoById"]);
+		
+		// Buscar producto por código (para pistolas de código de barras)
+		Route::get('inventarios/buscar', [InventarioController::class,"buscarPorCodigo"]);
 
 		// ================ RUTAS PARA GESTIÓN DE RESPONSABLES ================
 		
@@ -254,6 +263,62 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		
 		// Crear solo el pedido de garantía/devolución - FUNCIONALIDAD WEB
 		Route::post('garantias/crear-pedido', [GarantiaController::class,"crearPedidoGarantia"]);
+
+
+		// Rutas auxiliares para ubicaciones (deben ir primero para evitar conflictos)
+		Route::get('warehouses/generar-ubicaciones', [WarehouseController::class, 'generarUbicaciones']);
+		Route::get('warehouses/disponibles', [WarehouseController::class, 'getDisponibles']);
+		Route::get('warehouses/buscar-codigo', [WarehouseController::class, 'buscarPorCodigo']);
+		Route::post('warehouses/sugerir-ubicacion', [WarehouseController::class, 'sugerirUbicacion']);
+		Route::get('warehouses/reporte-ocupacion', [WarehouseController::class, 'reporteOcupacion']);
+		Route::get('warehouses/cargar-por-rango', [WarehouseController::class, 'cargarPorRango'])->name('warehouses.cargar-por-rango');
+		Route::post('warehouses/generar-por-rango', [WarehouseController::class, 'generarPorRango'])->name('warehouses.generar-por-rango');
+		
+		// Rutas CRUD de ubicaciones (warehouses)
+		Route::get('warehouses/buscar', [WarehouseController::class, 'buscarUbicaciones'])->name('warehouses.buscar');
+		Route::get('warehouses', [WarehouseController::class, 'index'])->name('warehouses.index');
+		Route::post('warehouses', [WarehouseController::class, 'store'])->name('warehouses.store');
+		Route::get('warehouses/{id}', [WarehouseController::class, 'show'])->name('warehouses.show');
+		Route::put('warehouses/{id}', [WarehouseController::class, 'update'])->name('warehouses.update');
+		Route::delete('warehouses/{id}', [WarehouseController::class, 'destroy'])->name('warehouses.destroy');
+		
+		// Consultas de inventario (antes de las rutas con parámetros)
+		Route::get('warehouse-inventory/buscar-productos', [WarehouseInventoryController::class, 'buscarProductos'])->name('warehouse-inventory.buscar-productos');
+		Route::get('warehouse-inventory/buscar-codigo', [WarehouseInventoryController::class, 'buscarPorCodigo'])->name('warehouse-inventory.buscar-codigo');
+		Route::get('warehouse-inventory/producto/{inventarioId}', [WarehouseInventoryController::class, 'consultarUbicaciones'])->name('warehouse-inventory.producto');
+		Route::get('warehouse-inventory/ubicacion/{warehouseId}', [WarehouseInventoryController::class, 'consultarPorUbicacion'])->name('warehouse-inventory.ubicacion');
+		Route::get('warehouse-inventory/por-ubicacion', [WarehouseInventoryController::class, 'porUbicacion'])->name('warehouse-inventory.por-ubicacion');
+		Route::get('warehouse-inventory/{id}/ticket', [WarehouseInventoryController::class, 'imprimirTicket'])->name('warehouse-inventory.ticket');
+		Route::get('warehouse-inventory/historial', [WarehouseInventoryController::class, 'historial'])->name('warehouse-inventory.historial');
+		Route::get('warehouse-inventory/proximos-vencer', [WarehouseInventoryController::class, 'proximosVencer'])->name('warehouse-inventory.proximos-vencer');
+		
+		// Rutas de inventario en ubicaciones
+		Route::get('warehouse-inventory', [WarehouseInventoryController::class, 'index'])->name('warehouse-inventory.index');
+		Route::post('warehouse-inventory/asignar', [WarehouseInventoryController::class, 'asignar'])->name('warehouse-inventory.asignar');
+		Route::post('warehouse-inventory/transferir', [WarehouseInventoryController::class, 'transferir'])->name('warehouse-inventory.transferir');
+		Route::post('warehouse-inventory/retirar', [WarehouseInventoryController::class, 'retirar'])->name('warehouse-inventory.retirar');
+		Route::put('warehouse-inventory/{id}/estado', [WarehouseInventoryController::class, 'actualizarEstado'])->name('warehouse-inventory.actualizar-estado');
+		Route::get('warehouse-inventory/stock-ubicacion', [WarehouseInventoryController::class, 'consultarStockUbicacion'])->name('warehouse-inventory.stock-ubicacion');
+		
+		// Rutas del módulo TCR (nuevo sistema con chequeador y pasillero)
+		Route::get('warehouse-inventory/tcr', [TCRController::class, 'chequeador'])->name('warehouse-inventory.tcr.chequeador');
+		Route::get('warehouse-inventory/tcr/pasillero', [TCRController::class, 'pasillero'])->name('warehouse-inventory.tcr.pasillero');
+		Route::post('warehouse-inventory/tcr/get-pedidos-central', [TCRController::class, 'getPedidosCentral'])->name('warehouse-inventory.tcr.get-pedidos-central');
+		Route::get('warehouse-inventory/tcr/get-pasilleros', [TCRController::class, 'getPasilleros'])->name('warehouse-inventory.tcr.get-pasilleros');
+		Route::post('warehouse-inventory/tcr/asignar-productos', [TCRController::class, 'asignarProductos'])->name('warehouse-inventory.tcr.asignar-productos');
+		Route::get('warehouse-inventory/tcr/mis-asignaciones', [TCRController::class, 'getMisAsignaciones'])->name('warehouse-inventory.tcr.mis-asignaciones');
+		Route::post('warehouse-inventory/tcr/procesar-asignacion', [TCRController::class, 'procesarAsignacion'])->name('warehouse-inventory.tcr.procesar-asignacion');
+		Route::get('warehouse-inventory/tcr/buscar-ubicacion', [TCRController::class, 'buscarUbicacion'])->name('warehouse-inventory.tcr.buscar-ubicacion');
+		Route::get('warehouse-inventory/tcr/asignaciones-por-pedido', [TCRController::class, 'getAsignacionesPorPedido'])->name('warehouse-inventory.tcr.asignaciones-por-pedido');
+		Route::post('warehouse-inventory/tcr/confirmar-pedido', [TCRController::class, 'confirmarPedido'])->name('warehouse-inventory.tcr.confirmar-pedido');
+		
+		// ================ RUTAS PARA INVENTARIAR PRODUCTOS ================
+		Route::get('inventario/inventariar', [InventarioController::class, 'inventariar'])->name('inventario.inventariar');
+		Route::post('inventario/buscar-producto-inventariar', [InventarioController::class, 'buscarProductoInventariar'])->name('inventario.buscar-producto-inventariar');
+		Route::post('inventario/buscar-ubicacion-inventariar', [InventarioController::class, 'buscarUbicacionInventariar'])->name('inventario.buscar-ubicacion-inventariar');
+		Route::post('inventario/guardar-inventario-con-ubicacion', [InventarioController::class, 'guardarInventarioConUbicacion'])->name('inventario.guardar-inventario-con-ubicacion');
+		// ================ FIN RUTAS PARA INVENTARIAR PRODUCTOS ================
+	
 		
 	});
 	
@@ -395,7 +460,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		
 		Route::post('delMov', [MovimientosController::class,"delMov"]);
 		
-	//Central
+		//Central
 		Route::post('checkPedidosCentral', [InventarioController::class,"checkPedidosCentral"]);
 		Route::post('removeVinculoCentral', [sendCentral::class,"removeVinculoCentral"]);
 		
@@ -512,45 +577,5 @@ Route::group(['middleware' => ['auth.user:admin']], function () {
     Route::post('updateDollarRate', [MonedasController::class, 'updateDollarRate']);
     Route::post('updateMoneda', [MonedasController::class, 'updateMoneda']);
 });
-// ================ FIN RUTAS MONEDAS ================
-
-// ================ RUTAS PARA WAREHOUSES (GESTIÓN DE ALMACÉN) ================
-use App\Http\Controllers\WarehouseController;
-use App\Http\Controllers\WarehouseInventoryController;
-
-Route::group(['middleware' => ['auth.user:admin']], function () {
-    // Rutas auxiliares para ubicaciones (deben ir primero para evitar conflictos)
-	Route::get('warehouses/generar-ubicaciones', [WarehouseController::class, 'generarUbicaciones']);
-    Route::get('warehouses/disponibles', [WarehouseController::class, 'getDisponibles']);
-    Route::get('warehouses/buscar-codigo', [WarehouseController::class, 'buscarPorCodigo']);
-    Route::post('warehouses/sugerir-ubicacion', [WarehouseController::class, 'sugerirUbicacion']);
-    Route::get('warehouses/reporte-ocupacion', [WarehouseController::class, 'reporteOcupacion']);
-    
-    // Rutas CRUD de ubicaciones (warehouses)
-    Route::get('warehouses/buscar', [WarehouseController::class, 'buscarUbicaciones'])->name('warehouses.buscar');
-    Route::get('warehouses', [WarehouseController::class, 'index'])->name('warehouses.index');
-    Route::post('warehouses', [WarehouseController::class, 'store'])->name('warehouses.store');
-    Route::get('warehouses/{id}', [WarehouseController::class, 'show'])->name('warehouses.show');
-    Route::put('warehouses/{id}', [WarehouseController::class, 'update'])->name('warehouses.update');
-    Route::delete('warehouses/{id}', [WarehouseController::class, 'destroy'])->name('warehouses.destroy');
-    
-    // Consultas de inventario (antes de las rutas con parámetros)
-    Route::get('warehouse-inventory/buscar-productos', [WarehouseInventoryController::class, 'buscarProductos'])->name('warehouse-inventory.buscar-productos');
-    Route::get('warehouse-inventory/buscar-codigo', [WarehouseInventoryController::class, 'buscarPorCodigo'])->name('warehouse-inventory.buscar-codigo');
-    Route::get('warehouse-inventory/producto/{inventarioId}', [WarehouseInventoryController::class, 'consultarUbicaciones'])->name('warehouse-inventory.producto');
-    Route::get('warehouse-inventory/ubicacion/{warehouseId}', [WarehouseInventoryController::class, 'consultarPorUbicacion'])->name('warehouse-inventory.ubicacion');
-    Route::get('warehouse-inventory/por-ubicacion', [WarehouseInventoryController::class, 'porUbicacion'])->name('warehouse-inventory.por-ubicacion');
-    Route::get('warehouse-inventory/{id}/ticket', [WarehouseInventoryController::class, 'imprimirTicket'])->name('warehouse-inventory.ticket');
-    Route::get('warehouse-inventory/historial', [WarehouseInventoryController::class, 'historial'])->name('warehouse-inventory.historial');
-    Route::get('warehouse-inventory/proximos-vencer', [WarehouseInventoryController::class, 'proximosVencer'])->name('warehouse-inventory.proximos-vencer');
-    
-    // Rutas de inventario en ubicaciones
-    Route::get('warehouse-inventory', [WarehouseInventoryController::class, 'index'])->name('warehouse-inventory.index');
-    Route::post('warehouse-inventory/asignar', [WarehouseInventoryController::class, 'asignar'])->name('warehouse-inventory.asignar');
-    Route::post('warehouse-inventory/transferir', [WarehouseInventoryController::class, 'transferir'])->name('warehouse-inventory.transferir');
-    Route::post('warehouse-inventory/retirar', [WarehouseInventoryController::class, 'retirar'])->name('warehouse-inventory.retirar');
-    Route::put('warehouse-inventory/{id}/estado', [WarehouseInventoryController::class, 'actualizarEstado'])->name('warehouse-inventory.actualizar-estado');
-});
-// ================ FIN RUTAS WAREHOUSES ================
 
 

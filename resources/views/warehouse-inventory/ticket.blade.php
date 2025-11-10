@@ -16,19 +16,28 @@
             margin: 0;
         }
         
+        html {
+            width: 57mm;
+            height: 44mm;
+        }
+        
         body {
             width: 57mm;
             height: 44mm;
+            max-width: 57mm;
+            max-height: 44mm;
             font-family: 'Courier New', monospace;
             font-size: 7px;
             line-height: 1.1;
             padding: 1.5mm;
             background: white;
+            overflow: hidden;
         }
         
         .ticket {
             width: 100%;
             height: 100%;
+            max-width: 54mm;
             display: flex;
             flex-direction: column;
         }
@@ -53,10 +62,13 @@
             padding: 0.5mm;
             background: white;
             border: 1px solid #000;
+            max-width: 100%;
+            overflow: hidden;
         }
         
         .barcode {
             width: 100%;
+            max-width: 100%;
             height: 8mm;
             background: white;
         }
@@ -187,10 +199,12 @@
         // Generar código de barras
         JsBarcode("#barcode", "WH{{ str_pad($inventario->id, 6, '0', STR_PAD_LEFT) }}", {
             format: "CODE128",
-            width: 1.5,
+            width: 1.3,
             height: 30,
             displayValue: false,
             margin: 0,
+            marginLeft: 0,
+            marginRight: 0,
             fontSize: 10
         });
         

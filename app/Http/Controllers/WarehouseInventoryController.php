@@ -18,45 +18,194 @@ class WarehouseInventoryController extends Controller
      */
     public function index(Request $request)
     {
-        $query = WarehouseInventory::with(['warehouse', 'inventario']);
+        // Consulta unificada de productos
+        $query = inventario::with(['proveedor', 'categoria', 'marca', 'warehouseInventory.warehouse']);
         
-        // Filtros
-        if ($request->has('warehouse_id') && $request->warehouse_id) {
-            $query->where('warehouse_id', $request->warehouse_id);
-        }
-        
-        if ($request->has('inventario_id') && $request->inventario_id) {
-            $query->where('inventario_id', $request->inventario_id);
-        }
-        
-        if ($request->has('estado') && $request->estado) {
-            $query->where('estado', $request->estado);
-        }
-        
-        if ($request->has('lote') && $request->lote) {
-            $query->where('lote', 'like', "%{$request->lote}%");
-        }
-        
+        // Filtro de búsqueda
         if ($request->has('buscar') && $request->buscar) {
             $buscar = $request->buscar;
-            $query->whereHas('inventario', function($q) use ($buscar) {
-                $q->where('descripcion', 'like', "%{$buscar}%")
-                  ->orWhere('codigo_barras', 'like', "%{$buscar}%");
+            $campo = $request->campo_busqueda ?? 'todos';
+            
+            $query->where(function($q) use ($buscar, $campo) {
+                if ($campo === 'codigo_barras' || $campo === 'todos') {
+                    $q->orWhere('codigo_barras', 'like', "%{$buscar}%");
+                }
+                if ($campo === 'codigo_proveedor' || $campo === 'todos') {
+                    $q->orWhere('codigo_proveedor', 'like', "%{$buscar}%");
+                }
+                if ($campo === 'descripcion' || $campo === 'todos') {
+                    $q->orWhere('descripcion', 'like', "%{$buscar}%");
+                }
             });
         }
         
-        $inventarios = $query->conStock()
-                            ->orderBy('created_at', 'desc')
-                            ->paginate(50);
-        
-        $warehouses = Warehouse::activas()->orderBy('codigo')->get();
-        
-        // Si es una petición AJAX, devolver JSON
-        if ($request->ajax() || $request->wantsJson()) {
-            return Response::json($inventarios);
+        // Filtro por estado de warehouse (nuevo filtro unificado)
+        if ($request->has('filtro_warehouse') && $request->filtro_warehouse !== '') {
+            if ($request->filtro_warehouse === 'con_warehouse') {
+                // Solo productos que tienen warehouse asignado
+                $query->whereHas('warehouseInventory', function($q) {
+                    $q->where('cantidad', '>', 0);
+                });
+            } elseif ($request->filtro_warehouse === 'sin_warehouse') {
+                // Solo productos que NO tienen warehouse asignado
+                $query->whereDoesntHave('warehouseInventory', function($q) {
+                    $q->where('cantidad', '>', 0);
+                });
+            }
+            // Si es 'ambos' o vacío, no filtrar
         }
         
-        return view('warehouse-inventory.index', compact('inventarios', 'warehouses'));
+        // Filtro por categoría
+        if ($request->has('categoria_id') && $request->categoria_id) {
+            $query->where('id_categoria', $request->categoria_id);
+        }
+        
+        // Filtro por proveedor
+        if ($request->has('proveedor_id') && $request->proveedor_id) {
+            $query->where('id_proveedor', $request->proveedor_id);
+        }
+        
+        // Filtro por marca
+        if ($request->has('marca_id') && $request->marca_id) {
+            $query->where('id_marca', $request->marca_id);
+        }
+        
+        // NUEVO: Filtro por ubicación específica
+        if ($request->has('ubicacion_id') && $request->ubicacion_id) {
+            $query->whereHas('warehouseInventory', function($q) use ($request) {
+                $q->where('warehouse_id', $request->ubicacion_id)
+                  ->where('cantidad', '>', 0);
+            });
+        }
+        
+        $productos = $query->orderBy('descripcion', 'asc')->paginate(50);
+        
+        // Agregar información adicional a cada producto
+        $productos->getCollection()->transform(function($producto) {
+            $warehouseInventories = $producto->warehouseInventory()->where('cantidad', '>', 0)->get();
+            
+            $producto->tiene_warehouse = $warehouseInventories->count() > 0;
+            $producto->total_en_warehouses = $warehouseInventories->sum('cantidad');
+            $producto->numero_ubicaciones = $warehouseInventories->count();
+            
+            // Calcular cantidad sin asignar (stock total - stock en warehouses)
+            $stockTotal = $producto->cantidad ?? 0;
+            $producto->sin_ubicar = max(0, $stockTotal - $producto->total_en_warehouses);
+            
+            $producto->ubicaciones_detalle = $warehouseInventories->map(function($wi) {
+                return [
+                    'id' => $wi->id,
+                    'warehouse_id' => $wi->warehouse_id,
+                    'warehouse' => $wi->warehouse->codigo ?? 'N/A',
+                    'warehouse_nombre' => $wi->warehouse->nombre ?? '',
+                    'cantidad' => $wi->cantidad,
+                    'lote' => $wi->lote,
+                    'estado' => $wi->estado,
+                    'fecha_entrada' => $wi->fecha_entrada,
+                    'fecha_vencimiento' => $wi->fecha_vencimiento,
+                ];
+            });
+            
+            return $producto;
+        });
+        
+        // Obtener datos para filtros
+        $warehouses = Warehouse::activas()->orderBy('codigo')->get();
+        $categorias = \App\Models\categorias::orderBy('descripcion')->get();
+        $proveedores = \App\Models\proveedores::orderBy('descripcion')->get();
+        $marcas = \App\Models\marcas::orderBy('descripcion')->get();
+        
+        // Si es AJAX, devolver JSON
+        if ($request->ajax() || $request->wantsJson()) {
+            return Response::json([
+                'estado' => true,
+                'data' => $productos
+            ]);
+        }
+        
+        return view('warehouse-inventory.index', compact('productos', 'warehouses', 'categorias', 'proveedores', 'marcas'));
+    }
+
+    /**
+     * Buscar productos generales del inventario con información de warehouse
+     */
+    private function buscarProductosGenerales(Request $request)
+    {
+        $query = inventario::with(['proveedor', 'categoria', 'marca', 'warehouseInventory.warehouse']);
+        
+        // Filtro por campo de búsqueda
+        if ($request->has('buscar') && $request->buscar) {
+            $buscar = $request->buscar;
+            $campo = $request->campo_busqueda ?? 'todos';
+            
+            $query->where(function($q) use ($buscar, $campo) {
+                if ($campo === 'codigo_barras' || $campo === 'todos') {
+                    $q->orWhere('codigo_barras', 'like', "%{$buscar}%");
+                }
+                if ($campo === 'codigo_proveedor' || $campo === 'todos') {
+                    $q->orWhere('codigo_proveedor', 'like', "%{$buscar}%");
+                }
+                if ($campo === 'descripcion' || $campo === 'todos') {
+                    $q->orWhere('descripcion', 'like', "%{$buscar}%");
+                }
+            });
+        }
+        
+        // Filtro por asignación a warehouse
+        if ($request->has('filtro_warehouse')) {
+            if ($request->filtro_warehouse === 'con_warehouse') {
+                // Productos que tienen al menos un warehouse asignado
+                $query->whereHas('warehouseInventory', function($q) {
+                    $q->where('cantidad', '>', 0);
+                });
+            } elseif ($request->filtro_warehouse === 'sin_warehouse') {
+                // Productos que NO tienen warehouse asignado
+                $query->whereDoesntHave('warehouseInventory', function($q) {
+                    $q->where('cantidad', '>', 0);
+                });
+            }
+        }
+        
+        // Filtro por categoría
+        if ($request->has('categoria_id') && $request->categoria_id) {
+            $query->where('id_categoria', $request->categoria_id);
+        }
+        
+        // Filtro por proveedor
+        if ($request->has('proveedor_id') && $request->proveedor_id) {
+            $query->where('id_proveedor', $request->proveedor_id);
+        }
+        
+        $productos = $query->orderBy('descripcion', 'asc')->paginate(50);
+        
+        // Agregar información adicional a cada producto
+        $productos->getCollection()->transform(function($producto) {
+            $warehouseInventories = $producto->warehouseInventory()->where('cantidad', '>', 0)->get();
+            
+            $producto->tiene_warehouse = $warehouseInventories->count() > 0;
+            $producto->total_en_warehouses = $warehouseInventories->sum('cantidad');
+            $producto->numero_ubicaciones = $warehouseInventories->count();
+            $producto->ubicaciones_resumen = $warehouseInventories->map(function($wi) {
+                return [
+                    'warehouse' => $wi->warehouse->codigo,
+                    'cantidad' => $wi->cantidad,
+                    'lote' => $wi->lote,
+                ];
+            });
+            
+            return $producto;
+        });
+        
+        $warehouses = Warehouse::activas()->orderBy('codigo')->get();
+        $categorias = \App\Models\categoria::orderBy('nombre')->get();
+        $proveedores = \App\Models\proveedores::orderBy('razonsocial')->get();
+        
+        // Si es AJAX, devolver JSON
+        if ($request->ajax() || $request->wantsJson()) {
+            return Response::json($productos);
+        }
+        
+        return view('warehouse-inventory.index', compact('productos', 'warehouses', 'categorias', 'proveedores'));
     }
 
     /**
@@ -120,6 +269,22 @@ class WarehouseInventoryController extends Controller
             ->findOrFail($id);
         
         return view('warehouse-inventory.ticket', compact('inventario'));
+    }
+
+    /**
+     * Imprimir ticket de producto (sin ubicación) - Recibe datos del frontend
+     */
+    public function imprimirTicketProducto(Request $request)
+    {
+        // Crear objeto con los datos recibidos
+        $producto = (object) [
+            'codigo_barras' => $request->input('codigo_barras'),
+            'codigo_proveedor' => $request->input('codigo_proveedor'),
+            'descripcion' => $request->input('descripcion'),
+            'marca' => $request->input('marca')
+        ];
+        
+        return view('warehouse-inventory.ticket-producto', compact('producto'));
     }
 
     /**
@@ -571,5 +736,53 @@ class WarehouseInventoryController extends Controller
         return Response::json([
             'productos' => $productos
         ]);
+    }
+
+    /**
+     * Consultar stock disponible en una ubicación específica para un producto
+     */
+    public function consultarStockUbicacion(Request $request)
+    {
+        try {
+            $warehouseId = $request->warehouse_id;
+            $inventarioId = $request->inventario_id;
+            
+            if (!$warehouseId || !$inventarioId) {
+                return Response::json([
+                    'estado' => false,
+                    'cantidad' => 0,
+                    'msj' => 'Parámetros faltantes'
+                ]);
+            }
+            
+            $warehouseInventory = WarehouseInventory::where('warehouse_id', $warehouseId)
+                ->where('inventario_id', $inventarioId)
+                ->where('estado', 'disponible')
+                ->where('cantidad', '>', 0)
+                ->first();
+            
+            if ($warehouseInventory) {
+                return Response::json([
+                    'estado' => true,
+                    'cantidad' => $warehouseInventory->cantidad,
+                    'lote' => $warehouseInventory->lote,
+                    'fecha_entrada' => $warehouseInventory->fecha_entrada,
+                    'fecha_vencimiento' => $warehouseInventory->fecha_vencimiento
+                ]);
+            }
+            
+            return Response::json([
+                'estado' => true,
+                'cantidad' => 0,
+                'msj' => 'No hay stock disponible en esta ubicación'
+            ]);
+            
+        } catch (\Exception $e) {
+            return Response::json([
+                'estado' => false,
+                'cantidad' => 0,
+                'msj' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

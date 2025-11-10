@@ -174,6 +174,22 @@ function Header({
                                     <i className="w-4 mr-2 fa fa-clipboard-list"></i>
                                     Inventario Cíclico
                                 </button>
+
+                                <button
+                                        className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
+                                            view === "warehouse-inventory"
+                                                ? "bg-green-100 text-green-800 border-l-4 border-green-800"
+                                                : "text-gray-700 hover:bg-gray-100"
+                                        }`}
+                                        onClick={() => {
+                                            // Si tienes un sistema de navegación en SPA:
+                                            // Si necesitas redirigir a la ruta nativa (full reload), descomenta la siguiente línea:
+                                            window.open("/warehouse-inventory", "_blank");
+                                        }}
+                                    >
+                                        <i className="w-4 mr-2 fa fa-warehouse"></i>
+                                        Gestión de Almacén
+                                    </button>
                             </>
                         ) : (
                             /* Navegación para Usuarios Regulares - TODO */
@@ -333,7 +349,7 @@ function Header({
                                         Administración
                                     </button>
                                 )}
-
+                               
                                 {auth(1) && user.iscentral && (
                                     <button
                                         className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${

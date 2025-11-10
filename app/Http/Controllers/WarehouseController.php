@@ -349,17 +349,19 @@ class WarehouseController extends Controller
     {
         $codigo = $request->codigo;
         
-        $warehouse = Warehouse::where('codigo', $codigo)->first();
+        $warehouse = Warehouse::where('codigo', $codigo)
+            ->where('estado', 'activa')
+            ->first();
         
         if ($warehouse) {
             return Response::json([
-                'warehouse' => $warehouse,
-                'encontrado' => true
+                'data' => $warehouse,
+                'estado' => true
             ]);
         }
         
         return Response::json([
-            'encontrado' => false,
+            'estado' => false,
             'msj' => 'No se encontró ubicación con ese código'
         ]);
     }
@@ -407,5 +409,108 @@ class WarehouseController extends Controller
             });
         
         return view('warehouses.reporte-ocupacion', compact('warehouses'));
+    }
+
+    /**
+     * Vista para cargar ubicaciones por rango
+     */
+    public function cargarPorRango()
+    {
+        return view('warehouses.cargar-por-rango');
+    }
+
+    /**
+     * Generar ubicaciones por rango
+     */
+    public function generarPorRango(Request $request)
+    {
+        $request->validate([
+            'pasillo' => 'required|string|max:1|regex:/^[A-Z]$/',
+            'cara_desde' => 'required|integer|min:1',
+            'cara_hasta' => 'required|integer|min:1|gte:cara_desde',
+            'rack_desde' => 'required|integer|min:1',
+            'rack_hasta' => 'required|integer|min:1|gte:rack_desde',
+            'nivel_desde' => 'required|integer|min:1',
+            'nivel_hasta' => 'required|integer|min:1|gte:nivel_desde',
+            'tipo' => 'nullable|in:almacenamiento,picking,recepcion,despacho',
+            'estado' => 'nullable|in:activa,inactiva,mantenimiento,bloqueada',
+            'zona' => 'nullable|string|max:50',
+            'capacidad_unidades' => 'nullable|integer|min:0',
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            $pasillo = strtoupper($request->pasillo);
+            $caras = range($request->cara_desde, $request->cara_hasta);
+            $racks = range($request->rack_desde, $request->rack_hasta);
+            $niveles = range($request->nivel_desde, $request->nivel_hasta);
+
+            $tipo = $request->tipo ?? 'almacenamiento';
+            $estado = $request->estado ?? 'activa';
+            $zona = $request->zona;
+            $capacidad_unidades = $request->capacidad_unidades;
+
+            $creados = 0;
+            $actualizados = 0;
+            $errores = [];
+
+            foreach ($caras as $cara) {
+                foreach ($racks as $rack) {
+                    foreach ($niveles as $nivel) {
+                        try {
+                            $codigo = $pasillo . $cara . '-' . str_pad($rack, 2, '0', STR_PAD_LEFT) . '-' . $nivel;
+
+                            $warehouse = Warehouse::updateOrCreate(
+                                [
+                                    'pasillo' => $pasillo,
+                                    'cara' => (string)$cara,
+                                    'rack' => $rack,
+                                    'nivel' => $nivel,
+                                ],
+                                [
+                                    'codigo' => $codigo,
+                                    'nombre' => $codigo,
+                                    'descripcion' => null,
+                                    'tipo' => $tipo,
+                                    'estado' => $estado,
+                                    'zona' => $zona,
+                                    'capacidad_unidades' => $capacidad_unidades,
+                                ]
+                            );
+
+                            if ($warehouse->wasRecentlyCreated) {
+                                $creados++;
+                            } else {
+                                $actualizados++;
+                            }
+                        } catch (\Exception $e) {
+                            $errores[] = "Error en {$codigo}: " . $e->getMessage();
+                        }
+                    }
+                }
+            }
+
+            DB::commit();
+
+            $total = $creados + $actualizados;
+            $mensaje = "Proceso completado. Creadas: {$creados}, Actualizadas: {$actualizados}, Total: {$total}";
+
+            return Response::json([
+                'estado' => true,
+                'msj' => $mensaje,
+                'creados' => $creados,
+                'actualizados' => $actualizados,
+                'total' => $total,
+                'errores' => $errores
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

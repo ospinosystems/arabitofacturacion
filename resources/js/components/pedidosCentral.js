@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 import Modalmovil from "./modalmovil";
 import TransferenciasModule from "./TransferenciasModule";
+import TCRModule from "./TCRModule";
 
 export default function PedidosCentralComponent({
 	socketUrl,
@@ -100,13 +101,55 @@ export default function PedidosCentralComponent({
                 />
             ) : null}
 
-				<div className="btn-group mb-2">
-					<button className={subviewcentral == "pedidos" ? ("btn btn-outline-sinapsis") : ("btn btn-outline-secondary")} onClick={() => { getPedidosCentral(); setsubviewcentral("pedidos") }}>Recibir Pedidos</button>
-					<button className={subviewcentral == "pedidos_send" ? ("btn btn-outline-sinapsis") : ("btn btn-outline-secondary")} onClick={() => { setsubviewcentral("pedidos_send") }}>Enviar Pedidos</button>
-					<button className={subviewcentral == "tareas" ? ("btn btn-outline-sinapsis") : ("btn btn-outline-secondary")} onClick={() => { setsubviewcentral("tareas") }}>Tareas</button>
-					{/* <button className={subviewcentral == "inventario" ? ("btn btn-outline-sinapsis") : ("btn btn-outline-secondary")} onClick={() => { getInventarioFromSucursal(); setsubviewcentral("inventario") }}>Actualizar Inventario</button>
- */}
-				</div>
+				<nav className="flex flex-wrap gap-2 mb-4">
+					<button
+						className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm
+							${subviewcentral === "pedidos"
+								? "bg-sinapsis text-white shadow border border-sinapsis"
+								: "bg-white text-gray-700 hover:bg-sinapsis border border-gray-300"
+							}`}
+						onClick={() => { getPedidosCentral(); setsubviewcentral("pedidos"); }}>
+						Recibir Pedidos
+					</button>
+					<button
+						className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm
+							${subviewcentral === "pedidos_send"
+								? "bg-sinapsis text-white shadow border border-sinapsis"
+								: "bg-white text-gray-700 hover:bg-sinapsis border border-gray-300"
+							}`}
+						onClick={() => { setsubviewcentral("pedidos_send"); }}>
+						Enviar Pedidos
+					</button>
+					<button
+						className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm
+							${subviewcentral === "tcr"
+								? "bg-sinapsis text-white shadow border border-sinapsis"
+								: "bg-white text-gray-700 hover:bg-sinapsis border border-gray-300"
+							}`}
+						onClick={() => { setsubviewcentral("tcr"); }}>
+						TCR
+					</button>
+					<button
+						className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm
+							${subviewcentral === "tareas"
+								? "bg-sinapsis text-white shadow border border-sinapsis"
+								: "bg-white text-gray-700 hover:bg-sinapsis border border-gray-300"
+							}`}
+						onClick={() => { setsubviewcentral("tareas"); }}>
+						Tareas
+					</button>
+					{/* 
+					<button
+						className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm
+							${subviewcentral === "inventario"
+								? "bg-sinapsis text-white shadow border border-sinapsis"
+								: "bg-white text-gray-700 hover:bg-sinapsis hover:text-white border border-gray-300"
+							}`}
+						onClick={() => { getInventarioFromSucursal(); setsubviewcentral("inventario"); }}>
+						Actualizar Inventario
+					</button>
+					*/}
+				</nav>
 				{subviewcentral == "tareas" ?
 					<>
 						<div className="flex items-center gap-4 mb-4">
@@ -689,6 +732,28 @@ export default function PedidosCentralComponent({
 					: null}
 				
 				{subviewcentral == "pedidos_send" ? (<TransferenciasModule/>) : null}
+
+				{subviewcentral == "tcr" ? (
+					<TCRModule
+						pedidosCentral={pedidosCentral}
+						indexPedidoCentral={indexPedidoCentral}
+						setIndexPedidoCentral={setIndexPedidoCentral}
+						qpedidoscentralq={qpedidoscentralq}
+						setqpedidoscentralq={setqpedidoscentralq}
+						qpedidocentrallimit={qpedidocentrallimit}
+						setqpedidocentrallimit={setqpedidocentrallimit}
+						qpedidocentralemisor={qpedidocentralemisor}
+						setqpedidocentralemisor={setqpedidocentralemisor}
+						sucursalesCentral={sucursalesCentral}
+						getPedidosCentral={getPedidosCentral}
+						getSucursales={getSucursales}
+						showdetailsPEdido={showdetailsPEdido}
+						setshowdetailsPEdido={setshowdetailsPEdido}
+						moneda={moneda}
+						selectPedidosCentral={selectPedidosCentral}
+						checkPedidosCentral={checkPedidosCentral}
+					/>
+				) : null}
 
 			</>
 		)	
