@@ -61,7 +61,7 @@ class sendCentral extends Controller
        return "https://phplaravel-1009655-3565285.cloudwaysapps.com";
     }
 
-    /**
+    /**\
      * Buscar una solicitud de garantía específica en arabitocentral
      */
     public function buscarSolicitudGarantiaCentral($id)

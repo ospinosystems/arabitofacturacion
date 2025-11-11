@@ -563,6 +563,11 @@ export default function Facturar({
 
         { value: "0108", text: "0108 PROVINCIAL" },
         { value: "0191", text: "0191 BANCO NACIONAL DE CRÉDITO BNC" },
+
+        {value:"0171 ACTIVO ARABITO 0194", text:"0171 ACTIVO ARABITO 0194"},
+        {value:"0171 ACTIVO EL HENAOUI 0176", text:"0171 ACTIVO EL HENAOUI 0176"},
+        {value:"0171 ACTIVO TITANIO 0229", text:"0171 ACTIVO TITANIO 0229"},
+
         { value: "0105", text: "0105 MERCANTIL" },
         { value: "0102", text: "0102 BANCO DE VENEZUELA" },
         { value: "0114", text: "0114 BANCO DEL CARIBE" },
