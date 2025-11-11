@@ -2,60 +2,88 @@
 
 @section('content')
 @include('warehouse-inventory.partials.nav')
-<div class="container-fluid px-4 py-3">
-    <div class="mb-4">
-        <h1 class="text-2xl font-bold text-gray-800 flex items-center">
-            <i class="fas fa-boxes text-blue-500 mr-2"></i>
-            Inventariar Productos
-        </h1>
-        <p class="text-gray-600 mt-1">Escanea producto, ubicación e ingresa cantidad</p>
+<div class="container-fluid px-2 py-1">
+    <div class="mb-1">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-lg font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-boxes text-blue-500 mr-1 text-base"></i>
+                    Inventariar Productos
+                </h1>
+                <p class="text-gray-600 text-xs mt-0.5">Escanea producto, ubicación e ingresa cantidad</p>
+            </div>
+            <button onclick="mostrarModalReporte()" 
+                    class="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition flex items-center text-xs">
+                <i class="fas fa-file-pdf mr-1"></i>
+                Generar Reporte PDF
+            </button>
+        </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-2">
         <!-- Panel de Escaneo -->
         <div class="lg:col-span-2">
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-xl font-bold text-gray-700 mb-4">Proceso de Inventariado</h2>
+            <div class="bg-white rounded-lg shadow p-2">
+                <h2 class="text-lg font-bold text-gray-700 mb-2">Proceso de Inventariado</h2>
                 
                 <!-- Paso 1: Escanear Producto -->
-                <div id="pasoProducto" class="space-y-4">
-                    <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded">
-                        <h3 class="font-bold text-green-700 mb-2">
-                            <span class="bg-green-500 text-white rounded-full w-8 h-8 inline-flex items-center justify-center mr-2">1</span>
+                <div id="pasoProducto" class="space-y-2">
+                    <div class="bg-green-50 border-l-4 border-green-500 p-2 rounded">
+                        <h3 class="font-bold text-green-700 mb-1 text-sm">
+                            <span class="bg-green-500 text-white rounded-full w-6 h-6 inline-flex items-center justify-center mr-1 text-xs">1</span>
                             Escanear Producto
                         </h3>
-                        <p class="text-sm text-gray-600 mb-3">Escanea el código de barras o código de proveedor del producto</p>
-                        <input type="text" 
-                               id="inputProducto" 
-                               class="w-full px-4 py-3 text-lg font-mono border-2 border-green-400 rounded-lg focus:ring-2 focus:ring-green-500"
-                               placeholder="Escanea código de barras o proveedor"
-                               autofocus
-                               onkeypress="if(event.key === 'Enter') buscarProducto()">
-                        <div id="mensajeProducto" class="mt-2 text-sm"></div>
+                        <p class="text-xs text-gray-600 mb-1">Escanea el código de barras o código de proveedor del producto</p>
+                        <div class="relative">
+                            <input type="text" 
+                                   id="inputProducto" 
+                                   class="w-full px-2 py-2 text-base font-mono border-2 border-green-400 rounded-lg focus:ring-2 focus:ring-green-500 pr-8"
+                                   placeholder="Escanea código de barras o proveedor"
+                                   autofocus
+                                   onkeypress="if(event.key === 'Enter') buscarProducto()">
+                            <button onclick="limpiarInput('inputProducto')" 
+                                    class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                                    type="button">
+                                <i class="fas fa-times text-sm"></i>
+                            </button>
+                        </div>
+                        <div id="mensajeProducto" class="mt-1 text-xs"></div>
                         <button onclick="buscarProducto()" 
-                                class="mt-3 w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition">
-                            <i class="fas fa-search mr-2"></i>
+                                class="mt-1 w-full px-2 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg transition text-sm">
+                            <i class="fas fa-search mr-1"></i>
                             Buscar Producto
                         </button>
                     </div>
                     
                     <!-- Información del Producto -->
-                    <div id="infoProducto" class="bg-white border border-gray-200 rounded-lg p-4" style="display: none;">
+                    <div id="infoProducto" class="bg-white border border-gray-200 rounded-lg p-2" style="display: none;">
                         <div class="flex items-start justify-between">
                             <div class="flex-1">
-                                <h4 class="font-bold text-gray-800 text-lg" id="productoDescripcion"></h4>
+                                <h4 class="font-bold text-gray-800 text-base" id="productoDescripcion"></h4>
                                 
                                 <!-- Cantidad Actual - Destacada -->
-                                <div class="mt-3 mb-3 p-3 bg-blue-50 border-2 border-blue-300 rounded-lg">
+                                <div class="mt-1 mb-1 p-2 bg-blue-50 border-2 border-blue-300 rounded-lg">
                                     <div class="flex items-center justify-between">
-                                        <span class="text-gray-700 font-semibold">Cantidad Actual en Inventario:</span>
-                                        <span class="font-bold text-blue-700 text-2xl" id="productoCantidadActual"></span>
+                                        <span class="text-gray-700 font-semibold text-xs">Cantidad Actual:</span>
+                                        <span class="font-bold text-blue-700 text-xl" id="productoCantidadActual"></span>
                                     </div>
-                                    <div class="mt-1 text-xs text-gray-600" id="productoCantidadAnterior"></div>
+                                    <div class="mt-0.5 text-xs text-gray-600" id="productoCantidadAnterior"></div>
+                                    <!-- Check para usar cantidad absoluta (visible solo si cantidad != 0) -->
+                                    <div id="checkCantidadAbsolutaContainer" class="mt-1" style="display: none;">
+                                        <label class="flex items-center cursor-pointer">
+                                            <input type="checkbox" 
+                                                   id="usarCantidadAbsoluta" 
+                                                   class="mr-1 w-3.5 h-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                                   checked="false">
+                                            <span class="text-xs text-gray-700 font-medium">
+                                                Usar cantidad absoluta
+                                            </span>
+                                        </label>
+                                    </div>
                                 </div>
 
                                 <!-- Información Básica -->
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 text-sm">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-1 mt-1 text-xs">
                                     <div class="flex items-center">
                                         <span class="text-gray-600 w-32">Código Barras:</span>
                                         <span class="font-mono font-semibold" id="productoCodigoBarras"></span>
@@ -91,23 +119,23 @@
                                 </div>
 
                                 <!-- Información de Ubicaciones -->
-                                <div id="infoUbicaciones" class="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-lg" style="display: none;">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <span class="text-sm font-semibold text-gray-700">
-                                            <i class="fas fa-map-marker-alt mr-1"></i>
+                                <div id="infoUbicaciones" class="mt-1 p-1 bg-gray-50 border border-gray-200 rounded-lg" style="display: none;">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <span class="text-xs font-semibold text-gray-700">
+                                            <i class="fas fa-map-marker-alt mr-0.5"></i>
                                             En Ubicaciones:
                                         </span>
-                                        <span class="font-bold text-gray-800" id="productoTotalUbicaciones"></span>
+                                        <span class="font-bold text-gray-800 text-xs" id="productoTotalUbicaciones"></span>
                                     </div>
                                     <div class="text-xs text-gray-600" id="productoNumeroUbicaciones"></div>
-                                    <div id="productoListaUbicaciones" class="mt-2 text-xs space-y-1"></div>
+                                    <div id="productoListaUbicaciones" class="mt-1 text-xs space-y-0.5"></div>
                                 </div>
 
                                 <!-- Botones de Acción -->
-                                <div class="mt-3 flex gap-2">
+                                <div class="mt-1 flex gap-1">
                                     <button onclick="imprimirTicket()" 
-                                            class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition flex items-center">
-                                        <i class="fas fa-print mr-2"></i>
+                                            class="px-2 py-1 bg-green-500 hover:bg-green-600 text-white rounded-lg transition flex items-center text-xs">
+                                        <i class="fas fa-print mr-1"></i>
                                         Imprimir Ticket
                                     </button>
                                 </div>
@@ -120,33 +148,40 @@
                 </div>
 
                 <!-- Paso 2: Escanear Ubicación -->
-                <div id="pasoUbicacion" class="space-y-4 mt-6" style="display: none;">
-                    <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-                        <h3 class="font-bold text-blue-700 mb-2">
-                            <span class="bg-blue-500 text-white rounded-full w-8 h-8 inline-flex items-center justify-center mr-2">2</span>
+                <div id="pasoUbicacion" class="space-y-2 mt-2" style="display: none;">
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-2 rounded">
+                        <h3 class="font-bold text-blue-700 mb-1 text-sm">
+                            <span class="bg-blue-500 text-white rounded-full w-6 h-6 inline-flex items-center justify-center mr-1 text-xs">2</span>
                             Escanear Ubicación
                         </h3>
-                        <p class="text-sm text-gray-600 mb-3">Escanea o ingresa el código de la ubicación</p>
-                        <input type="text" 
-                               id="inputUbicacion" 
-                               class="w-full px-4 py-3 text-lg font-mono border-2 border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500"
-                               placeholder="Escanea código de ubicación"
-                               autofocus
-                               onkeypress="if(event.key === 'Enter') buscarUbicacion()">
-                        <div id="mensajeUbicacion" class="mt-2 text-sm"></div>
+                        <p class="text-xs text-gray-600 mb-1">Escanea o ingresa el código de la ubicación</p>
+                        <div class="relative">
+                            <input type="text" 
+                                   id="inputUbicacion" 
+                                   class="w-full px-2 py-2 text-base font-mono border-2 border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500 pr-8"
+                                   placeholder="Escanea código de ubicación"
+                                   autofocus
+                                   onkeypress="if(event.key === 'Enter') buscarUbicacion()">
+                            <button onclick="limpiarInput('inputUbicacion')" 
+                                    class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                                    type="button">
+                                <i class="fas fa-times text-sm"></i>
+                            </button>
+                        </div>
+                        <div id="mensajeUbicacion" class="mt-1 text-xs"></div>
                         <button onclick="buscarUbicacion()" 
-                                class="mt-3 w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition">
-                            <i class="fas fa-search mr-2"></i>
+                                class="mt-1 w-full px-2 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition text-sm">
+                            <i class="fas fa-search mr-1"></i>
                             Buscar Ubicación
                         </button>
                     </div>
                     
                     <!-- Información de la Ubicación -->
-                    <div id="infoUbicacion" class="bg-white border border-gray-200 rounded-lg p-4" style="display: none;">
+                    <div id="infoUbicacion" class="bg-white border border-gray-200 rounded-lg p-2" style="display: none;">
                         <div class="flex items-start justify-between">
                             <div class="flex-1">
-                                <h4 class="font-bold text-gray-800 text-lg" id="ubicacionNombre"></h4>
-                                <div class="mt-2 space-y-1 text-sm">
+                                <h4 class="font-bold text-gray-800 text-base" id="ubicacionNombre"></h4>
+                                <div class="mt-1 space-y-0.5 text-xs">
                                     <div class="flex items-center">
                                         <span class="text-gray-600 w-32">Código:</span>
                                         <span class="font-mono font-semibold" id="ubicacionCodigo"></span>
@@ -169,25 +204,32 @@
                 </div>
 
                 <!-- Paso 3: Ingresar Cantidad -->
-                <div id="pasoCantidad" class="space-y-4 mt-6" style="display: none;">
-                    <div class="bg-orange-50 border-l-4 border-orange-500 p-4 rounded">
-                        <h3 class="font-bold text-orange-700 mb-2">
-                            <span class="bg-orange-500 text-white rounded-full w-8 h-8 inline-flex items-center justify-center mr-2">3</span>
+                <div id="pasoCantidad" class="space-y-2 mt-2" style="display: none;">
+                    <div class="bg-orange-50 border-l-4 border-orange-500 p-2 rounded">
+                        <h3 class="font-bold text-orange-700 mb-1 text-sm">
+                            <span class="bg-orange-500 text-white rounded-full w-6 h-6 inline-flex items-center justify-center mr-1 text-xs">3</span>
                             Ingresar Cantidad
                         </h3>
-                        <p class="text-sm text-gray-600 mb-3">Ingresa la cantidad a inventariar</p>
-                        <input type="number" 
-                               id="inputCantidad" 
-                               step="0.0001"
-                               min="0.0001"
-                               class="w-full px-4 py-3 text-lg font-mono border-2 border-orange-400 rounded-lg focus:ring-2 focus:ring-orange-500"
-                               placeholder="Ingrese cantidad"
-                               autofocus
-                               onkeypress="if(event.key === 'Enter') guardarInventario()">
-                        <div id="mensajeCantidad" class="mt-2 text-sm"></div>
+                        <p class="text-xs text-gray-600 mb-1">Ingresa la cantidad a inventariar</p>
+                        <div class="relative">
+                            <input type="number" 
+                                   id="inputCantidad" 
+                                   step="0.0001"
+                                   min="0.0001"
+                                   class="w-full px-2 py-2 text-base font-mono border-2 border-orange-400 rounded-lg focus:ring-2 focus:ring-orange-500 pr-8"
+                                   placeholder="Ingrese cantidad"
+                                   autofocus
+                                   onkeypress="if(event.key === 'Enter') guardarInventario()">
+                            <button onclick="limpiarInput('inputCantidad')" 
+                                    class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                                    type="button">
+                                <i class="fas fa-times text-sm"></i>
+                            </button>
+                        </div>
+                        <div id="mensajeCantidad" class="mt-1 text-xs"></div>
                         <button onclick="guardarInventario()" 
-                                class="mt-3 w-full px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition">
-                            <i class="fas fa-save mr-2"></i>
+                                class="mt-1 w-full px-2 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition text-sm">
+                            <i class="fas fa-save mr-1"></i>
                             Guardar Inventario
                         </button>
                     </div>
@@ -197,25 +239,25 @@
 
         <!-- Panel de Resumen -->
         <div class="lg:col-span-1">
-            <div class="bg-white rounded-lg shadow p-6 sticky top-4">
-                <h3 class="text-lg font-bold text-gray-700 mb-4">Resumen</h3>
-                <div class="space-y-3">
-                    <div class="p-3 bg-gray-50 rounded">
-                        <div class="text-sm text-gray-600">Producto</div>
-                        <div id="resumenProducto" class="font-semibold text-gray-800 mt-1">-</div>
+            <div class="bg-white rounded-lg shadow p-2 sticky top-2">
+                <h3 class="text-sm font-bold text-gray-700 mb-1">Resumen</h3>
+                <div class="space-y-1">
+                    <div class="p-1 bg-gray-50 rounded">
+                        <div class="text-xs text-gray-600">Producto</div>
+                        <div id="resumenProducto" class="font-semibold text-gray-800 text-xs mt-0.5">-</div>
                     </div>
-                    <div class="p-3 bg-gray-50 rounded">
-                        <div class="text-sm text-gray-600">Ubicación</div>
-                        <div id="resumenUbicacion" class="font-semibold text-gray-800 mt-1">-</div>
+                    <div class="p-1 bg-gray-50 rounded">
+                        <div class="text-xs text-gray-600">Ubicación</div>
+                        <div id="resumenUbicacion" class="font-semibold text-gray-800 text-xs mt-0.5">-</div>
                     </div>
-                    <div class="p-3 bg-gray-50 rounded">
-                        <div class="text-sm text-gray-600">Cantidad</div>
-                        <div id="resumenCantidad" class="font-bold text-blue-600 text-lg mt-1">-</div>
+                    <div class="p-1 bg-gray-50 rounded">
+                        <div class="text-xs text-gray-600">Cantidad</div>
+                        <div id="resumenCantidad" class="font-bold text-blue-600 text-base mt-0.5">-</div>
                     </div>
                 </div>
                 <button onclick="resetearTodo()" 
-                        class="mt-4 w-full px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition">
-                    <i class="fas fa-redo mr-2"></i>
+                        class="mt-1 w-full px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition text-xs">
+                    <i class="fas fa-redo mr-1"></i>
                     Reiniciar
                 </button>
             </div>
@@ -226,9 +268,64 @@
 <!-- Notificaciones -->
 <div id="notificaciones" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
 
+<!-- Modal para Reporte PDF -->
+<div id="modalReporte" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden" style="display: none;">
+    <div class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xl font-bold text-gray-800">Generar Reporte PDF</h3>
+            <button onclick="cerrarModalReporte()" class="text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        <form id="formReporte" onsubmit="generarReporte(event)">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Fecha Desde</label>
+                    <input type="date" 
+                           id="fechaDesde" 
+                           name="fecha_desde"
+                           value="{{ date('Y-m-d') }}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                           required>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Fecha Hasta</label>
+                    <input type="date" 
+                           id="fechaHasta" 
+                           name="fecha_hasta"
+                           value="{{ date('Y-m-d') }}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                           required>
+                </div>
+            </div>
+            <div class="mt-6 flex gap-3">
+                <button type="submit" 
+                        class="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition">
+                    <i class="fas fa-file-pdf mr-2"></i>
+                    Generar PDF
+                </button>
+                <button type="button" 
+                        onclick="cerrarModalReporte()"
+                        class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition">
+                    Cancelar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 let productoSeleccionado = null;
 let ubicacionSeleccionada = null;
+
+// Función para limpiar inputs
+function limpiarInput(inputId) {
+    const input = document.getElementById(inputId);
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
+}
 
 function mostrarNotificacion(mensaje, tipo = 'info') {
     const tipos = {
@@ -310,6 +407,19 @@ function mostrarInfoProducto(producto) {
     // Cantidad actual
     const cantidadActual = parseFloat(producto.cantidad_actual) || 0;
     document.getElementById('productoCantidadActual').textContent = cantidadActual;
+    
+    // Mostrar check para cantidad absoluta solo si cantidad != 0
+    const checkContainer = document.getElementById('checkCantidadAbsolutaContainer');
+    const checkAbsoluta = document.getElementById('usarCantidadAbsoluta');
+    if (cantidadActual != 0) {
+        // Si tiene cantidad, mostrar el check para permitir usar cantidad absoluta
+        checkContainer.style.display = 'block';
+        checkAbsoluta.checked = false; // Por defecto false (sumar)
+    } else {
+        // Si no tiene cantidad, ocultar el check
+        checkContainer.style.display = 'none';
+        checkAbsoluta.checked = false;
+    }
     
     // Cantidad anterior (si existe)
     const cantidadAnterior = parseFloat(producto.cantidad_anterior) || 0;
@@ -483,6 +593,9 @@ function guardarInventario() {
         return;
     }
     
+    // Obtener el valor del check de cantidad absoluta
+    const usarCantidadAbsoluta = document.getElementById('usarCantidadAbsoluta').checked;
+    
     fetch('/inventario/guardar-inventario-con-ubicacion', {
         method: 'POST',
         headers: {
@@ -492,7 +605,8 @@ function guardarInventario() {
         body: JSON.stringify({
             producto_id: productoSeleccionado.id,
             warehouse_id: ubicacionSeleccionada.id,
-            cantidad: cantidad
+            cantidad: cantidad,
+            usar_cantidad_absoluta: usarCantidadAbsoluta
         })
     })
     .then(response => response.json())
@@ -537,6 +651,46 @@ function resetearTodo() {
 
 // Actualizar resumen cuando cambia la cantidad
 document.getElementById('inputCantidad').addEventListener('input', actualizarResumen);
+
+// Funciones para el modal de reporte
+function mostrarModalReporte() {
+    const modal = document.getElementById('modalReporte');
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+}
+
+function cerrarModalReporte() {
+    const modal = document.getElementById('modalReporte');
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+}
+
+function generarReporte(event) {
+    event.preventDefault();
+    const fechaDesde = document.getElementById('fechaDesde').value;
+    const fechaHasta = document.getElementById('fechaHasta').value;
+    
+    if (!fechaDesde || !fechaHasta) {
+        mostrarNotificacion('Por favor seleccione ambas fechas', 'warning');
+        return;
+    }
+    
+    if (fechaDesde > fechaHasta) {
+        mostrarNotificacion('La fecha desde no puede ser mayor que la fecha hasta', 'warning');
+        return;
+    }
+    
+    // Construir URL con parámetros
+    const url = `/inventario/reporte-planilla-pdf?fecha_desde=${fechaDesde}&fecha_hasta=${fechaHasta}`;
+    
+    // Abrir en nueva pestaña para descargar el PDF
+    window.open(url, '_blank');
+    
+    cerrarModalReporte();
+    mostrarNotificacion('Generando reporte PDF...', 'info');
+}
 </script>
 
 <style>

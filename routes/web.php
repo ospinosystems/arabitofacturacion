@@ -317,6 +317,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('inventario/buscar-producto-inventariar', [InventarioController::class, 'buscarProductoInventariar'])->name('inventario.buscar-producto-inventariar');
 		Route::post('inventario/buscar-ubicacion-inventariar', [InventarioController::class, 'buscarUbicacionInventariar'])->name('inventario.buscar-ubicacion-inventariar');
 		Route::post('inventario/guardar-inventario-con-ubicacion', [InventarioController::class, 'guardarInventarioConUbicacion'])->name('inventario.guardar-inventario-con-ubicacion');
+		Route::get('inventario/reporte-planilla-pdf', [InventarioController::class, 'generarReporteInventarioPDF'])->name('inventario.reporte-planilla-pdf');
 		// ================ FIN RUTAS PARA INVENTARIAR PRODUCTOS ================
 	
 		

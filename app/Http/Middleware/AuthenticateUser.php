@@ -104,6 +104,7 @@ class AuthenticateUser
         "inventario/buscar-producto-inventariar",
         "inventario/buscar-ubicacion-inventariar",
         "inventario/guardar-inventario-con-ubicacion",
+        "inventario/reporte-planilla-pdf",
         
         // Cargar ubicaciones por rango
         "warehouses/cargar-por-rango",

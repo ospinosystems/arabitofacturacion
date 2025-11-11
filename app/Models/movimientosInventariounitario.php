@@ -21,6 +21,10 @@ class movimientosInventariounitario extends Model
         return $this->hasOne(\App\Models\usuarios::class,"id","id_usuario"); 
     }
 
+    public function producto() { 
+        return $this->hasOne(\App\Models\inventario::class,"id","id_producto"); 
+    }
+
     protected $fillable = [
         "id_producto",
         "id_pedido",

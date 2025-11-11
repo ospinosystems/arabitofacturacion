@@ -28,6 +28,8 @@ use DB;
 use Response;
 use Storage;
 use Hash;
+use Barryvdh\DomPDF\Facade\Pdf;
+use App\Models\movimientosInventariounitario;
 
 
 class InventarioController extends Controller
@@ -1555,11 +1557,14 @@ class InventarioController extends Controller
                     'origen' => $origen,
                 ]);
 
+                // Si el origen es 'inventariado', usar "PLANILLA INVENTARIO" como concepto
+                $concepto = ($origen == 'inventariado') ? 'PLANILLA INVENTARIO' : "$origen #$id_cxp F-$numfactcxp";
+                
                 (new MovimientosInventariounitarioController)->setNewCtMov([
                     'id_producto' => $insertOrUpdateInv->id,
                     'cantidadafter' => $insertOrUpdateInv->cantidad,
                     'ct1' => isset($before['cantidad']) ? $before['cantidad'] : 0,
-                    'origen' => "$origen #$id_cxp F-$numfactcxp",
+                    'origen' => $concepto,
                 ]);
 
                 DB::commit();
@@ -2337,6 +2342,7 @@ class InventarioController extends Controller
                 'producto_id' => 'required|exists:inventarios,id',
                 'warehouse_id' => 'required|exists:warehouses,id',
                 'cantidad' => 'required|numeric|min:0.01',
+                'usar_cantidad_absoluta' => 'sometimes|boolean',
             ]);
 
             DB::beginTransaction();
@@ -2347,7 +2353,10 @@ class InventarioController extends Controller
             // Obtener cantidad actual del producto (antes de actualizar)
             $cantidadAnterior = $producto->cantidad ?? 0;
             $cantidadActual = $cantidadAnterior;
-            $nuevaCantidad = $cantidadAnterior + $request->cantidad;
+            
+            // Si usar_cantidad_absoluta es true, setear la cantidad directamente, sino sumar
+            $usarCantidadAbsoluta = $request->has('usar_cantidad_absoluta') && $request->usar_cantidad_absoluta;
+            $nuevaCantidad = $usarCantidadAbsoluta ? $request->cantidad : ($cantidadAnterior + $request->cantidad);
 
             // Guardar producto con nueva cantidad usando guardarProducto
             $resultado = $this->guardarProducto([
@@ -2389,7 +2398,11 @@ class InventarioController extends Controller
 
             if ($warehouseInventory) {
                 // Actualizar cantidad existente
-                $warehouseInventory->cantidad += $request->cantidad;
+                if ($usarCantidadAbsoluta) {
+                    $warehouseInventory->cantidad = $request->cantidad;
+                } else {
+                    $warehouseInventory->cantidad += $request->cantidad;
+                }
                 $warehouseInventory->fecha_entrada = now();
                 $warehouseInventory->save();
             } else {
@@ -2425,7 +2438,7 @@ class InventarioController extends Controller
                 'producto' => [
                     'id' => $productoId,
                     'cantidad_anterior' => $cantidadAnterior,
-                    'cantidad_agregada' => $request->cantidad,
+                    'cantidad_agregada' => $usarCantidadAbsoluta ? 0 : $request->cantidad,
                     'cantidad_total' => $nuevaCantidad,
                 ],
                 'warehouse' => [
@@ -2439,6 +2452,75 @@ class InventarioController extends Controller
             return Response::json([
                 'estado' => false,
                 'msj' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Generar PDF del reporte de inventario (PLANILLA INVENTARIO)
+     */
+    public function generarReporteInventarioPDF(Request $request)
+    {
+        try {
+            $fechaDesde = $request->input('fecha_desde', date('Y-m-d'));
+            $fechaHasta = $request->input('fecha_hasta', date('Y-m-d'));
+
+            // Obtener movimientos con concepto "PLANILLA INVENTARIO" filtrados por fecha
+            $movimientos = movimientosInventariounitario::with(['usuario', 'producto' => function($query) {
+                $query->select('id', 'descripcion', 'codigo_barras', 'codigo_proveedor', 'unidad');
+            }])
+            ->where('origen', 'PLANILLA INVENTARIO')
+            ->whereBetween('created_at', [$fechaDesde . ' 00:00:00', $fechaHasta . ' 23:59:59'])
+            ->orderBy('id_producto')
+            ->orderBy('created_at')
+            ->get();
+
+            // Agrupar productos iguales juntos
+            $productosAgrupados = [];
+            foreach ($movimientos as $movimiento) {
+                $idProducto = $movimiento->id_producto;
+                if (!isset($productosAgrupados[$idProducto])) {
+                    $productosAgrupados[$idProducto] = [
+                        'producto' => $movimiento->producto,
+                        'movimientos' => [],
+                        'total_cantidad' => 0,
+                        'cantidad_final' => 0
+                    ];
+                }
+                $productosAgrupados[$idProducto]['movimientos'][] = $movimiento;
+                $productosAgrupados[$idProducto]['total_cantidad'] += $movimiento->cantidad;
+                $productosAgrupados[$idProducto]['cantidad_final'] = $movimiento->cantidadafter;
+            }
+
+            // Generar HTML para el PDF
+            $html = view('inventario.reporte-inventario-pdf', [
+                'productosAgrupados' => $productosAgrupados,
+                'fechaDesde' => $fechaDesde,
+                'fechaHasta' => $fechaHasta,
+                'totalProductos' => count($productosAgrupados),
+                'totalMovimientos' => $movimientos->count()
+            ])->render();
+
+            // Generar PDF
+            $pdf = Pdf::loadHTML($html)
+                ->setPaper('letter', 'portrait')
+                ->setOptions([
+                    'isHtml5ParserEnabled' => true,
+                    'isPhpEnabled' => true,
+                    'margin_left' => 10,
+                    'margin_right' => 10,
+                    'margin_top' => 10,
+                    'margin_bottom' => 10,
+                ]);
+
+            $filename = 'reporte_inventario_planilla_' . $fechaDesde . '_' . $fechaHasta . '.pdf';
+            
+            return $pdf->download($filename);
+
+        } catch (\Exception $e) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error al generar reporte: ' . $e->getMessage()
             ], 500);
         }
     }
