@@ -30,6 +30,7 @@ class AuthenticateUser
         'getmovientoinventariounitario',
         'searchProductosInventario',
         'producto',
+        'inventarios/buscar',
         
         // Pedidos y transferencias
         'reqpedidos',
