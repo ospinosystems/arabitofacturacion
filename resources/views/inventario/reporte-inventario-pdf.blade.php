@@ -66,6 +66,17 @@
         .movimiento-row:nth-child(even) {
             background-color: #f9f9f9;
         }
+        .movimiento-resta {
+            background-color: #ffebee !important;
+            color: #c62828;
+        }
+        .movimiento-resta td {
+            color: #c62828;
+            font-weight: bold;
+        }
+        .movimiento-adicion {
+            background-color: #fff;
+        }
         .total-row {
             background-color: #f0f0f0;
             font-weight: bold;
@@ -125,13 +136,23 @@
             </thead>
             <tbody>
                 @foreach($grupo['movimientos'] as $index => $movimiento)
-                    <tr class="movimiento-row">
+                    @php
+                        $esResta = $movimiento->cantidad < 0;
+                        $claseFila = $esResta ? 'movimiento-resta' : 'movimiento-adicion';
+                    @endphp
+                    <tr class="movimiento-row {{ $claseFila }}">
                         <td class="text-center">{{ $index + 1 }}</td>
                         <td>{{ date('d/m/Y', strtotime($movimiento->created_at)) }}</td>
                         <td>{{ date('H:i:s', strtotime($movimiento->created_at)) }}</td>
                         <td>{{ $movimiento->usuario->usuario ?? 'N/A' }}</td>
                         <td class="text-right">{{ number_format($movimiento->cantidadafter - $movimiento->cantidad, 4) }}</td>
-                        <td class="text-right">{{ number_format($movimiento->cantidad, 4) }}</td>
+                        <td class="text-right">
+                            @if($esResta)
+                                <span style="color: #c62828; font-weight: bold;">{{ number_format($movimiento->cantidad, 4) }}</span>
+                            @else
+                                {{ number_format($movimiento->cantidad, 4) }}
+                            @endif
+                        </td>
                         <td class="text-right"><strong>{{ number_format($movimiento->cantidadafter, 4) }}</strong></td>
                     </tr>
                 @endforeach

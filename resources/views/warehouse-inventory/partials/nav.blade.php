@@ -20,7 +20,7 @@
             <div class="grid grid-cols-1 gap-2 lg:flex lg:flex-wrap">
                 <!-- Ubicaciones con submenú -->
                 <div class="relative group">
-                    <a href="{{ route('warehouses.index') }}" 
+                    <a href="#" 
                        class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('warehouses.index') || request()->is('warehouses/cargar-por-rango') ? 'bg-white text-blue-700 shadow-md' : '  ' }}">
                         <i class="fas fa-map-marker-alt mr-2"></i>
                         <span>Ubicaciones</span>

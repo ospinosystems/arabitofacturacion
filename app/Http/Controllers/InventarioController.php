@@ -2523,7 +2523,7 @@ class InventarioController extends Controller
             ->where('origen', 'PLANILLA INVENTARIO')
             ->whereBetween('created_at', [$fechaDesde . ' 00:00:00', $fechaHasta . ' 23:59:59'])
             ->orderBy('id_producto')
-            ->orderBy('created_at')
+            ->orderBy('created_at', 'asc') // Ordenar por hora ascendente
             ->get();
 
             // Agrupar productos iguales juntos
@@ -2541,6 +2541,13 @@ class InventarioController extends Controller
                 $productosAgrupados[$idProducto]['movimientos'][] = $movimiento;
                 $productosAgrupados[$idProducto]['total_cantidad'] += $movimiento->cantidad;
                 $productosAgrupados[$idProducto]['cantidad_final'] = $movimiento->cantidadafter;
+            }
+            
+            // Ordenar movimientos dentro de cada producto por hora ascendente
+            foreach ($productosAgrupados as $idProducto => $grupo) {
+                usort($productosAgrupados[$idProducto]['movimientos'], function($a, $b) {
+                    return strtotime($a->created_at) - strtotime($b->created_at);
+                });
             }
 
             // Generar HTML para el PDF
