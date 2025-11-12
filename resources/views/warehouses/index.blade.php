@@ -400,10 +400,12 @@ function imprimirMultiplesEtiquetas(codigos) {
         etiquetasHTML += `
             <div class="etiqueta-container">
                 <div class="etiqueta">
-                    <div class="codigo-texto">${codigo}</div>
-                    <div class="barcode-wrapper">
-                        <div class="barcode-container">
-                            <svg class="barcode" data-codigo="${codigo}"></svg>
+                    <div class="contenido-wrapper">
+                        <div class="codigo-texto">${codigo}</div>
+                        <div class="barcode-wrapper">
+                            <div class="barcode-container">
+                                <svg class="barcode" data-codigo="${codigo}"></svg>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -464,6 +466,19 @@ function imprimirMultiplesEtiquetas(codigos) {
                     text-align: center;
                 }
                 
+                .contenido-wrapper {
+                    width: 100%;
+                    padding: 0.5mm;
+                    border: 1.5mm solid #000;
+                    background: white;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: flex-start;
+                    flex: 1;
+                    min-height: 0;
+                }
+                
                 .codigo-texto {
                     font-size: 28px;
                     font-weight: 900;
@@ -472,7 +487,7 @@ function imprimirMultiplesEtiquetas(codigos) {
                     color: #000;
                     padding: 0.5mm 2mm;
                     display: inline-block;
-                    margin-bottom: 0.5mm;
+                    margin-bottom: 0.2mm;
                     margin-top: 0;
                     width: 100%;
                     text-align: center;
@@ -480,8 +495,7 @@ function imprimirMultiplesEtiquetas(codigos) {
                 
                 .barcode-wrapper {
                     width: 100%;
-                    padding: 0.5mm;
-                    border: 1.5mm solid #000;
+                    padding: 0;
                     background: white;
                     display: flex;
                     flex-direction: column;
@@ -630,6 +644,19 @@ function imprimirEtiqueta(codigo) {
                     text-align: center;
                 }
                 
+                .contenido-wrapper {
+                    width: 100%;
+                    padding: 0.5mm;
+                    border: 1.5mm solid #000;
+                    background: white;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: flex-start;
+                    flex: 1;
+                    min-height: 0;
+                }
+                
                 .codigo-texto {
                     font-size: 28px;
                     font-weight: 900;
@@ -638,7 +665,7 @@ function imprimirEtiqueta(codigo) {
                     color: #000;
                     padding: 0.5mm 2mm;
                     display: inline-block;
-                    margin-bottom: 0.5mm;
+                    margin-bottom: 0.2mm;
                     margin-top: 0;
                     width: 100%;
                     text-align: center;
@@ -646,8 +673,7 @@ function imprimirEtiqueta(codigo) {
                 
                 .barcode-wrapper {
                     width: 100%;
-                    padding: 0.5mm;
-                    border: 1.5mm solid #000;
+                    padding: 0;
                     background: white;
                     display: flex;
                     flex-direction: column;
@@ -703,10 +729,12 @@ function imprimirEtiqueta(codigo) {
         </head>
         <body>
             <div class="etiqueta">
-                <div class="codigo-texto">${codigo}</div>
-                <div class="barcode-wrapper">
-                    <div class="barcode-container">
-                        <svg id="barcode"></svg>
+                <div class="contenido-wrapper">
+                    <div class="codigo-texto">${codigo}</div>
+                    <div class="barcode-wrapper">
+                        <div class="barcode-container">
+                            <svg id="barcode"></svg>
+                        </div>
                     </div>
                 </div>
             </div>
