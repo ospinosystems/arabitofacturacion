@@ -88,6 +88,8 @@ class WarehouseController extends Controller
         
         if ($request->has('buscar')) {
             $buscar = $request->buscar;
+            // Normalizar código de búsqueda
+            $buscar = $this->normalizarCodigoUbicacion($buscar);
             $query->where(function($q) use ($buscar) {
                 $q->where('codigo', 'like', "%{$buscar}%")
                   ->orWhere('nombre', 'like', "%{$buscar}%")
@@ -105,6 +107,25 @@ class WarehouseController extends Controller
     }
 
     /**
+     * Normalizar código de ubicación: reemplazar caracteres no alfanuméricos por guiones
+     */
+    private function normalizarCodigoUbicacion($codigo)
+    {
+        if (!$codigo) {
+            return $codigo;
+        }
+        
+        // Reemplazar todo lo que no sea letra o número por guiones
+        $normalizado = preg_replace('/[^a-zA-Z0-9]/', '-', $codigo);
+        // Reemplazar múltiples guiones consecutivos por uno solo
+        $normalizado = preg_replace('/-+/', '-', $normalizado);
+        // Eliminar guiones al inicio y final
+        $normalizado = trim($normalizado, '-');
+        
+        return $normalizado;
+    }
+
+    /**
      * Buscar ubicaciones para asignar productos
      */
     public function buscarUbicaciones(Request $request)
@@ -116,6 +137,9 @@ class WarehouseController extends Controller
                 'ubicaciones' => []
             ]);
         }
+        
+        // Normalizar código de búsqueda
+        $buscar = $this->normalizarCodigoUbicacion($buscar);
         
         $ubicaciones = Warehouse::where(function($query) use ($buscar) {
                 $query->where('codigo', 'like', "%{$buscar}%")
@@ -348,6 +372,9 @@ class WarehouseController extends Controller
     public function buscarPorCodigo(Request $request)
     {
         $codigo = $request->codigo;
+        
+        // Normalizar código de ubicación
+        $codigo = $this->normalizarCodigoUbicacion($codigo);
         
         $warehouse = Warehouse::where('codigo', $codigo)
             ->where('estado', 'activa')

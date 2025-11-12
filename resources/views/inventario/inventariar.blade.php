@@ -81,6 +81,18 @@
                                             </span>
                                         </label>
                                     </div>
+                                    <!-- Mensaje informativo sobre movimientos anteriores de PLANILLA INVENTARIO -->
+                                    <div id="mensajeMovimientosPlanilla" class="mt-1 p-1.5 bg-yellow-50 border-l-4 border-yellow-400 rounded" style="display: none;">
+                                        <div class="flex items-start">
+                                            <i class="fas fa-info-circle text-yellow-600 mr-1.5 mt-0.5 text-xs"></i>
+                                            <div class="flex-1">
+                                                <p class="text-xs font-semibold text-yellow-800 mb-0.5">
+                                                    Movimientos anteriores detectados
+                                                </p>
+                                                <p class="text-xs text-yellow-700" id="textoMovimientosPlanilla"></p>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <!-- Información Básica -->
@@ -437,6 +449,36 @@ function mostrarInfoProducto(producto) {
         checkAbsoluta.checked = false;
     }
     
+    // Mostrar mensaje sobre movimientos anteriores de PLANILLA INVENTARIO
+    const mensajeMovimientos = document.getElementById('mensajeMovimientosPlanilla');
+    const textoMovimientos = document.getElementById('textoMovimientosPlanilla');
+    const tieneMovimientosPlanilla = producto.tiene_movimientos_planilla || false;
+    const cantidadMovimientos = producto.cantidad_movimientos_planilla || 0;
+    const movimientosPlanilla = producto.movimientos_planilla || [];
+    
+    if (tieneMovimientosPlanilla && cantidadMovimientos > 0) {
+        // Construir el texto del mensaje
+        let texto = `Este producto tiene ${cantidadMovimientos} movimiento${cantidadMovimientos > 1 ? 's' : ''} de PLANILLA INVENTARIO en los últimos 3 meses. `;
+        texto += `Las cantidades ingresadas se adicionarán a los movimientos anteriores.`;
+        
+        // Si hay movimientos, mostrar detalles (máximo 3 más recientes)
+        if (movimientosPlanilla.length > 0) {
+            texto += '<br><span class="font-semibold mt-1 block">Últimos movimientos:</span>';
+            const movimientosMostrar = movimientosPlanilla.slice(0, 3);
+            movimientosMostrar.forEach((mov, index) => {
+                texto += `<br>• ${mov.fecha} - Cantidad: ${mov.cantidad} → ${mov.cantidad_after}`;
+            });
+            if (movimientosPlanilla.length > 3) {
+                texto += `<br><span class="text-yellow-600">... y ${movimientosPlanilla.length - 3} movimiento${movimientosPlanilla.length - 3 > 1 ? 's' : ''} más</span>`;
+            }
+        }
+        
+        textoMovimientos.innerHTML = texto;
+        mensajeMovimientos.style.display = 'block';
+    } else {
+        mensajeMovimientos.style.display = 'none';
+    }
+    
     // Cantidad anterior (si existe)
     const cantidadAnterior = parseFloat(producto.cantidad_anterior) || 0;
     if (cantidadAnterior > 0 && cantidadAnterior !== cantidadActual) {
@@ -541,6 +583,8 @@ function resetearProducto() {
     document.getElementById('inputUbicacion').value = '';
     document.getElementById('infoUbicacion').style.display = 'none';
     document.getElementById('inputCantidad').value = '';
+    // Ocultar mensaje de movimientos anteriores
+    document.getElementById('mensajeMovimientosPlanilla').style.display = 'none';
     actualizarResumen();
     document.getElementById('inputProducto').focus();
 }
@@ -661,6 +705,8 @@ function resetearTodo() {
     document.getElementById('infoUbicacion').style.display = 'none';
     document.getElementById('pasoUbicacion').style.display = 'none';
     document.getElementById('pasoCantidad').style.display = 'none';
+    // Ocultar mensaje de movimientos anteriores
+    document.getElementById('mensajeMovimientosPlanilla').style.display = 'none';
     actualizarResumen();
     document.getElementById('inputProducto').focus();
 }

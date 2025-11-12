@@ -741,7 +741,8 @@ class InventarioController extends Controller
 
                                 // NUEVO: Asignar warehouse si se proporcionó warehouse_codigo
                                 if (isset($item['warehouse_codigo']) && !empty($item['warehouse_codigo'])) {
-                                    $warehouse = \App\Models\Warehouse::where('codigo', $item['warehouse_codigo'])
+                                    $warehouseCodigo = $this->normalizarCodigoUbicacion($item['warehouse_codigo']);
+                                    $warehouse = \App\Models\Warehouse::where('codigo', $warehouseCodigo)
                                         ->where('estado', 'activa')
                                         ->first();
                                     
@@ -2260,10 +2261,23 @@ class InventarioController extends Controller
 
             // Verificar si hay movimientos de PLANILLA INVENTARIO en los últimos 3 meses
             $fechaHace3Meses = now()->subMonths(3);
-            $tieneMovimientoPlanilla = \App\Models\movimientosInventariounitario::where('id_producto', $producto->id)
+            $movimientosPlanilla = \App\Models\movimientosInventariounitario::where('id_producto', $producto->id)
                 ->where('origen', 'PLANILLA INVENTARIO')
                 ->where('created_at', '>=', $fechaHace3Meses)
-                ->exists();
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            $tieneMovimientoPlanilla = $movimientosPlanilla->isNotEmpty();
+            $cantidadMovimientos = $movimientosPlanilla->count();
+            
+            // Obtener información de los movimientos para mostrar
+            $infoMovimientos = $movimientosPlanilla->map(function($movimiento) {
+                return [
+                    'fecha' => $movimiento->created_at->format('d/m/Y H:i'),
+                    'cantidad' => $movimiento->cantidad ?? 0,
+                    'cantidad_after' => $movimiento->cantidadafter ?? 0,
+                ];
+            })->toArray();
 
             // Si hay movimiento de PLANILLA INVENTARIO en los últimos 3 meses, usar cantidad absoluta = false
             // Si NO hay movimiento, usar cantidad absoluta = true
@@ -2288,6 +2302,9 @@ class InventarioController extends Controller
                     'numero_ubicaciones' => $numeroUbicaciones,
                     'ubicaciones' => $ubicacionesDetalle,
                     'usar_cantidad_absoluta' => $usarCantidadAbsoluta,
+                    'tiene_movimientos_planilla' => $tieneMovimientoPlanilla,
+                    'cantidad_movimientos_planilla' => $cantidadMovimientos,
+                    'movimientos_planilla' => $infoMovimientos,
                 ]
             ]);
 
@@ -2297,6 +2314,25 @@ class InventarioController extends Controller
                 'msj' => 'Error: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Normalizar código de ubicación: reemplazar caracteres no alfanuméricos por guiones
+     */
+    private function normalizarCodigoUbicacion($codigo)
+    {
+        if (!$codigo) {
+            return $codigo;
+        }
+        
+        // Reemplazar todo lo que no sea letra o número por guiones
+        $normalizado = preg_replace('/[^a-zA-Z0-9]/', '-', $codigo);
+        // Reemplazar múltiples guiones consecutivos por uno solo
+        $normalizado = preg_replace('/-+/', '-', $normalizado);
+        // Eliminar guiones al inicio y final
+        $normalizado = trim($normalizado, '-');
+        
+        return $normalizado;
     }
 
     /**
@@ -2313,6 +2349,9 @@ class InventarioController extends Controller
                     'msj' => 'Código requerido'
                 ]);
             }
+
+            // Normalizar código de ubicación
+            $codigo = $this->normalizarCodigoUbicacion($codigo);
 
             $warehouse = \App\Models\Warehouse::where('codigo', $codigo)
                 ->activas()

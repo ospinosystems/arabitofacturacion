@@ -15,6 +15,25 @@ use Response;
 class TCRController extends Controller
 {
     /**
+     * Normalizar código de ubicación: reemplazar caracteres no alfanuméricos por guiones
+     */
+    private function normalizarCodigoUbicacion($codigo)
+    {
+        if (!$codigo) {
+            return $codigo;
+        }
+        
+        // Reemplazar todo lo que no sea letra o número por guiones
+        $normalizado = preg_replace('/[^a-zA-Z0-9]/', '-', $codigo);
+        // Reemplazar múltiples guiones consecutivos por uno solo
+        $normalizado = preg_replace('/-+/', '-', $normalizado);
+        // Eliminar guiones al inicio y final
+        $normalizado = trim($normalizado, '-');
+        
+        return $normalizado;
+    }
+
+    /**
      * Vista del chequeador - Asignar productos a pasilleros
      */
     public function chequeador()
@@ -294,7 +313,8 @@ class TCRController extends Controller
             }
             
             // Buscar ubicación
-            $warehouse = Warehouse::where('codigo', $request->codigo_ubicacion)
+            $codigoUbicacion = $this->normalizarCodigoUbicacion($request->codigo_ubicacion);
+            $warehouse = Warehouse::where('codigo', $codigoUbicacion)
                 ->where('estado', 'activa')
                 ->first();
             
@@ -574,6 +594,9 @@ class TCRController extends Controller
                 'msj' => 'Código requerido'
             ]);
         }
+        
+        // Normalizar código de ubicación
+        $codigo = $this->normalizarCodigoUbicacion($codigo);
         
         $warehouse = Warehouse::where('codigo', $codigo)
             ->where('estado', 'activa')
