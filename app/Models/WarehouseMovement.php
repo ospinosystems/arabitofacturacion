@@ -64,7 +64,7 @@ class WarehouseMovement extends Model
      */
     public function usuario()
     {
-        return $this->belongsTo(User::class, 'usuario_id');
+        return $this->belongsTo(usuarios::class, 'usuario_id');
     }
     
     /**

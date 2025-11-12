@@ -47,19 +47,19 @@
                 </a>
                 
                 <!-- Consultar por Ubicación -->
-                <a href="{{ route('warehouse-inventory.por-ubicacion') }}" 
+              <!--   <a href="{{ route('warehouse-inventory.por-ubicacion') }}" 
                    class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('warehouse-inventory.por-ubicacion') ? 'bg-white text-blue-700 shadow-md' : '  ' }}">
                     <i class="fas fa-search-location mr-2"></i>
                     <span>Consultar Ubicación</span>
-                </a>
+                </a> -->
                 
                 <!-- Buscar por Código -->
-                <a href="{{ route('warehouse-inventory.buscar-codigo') }}" 
+                <!-- <a href="{{ route('warehouse-inventory.buscar-codigo') }}" 
                    class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('warehouse-inventory.buscar-codigo') ? 'bg-white text-blue-700 shadow-md' : '  ' }}">
                     <i class="fas fa-barcode mr-2"></i>
                     <span class="hidden sm:inline">Buscar por Código</span>
                     <span class="sm:hidden">Escanear</span>
-                </a>
+                </a> -->
                 
                 <!-- Historial -->
                 <a href="{{ route('warehouse-inventory.historial') }}" 
@@ -69,11 +69,11 @@
                 </a>
                 
                 <!-- Próximos a Vencer -->
-                <a href="{{ route('warehouse-inventory.proximos-vencer') }}" 
+                <!-- <a href="{{ route('warehouse-inventory.proximos-vencer') }}" 
                    class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('warehouse-inventory.proximos-vencer') ? 'bg-white text-blue-700 shadow-md' : '  ' }}">
                     <i class="fas fa-exclamation-triangle mr-2"></i>
                     <span>Próximos a Vencer</span>
-                </a>
+                </a> -->
 
                 <!-- TCR -->
                 <a href="/warehouse-inventory/tcr" 
