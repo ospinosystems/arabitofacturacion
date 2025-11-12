@@ -517,12 +517,15 @@ class InventarioController extends Controller
         }
         $inv->cantidad = $cantidad;
         if ($inv->save()) {
+            // Construir origen: si id_pedido es null, usar solo origen; si no, agregar el prefijo
+            $origenFinal = $id_pedido !== null ? ($origen . ' #' . $id_pedido) : $origen;
+            
             (new MovimientosInventariounitarioController)->setNewCtMov([
                 'id_producto' => $id_producto,
                 'cantidadafter' => $cantidad,
                 'ct1' => $ct1,
                 'id_pedido' => $id_pedido,
-                'origen' => $origen . ' #' . $id_pedido,
+                'origen' => $origenFinal,
             ]);
             return true;
         };

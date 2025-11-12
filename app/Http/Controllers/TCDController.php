@@ -10,8 +10,11 @@ use App\Models\Warehouse;
 use App\Models\WarehouseInventory;
 use App\Models\WarehouseMovement;
 use App\Models\inventario;
+use App\Http\Controllers\InventarioController;
+use App\Http\Controllers\sendCentral;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Http;
 use Response;
 
 class TCDController extends Controller
@@ -71,35 +74,69 @@ class TCDController extends Controller
                           ->orWhere('descripcion', 'like', "%{$buscar}%");
                 })
                 ->limit(20)
-                ->get()
-                ->map(function($producto) {
-                    // Obtener ubicación del producto (primera ubicación con stock)
+                ->get();
+            
+            $productosFormateados = $productos->map(function($producto) {
+                try {
+                    // Obtener stock disponible (cantidad - cantidad_bloqueada)
+                    $stockDisponible = WarehouseInventory::where('inventario_id', $producto->id)
+                        ->selectRaw('SUM(cantidad - COALESCE(cantidad_bloqueada, 0)) as disponible')
+                        ->value('disponible');
+                    
+                    $stockDisponible = $stockDisponible !== null ? (float)$stockDisponible : 0;
+                    
+                    // Obtener ubicación del producto (primera ubicación con stock disponible)
                     $warehouseInventory = WarehouseInventory::where('inventario_id', $producto->id)
-                        ->where('cantidad', '>', 0)
+                        ->whereRaw('(cantidad - COALESCE(cantidad_bloqueada, 0)) > 0')
                         ->with('warehouse')
+                        ->orderBy('cantidad', 'desc')
                         ->first();
                     
-                    $ubicacion = $warehouseInventory ? $warehouseInventory->warehouse->codigo ?? 'N/A' : 'N/A';
+                    $ubicacion = 'N/A';
+                    if ($warehouseInventory && $warehouseInventory->warehouse) {
+                        $ubicacion = $warehouseInventory->warehouse->codigo ?? 'N/A';
+                    }
+                    
+                    // Obtener stock total
+                    $stockTotal = WarehouseInventory::where('inventario_id', $producto->id)
+                        ->sum('cantidad') ?? 0;
                     
                     return [
                         'id' => $producto->id,
-                        'codigo_barras' => $producto->codigo_barras,
-                        'codigo_proveedor' => $producto->codigo_proveedor,
-                        'descripcion' => $producto->descripcion,
-                        'precio' => $producto->precio,
-                        'precio_base' => $producto->precio_base,
+                        'codigo_barras' => $producto->codigo_barras ?? '',
+                        'codigo_proveedor' => $producto->codigo_proveedor ?? '',
+                        'descripcion' => $producto->descripcion ?? '',
+                        'precio' => $producto->precio ?? 0,
+                        'precio_base' => $producto->precio_base ?? 0,
                         'ubicacion' => $ubicacion,
-                        'stock_total' => WarehouseInventory::where('inventario_id', $producto->id)
-                            ->where('cantidad', '>', 0)
-                            ->sum('cantidad'),
+                        'stock_total' => (float)$stockTotal,
+                        'stock_disponible' => $stockDisponible,
                     ];
-                });
+                } catch (\Exception $e) {
+                    // Si hay error procesando un producto, retornar datos básicos
+                    return [
+                        'id' => $producto->id,
+                        'codigo_barras' => $producto->codigo_barras ?? '',
+                        'codigo_proveedor' => $producto->codigo_proveedor ?? '',
+                        'descripcion' => $producto->descripcion ?? '',
+                        'precio' => $producto->precio ?? 0,
+                        'precio_base' => $producto->precio_base ?? 0,
+                        'ubicacion' => 'N/A',
+                        'stock_total' => 0,
+                        'stock_disponible' => 0,
+                    ];
+                }
+            })->values(); // values() para asegurar que sea un array indexado
             
             return Response::json([
                 'estado' => true,
-                'productos' => $productos
-            ]);
+                'productos' => $productosFormateados->toArray()
+            ], 200, [], JSON_UNESCAPED_UNICODE);
         } catch (\Exception $e) {
+            \Log::error('Error en buscarProductos TCD: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return Response::json([
                 'estado' => false,
                 'productos' => [],
@@ -140,14 +177,24 @@ class TCDController extends Controller
                 'observaciones' => $request->observaciones,
             ]);
             
-            // Crear items de la orden
+            // Crear items de la orden con validación de stock
             foreach ($request->items as $item) {
                 $producto = inventario::findOrFail($item['inventario_id']);
                 
+                // Validar stock disponible (cantidad - cantidad_bloqueada)
+                $stockDisponible = WarehouseInventory::where('inventario_id', $producto->id)
+                    ->selectRaw('SUM(cantidad - COALESCE(cantidad_bloqueada, 0)) as disponible')
+                    ->value('disponible') ?? 0;
+                
+                if ($stockDisponible < $item['cantidad']) {
+                    throw new \Exception("Stock insuficiente para el producto '{$producto->descripcion}'. Disponible: {$stockDisponible}, Solicitado: {$item['cantidad']}");
+                }
+                
                 // Obtener ubicación del producto
                 $warehouseInventory = WarehouseInventory::where('inventario_id', $producto->id)
-                    ->where('cantidad', '>', 0)
+                    ->whereRaw('(cantidad - COALESCE(cantidad_bloqueada, 0)) > 0')
                     ->with('warehouse')
+                    ->orderBy('cantidad', 'desc')
                     ->first();
                 
                 $ubicacion = $warehouseInventory ? $warehouseInventory->warehouse->codigo ?? null : null;
@@ -267,7 +314,7 @@ class TCDController extends Controller
     }
     
     /**
-     * Obtener asignaciones del pasillero actual
+     * Obtener asignaciones del pasillero actual agrupadas por orden
      */
     public function getMisAsignaciones(Request $request)
     {
@@ -279,15 +326,141 @@ class TCDController extends Controller
             ], 401);
         }
         
+        // Obtener asignaciones del pasillero
         $asignaciones = TCDAsignacion::porPasillero($pasilleroId)
             ->whereIn('estado', ['pendiente', 'en_proceso'])
             ->with(['orden', 'ordenItem', 'warehouse'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+            ->get()
+            ->map(function($asig) {
+                $inventarioId = $asig->ordenItem->inventario_id;
+                $cantidadPendiente = $asig->cantidad - $asig->cantidad_procesada;
+                
+                // Obtener stock disponible total
+                $stockDisponible = WarehouseInventory::where('inventario_id', $inventarioId)
+                    ->selectRaw('SUM(cantidad - COALESCE(cantidad_bloqueada, 0)) as disponible')
+                    ->value('disponible') ?? 0;
+                
+                // Obtener TODAS las ubicaciones con stock disponible para este producto
+                $todasUbicaciones = WarehouseInventory::where('inventario_id', $inventarioId)
+                    ->whereRaw('(cantidad - COALESCE(cantidad_bloqueada, 0)) > 0')
+                    ->with('warehouse')
+                    ->get()
+                    ->map(function($wi) {
+                        $disponible = $wi->cantidad - ($wi->cantidad_bloqueada ?? 0);
+                        return [
+                            'warehouse_id' => $wi->warehouse_id,
+                            'codigo' => $wi->warehouse->codigo ?? 'N/A',
+                            'stock_disponible' => (float)$disponible
+                        ];
+                    })
+                    ->values();
+                
+                // Separar ubicaciones: las que resuelven completamente y las que tienen stock pero no resuelven
+                $ubicacionesSuficientes = $todasUbicaciones->filter(function($ubicacion) use ($cantidadPendiente) {
+                    return $ubicacion['stock_disponible'] >= $cantidadPendiente;
+                })->values();
+                
+                $ubicacionesInsuficientes = $todasUbicaciones->filter(function($ubicacion) use ($cantidadPendiente) {
+                    return $ubicacion['stock_disponible'] < $cantidadPendiente;
+                })->values();
+                
+                // Verificar si hay al menos una ubicación que resuelva la cantidad pendiente
+                $tieneUbicacionSuficiente = $ubicacionesSuficientes->count() > 0;
+                
+                $asig->stock_disponible = $stockDisponible;
+                $asig->ubicaciones_suficientes = $ubicacionesSuficientes;
+                $asig->ubicaciones_insuficientes = $ubicacionesInsuficientes;
+                $asig->ubicaciones_disponibles = $todasUbicaciones; // Todas las ubicaciones para mostrar
+                $asig->tiene_ubicacion_suficiente = $tieneUbicacionSuficiente;
+                
+                return $asig;
+            });
+        
+        // Agrupar por orden
+        $ordenesAgrupadas = $asignaciones->groupBy('tcd_orden_id')->map(function($asigs, $ordenId) {
+            $orden = $asigs->first()->orden;
+            return [
+                'orden_id' => $orden->id,
+                'numero_orden' => $orden->numero_orden,
+                'estado' => $orden->estado,
+                'fecha_creacion' => $orden->created_at->toDateTimeString(),
+                'observaciones' => $orden->observaciones,
+                'asignaciones' => $asigs->map(function($asig) {
+                    return [
+                        'id' => $asig->id,
+                        'tcd_orden_id' => $asig->tcd_orden_id,
+                        'tcd_orden_item_id' => $asig->tcd_orden_item_id,
+                        'pasillero_id' => $asig->pasillero_id,
+                        'cantidad' => (float)$asig->cantidad,
+                        'cantidad_procesada' => (float)$asig->cantidad_procesada,
+                        'estado' => $asig->estado,
+                        'warehouse_id' => $asig->warehouse_id,
+                        'stock_disponible' => (float)($asig->stock_disponible ?? 0),
+                        'ubicaciones_suficientes' => $asig->ubicaciones_suficientes ?? [],
+                        'ubicaciones_insuficientes' => $asig->ubicaciones_insuficientes ?? [],
+                        'ubicaciones_disponibles' => $asig->ubicaciones_disponibles ?? [],
+                        'tiene_ubicacion_suficiente' => $asig->tiene_ubicacion_suficiente ?? false,
+                        'orden' => [
+                            'id' => $asig->orden->id,
+                            'numero_orden' => $asig->orden->numero_orden,
+                            'estado' => $asig->orden->estado
+                        ],
+                        'orden_item' => [
+                            'id' => $asig->ordenItem->id,
+                            'inventario_id' => $asig->ordenItem->inventario_id,
+                            'codigo_barras' => $asig->ordenItem->codigo_barras,
+                            'codigo_proveedor' => $asig->ordenItem->codigo_proveedor,
+                            'descripcion' => $asig->ordenItem->descripcion,
+                            'cantidad_solicitada' => (float)$asig->ordenItem->cantidad_solicitada
+                        ],
+                        'warehouse' => $asig->warehouse ? [
+                            'id' => $asig->warehouse->id,
+                            'codigo' => $asig->warehouse->codigo
+                        ] : null
+                    ];
+                })->values()
+            ];
+        })->sortByDesc(function($orden) {
+            return $orden['fecha_creacion'];
+        })->values(); // Ordenar por fecha de creación descendente
         
         return Response::json([
             'estado' => true,
-            'asignaciones' => $asignaciones
+            'ordenes' => $ordenesAgrupadas->toArray(),
+            'asignaciones' => $asignaciones->map(function($asig) {
+                return [
+                    'id' => $asig->id,
+                    'tcd_orden_id' => $asig->tcd_orden_id,
+                    'tcd_orden_item_id' => $asig->tcd_orden_item_id,
+                    'pasillero_id' => $asig->pasillero_id,
+                    'cantidad' => (float)$asig->cantidad,
+                    'cantidad_procesada' => (float)$asig->cantidad_procesada,
+                    'estado' => $asig->estado,
+                    'warehouse_id' => $asig->warehouse_id,
+                    'stock_disponible' => (float)($asig->stock_disponible ?? 0),
+                    'ubicaciones_suficientes' => $asig->ubicaciones_suficientes ?? [],
+                    'ubicaciones_insuficientes' => $asig->ubicaciones_insuficientes ?? [],
+                    'ubicaciones_disponibles' => $asig->ubicaciones_disponibles ?? [],
+                    'tiene_ubicacion_suficiente' => $asig->tiene_ubicacion_suficiente ?? false,
+                    'orden' => [
+                        'id' => $asig->orden->id,
+                        'numero_orden' => $asig->orden->numero_orden,
+                        'estado' => $asig->orden->estado
+                    ],
+                    'orden_item' => [
+                        'id' => $asig->ordenItem->id,
+                        'inventario_id' => $asig->ordenItem->inventario_id,
+                        'codigo_barras' => $asig->ordenItem->codigo_barras,
+                        'codigo_proveedor' => $asig->ordenItem->codigo_proveedor,
+                        'descripcion' => $asig->ordenItem->descripcion,
+                        'cantidad_solicitada' => (float)$asig->ordenItem->cantidad_solicitada
+                    ],
+                    'warehouse' => $asig->warehouse ? [
+                        'id' => $asig->warehouse->id,
+                        'codigo' => $asig->warehouse->codigo
+                    ] : null
+                ];
+            })->toArray() // Mantener para compatibilidad
         ]);
     }
     
@@ -380,6 +553,85 @@ class TCDController extends Controller
     }
     
     /**
+     * Reversar una asignación procesada
+     */
+    public function reversarAsignacion(Request $request)
+    {
+        $chequeadorId = session('id_usuario');
+        if (!$chequeadorId) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Usuario no autenticado'
+            ], 401);
+        }
+        
+        $request->validate([
+            'asignacion_id' => 'required|integer|exists:tcd_asignaciones,id',
+            'cantidad' => 'required|numeric|min:0.0001'
+        ]);
+        
+        try {
+            DB::beginTransaction();
+            
+            $asignacion = TCDAsignacion::with(['orden', 'ordenItem'])->findOrFail($request->asignacion_id);
+            
+            // Verificar que el chequeador sea el dueño de la orden
+            if ($asignacion->orden->chequeador_id != $chequeadorId) {
+                throw new \Exception('No tiene permiso para reversar esta asignación');
+            }
+            
+            // Verificar que la orden no tenga ticket de despacho generado
+            if ($asignacion->orden->ticketDespacho) {
+                throw new \Exception('No se puede reversar una asignación de una orden que ya tiene ticket de despacho');
+            }
+            
+            // Verificar que la cantidad a reversar no exceda la cantidad procesada
+            if ($request->cantidad > $asignacion->cantidad_procesada) {
+                throw new \Exception("La cantidad a reversar ({$request->cantidad}) excede la cantidad procesada ({$asignacion->cantidad_procesada})");
+            }
+            
+            // Reversar la cantidad
+            $asignacion->cantidad_procesada -= $request->cantidad;
+            
+            // Si la cantidad procesada llega a 0, cambiar estado a pendiente
+            if ($asignacion->cantidad_procesada <= 0) {
+                $asignacion->cantidad_procesada = 0;
+                $asignacion->estado = 'pendiente';
+            } else {
+                // Si aún hay cantidad procesada, cambiar a en_proceso
+                $asignacion->estado = 'en_proceso';
+            }
+            
+            $asignacion->save();
+            
+            // Actualizar estado de la orden
+            $orden = $asignacion->orden;
+            $todasCompletas = $orden->asignaciones()->where('estado', '!=', 'completada')->count() === 0;
+            if ($todasCompletas) {
+                $orden->estado = 'completada';
+            } else {
+                $orden->estado = 'en_proceso';
+            }
+            $orden->save();
+            
+            DB::commit();
+            
+            return Response::json([
+                'estado' => true,
+                'msj' => 'Asignación reversada exitosamente',
+                'asignacion' => $asignacion->fresh()
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
      * Obtener asignaciones por orden para el chequeador
      */
     public function getAsignacionesPorOrden(Request $request)
@@ -402,8 +654,11 @@ class TCDController extends Controller
         
         $orden = TCDOrden::where('id', $ordenId)
             ->where('chequeador_id', $chequeadorId)
-            ->with(['items', 'asignaciones.pasillero', 'asignaciones.ordenItem'])
+            ->with(['items', 'asignaciones.pasillero', 'asignaciones.ordenItem', 'asignaciones.warehouse', 'ticketDespacho'])
             ->firstOrFail();
+        
+        // Verificar si ya tiene ticket de despacho (ya fue confirmada y descontada)
+        $tieneTicketDespacho = $orden->ticketDespacho !== null;
         
         // Agrupar por pasillero
         $asignacionesPorPasillero = $orden->asignaciones->groupBy('pasillero_id')->map(function($asigs, $pasilleroId) {
@@ -415,7 +670,31 @@ class TCDController extends Controller
                 'completadas' => $asigs->where('estado', 'completada')->count(),
                 'pendientes' => $asigs->where('estado', 'pendiente')->count(),
                 'en_proceso' => $asigs->where('estado', 'en_proceso')->count(),
-                'asignaciones' => $asigs->values()
+                'asignaciones' => $asigs->map(function($asig) {
+                    return [
+                        'id' => $asig->id,
+                        'cantidad' => (float)$asig->cantidad,
+                        'cantidad_procesada' => (float)$asig->cantidad_procesada,
+                        'estado' => $asig->estado,
+                        'warehouse_id' => $asig->warehouse_id,
+                        'warehouse_codigo' => $asig->warehouse_codigo,
+                        'orden_item' => [
+                            'id' => $asig->ordenItem->id,
+                            'inventario_id' => $asig->ordenItem->inventario_id,
+                            'codigo_barras' => $asig->ordenItem->codigo_barras,
+                            'codigo_proveedor' => $asig->ordenItem->codigo_proveedor,
+                            'descripcion' => $asig->ordenItem->descripcion,
+                            'cantidad_solicitada' => (float)$asig->ordenItem->cantidad_solicitada,
+                            'precio_base' => (float)$asig->ordenItem->precio_base,
+                            'precio_venta' => (float)$asig->ordenItem->precio_venta,
+                        ],
+                        'warehouse' => $asig->warehouse ? [
+                            'id' => $asig->warehouse->id,
+                            'codigo' => $asig->warehouse->codigo,
+                            'descripcion' => $asig->warehouse->descripcion ?? null,
+                        ] : null
+                    ];
+                })->values()
             ];
         })->values();
         
@@ -428,6 +707,18 @@ class TCDController extends Controller
             'orden' => $orden,
             'asignaciones_por_pasillero' => $asignacionesPorPasillero,
             'todas_listas' => $todasListas,
+            'tiene_ticket_despacho' => $tieneTicketDespacho,
+            'ticket_despacho' => $orden->ticketDespacho ? [
+                'codigo_barras' => $orden->ticketDespacho->codigo_barras,
+                'estado' => $orden->ticketDespacho->estado,
+                'fecha_generacion' => $orden->ticketDespacho->created_at,
+            ] : null,
+            'transferencia' => $orden->fecha_transferencia ? [
+                'sucursal_destino_id' => $orden->sucursal_destino_id,
+                'sucursal_destino_codigo' => $orden->sucursal_destino_codigo,
+                'fecha_transferencia' => $orden->fecha_transferencia,
+                'pedido_central_numero' => $orden->pedido_central_numero,
+            ] : null,
         ]);
     }
     
@@ -447,14 +738,19 @@ class TCDController extends Controller
         $estado = $request->estado ?? null;
         
         $query = TCDOrden::where('chequeador_id', $chequeadorId)
-            ->with(['items', 'asignaciones'])
+            ->with(['items', 'asignaciones', 'ticketDespacho'])
             ->orderBy('created_at', 'desc');
         
         if ($estado) {
             $query->where('estado', $estado);
         }
         
-        $ordenes = $query->get();
+        $ordenes = $query->get()->map(function($orden) {
+            $ordenArray = $orden->toArray();
+            $ordenArray['tiene_ticket_despacho'] = $orden->ticketDespacho !== null;
+            $ordenArray['fue_transferida'] = $orden->fecha_transferencia !== null;
+            return $ordenArray;
+        });
         
         return Response::json([
             'estado' => true,
@@ -487,6 +783,9 @@ class TCDController extends Controller
                 throw new \Exception('La orden no está completa. Todas las asignaciones deben estar completadas.');
             }
             
+            // Acumular cantidades por producto para descontar del inventario general
+            $cantidadesPorProducto = [];
+            
             // Procesar cada item de la orden
             foreach ($orden->items as $item) {
                 $producto = inventario::findOrFail($item->inventario_id);
@@ -504,14 +803,31 @@ class TCDController extends Controller
                         ->where('inventario_id', $producto->id)
                         ->first();
                     
-                    if (!$warehouseInventory || $warehouseInventory->cantidad < $asignacion->cantidad_procesada) {
-                        throw new \Exception("Stock insuficiente en ubicación para el producto: {$item->descripcion}");
+                    if (!$warehouseInventory) {
+                        throw new \Exception("Producto no encontrado en la ubicación para: {$item->descripcion}");
+                    }
+                    
+                    // Calcular stock disponible (cantidad - cantidad_bloqueada)
+                    $stockDisponible = $warehouseInventory->cantidad - ($warehouseInventory->cantidad_bloqueada ?? 0);
+                    
+                    if ($stockDisponible < $asignacion->cantidad_procesada) {
+                        throw new \Exception("Stock insuficiente en ubicación para el producto: {$item->descripcion}. Disponible: {$stockDisponible}, Solicitado: {$asignacion->cantidad_procesada}");
                     }
                     
                     // Descontar cantidad y bloquear
                     $warehouseInventory->cantidad -= $asignacion->cantidad_procesada;
                     $warehouseInventory->cantidad_bloqueada = ($warehouseInventory->cantidad_bloqueada ?? 0) + $asignacion->cantidad_procesada;
                     $warehouseInventory->save();
+                    
+                    // Acumular cantidad para descontar del inventario general
+                    if (!isset($cantidadesPorProducto[$producto->id])) {
+                        $cantidadesPorProducto[$producto->id] = [
+                            'producto' => $producto,
+                            'cantidad_total' => 0,
+                            'cantidad_anterior' => $producto->cantidad
+                        ];
+                    }
+                    $cantidadesPorProducto[$producto->id]['cantidad_total'] += $asignacion->cantidad_procesada;
                     
                     // Actualizar item
                     $item->cantidad_descontada += $asignacion->cantidad_procesada;
@@ -533,6 +849,29 @@ class TCDController extends Controller
                         'fecha_movimiento' => now(),
                     ]);
                 }
+            }
+            
+            // Descontar del inventario general usando descontarInventario
+            $inventarioController = new InventarioController();
+            foreach ($cantidadesPorProducto as $productoId => $datos) {
+                $producto = $datos['producto'];
+                $cantidadAnterior = $datos['cantidad_anterior'];
+                $cantidadADescontar = $datos['cantidad_total'];
+                $cantidadNueva = $cantidadAnterior - $cantidadADescontar;
+                
+                if ($cantidadNueva < 0) {
+                    throw new \Exception("No hay suficiente stock en inventario general para el producto: {$producto->descripcion}. Disponible: {$cantidadAnterior}, Solicitado: {$cantidadADescontar}");
+                }
+                
+                // Descontar del inventario general
+                // Pasamos null como id_pedido (es un campo integer nullable) y el numero_orden completo como origen
+                $inventarioController->descontarInventario(
+                    $productoId,
+                    $cantidadNueva, // cantidad nueva (después del descuento)
+                    $cantidadAnterior, // cantidad anterior (antes del descuento)
+                    null, // id_pedido (null porque es un campo integer y queremos el concepto en origen)
+                    $orden->numero_orden // origen (el número de orden completo, ej: "TCD #000005")
+                );
             }
             
             // Generar ticket de despacho
@@ -571,6 +910,7 @@ class TCDController extends Controller
     public function buscarUbicacion(Request $request)
     {
         $codigo = $request->codigo;
+        $inventario_id = $request->inventario_id; // ID del producto para validar stock
         
         if (!$codigo) {
             return Response::json([
@@ -585,17 +925,29 @@ class TCDController extends Controller
             ->where('estado', 'activa')
             ->first();
         
-        if ($warehouse) {
-            return Response::json([
-                'estado' => true,
-                'ubicacion' => $warehouse
-            ]);
-        } else {
+        if (!$warehouse) {
             return Response::json([
                 'estado' => false,
                 'msj' => 'Ubicación no encontrada o no está activa'
             ]);
         }
+        
+        $response = [
+            'estado' => true,
+            'ubicacion' => $warehouse
+        ];
+        
+        // Si se proporciona el inventario_id, calcular stock disponible en este warehouse
+        if ($inventario_id) {
+            $stockDisponible = WarehouseInventory::where('inventario_id', $inventario_id)
+                ->where('warehouse_id', $warehouse->id)
+                ->selectRaw('SUM(cantidad - COALESCE(cantidad_bloqueada, 0)) as disponible')
+                ->value('disponible') ?? 0;
+            
+            $response['stock_disponible'] = (float)$stockDisponible;
+        }
+        
+        return Response::json($response);
     }
     
     /**
@@ -668,6 +1020,227 @@ class TCDController extends Controller
                 'msj' => 'Ticket escaneado exitosamente. Productos desbloqueados.',
                 'orden' => $orden->fresh()
             ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Convertir orden TCD al formato de pedido para transferencia
+     */
+    private function convertirOrdenTCDAPedido($orden)
+    {
+        $orden->load(['items.inventario.proveedor', 'items.inventario.categoria']);
+        
+        // Crear estructura similar a pedidosExportadosFun
+        $pedidoFormato = [
+            'id' => 'TCD-' . $orden->id, // ID único para TCD
+            'numero_orden' => $orden->numero_orden,
+            'tipo' => 'TCD',
+            'fecha' => $orden->created_at->toDateString(),
+            'observaciones' => $orden->observaciones ?? 'Orden TCD: ' . $orden->numero_orden,
+            'cliente' => null, // TCD no tiene cliente
+            'items' => $orden->items->map(function($item) {
+                $producto = $item->inventario;
+                return [
+                    'id' => $item->id,
+                    'id_producto' => $item->inventario_id,
+                    'cantidad' => $item->cantidad_descontada > 0 ? $item->cantidad_descontada : $item->cantidad,
+                    'monto' => ($item->precio ?? 0) * ($item->cantidad_descontada > 0 ? $item->cantidad_descontada : $item->cantidad),
+                    'descuento' => 0,
+                    'entregado' => 0,
+                    'condicion' => null,
+                    'producto' => $producto ? [
+                        'id' => $producto->id,
+                        'codigo_barras' => $producto->codigo_barras,
+                        'codigo_proveedor' => $producto->codigo_proveedor,
+                        'descripcion' => $producto->descripcion,
+                        'precio' => $producto->precio,
+                        'precio_base' => $producto->precio_base,
+                        'cantidad' => $producto->cantidad,
+                        'proveedor' => $producto->proveedor,
+                        'categoria' => $producto->categoria,
+                    ] : null,
+                ];
+            }),
+            'base' => $orden->items->sum(function($item) {
+                return ($item->precio_base ?? 0) * ($item->cantidad_descontada > 0 ? $item->cantidad_descontada : $item->cantidad);
+            }),
+            'venta' => $orden->items->sum(function($item) {
+                return ($item->precio ?? 0) * ($item->cantidad_descontada > 0 ? $item->cantidad_descontada : $item->cantidad);
+            }),
+        ];
+        
+        return $pedidoFormato;
+    }
+    
+    /**
+     * Obtener sucursales disponibles para transferencia
+     */
+    public function getSucursalesDisponibles()
+    {
+        try {
+            $sendCentral = new sendCentral();
+            $response = $sendCentral->getSucursales();
+            
+            // El método getSucursales retorna un Response::json, necesitamos extraer los datos
+            if (is_object($response) && method_exists($response, 'getData')) {
+                $data = $response->getData(true);
+                if (isset($data['estado']) && $data['estado'] && isset($data['msj'])) {
+                    return Response::json([
+                        'estado' => true,
+                        'sucursales' => $data['msj']
+                    ]);
+                }
+            }
+            
+            return Response::json([
+                'estado' => false,
+                'msj' => 'No se pudieron obtener las sucursales'
+            ], 500);
+            
+        } catch (\Exception $e) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Transferir orden TCD a una sucursal
+     */
+    public function transferirOrdenASucursal(Request $request)
+    {
+        $chequeadorId = session('id_usuario');
+        if (!$chequeadorId) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Usuario no autenticado'
+            ], 401);
+        }
+        
+        $request->validate([
+            'orden_id' => 'required|exists:tcd_ordenes,id',
+            'id_sucursal' => 'required|integer',
+        ]);
+        
+        try {
+            DB::beginTransaction();
+            
+            $orden = TCDOrden::where('id', $request->orden_id)
+                ->where('chequeador_id', $chequeadorId)
+                ->with(['items.inventario.proveedor', 'items.inventario.categoria'])
+                ->firstOrFail();
+            
+            // Verificar que la orden esté completada y tenga ticket de despacho
+            if ($orden->estado !== 'completada') {
+                throw new \Exception('La orden debe estar completada para poder transferirla');
+            }
+            
+            if (!$orden->ticketDespacho) {
+                throw new \Exception('La orden debe tener un ticket de despacho generado para poder transferirla');
+            }
+            
+            // Obtener información de la sucursal destino
+            $sendCentral = new sendCentral();
+            $sucursalesResponse = $sendCentral->getSucursales();
+            $sucursalDestino = null;
+            $sucursalDestinoCodigo = null;
+            
+            // Extraer datos de la respuesta de getSucursales
+            if (is_object($sucursalesResponse) && method_exists($sucursalesResponse, 'getData')) {
+                $sucursalesData = $sucursalesResponse->getData(true);
+                if (isset($sucursalesData['estado']) && $sucursalesData['estado'] && isset($sucursalesData['msj'])) {
+                    $sucursales = $sucursalesData['msj'];
+                    
+                    // Buscar la sucursal por ID
+                    if (is_array($sucursales)) {
+                        foreach ($sucursales as $suc) {
+                            if (isset($suc['id']) && $suc['id'] == $request->id_sucursal) {
+                                $sucursalDestino = $suc;
+                                $sucursalDestinoCodigo = $suc['codigo'] ?? null;
+                                break;
+                            } elseif (isset($suc['id_sucursal']) && $suc['id_sucursal'] == $request->id_sucursal) {
+                                $sucursalDestino = $suc;
+                                $sucursalDestinoCodigo = $suc['codigo'] ?? null;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Convertir orden TCD al formato de pedido
+            $pedidoFormato = $this->convertirOrdenTCDAPedido($orden);
+            
+                // Preparar los datos en el formato que espera setPedidoInCentralFromMaster
+            $codigo_origen = $sendCentral->getOrigen();
+            
+            $response = Http::post(
+                $sendCentral->path() . "/setPedidoInCentralFromMasters", [
+                    "codigo_origen" => $codigo_origen,
+                    "id_sucursal" => $request->id_sucursal,
+                    "type" => "add",
+                    "pedidos" => [$pedidoFormato], // Array con un solo pedido
+                    "tipo_pedido" => "TCD", // Indicar que es una orden TCD
+                    "tcd_orden_id" => $orden->id, // ID de la orden TCD original
+                ]
+            );
+            
+            if ($response->ok()) {
+                $resretur = $response->json();
+                
+                if ($resretur["estado"]) {
+                    // Obtener número de pedido de la respuesta
+                    $pedidoCentralNumero = null;
+                    if (isset($resretur['pedidos']) && is_array($resretur['pedidos']) && count($resretur['pedidos']) > 0) {
+                        // Si viene un array de pedidos, tomar el primero
+                        $pedidoCentralNumero = $resretur['pedidos'][0]['numero'] ?? 
+                                               $resretur['pedidos'][0]['id'] ?? 
+                                               $resretur['pedidos'][0]['numero_pedido'] ?? null;
+                    } elseif (isset($resretur['pedido'])) {
+                        // Si viene un solo pedido
+                        $pedidoCentralNumero = $resretur['pedido']['numero'] ?? 
+                                               $resretur['pedido']['id'] ?? 
+                                               $resretur['pedido']['numero_pedido'] ?? null;
+                    } elseif (isset($resretur['numero_pedido'])) {
+                        $pedidoCentralNumero = $resretur['numero_pedido'];
+                    } elseif (isset($resretur['id'])) {
+                        $pedidoCentralNumero = $resretur['id'];
+                    }
+                    
+                    // Guardar información de transferencia en la orden
+                    $orden->sucursal_destino_id = $request->id_sucursal;
+                    $orden->sucursal_destino_codigo = $sucursalDestinoCodigo;
+                    $orden->fecha_transferencia = now();
+                    $orden->pedido_central_numero = $pedidoCentralNumero ? (string)$pedidoCentralNumero : null;
+                    $orden->save();
+                    
+                    DB::commit();
+                    
+                    return Response::json([
+                        'estado' => true,
+                        'msj' => 'Orden TCD transferida exitosamente a la sucursal',
+                        'data' => $resretur,
+                        'transferencia' => [
+                            'sucursal_destino_id' => $orden->sucursal_destino_id,
+                            'sucursal_destino_codigo' => $orden->sucursal_destino_codigo,
+                            'fecha_transferencia' => $orden->fecha_transferencia,
+                            'pedido_central_numero' => $orden->pedido_central_numero,
+                        ]
+                    ]);
+                } else {
+                    throw new \Exception($resretur['msj'] ?? 'Error al transferir la orden');
+                }
+            } else {
+                throw new \Exception('Error de comunicación con central: ' . $response->status());
+            }
             
         } catch (\Exception $e) {
             DB::rollBack();

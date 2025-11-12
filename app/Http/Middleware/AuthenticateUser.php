@@ -113,7 +113,10 @@ class AuthenticateUser
         "warehouse-inventory/tcd/procesar-asignacion",
         "warehouse-inventory/tcd/buscar-ubicacion",
         "warehouse-inventory/tcd/confirmar-orden",
+        "warehouse-inventory/tcd/reversar-asignacion",
         "warehouse-inventory/tcd/escanear-ticket-despacho",
+        "warehouse-inventory/tcd/get-sucursales-disponibles",
+        "warehouse-inventory/tcd/transferir-orden-sucursal",
         
         // Inventariar productos (tres pasos: producto, ubicación, cantidad)
         "inventario/inventariar",
@@ -243,6 +246,9 @@ class AuthenticateUser
         // Tipo 8 (Pasillero) solo tiene acceso a rutas del pasillero
         if ($userType == 8) {
             $routeUri = $request->route() ? $request->route()->uri : $request->path();
+            $routeName = $request->route() ? $request->route()->getName() : null;
+            $path = $request->path();
+            
             $pasilleroRoutes = [
                 // Rutas TCR Pasillero
                 'warehouse-inventory/tcr/pasillero',
@@ -255,9 +261,30 @@ class AuthenticateUser
                 'warehouse-inventory/tcd/procesar-asignacion',
                 'warehouse-inventory/tcd/buscar-ubicacion',
             ];
+            
+            $pasilleroRouteNames = [
+                'warehouse-inventory.tcr.pasillero',
+                'warehouse-inventory.tcr.mis-asignaciones',
+                'warehouse-inventory.tcr.procesar-asignacion',
+                'warehouse-inventory.tcr.buscar-ubicacion',
+                'warehouse-inventory.tcd.pasillero',
+                'warehouse-inventory.tcd.mis-asignaciones',
+                'warehouse-inventory.tcd.procesar-asignacion',
+                'warehouse-inventory.tcd.buscar-ubicacion',
+            ];
+            
+            // Verificar por URI, nombre de ruta o path
             return in_array($routeUri, $pasilleroRoutes) 
-                || str_starts_with($routeUri, 'warehouse-inventory/tcr/pasillero')
-                || str_starts_with($routeUri, 'warehouse-inventory/tcd/pasillero');
+                || ($routeName && in_array($routeName, $pasilleroRouteNames))
+                || in_array($path, $pasilleroRoutes)
+                || str_starts_with($path, 'warehouse-inventory/tcr/pasillero')
+                || str_starts_with($path, 'warehouse-inventory/tcd/pasillero')
+                || str_starts_with($path, 'warehouse-inventory/tcr/mis-asignaciones')
+                || str_starts_with($path, 'warehouse-inventory/tcr/procesar-asignacion')
+                || str_starts_with($path, 'warehouse-inventory/tcr/buscar-ubicacion')
+                || str_starts_with($path, 'warehouse-inventory/tcd/mis-asignaciones')
+                || str_starts_with($path, 'warehouse-inventory/tcd/procesar-asignacion')
+                || str_starts_with($path, 'warehouse-inventory/tcd/buscar-ubicacion');
         }
         
         return false;

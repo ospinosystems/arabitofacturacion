@@ -326,7 +326,10 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('warehouse-inventory/tcd/procesar-asignacion', [TCDController::class, 'procesarAsignacion'])->name('warehouse-inventory.tcd.procesar-asignacion');
 		Route::get('warehouse-inventory/tcd/buscar-ubicacion', [TCDController::class, 'buscarUbicacion'])->name('warehouse-inventory.tcd.buscar-ubicacion');
 		Route::post('warehouse-inventory/tcd/confirmar-orden', [TCDController::class, 'confirmarOrden'])->name('warehouse-inventory.tcd.confirmar-orden');
+		Route::post('warehouse-inventory/tcd/reversar-asignacion', [TCDController::class, 'reversarAsignacion'])->name('warehouse-inventory.tcd.reversar-asignacion');
 		Route::post('warehouse-inventory/tcd/escanear-ticket-despacho', [TCDController::class, 'escanearTicketDespacho'])->name('warehouse-inventory.tcd.escanear-ticket-despacho');
+		Route::get('warehouse-inventory/tcd/get-sucursales-disponibles', [TCDController::class, 'getSucursalesDisponibles'])->name('warehouse-inventory.tcd.get-sucursales-disponibles');
+		Route::post('warehouse-inventory/tcd/transferir-orden-sucursal', [TCDController::class, 'transferirOrdenASucursal'])->name('warehouse-inventory.tcd.transferir-orden-sucursal');
 		
 		// ================ RUTAS PARA INVENTARIAR PRODUCTOS ================
 		Route::get('inventario/inventariar', [InventarioController::class, 'inventariar'])->name('inventario.inventariar');

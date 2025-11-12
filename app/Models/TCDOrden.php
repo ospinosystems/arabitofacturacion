@@ -17,10 +17,15 @@ class TCDOrden extends Model
         'estado',
         'observaciones',
         'fecha_despacho',
+        'sucursal_destino_id',
+        'sucursal_destino_codigo',
+        'fecha_transferencia',
+        'pedido_central_numero',
     ];
     
     protected $casts = [
         'fecha_despacho' => 'datetime',
+        'fecha_transferencia' => 'datetime',
     ];
     
     // Relaciones

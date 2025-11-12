@@ -227,14 +227,15 @@
                         </h3>
                         <p class="text-xs text-gray-600 mb-1">Ingresa la cantidad a inventariar</p>
                         <div class="relative">
-                            <input type="number" 
+                            <input type="text" 
                                    id="inputCantidad" 
-                                   step="0.0001"
-                                   min="0.0001"
+                                   inputmode="decimal"
                                    class="w-full px-4 py-4 text-xl font-mono border-2 border-orange-400 rounded-lg focus:ring-2 focus:ring-orange-500 pr-10 text-gray-900"
                                    placeholder="Ingrese cantidad"
                                    autofocus
-                                   onkeypress="if(event.key === 'Enter') guardarInventario()">
+                                   oninput="validarCantidad(this)"
+                                   onkeypress="if(event.key === 'Enter') guardarInventario()"
+                                   onpaste="event.preventDefault(); validarPegado(event)">
                             <button onclick="limpiarInput('inputCantidad')" 
                                     class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
                                     type="button">
@@ -386,6 +387,65 @@ function desbloquearInput(inputId) {
         } else if (inputId === 'inputUbicacion') {
             input.classList.add('border-blue-400');
         }
+    }
+}
+
+// Función para validar que solo se ingresen números y decimales
+function validarCantidad(input) {
+    let valor = input.value;
+    
+    // Remover cualquier carácter que no sea número o punto decimal
+    valor = valor.replace(/[^0-9.]/g, '');
+    
+    // Evitar múltiples puntos decimales
+    const partes = valor.split('.');
+    if (partes.length > 2) {
+        valor = partes[0] + '.' + partes.slice(1).join('');
+    }
+    
+    // Actualizar el valor del input
+    if (input.value !== valor) {
+        input.value = valor;
+        // Mostrar mensaje de advertencia
+        const mensajeCantidad = document.getElementById('mensajeCantidad');
+        if (mensajeCantidad) {
+            mensajeCantidad.innerHTML = '<span class="text-red-600 text-xs"><i class="fas fa-exclamation-circle mr-1"></i>Solo se permiten números y decimales</span>';
+            setTimeout(() => {
+                mensajeCantidad.innerHTML = '';
+            }, 2000);
+        }
+    } else {
+        // Limpiar mensaje si el valor es válido
+        const mensajeCantidad = document.getElementById('mensajeCantidad');
+        if (mensajeCantidad && mensajeCantidad.innerHTML.includes('Solo se permiten')) {
+            mensajeCantidad.innerHTML = '';
+        }
+    }
+    
+    // Actualizar resumen
+    actualizarResumen();
+}
+
+// Función para validar texto pegado
+function validarPegado(event) {
+    event.preventDefault();
+    const textoPegado = (event.clipboardData || window.clipboardData).getData('text');
+    
+    // Extraer solo números y punto decimal
+    let valorValido = textoPegado.replace(/[^0-9.]/g, '');
+    
+    // Evitar múltiples puntos decimales
+    const partes = valorValido.split('.');
+    if (partes.length > 2) {
+        valorValido = partes[0] + '.' + partes.slice(1).join('');
+    }
+    
+    // Insertar el valor válido en el input
+    const input = document.getElementById('inputCantidad');
+    if (input && valorValido) {
+        input.value = valorValido;
+        validarCantidad(input);
+        actualizarResumen();
     }
 }
 
@@ -708,9 +768,21 @@ function guardarInventario() {
         return;
     }
     
-    const cantidad = parseFloat(document.getElementById('inputCantidad').value);
-    if (!cantidad || cantidad <= 0) {
-        mostrarNotificacion('Ingrese una cantidad válida', 'warning');
+    const inputCantidad = document.getElementById('inputCantidad');
+    const valorCantidad = inputCantidad.value.trim();
+    
+    // Validar que el valor no esté vacío
+    if (!valorCantidad) {
+        mostrarNotificacion('Ingrese una cantidad', 'warning');
+        inputCantidad.focus();
+        return;
+    }
+    
+    // Validar que sea un número válido
+    const cantidad = parseFloat(valorCantidad);
+    if (isNaN(cantidad) || cantidad <= 0) {
+        mostrarNotificacion('Ingrese una cantidad válida (solo números y decimales)', 'warning');
+        inputCantidad.focus();
         return;
     }
     
