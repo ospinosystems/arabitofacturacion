@@ -466,11 +466,11 @@ function imprimirMultiplesEtiquetas(codigos) {
                 }
                 
                 .codigo-texto {
-                    font-size: 22px;
+                    font-size: 28px;
                     font-weight: 900;
-                    letter-spacing: 1px;
-                    background: #000;
-                    color: #fff;
+                    letter-spacing: 1.5px;
+                    background: transparent;
+                    color: #000;
                     padding: 1.5mm 2mm;
                     display: inline-block;
                     margin-bottom: 1mm;
@@ -632,11 +632,11 @@ function imprimirEtiqueta(codigo) {
                 }
                 
                 .codigo-texto {
-                    font-size: 22px;
+                    font-size: 28px;
                     font-weight: 900;
-                    letter-spacing: 1px;
-                    background: #000;
-                    color: #fff;
+                    letter-spacing: 1.5px;
+                    background: transparent;
+                    color: #000;
                     padding: 1.5mm 2mm;
                     display: inline-block;
                     margin-bottom: 1mm;
