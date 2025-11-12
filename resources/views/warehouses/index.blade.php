@@ -433,7 +433,7 @@ function imprimirMultiplesEtiquetas(codigos) {
                 html, body {
                     margin: 0;
                     padding: 0;
-                    font-family: 'Courier New', monospace;
+                    font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
                     background: white;
                 }
                 
@@ -445,7 +445,7 @@ function imprimirMultiplesEtiquetas(codigos) {
                     display: flex;
                     justify-content: center;
                     align-items: center;
-                    padding: 1mm;
+                    padding: 0.5mm;
                 }
                 
                 .etiqueta-container:last-child {
@@ -459,7 +459,7 @@ function imprimirMultiplesEtiquetas(codigos) {
                     max-width: 55mm;
                     display: flex;
                     flex-direction: column;
-                    justify-content: space-between;
+                    justify-content: flex-start;
                     align-items: center;
                     text-align: center;
                 }
@@ -470,16 +470,17 @@ function imprimirMultiplesEtiquetas(codigos) {
                     letter-spacing: 1.5px;
                     background: transparent;
                     color: #000;
-                    padding: 1.5mm 2mm;
+                    padding: 0.5mm 2mm;
                     display: inline-block;
-                    margin-bottom: 1mm;
+                    margin-bottom: 0.5mm;
+                    margin-top: 0;
                     width: 100%;
                     text-align: center;
                 }
                 
                 .barcode-wrapper {
                     width: 100%;
-                    padding: 1mm;
+                    padding: 0.5mm;
                     border: 1.5mm solid #000;
                     background: white;
                     display: flex;
@@ -488,6 +489,7 @@ function imprimirMultiplesEtiquetas(codigos) {
                     justify-content: center;
                     flex: 1;
                     min-height: 0;
+                    margin-top: 0;
                 }
                 
                 .barcode-container {
@@ -518,7 +520,7 @@ function imprimirMultiplesEtiquetas(codigos) {
                         width: 57mm;
                         height: 44mm;
                         margin: 0;
-                        padding: 1mm;
+                        padding: 0.5mm;
                     }
                     
                     .etiqueta {
@@ -612,7 +614,7 @@ function imprimirEtiqueta(codigo) {
                     height: 44mm;
                     margin: 0;
                     padding: 0;
-                    font-family: 'Courier New', monospace;
+                    font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
                     background: white;
                     overflow: hidden;
                 }
@@ -620,10 +622,10 @@ function imprimirEtiqueta(codigo) {
                 .etiqueta {
                     width: 57mm;
                     height: 44mm;
-                    padding: 1mm;
+                    padding: 0.5mm 1mm;
                     display: flex;
                     flex-direction: column;
-                    justify-content: space-between;
+                    justify-content: flex-start;
                     align-items: center;
                     text-align: center;
                 }
@@ -634,16 +636,17 @@ function imprimirEtiqueta(codigo) {
                     letter-spacing: 1.5px;
                     background: transparent;
                     color: #000;
-                    padding: 1.5mm 2mm;
+                    padding: 0.5mm 2mm;
                     display: inline-block;
-                    margin-bottom: 1mm;
+                    margin-bottom: 0.5mm;
+                    margin-top: 0;
                     width: 100%;
                     text-align: center;
                 }
                 
                 .barcode-wrapper {
                     width: 100%;
-                    padding: 1mm;
+                    padding: 0.5mm;
                     border: 1.5mm solid #000;
                     background: white;
                     display: flex;
@@ -652,6 +655,7 @@ function imprimirEtiqueta(codigo) {
                     justify-content: center;
                     flex: 1;
                     min-height: 0;
+                    margin-top: 0;
                 }
                 
                 .barcode-container {
@@ -682,7 +686,7 @@ function imprimirEtiqueta(codigo) {
                         width: 57mm;
                         height: 44mm;
                         margin: 0;
-                        padding: 1mm;
+                        padding: 0.5mm 1mm;
                     }
                     
                     body {

@@ -37,15 +37,15 @@
                         <div class="relative">
                             <input type="text" 
                                    id="inputProducto" 
-                                   class="w-full px-2 py-2 text-base font-mono border-2 border-green-400 rounded-lg focus:ring-2 focus:ring-green-500 pr-8"
+                                   class="w-full px-4 py-4 text-xl font-mono border-2 border-green-400 rounded-lg focus:ring-2 focus:ring-green-500 pr-10 text-gray-900"
                                    placeholder="Escanea código de barras o proveedor"
                                    autofocus
                                    onkeypress="if(event.key === 'Enter') buscarProducto()"
                                    oninput="if(this.disabled) { this.value = this.defaultValue; }">
                             <button onclick="limpiarInput('inputProducto')" 
-                                    class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                                    class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
                                     type="button">
-                                <i class="fas fa-times text-sm"></i>
+                                <i class="fas fa-times text-lg"></i>
                             </button>
                         </div>
                         <div id="mensajeProducto" class="mt-1 text-xs"></div>
@@ -172,15 +172,15 @@
                         <div class="relative">
                             <input type="text" 
                                    id="inputUbicacion" 
-                                   class="w-full px-2 py-2 text-base font-mono border-2 border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500 pr-8"
+                                   class="w-full px-4 py-4 text-xl font-mono border-2 border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10 text-gray-900"
                                    placeholder="Escanea código de ubicación"
                                    autofocus
                                    oninput="if(this.disabled) { this.value = this.defaultValue; }"
                                    onkeypress="if(event.key === 'Enter') buscarUbicacion()">
                             <button onclick="limpiarInput('inputUbicacion')" 
-                                    class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                                    class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
                                     type="button">
-                                <i class="fas fa-times text-sm"></i>
+                                <i class="fas fa-times text-lg"></i>
                             </button>
                         </div>
                         <div id="mensajeUbicacion" class="mt-1 text-xs"></div>
@@ -231,14 +231,14 @@
                                    id="inputCantidad" 
                                    step="0.0001"
                                    min="0.0001"
-                                   class="w-full px-2 py-2 text-base font-mono border-2 border-orange-400 rounded-lg focus:ring-2 focus:ring-orange-500 pr-8"
+                                   class="w-full px-4 py-4 text-xl font-mono border-2 border-orange-400 rounded-lg focus:ring-2 focus:ring-orange-500 pr-10 text-gray-900"
                                    placeholder="Ingrese cantidad"
                                    autofocus
                                    onkeypress="if(event.key === 'Enter') guardarInventario()">
                             <button onclick="limpiarInput('inputCantidad')" 
-                                    class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                                    class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
                                     type="button">
-                                <i class="fas fa-times text-sm"></i>
+                                <i class="fas fa-times text-lg"></i>
                             </button>
                         </div>
                         <div id="mensajeCantidad" class="mt-1 text-xs"></div>
@@ -370,7 +370,7 @@ function bloquearInput(inputId) {
     const input = document.getElementById(inputId);
     if (input) {
         input.disabled = true;
-        input.classList.add('bg-gray-100', 'cursor-not-allowed');
+        input.classList.add('bg-gray-100', 'cursor-not-allowed', '!text-gray-900');
         input.classList.remove('border-green-400', 'border-blue-400', 'border-orange-400');
     }
 }
