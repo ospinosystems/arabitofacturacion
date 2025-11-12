@@ -401,10 +401,10 @@ function imprimirMultiplesEtiquetas(codigos) {
             <div class="etiqueta-container">
                 <div class="etiqueta">
                     <div class="contenido-wrapper">
-                        <div class="codigo-texto">${codigo}</div>
+                    <div class="codigo-texto">${codigo}</div>
                         <div class="barcode-wrapper">
                             <div class="barcode-container">
-                                <svg class="barcode" data-codigo="${codigo}"></svg>
+                    <svg class="barcode" data-codigo="${codigo}"></svg>
                             </div>
                         </div>
                     </div>
@@ -487,7 +487,7 @@ function imprimirMultiplesEtiquetas(codigos) {
                     color: #000;
                     padding: 0.5mm 2mm;
                     display: inline-block;
-                    margin-bottom: 0.2mm;
+                    margin-bottom: 0;
                     margin-top: 0;
                     width: 100%;
                     text-align: center;
@@ -507,8 +507,8 @@ function imprimirMultiplesEtiquetas(codigos) {
                 }
                 
                 .barcode-container {
-                    width: 100%;
-                    max-width: 100%;
+                    width: 70%;
+                    max-width: 70%;
                     display: flex;
                     justify-content: center;
                     align-items: center;
@@ -564,17 +564,17 @@ function imprimirMultiplesEtiquetas(codigos) {
                         const codigo = barcode.getAttribute('data-codigo');
                         const container = barcode.closest('.etiqueta');
                         try {
-                            JsBarcode(barcode, codigo, {
-                                format: "CODE128",
-                                width: 0.8,
-                                height: 14,
-                                displayValue: false,
-                                margin: 2,
-                                marginLeft: 2,
-                                marginRight: 2,
-                                fontSize: 0,
-                                background: "#ffffff"
-                            });
+                        JsBarcode(barcode, codigo, {
+                            format: "CODE128",
+                            width: 0.5,
+                            height: 14,
+                            displayValue: false,
+                            margin: 1,
+                            marginLeft: 1,
+                            marginRight: 1,
+                            fontSize: 0,
+                            background: "#ffffff"
+                        });
                             
                             // Ajustar SVG
                             barcode.style.maxWidth = '100%';
@@ -665,7 +665,7 @@ function imprimirEtiqueta(codigo) {
                     color: #000;
                     padding: 0.5mm 2mm;
                     display: inline-block;
-                    margin-bottom: 0.2mm;
+                    margin-bottom: 0;
                     margin-top: 0;
                     width: 100%;
                     text-align: center;
@@ -685,8 +685,8 @@ function imprimirEtiqueta(codigo) {
                 }
                 
                 .barcode-container {
-                    width: 100%;
-                    max-width: 100%;
+                    width: 70%;
+                    max-width: 70%;
                     display: flex;
                     justify-content: center;
                     align-items: center;
@@ -730,10 +730,10 @@ function imprimirEtiqueta(codigo) {
         <body>
             <div class="etiqueta">
                 <div class="contenido-wrapper">
-                    <div class="codigo-texto">${codigo}</div>
+                <div class="codigo-texto">${codigo}</div>
                     <div class="barcode-wrapper">
-                        <div class="barcode-container">
-                            <svg id="barcode"></svg>
+                <div class="barcode-container">
+                    <svg id="barcode"></svg>
                         </div>
                     </div>
                 </div>
@@ -746,12 +746,12 @@ function imprimirEtiqueta(codigo) {
                     try {
                         JsBarcode("#barcode", "${codigo}", {
                             format: "CODE128",
-                            width: 0.8,
+                            width: 0.5,
                             height: 14,
                             displayValue: false,
-                            margin: 2,
-                            marginLeft: 2,
-                            marginRight: 2,
+                            margin: 1,
+                            marginLeft: 1,
+                            marginRight: 1,
                             fontSize: 0,
                             background: "#ffffff"
                         });
