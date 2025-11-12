@@ -100,6 +100,21 @@ class AuthenticateUser
         "warehouse-inventory/tcr/asignaciones-por-pedido",
         "warehouse-inventory/tcr/confirmar-pedido",
         
+        // Módulo TCD (Torre de Control de Despacho)
+        "warehouse-inventory/tcd",
+        "warehouse-inventory/tcd/pasillero",
+        "warehouse-inventory/tcd/buscar-productos",
+        "warehouse-inventory/tcd/crear-orden",
+        "warehouse-inventory/tcd/get-pasilleros",
+        "warehouse-inventory/tcd/asignar-productos",
+        "warehouse-inventory/tcd/get-ordenes",
+        "warehouse-inventory/tcd/get-asignaciones-por-orden",
+        "warehouse-inventory/tcd/mis-asignaciones",
+        "warehouse-inventory/tcd/procesar-asignacion",
+        "warehouse-inventory/tcd/buscar-ubicacion",
+        "warehouse-inventory/tcd/confirmar-orden",
+        "warehouse-inventory/tcd/escanear-ticket-despacho",
+        
         // Inventariar productos (tres pasos: producto, ubicación, cantidad)
         "inventario/inventariar",
         "inventario/buscar-producto-inventariar",
@@ -229,12 +244,20 @@ class AuthenticateUser
         if ($userType == 8) {
             $routeUri = $request->route() ? $request->route()->uri : $request->path();
             $pasilleroRoutes = [
+                // Rutas TCR Pasillero
                 'warehouse-inventory/tcr/pasillero',
                 'warehouse-inventory/tcr/mis-asignaciones',
                 'warehouse-inventory/tcr/procesar-asignacion',
                 'warehouse-inventory/tcr/buscar-ubicacion',
+                // Rutas TCD Pasillero
+                'warehouse-inventory/tcd/pasillero',
+                'warehouse-inventory/tcd/mis-asignaciones',
+                'warehouse-inventory/tcd/procesar-asignacion',
+                'warehouse-inventory/tcd/buscar-ubicacion',
             ];
-            return in_array($routeUri, $pasilleroRoutes) || str_starts_with($routeUri, 'warehouse-inventory/tcr/pasillero');
+            return in_array($routeUri, $pasilleroRoutes) 
+                || str_starts_with($routeUri, 'warehouse-inventory/tcr/pasillero')
+                || str_starts_with($routeUri, 'warehouse-inventory/tcd/pasillero');
         }
         
         return false;

@@ -265,12 +265,12 @@
                                         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2 rounded px-2.5 py-1.5 {{ $esUbicacionFiltrada ? 'bg-green-100 border-2 border-green-400 shadow-md' : 'bg-gray-50 border border-gray-200' }}">
                                             <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 flex-1 min-w-0">
                                                 <div class="flex items-center gap-1.5 min-w-0">
-                                                    @if($esUbicacionFiltrada)
+                                                @if($esUbicacionFiltrada)
                                                         <i class="fas fa-map-marker-alt text-green-600 text-xs animate-pulse flex-shrink-0"></i>
-                                                    @endif
+                                                @endif
                                                     <span class="text-xs sm:text-sm font-semibold {{ $esUbicacionFiltrada ? 'text-green-700' : 'text-blue-600' }} break-all">
-                                                        {{ $ubicacion['warehouse'] }}
-                                                    </span>
+                                                    {{ $ubicacion['warehouse'] }}
+                                                </span>
                                                 </div>
                                                 @if($ubicacion['lote'])
                                                     <span class="text-xs text-gray-500 whitespace-nowrap">Lote: {{ $ubicacion['lote'] }}</span>
