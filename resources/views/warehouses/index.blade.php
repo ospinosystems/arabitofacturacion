@@ -401,7 +401,11 @@ function imprimirMultiplesEtiquetas(codigos) {
             <div class="etiqueta-container">
                 <div class="etiqueta">
                     <div class="codigo-texto">${codigo}</div>
-                    <svg class="barcode" data-codigo="${codigo}"></svg>
+                    <div class="barcode-wrapper">
+                        <div class="barcode-container">
+                            <svg class="barcode" data-codigo="${codigo}"></svg>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
@@ -426,10 +430,10 @@ function imprimirMultiplesEtiquetas(codigos) {
                     box-sizing: border-box;
                 }
                 
-                body {
+                html, body {
                     margin: 0;
                     padding: 0;
-                    font-family: Arial, sans-serif;
+                    font-family: 'Courier New', monospace;
                     background: white;
                 }
                 
@@ -441,7 +445,8 @@ function imprimirMultiplesEtiquetas(codigos) {
                     display: flex;
                     justify-content: center;
                     align-items: center;
-                    padding: 2mm 3mm;
+                    padding: 1mm;
+                    border: 0.5mm solid #000;
                 }
                 
                 .etiqueta-container:last-child {
@@ -452,36 +457,84 @@ function imprimirMultiplesEtiquetas(codigos) {
                 .etiqueta {
                     width: 100%;
                     height: 100%;
-                    max-width: 51mm;
+                    max-width: 55mm;
                     display: flex;
                     flex-direction: column;
-                    justify-content: center;
+                    justify-content: space-between;
                     align-items: center;
                     text-align: center;
                 }
                 
                 .codigo-texto {
-                    font-size: 28px;
-                    font-weight: bold;
-                    margin-bottom: 8px;
+                    font-size: 22px;
+                    font-weight: 900;
                     letter-spacing: 1px;
+                    background: #000;
+                    color: #fff;
+                    padding: 1.5mm 2mm;
+                    display: inline-block;
+                    margin-bottom: 1mm;
+                    width: 100%;
+                    text-align: center;
+                }
+                
+                .barcode-wrapper {
+                    width: 100%;
+                    padding: 1mm;
+                    border: 1.5mm solid #000;
+                    background: white;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    flex: 1;
+                    min-height: 0;
+                }
+                
+                .barcode-container {
+                    width: 100%;
+                    max-width: 100%;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    overflow: hidden;
                 }
                 
                 .barcode {
-                    margin: 5px 0;
-                    max-width: 100%;
                     width: 100%;
+                    max-width: 100%;
+                    height: auto;
+                    max-height: 14mm;
                 }
                 
                 @media print {
+                    html, body {
+                        width: 57mm;
+                        height: 44mm;
+                        margin: 0;
+                        padding: 0;
+                    }
+                    
                     .etiqueta-container {
                         width: 57mm;
                         height: 44mm;
-                        padding: 2mm 3mm;
+                        margin: 0;
+                        padding: 1mm;
+                        border: 0.5mm solid #000;
                     }
                     
                     .etiqueta {
-                        max-width: 51mm;
+                        max-width: 55mm;
+                    }
+                    
+                    body {
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
+                    
+                    @page {
+                        margin: 0;
+                        size: 57mm 44mm;
                     }
                 }
             </style>
@@ -495,16 +548,24 @@ function imprimirMultiplesEtiquetas(codigos) {
                     const barcodes = document.querySelectorAll('.barcode');
                     barcodes.forEach(function(barcode) {
                         const codigo = barcode.getAttribute('data-codigo');
+                        const container = barcode.closest('.etiqueta');
                         try {
                             JsBarcode(barcode, codigo, {
                                 format: "CODE128",
-                                width: 1.5,
-                                height: 40,
+                                width: 0.8,
+                                height: 14,
                                 displayValue: false,
-                                margin: 0,
-                                marginLeft: 0,
-                                marginRight: 0
+                                margin: 2,
+                                marginLeft: 2,
+                                marginRight: 2,
+                                fontSize: 0,
+                                background: "#ffffff"
                             });
+                            
+                            // Ajustar SVG
+                            barcode.style.maxWidth = '100%';
+                            barcode.style.width = '100%';
+                            barcode.style.height = 'auto';
                         } catch (e) {
                             console.error("Error generando código de barras:", e);
                         }
@@ -513,9 +574,7 @@ function imprimirMultiplesEtiquetas(codigos) {
                     // Imprimir automáticamente cuando se cargue todo
                     setTimeout(function() {
                         window.print();
-                        // Opcional: cerrar después de imprimir
-                        // window.onafterprint = function() { window.close(); };
-                    }, 800);
+                    }, 500);
                 });
             <\/script>
         </body>
@@ -573,14 +632,16 @@ function imprimirEtiqueta(codigo) {
                 }
                 
                 .codigo-texto {
-                    font-size: 11px;
-                    font-weight: bold;
-                    letter-spacing: 0.3px;
+                    font-size: 22px;
+                    font-weight: 900;
+                    letter-spacing: 1px;
                     background: #000;
                     color: #fff;
-                    padding: 0.8mm 1.5mm;
+                    padding: 1.5mm 2mm;
                     display: inline-block;
-                    margin-bottom: 0.5mm;
+                    margin-bottom: 1mm;
+                    width: 100%;
+                    text-align: center;
                 }
                 
                 .barcode-wrapper {
@@ -610,13 +671,6 @@ function imprimirEtiqueta(codigo) {
                     max-width: 100%;
                     height: auto;
                     max-height: 14mm;
-                }
-                
-                .barcode-text {
-                    font-size: 5.5px;
-                    margin-top: 0.5mm;
-                    font-weight: bold;
-                    letter-spacing: 0.2px;
                 }
                 
                 @media print {
@@ -654,7 +708,6 @@ function imprimirEtiqueta(codigo) {
                     <div class="barcode-container">
                         <svg id="barcode"></svg>
                     </div>
-                    <div class="barcode-text">${codigo}</div>
                 </div>
             </div>
             
