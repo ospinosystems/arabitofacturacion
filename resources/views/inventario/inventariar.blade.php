@@ -13,8 +13,8 @@
                 <p class="text-gray-600 text-xs mt-0.5">Escanea producto, ubicación e ingresa cantidad</p>
             </div>
             <button onclick="mostrarModalReporte()" 
-                    class="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition flex items-center text-xs">
-                <i class="fas fa-file-pdf mr-1"></i>
+                    class="px-4 py-3 md:px-3 md:py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition flex items-center text-base md:text-sm font-semibold">
+                <i class="fas fa-file-pdf mr-2 md:mr-1 text-lg md:text-sm"></i>
                 Generar Reporte PDF
             </button>
         </div>
@@ -50,8 +50,8 @@
                         </div>
                         <div id="mensajeProducto" class="mt-1 text-xs"></div>
                         <button onclick="buscarProducto()" 
-                                class="mt-1 w-full px-2 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg transition text-sm">
-                            <i class="fas fa-search mr-1"></i>
+                                class="mt-1 w-full px-4 py-4 md:px-3 md:py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition text-lg md:text-base font-semibold">
+                            <i class="fas fa-search mr-2 md:mr-1 text-xl md:text-base"></i>
                             Buscar Producto
                         </button>
                     </div>
@@ -148,14 +148,14 @@
                                 <!-- Botones de Acción -->
                                 <div class="mt-1 flex gap-1">
                                     <button onclick="imprimirTicket()" 
-                                            class="px-2 py-1 bg-green-500 hover:bg-green-600 text-white rounded-lg transition flex items-center text-xs">
-                                        <i class="fas fa-print mr-1"></i>
+                                            class="px-4 py-3 md:px-3 md:py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition flex items-center text-base md:text-sm font-semibold">
+                                        <i class="fas fa-print mr-2 md:mr-1 text-lg md:text-sm"></i>
                                         Imprimir Ticket
                                     </button>
                                 </div>
                             </div>
-                            <button onclick="resetearProducto()" class="ml-4 text-red-500 hover:text-red-700">
-                                <i class="fas fa-times-circle text-xl"></i>
+                            <button onclick="resetearProducto()" class="ml-4 text-red-500 hover:text-red-700 p-2 md:p-1">
+                                <i class="fas fa-times-circle text-2xl md:text-xl"></i>
                             </button>
                         </div>
                     </div>
@@ -185,8 +185,8 @@
                         </div>
                         <div id="mensajeUbicacion" class="mt-1 text-xs"></div>
                         <button onclick="buscarUbicacion()" 
-                                class="mt-1 w-full px-2 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition text-sm">
-                            <i class="fas fa-search mr-1"></i>
+                                class="mt-1 w-full px-4 py-4 md:px-3 md:py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition text-lg md:text-base font-semibold">
+                            <i class="fas fa-search mr-2 md:mr-1 text-xl md:text-base"></i>
                             Buscar Ubicación
                         </button>
                     </div>
@@ -211,8 +211,8 @@
                                     </div>
                                 </div>
                             </div>
-                            <button onclick="resetearUbicacion()" class="ml-4 text-red-500 hover:text-red-700">
-                                <i class="fas fa-times-circle text-xl"></i>
+                            <button onclick="resetearUbicacion()" class="ml-4 text-red-500 hover:text-red-700 p-2 md:p-1">
+                                <i class="fas fa-times-circle text-2xl md:text-xl"></i>
                             </button>
                         </div>
                     </div>
@@ -243,8 +243,8 @@
                         </div>
                         <div id="mensajeCantidad" class="mt-1 text-xs"></div>
                         <button onclick="guardarInventario()" 
-                                class="mt-1 w-full px-2 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition text-sm">
-                            <i class="fas fa-save mr-1"></i>
+                                class="mt-1 w-full px-4 py-4 md:px-3 md:py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition text-lg md:text-base">
+                            <i class="fas fa-save mr-2 md:mr-1 text-xl md:text-base"></i>
                             Guardar Inventario
                         </button>
                     </div>
@@ -271,8 +271,8 @@
                     </div>
                 </div>
                 <button onclick="resetearTodo()" 
-                        class="mt-1 w-full px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition text-xs">
-                    <i class="fas fa-redo mr-1"></i>
+                        class="mt-1 w-full px-4 py-3 md:px-3 md:py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition text-base md:text-sm font-semibold">
+                    <i class="fas fa-redo mr-2 md:mr-1 text-lg md:text-sm"></i>
                     Reiniciar
                 </button>
             </div>
@@ -288,8 +288,8 @@
     <div class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
         <div class="flex items-center justify-between mb-4">
             <h3 class="text-xl font-bold text-gray-800">Generar Reporte PDF</h3>
-            <button onclick="cerrarModalReporte()" class="text-gray-500 hover:text-gray-700">
-                <i class="fas fa-times text-xl"></i>
+            <button onclick="cerrarModalReporte()" class="text-gray-500 hover:text-gray-700 p-2 md:p-1">
+                <i class="fas fa-times text-2xl md:text-xl"></i>
             </button>
         </div>
         <form id="formReporte" onsubmit="generarReporte(event)">
@@ -315,13 +315,13 @@
             </div>
             <div class="mt-6 flex gap-3">
                 <button type="submit" 
-                        class="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition">
-                    <i class="fas fa-file-pdf mr-2"></i>
+                        class="flex-1 px-4 py-3 md:px-4 md:py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition text-base md:text-sm font-semibold">
+                    <i class="fas fa-file-pdf mr-2 md:mr-1 text-lg md:text-sm"></i>
                     Generar PDF
                 </button>
                 <button type="button" 
                         onclick="cerrarModalReporte()"
-                        class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition">
+                        class="px-4 py-3 md:px-4 md:py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition text-base md:text-sm font-semibold">
                     Cancelar
                 </button>
             </div>
