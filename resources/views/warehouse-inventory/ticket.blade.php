@@ -29,7 +29,7 @@
         .ticket {
             width: 57mm;
             height: 44mm;
-            padding: 0.8mm;
+            padding: 0.5mm;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -38,73 +38,76 @@
         
         .header {
             text-align: center;
-            margin-bottom: 0.3mm;
+            margin-bottom: 0.2mm;
         }
         
         .ubicacion-codigo {
-            font-size: 9px;
+            font-size: 8px;
             font-weight: bold;
-            letter-spacing: 0.2px;
+            letter-spacing: 0.1px;
             background: #000;
             color: #fff;
-            padding: 0.6mm 0.8mm;
+            padding: 0.4mm 0.6mm;
             display: inline-block;
         }
         
         .barcode-wrapper {
             text-align: center;
-            margin: 0.3mm 0;
+            margin: 0.2mm 0;
             padding: 0.8mm;
-            border: 2mm solid #000;
+            border: 2.5mm solid #000 !important;
             background: white;
             position: relative;
-            min-height: 16mm;
+            min-height: 10mm;
+            max-height: 10mm;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
+            box-sizing: border-box;
         }
         
         .barcode {
             width: 100%;
             height: auto;
-            max-height: 14mm;
+            max-height: 6mm;
+            min-height: 6mm;
             display: block;
             margin: 0 auto;
         }
         
         .barcode-text {
-            font-size: 5px;
-            margin-top: 0.3mm;
+            font-size: 4.5px;
+            margin-top: 0.2mm;
             font-weight: bold;
             letter-spacing: 0.1px;
             font-family: 'Courier New', monospace;
         }
         
         .info-section {
-            font-size: 5px;
+            font-size: 4.5px;
             line-height: 1;
-            margin: 0.2mm 0;
+            margin: 0.15mm 0;
         }
         
         .producto-nombre {
             font-weight: bold;
-            font-size: 5.5px;
-            margin-bottom: 0.2mm;
+            font-size: 5px;
+            margin-bottom: 0.15mm;
             line-height: 1;
             word-wrap: break-word;
             overflow: hidden;
             text-overflow: ellipsis;
             display: -webkit-box;
-            -webkit-line-clamp: 2;
+            -webkit-line-clamp: 1;
             -webkit-box-orient: vertical;
         }
         
         .info-line {
             display: flex;
             justify-content: space-between;
-            margin: 0.15mm 0;
-            font-size: 4.5px;
+            margin: 0.1mm 0;
+            font-size: 4px;
         }
         
         .label {
@@ -119,25 +122,25 @@
         .cantidad-box {
             background: #f0f0f0;
             border: 0.5mm solid #000;
-            padding: 0.5mm;
+            padding: 0.4mm;
             text-align: center;
-            margin-top: 0.2mm;
+            margin-top: 0.15mm;
         }
         
         .cantidad-label {
-            font-size: 4px;
+            font-size: 3.5px;
             font-weight: bold;
         }
         
         .cantidad-valor {
-            font-size: 9px;
+            font-size: 8px;
             font-weight: bold;
             margin-top: 0.1mm;
         }
         
         .footer {
             text-align: center;
-            font-size: 4px;
+            font-size: 3.5px;
             margin-top: 0.1mm;
         }
         
@@ -153,13 +156,21 @@
                 width: 57mm !important;
                 height: 44mm !important;
                 margin: 0 !important;
-                padding: 0.8mm !important;
+                padding: 0.5mm !important;
                 border: 0.5mm solid #000 !important;
             }
             
             .barcode-wrapper {
-                border: 2mm solid #000 !important;
+                border: 2.5mm solid #000 !important;
                 padding: 0.8mm !important;
+                min-height: 10mm !important;
+                max-height: 10mm !important;
+                box-sizing: border-box !important;
+            }
+            
+            .barcode {
+                max-height: 6mm !important;
+                min-height: 6mm !important;
             }
             
             body {
@@ -190,12 +201,12 @@
         <!-- Información Mínima -->
         <div class="info-section">
             <div class="producto-nombre">
-                {{ \Illuminate\Support\Str::limit($inventario->inventario->descripcion, 40) }}
+                {{ \Illuminate\Support\Str::limit($inventario->inventario->descripcion, 35) }}
             </div>
             
             <div class="info-line">
                 <span class="label">Cod:</span>
-                <span class="value">{{ \Illuminate\Support\Str::limit($inventario->inventario->codigo_barras, 12) }}</span>
+                <span class="value">{{ \Illuminate\Support\Str::limit($inventario->inventario->codigo_barras, 10) }}</span>
             </div>
         </div>
         
@@ -221,15 +232,15 @@
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     
     <script>
-        // Generar código de barras con el código de ubicación - Optimizado para escaneo
+        // Generar código de barras con el código de ubicación - Compacto y optimizado para escaneo
         JsBarcode("#barcode", "{{ $inventario->warehouse->codigo }}", {
             format: "CODE128",
-            width: 0.8,
-            height: 14,
+            width: 0.5,
+            height: 6,
             displayValue: false,
-            margin: 3,
-            marginLeft: 3,
-            marginRight: 3,
+            margin: 1.5,
+            marginLeft: 1.5,
+            marginRight: 1.5,
             fontSize: 0,
             background: "#ffffff",
             lineColor: "#000000"
