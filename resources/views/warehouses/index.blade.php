@@ -446,7 +446,6 @@ function imprimirMultiplesEtiquetas(codigos) {
                     justify-content: center;
                     align-items: center;
                     padding: 1mm;
-                    border: 0.5mm solid #000;
                 }
                 
                 .etiqueta-container:last-child {
@@ -520,7 +519,6 @@ function imprimirMultiplesEtiquetas(codigos) {
                         height: 44mm;
                         margin: 0;
                         padding: 1mm;
-                        border: 0.5mm solid #000;
                     }
                     
                     .etiqueta {
@@ -628,7 +626,6 @@ function imprimirEtiqueta(codigo) {
                     justify-content: space-between;
                     align-items: center;
                     text-align: center;
-                    border: 0.5mm solid #000;
                 }
                 
                 .codigo-texto {
@@ -686,7 +683,6 @@ function imprimirEtiqueta(codigo) {
                         height: 44mm;
                         margin: 0;
                         padding: 1mm;
-                        border: 0.5mm solid #000;
                     }
                     
                     body {
