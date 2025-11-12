@@ -1037,13 +1037,18 @@ class TCDController extends Controller
     {
         $orden->load(['items.inventario.proveedor', 'items.inventario.categoria']);
         
+        // Generar un ID numérico único para TCD usando un offset grande
+        // Usamos 9000000 como base para evitar conflictos con pedidos normales
+        // El ID será: 9000000 + orden_id (ej: 9000004 para orden 4)
+        $idinsucursalNumerico = 9000000 + $orden->id;
+        
         // Crear estructura similar a pedidosExportadosFun
         $pedidoFormato = [
-            'id' => 'TCD-' . $orden->id, // ID único para TCD
+            'id' => $idinsucursalNumerico, // ID numérico único para TCD (9000000 + orden_id)
             'numero_orden' => $orden->numero_orden,
             'tipo' => 'TCD',
             'fecha' => $orden->created_at->toDateString(),
-            'observaciones' => $orden->observaciones ?? 'Orden TCD: ' . $orden->numero_orden,
+            'observaciones' => ($orden->observaciones ?? 'Orden TCD: ' . $orden->numero_orden) . ' [TCD-' . $orden->id . ']',
             'cliente' => null, // TCD no tiene cliente
             'items' => $orden->items->map(function($item) {
                 $producto = $item->inventario;
@@ -1145,6 +1150,11 @@ class TCDController extends Controller
             
             if (!$orden->ticketDespacho) {
                 throw new \Exception('La orden debe tener un ticket de despacho generado para poder transferirla');
+            }
+            
+            // Verificar si la orden ya fue transferida
+            if ($orden->fecha_transferencia) {
+                throw new \Exception('Esta orden ya fue transferida el ' . $orden->fecha_transferencia->format('Y-m-d H:i:s') . ' a la sucursal ' . ($orden->sucursal_destino_codigo ?? 'ID: ' . $orden->sucursal_destino_id));
             }
             
             // Obtener información de la sucursal destino
