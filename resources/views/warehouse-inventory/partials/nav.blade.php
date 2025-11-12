@@ -25,9 +25,9 @@
                     <span>Ubicaciones</span>
                 </a>
                 
-                <!-- Cargar por Rango -->
-                <a href="/warehouses/cargar-por-rango" 
-                   class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->is('warehouses/cargar-por-rango') ? 'bg-white text-blue-700 shadow-md' : '  ' }}">
+                <!-- Cargar por Rango (dentro de Ubicaciones) -->
+                <a href="{{ route('warehouses.cargar-por-rango') }}" 
+                   class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('warehouses.cargar-por-rango') ? 'bg-white text-blue-700 shadow-md' : '  ' }}">
                     <i class="fas fa-layer-group mr-2"></i>
                     <span>Cargar por Rango</span>
                 </a>
