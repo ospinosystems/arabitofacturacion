@@ -530,7 +530,7 @@ function imprimirEtiqueta(codigo) {
     // Crear ventana emergente para impresión
     const ventanaImpresion = window.open('', '_blank', 'width=400,height=300');
     
-    // Contenido HTML de la etiqueta con medidas 57mm x 44mm
+    // Contenido HTML de la etiqueta con medidas 57mm x 44mm optimizado
     const contenido = `
         <!DOCTYPE html>
         <html>
@@ -550,77 +550,99 @@ function imprimirEtiqueta(codigo) {
                     box-sizing: border-box;
                 }
                 
-                html {
+                html, body {
                     width: 57mm;
                     height: 44mm;
-                }
-                
-                body {
-                    width: 57mm;
-                    height: 44mm;
-                    max-width: 57mm;
-                    max-height: 44mm;
                     margin: 0;
-                    padding: 1.5mm;
-                    font-family: Arial, sans-serif;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    align-items: center;
+                    padding: 0;
+                    font-family: 'Courier New', monospace;
                     background: white;
                     overflow: hidden;
                 }
                 
                 .etiqueta {
-                    width: 100%;
-                    height: 100%;
-                    max-width: 54mm;
+                    width: 57mm;
+                    height: 44mm;
+                    padding: 1mm;
                     display: flex;
                     flex-direction: column;
-                    justify-content: center;
+                    justify-content: space-between;
                     align-items: center;
                     text-align: center;
+                    border: 0.5mm solid #000;
                 }
                 
                 .codigo-texto {
-                    font-size: 26px;
+                    font-size: 11px;
                     font-weight: bold;
-                    margin-bottom: 6px;
-                    letter-spacing: 0.5px;
-                    max-width: 100%;
-                    word-wrap: break-word;
+                    letter-spacing: 0.3px;
+                    background: #000;
+                    color: #fff;
+                    padding: 0.8mm 1.5mm;
+                    display: inline-block;
+                    margin-bottom: 0.5mm;
+                }
+                
+                .barcode-wrapper {
+                    width: 100%;
+                    padding: 1mm;
+                    border: 1.5mm solid #000;
+                    background: white;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    flex: 1;
+                    min-height: 0;
                 }
                 
                 .barcode-container {
                     width: 100%;
-                    max-width: 52mm;
+                    max-width: 100%;
                     display: flex;
                     justify-content: center;
+                    align-items: center;
                     overflow: hidden;
                 }
                 
                 #barcode {
+                    width: 100%;
                     max-width: 100%;
                     height: auto;
+                    max-height: 14mm;
+                }
+                
+                .barcode-text {
+                    font-size: 5.5px;
+                    margin-top: 0.5mm;
+                    font-weight: bold;
+                    letter-spacing: 0.2px;
                 }
                 
                 @media print {
                     html, body {
                         width: 57mm;
                         height: 44mm;
-                    }
-                    
-                    body {
-                        padding: 1.5mm;
-                        overflow: hidden;
+                        margin: 0;
+                        padding: 0;
                     }
                     
                     .etiqueta {
-                        max-width: 54mm;
+                        width: 57mm;
+                        height: 44mm;
+                        margin: 0;
+                        padding: 1mm;
+                        border: 0.5mm solid #000;
                     }
                     
-                    .barcode-container {
-                        max-width: 52mm;
+                    body {
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
+                    
+                    @page {
+                        margin: 0;
+                        size: 57mm 44mm;
                     }
                 }
             </style>
@@ -628,8 +650,11 @@ function imprimirEtiqueta(codigo) {
         <body>
             <div class="etiqueta">
                 <div class="codigo-texto">${codigo}</div>
-                <div class="barcode-container">
-                    <svg id="barcode"></svg>
+                <div class="barcode-wrapper">
+                    <div class="barcode-container">
+                        <svg id="barcode"></svg>
+                    </div>
+                    <div class="barcode-text">${codigo}</div>
                 </div>
             </div>
             
@@ -640,21 +665,19 @@ function imprimirEtiqueta(codigo) {
                     try {
                         JsBarcode("#barcode", "${codigo}", {
                             format: "CODE128",
-                            width: 0.9,
-                            height: 35,
+                            width: 0.8,
+                            height: 14,
                             displayValue: false,
-                            margin: 0,
-                            marginLeft: 0,
-                            marginRight: 0
+                            margin: 2,
+                            marginLeft: 2,
+                            marginRight: 2,
+                            fontSize: 0,
+                            background: "#ffffff"
                         });
                         
-                        // Forzar que el SVG respete el ancho del contenedor
+                        // Ajustar SVG para que se ajuste al contenedor
                         const svgElement = document.getElementById('barcode');
                         if (svgElement) {
-                            // Remover atributos width y height del SVG
-                            svgElement.removeAttribute('width');
-                            svgElement.removeAttribute('height');
-                            // Configurar estilos directamente
                             svgElement.style.maxWidth = '100%';
                             svgElement.style.width = '100%';
                             svgElement.style.height = 'auto';
@@ -668,9 +691,14 @@ function imprimirEtiqueta(codigo) {
                 window.onload = function() {
                     setTimeout(function() {
                         window.print();
-                        // Cerrar la ventana después de imprimir (opcional)
-                        // window.onafterprint = function() { window.close(); };
-                    }, 700);
+                    }, 500);
+                };
+                
+                // Cerrar ventana después de imprimir
+                window.onafterprint = function() {
+                    setTimeout(function() {
+                        window.close();
+                    }, 100);
                 };
             <\/script>
         </body>
