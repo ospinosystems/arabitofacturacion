@@ -88,6 +88,20 @@
                     <i class="fas fa-clipboard-list mr-2"></i>
                     <span>TCR Pasilleros</span>
                 </a>
+
+                <!-- TCD -->
+                <a href="{{ route('warehouse-inventory.tcd.chequeador') }}" 
+                   class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('warehouse-inventory.tcd.*') ? 'bg-white text-blue-700 shadow-md' : '  ' }}">
+                    <i class="fas fa-tower-control mr-2"></i>
+                    <span>TCD</span>
+                </a>
+
+                <!-- TCD Pasilleros -->
+                <a href="{{ route('warehouse-inventory.tcd.pasillero') }}" 
+                   class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('warehouse-inventory.tcd.pasillero') ? 'bg-white text-blue-700 shadow-md' : '  ' }}">
+                    <i class="fas fa-clipboard-list mr-2"></i>
+                    <span>TCD Pasilleros</span>
+                </a>
             </div>
         </div>
     </div>

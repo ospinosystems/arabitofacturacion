@@ -40,7 +40,8 @@
                                    class="w-full px-2 py-2 text-base font-mono border-2 border-green-400 rounded-lg focus:ring-2 focus:ring-green-500 pr-8"
                                    placeholder="Escanea código de barras o proveedor"
                                    autofocus
-                                   onkeypress="if(event.key === 'Enter') buscarProducto()">
+                                   onkeypress="if(event.key === 'Enter') buscarProducto()"
+                                   oninput="if(this.disabled) { this.value = this.defaultValue; }">
                             <button onclick="limpiarInput('inputProducto')" 
                                     class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
                                     type="button">
@@ -174,7 +175,7 @@
                                    class="w-full px-2 py-2 text-base font-mono border-2 border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500 pr-8"
                                    placeholder="Escanea código de ubicación"
                                    autofocus
-                                   oninput="sanitizarUbicacion(this)"
+                                   oninput="if(!this.disabled) { sanitizarUbicacion(this); } else { this.value = this.defaultValue; }"
                                    onkeypress="if(event.key === 'Enter') buscarUbicacion()">
                             <button onclick="limpiarInput('inputUbicacion')" 
                                     class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
@@ -332,12 +333,59 @@
 let productoSeleccionado = null;
 let ubicacionSeleccionada = null;
 
-// Función para limpiar inputs
+// Función para limpiar inputs y desbloquear campos
 function limpiarInput(inputId) {
     const input = document.getElementById(inputId);
     if (input) {
         input.value = '';
+        input.disabled = false;
+        input.classList.remove('bg-gray-100', 'cursor-not-allowed');
+        input.classList.add('border-green-400', 'border-blue-400');
+        
+        // Limpiar mensajes y reseteos relacionados
+        if (inputId === 'inputProducto') {
+            productoSeleccionado = null;
+            document.getElementById('infoProducto').style.display = 'none';
+            document.getElementById('mensajeProducto').innerHTML = '';
+            document.getElementById('pasoUbicacion').style.display = 'none';
+            // También resetear ubicación si estaba seleccionada
+            if (ubicacionSeleccionada) {
+                resetearUbicacion();
+            }
+        } else if (inputId === 'inputUbicacion') {
+            ubicacionSeleccionada = null;
+            document.getElementById('infoUbicacion').style.display = 'none';
+            document.getElementById('mensajeUbicacion').innerHTML = '';
+            document.getElementById('pasoCantidad').style.display = 'none';
+            document.getElementById('inputCantidad').value = '';
+        }
+        
         input.focus();
+        actualizarResumen();
+    }
+}
+
+// Función para bloquear un input
+function bloquearInput(inputId) {
+    const input = document.getElementById(inputId);
+    if (input) {
+        input.disabled = true;
+        input.classList.add('bg-gray-100', 'cursor-not-allowed');
+        input.classList.remove('border-green-400', 'border-blue-400', 'border-orange-400');
+    }
+}
+
+// Función para desbloquear un input
+function desbloquearInput(inputId) {
+    const input = document.getElementById(inputId);
+    if (input) {
+        input.disabled = false;
+        input.classList.remove('bg-gray-100', 'cursor-not-allowed');
+        if (inputId === 'inputProducto') {
+            input.classList.add('border-green-400');
+        } else if (inputId === 'inputUbicacion') {
+            input.classList.add('border-blue-400');
+        }
     }
 }
 
@@ -380,7 +428,15 @@ function mostrarNotificacion(mensaje, tipo = 'info') {
 }
 
 function buscarProducto() {
-    const codigo = document.getElementById('inputProducto').value.trim();
+    const inputProducto = document.getElementById('inputProducto');
+    const codigo = inputProducto.value.trim();
+    
+    // Si el campo está bloqueado, no hacer nada
+    if (inputProducto.disabled) {
+        mostrarNotificacion('El campo está bloqueado. Use el botón X para limpiar y editar', 'warning');
+        return;
+    }
+    
     if (!codigo) {
         mostrarNotificacion('Ingrese un código de producto', 'warning');
         return;
@@ -399,6 +455,9 @@ function buscarProducto() {
         if (data.estado) {
             productoSeleccionado = data.producto;
             mostrarInfoProducto(data.producto);
+            // Bloquear el campo de producto después de encontrarlo
+            bloquearInput('inputProducto');
+            document.getElementById('mensajeProducto').innerHTML = '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>Producto encontrado - Campo bloqueado</span>';
             document.getElementById('pasoUbicacion').style.display = 'block';
             document.getElementById('inputUbicacion').focus();
             actualizarResumen();
@@ -575,12 +634,12 @@ function imprimirTicket() {
 
 function resetearProducto() {
     productoSeleccionado = null;
-    document.getElementById('inputProducto').value = '';
+    limpiarInput('inputProducto');
     document.getElementById('infoProducto').style.display = 'none';
     document.getElementById('pasoUbicacion').style.display = 'none';
     document.getElementById('pasoCantidad').style.display = 'none';
     ubicacionSeleccionada = null;
-    document.getElementById('inputUbicacion').value = '';
+    limpiarInput('inputUbicacion');
     document.getElementById('infoUbicacion').style.display = 'none';
     document.getElementById('inputCantidad').value = '';
     // Ocultar mensaje de movimientos anteriores
@@ -590,7 +649,15 @@ function resetearProducto() {
 }
 
 function buscarUbicacion() {
-    const codigo = document.getElementById('inputUbicacion').value.trim();
+    const inputUbicacion = document.getElementById('inputUbicacion');
+    const codigo = inputUbicacion.value.trim();
+    
+    // Si el campo está bloqueado, no hacer nada
+    if (inputUbicacion.disabled) {
+        mostrarNotificacion('El campo está bloqueado. Use el botón X para limpiar y editar', 'warning');
+        return;
+    }
+    
     if (!codigo) {
         mostrarNotificacion('Ingrese un código de ubicación', 'warning');
         return;
@@ -609,6 +676,9 @@ function buscarUbicacion() {
         if (data.estado) {
             ubicacionSeleccionada = data.warehouse;
             mostrarInfoUbicacion(data.warehouse);
+            // Bloquear el campo de ubicación después de encontrarlo
+            bloquearInput('inputUbicacion');
+            document.getElementById('mensajeUbicacion').innerHTML = '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>Ubicación encontrada - Campo bloqueado</span>';
             document.getElementById('pasoCantidad').style.display = 'block';
             document.getElementById('inputCantidad').focus();
             actualizarResumen();
@@ -633,7 +703,7 @@ function mostrarInfoUbicacion(warehouse) {
 
 function resetearUbicacion() {
     ubicacionSeleccionada = null;
-    document.getElementById('inputUbicacion').value = '';
+    limpiarInput('inputUbicacion');
     document.getElementById('infoUbicacion').style.display = 'none';
     document.getElementById('pasoCantidad').style.display = 'none';
     document.getElementById('inputCantidad').value = '';
@@ -698,8 +768,8 @@ function actualizarResumen() {
 function resetearTodo() {
     productoSeleccionado = null;
     ubicacionSeleccionada = null;
-    document.getElementById('inputProducto').value = '';
-    document.getElementById('inputUbicacion').value = '';
+    limpiarInput('inputProducto');
+    limpiarInput('inputUbicacion');
     document.getElementById('inputCantidad').value = '';
     document.getElementById('infoProducto').style.display = 'none';
     document.getElementById('infoUbicacion').style.display = 'none';

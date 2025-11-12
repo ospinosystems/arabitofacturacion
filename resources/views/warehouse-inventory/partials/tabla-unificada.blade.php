@@ -135,32 +135,77 @@
 </div>
 
 <!-- Tabla de Productos Unificada -->
+<style>
+    /* Estilos específicos para tablets */
+    @media (min-width: 768px) and (max-width: 1024px) {
+        .table-container {
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+        }
+        
+        .table-container::-webkit-scrollbar {
+            height: 8px;
+        }
+        
+        .table-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .table-container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        
+        /* Mejorar legibilidad de ubicaciones en tablets */
+        .ubicacion-item {
+            min-width: 100%;
+            padding: 0.5rem;
+        }
+        
+        .ubicacion-item .ubicacion-codigo {
+            word-break: break-word;
+            hyphens: auto;
+        }
+    }
+</style>
+
 <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-    <div class="overflow-x-auto">
+    <div class="overflow-x-auto table-container">
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
-                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Stock General</th>
-                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">En Ubicaciones</th>
-                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicaciones Asignadas</th>
-                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    <th class="px-2 md:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
+                    <th class="px-2 md:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">Descripción</th>
+                    <th class="px-2 md:px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Stock General</th>
+                    <th class="px-2 md:px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">En Ubicaciones</th>
+                    <th class="px-2 md:px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Estado</th>
+                    <th class="px-2 md:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[280px] md:min-w-[320px] lg:min-w-[380px]">Ubicaciones Asignadas</th>
+                    <th class="px-2 md:px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
                 @forelse($productos ?? [] as $producto)
                     <tr class="hover:bg-gray-50 transition">
-                        <td class="px-4 py-3">
-                            <div class="text-sm font-medium text-gray-900">{{ $producto->codigo_barras }}</div>
+                        <td class="px-2 md:px-4 py-3">
+                            <div class="text-sm font-medium text-gray-900 break-words">{{ $producto->codigo_barras }}</div>
                             @if($producto->codigo_proveedor)
-                                <div class="text-xs text-gray-500">Prov: {{ $producto->codigo_proveedor }}</div>
+                                <div class="text-xs text-gray-500 break-words">Prov: {{ $producto->codigo_proveedor }}</div>
                             @endif
+                            {{-- Mostrar stock general en móvil/tablet --}}
+                            <div class="lg:hidden mt-1">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $producto->existencia > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                    Stock: {{ number_format($producto->cantidad, 2) }}
+                                </span>
+                            </div>
                         </td>
-                        <td class="px-4 py-3">
-                            <div class="text-sm font-medium text-gray-900">{{ $producto->descripcion }}</div>
-                            <div class="text-xs text-gray-500">
+                        <td class="px-2 md:px-4 py-3">
+                            <div class="text-sm font-medium text-gray-900 break-words">{{ $producto->descripcion }}</div>
+                            <div class="text-xs text-gray-500 break-words">
                                 @if($producto->proveedor)
                                     {{ $producto->proveedor->razonsocial }}
                                 @endif
@@ -169,13 +214,25 @@
                                     {{ $producto->categoria->nombre }}
                                 @endif
                             </div>
+                            {{-- Mostrar estado en móvil/tablet --}}
+                            <div class="md:hidden mt-2">
+                                @if($producto->tiene_warehouse ?? false)
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                                        <i class="fas fa-check-circle mr-1"></i>Ubicado
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                                        <i class="fas fa-times-circle mr-1"></i>Sin Ubicar
+                                    </span>
+                                @endif
+                            </div>
                         </td>
-                        <td class="px-4 py-3 text-center">
+                        <td class="px-2 md:px-4 py-3 text-center hidden lg:table-cell">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium {{ $producto->existencia > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
                                 {{ number_format($producto->cantidad, 2) }}
                             </span>
                         </td>
-                        <td class="px-4 py-3 text-center">
+                        <td class="px-2 md:px-4 py-3 text-center hidden lg:table-cell">
                             @if($producto->tiene_warehouse ?? false)
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
                                     {{ number_format($producto->total_en_warehouses ?? 0, 2) }}
@@ -184,7 +241,7 @@
                                 <span class="text-sm text-gray-400">0.00</span>
                             @endif
                         </td>
-                        <td class="px-4 py-3 text-center">
+                        <td class="px-2 md:px-4 py-3 text-center hidden md:table-cell">
                             @if($producto->tiene_warehouse ?? false)
                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200">
                                     <i class="fas fa-check-circle mr-1"></i>
@@ -197,31 +254,33 @@
                                 </span>
                             @endif
                         </td>
-                        <td class="px-4 py-3">
+                        <td class="px-2 md:px-4 py-3">
                             @if($producto->tiene_warehouse ?? false)
-                                <div class="space-y-1">
+                                <div class="space-y-1.5 min-w-[250px]">
                                     @foreach($producto->ubicaciones_detalle ?? [] as $ubicacion)
                                         @php
                                             // Verificar si esta ubicación coincide con el filtro
                                             $esUbicacionFiltrada = request('ubicacion_id') && $ubicacion['warehouse_id'] == request('ubicacion_id');
                                         @endphp
-                                        <div class="flex items-center justify-between rounded px-2 py-1 {{ $esUbicacionFiltrada ? 'bg-green-100 border-2 border-green-400 shadow-md' : 'bg-gray-50' }}">
-                                            <div class="flex items-center space-x-2">
-                                                @if($esUbicacionFiltrada)
-                                                    <i class="fas fa-map-marker-alt text-green-600 text-xs animate-pulse"></i>
-                                                @endif
-                                                <span class="text-xs font-semibold {{ $esUbicacionFiltrada ? 'text-green-700' : 'text-blue-600' }}">
-                                                    {{ $ubicacion['warehouse'] }}
-                                                </span>
+                                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2 rounded px-2.5 py-1.5 {{ $esUbicacionFiltrada ? 'bg-green-100 border-2 border-green-400 shadow-md' : 'bg-gray-50 border border-gray-200' }}">
+                                            <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 flex-1 min-w-0">
+                                                <div class="flex items-center gap-1.5 min-w-0">
+                                                    @if($esUbicacionFiltrada)
+                                                        <i class="fas fa-map-marker-alt text-green-600 text-xs animate-pulse flex-shrink-0"></i>
+                                                    @endif
+                                                    <span class="text-xs sm:text-sm font-semibold {{ $esUbicacionFiltrada ? 'text-green-700' : 'text-blue-600' }} break-all">
+                                                        {{ $ubicacion['warehouse'] }}
+                                                    </span>
+                                                </div>
                                                 @if($ubicacion['lote'])
-                                                    <span class="text-xs text-gray-500">| Lote: {{ $ubicacion['lote'] }}</span>
+                                                    <span class="text-xs text-gray-500 whitespace-nowrap">Lote: {{ $ubicacion['lote'] }}</span>
                                                 @endif
                                             </div>
-                                            <div class="flex items-center space-x-2">
-                                                <span class="text-xs font-medium {{ $esUbicacionFiltrada ? 'text-green-900' : 'text-gray-900' }}">
+                                            <div class="flex items-center gap-2 flex-shrink-0">
+                                                <span class="text-xs sm:text-sm font-medium {{ $esUbicacionFiltrada ? 'text-green-900' : 'text-gray-900' }} whitespace-nowrap">
                                                     {{ number_format($ubicacion['cantidad'], 2) }}
                                                 </span>
-                                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium 
+                                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap
                                                     {{ $ubicacion['estado'] === 'disponible' ? 'bg-green-100 text-green-800' : ($ubicacion['estado'] === 'reservado' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800') }}">
                                                     {{ ucfirst($ubicacion['estado']) }}
                                                 </span>
@@ -231,14 +290,14 @@
                                     
                                     {{-- Mostrar cantidad sin ubicar si existe --}}
                                     @if(($producto->sin_ubicar ?? 0) > 0)
-                                        <div class="flex items-center justify-between bg-orange-50 border border-orange-200 rounded px-2 py-1 mt-1">
-                                            <div class="flex items-center space-x-2">
-                                                <i class="fas fa-box text-orange-600 text-xs"></i>
-                                                <span class="text-xs font-semibold text-orange-700">Sin Ubicar</span>
+                                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2 bg-orange-50 border border-orange-200 rounded px-2.5 py-1.5 mt-1">
+                                            <div class="flex items-center gap-1.5">
+                                                <i class="fas fa-box text-orange-600 text-xs flex-shrink-0"></i>
+                                                <span class="text-xs sm:text-sm font-semibold text-orange-700">Sin Ubicar</span>
                                             </div>
-                                            <div class="flex items-center space-x-2">
-                                                <span class="text-xs font-medium text-orange-900">{{ number_format($producto->sin_ubicar, 2) }}</span>
-                                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
+                                            <div class="flex items-center gap-2 flex-shrink-0">
+                                                <span class="text-xs sm:text-sm font-medium text-orange-900 whitespace-nowrap">{{ number_format($producto->sin_ubicar, 2) }}</span>
+                                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 whitespace-nowrap">
                                                     Disponible
                                                 </span>
                                             </div>
@@ -248,14 +307,14 @@
                             @else
                                 {{-- Si no tiene ubicaciones, todo el stock está sin ubicar --}}
                                 @if(($producto->cantidad ?? 0) > 0)
-                                    <div class="flex items-center justify-between bg-orange-50 border border-orange-200 rounded px-2 py-1">
-                                        <div class="flex items-center space-x-2">
-                                            <i class="fas fa-box text-orange-600 text-xs"></i>
-                                            <span class="text-xs font-semibold text-orange-700">Sin Ubicar</span>
+                                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2 bg-orange-50 border border-orange-200 rounded px-2.5 py-1.5 min-w-[200px]">
+                                        <div class="flex items-center gap-1.5">
+                                            <i class="fas fa-box text-orange-600 text-xs flex-shrink-0"></i>
+                                            <span class="text-xs sm:text-sm font-semibold text-orange-700">Sin Ubicar</span>
                                         </div>
-                                        <div class="flex items-center space-x-2">
-                                            <span class="text-xs font-medium text-orange-900">{{ number_format($producto->cantidad, 2) }}</span>
-                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
+                                        <div class="flex items-center gap-2 flex-shrink-0">
+                                            <span class="text-xs sm:text-sm font-medium text-orange-900 whitespace-nowrap">{{ number_format($producto->cantidad, 2) }}</span>
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 whitespace-nowrap">
                                                 Disponible
                                             </span>
                                         </div>
@@ -265,21 +324,21 @@
                                 @endif
                             @endif
                         </td>
-                        <td class="px-4 py-3">
-                            <div class="flex items-center justify-center space-x-2">
+                        <td class="px-2 md:px-4 py-3">
+                            <div class="flex items-center justify-center space-x-1 sm:space-x-2">
                                 @if($producto->tiene_warehouse ?? false)
                                     <button type="button" 
                                             onclick="verDetallesUbicaciones({{ $producto->id }})"
-                                            class="p-2 text-blue-600 hover:bg-blue-50 rounded transition"
+                                            class="p-1.5 sm:p-2 text-blue-600 hover:bg-blue-50 rounded transition"
                                             title="Ver detalles completos">
-                                        <i class="fas fa-eye"></i>
+                                        <i class="fas fa-eye text-sm sm:text-base"></i>
                                     </button>
                                 @endif
                                 <button type="button" 
                                         onclick="asignarProducto({{ $producto->id }})"
-                                        class="p-2 text-green-600 hover:bg-green-50 rounded transition"
+                                        class="p-1.5 sm:p-2 text-green-600 hover:bg-green-50 rounded transition"
                                         title="Asignar a ubicación">
-                                    <i class="fas fa-plus-circle"></i>
+                                    <i class="fas fa-plus-circle text-sm sm:text-base"></i>
                                 </button>
                             </div>
                         </td>

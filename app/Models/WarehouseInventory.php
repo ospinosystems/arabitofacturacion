@@ -21,6 +21,7 @@ class WarehouseInventory extends Model
         'warehouse_id',
         'inventario_id',
         'cantidad',
+        'cantidad_bloqueada',
         'lote',
         'fecha_vencimiento',
         'fecha_entrada',
@@ -30,6 +31,7 @@ class WarehouseInventory extends Model
     
     protected $casts = [
         'cantidad' => 'decimal:2',
+        'cantidad_bloqueada' => 'decimal:4',
         'fecha_vencimiento' => 'date',
         'fecha_entrada' => 'date',
     ];

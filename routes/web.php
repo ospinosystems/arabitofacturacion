@@ -41,6 +41,7 @@ use App\Http\Controllers\MonedasController;
 use App\Http\Controllers\WarehouseController;
 use App\Http\Controllers\WarehouseInventoryController;
 use App\Http\Controllers\TCRController;
+use App\Http\Controllers\TCDController;
 
 use App\Http\Controllers\CajasController;
 Route::get('checkroutes', [PedidosController::class,"checkroutes"]);
@@ -311,6 +312,21 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::get('warehouse-inventory/tcr/buscar-ubicacion', [TCRController::class, 'buscarUbicacion'])->name('warehouse-inventory.tcr.buscar-ubicacion');
 		Route::get('warehouse-inventory/tcr/asignaciones-por-pedido', [TCRController::class, 'getAsignacionesPorPedido'])->name('warehouse-inventory.tcr.asignaciones-por-pedido');
 		Route::post('warehouse-inventory/tcr/confirmar-pedido', [TCRController::class, 'confirmarPedido'])->name('warehouse-inventory.tcr.confirmar-pedido');
+		
+		// Rutas del módulo TCD (Torre de Control de Despacho)
+		Route::get('warehouse-inventory/tcd', [TCDController::class, 'chequeador'])->name('warehouse-inventory.tcd.chequeador');
+		Route::get('warehouse-inventory/tcd/pasillero', [TCDController::class, 'pasillero'])->name('warehouse-inventory.tcd.pasillero');
+		Route::get('warehouse-inventory/tcd/buscar-productos', [TCDController::class, 'buscarProductos'])->name('warehouse-inventory.tcd.buscar-productos');
+		Route::post('warehouse-inventory/tcd/crear-orden', [TCDController::class, 'crearOrden'])->name('warehouse-inventory.tcd.crear-orden');
+		Route::get('warehouse-inventory/tcd/get-pasilleros', [TCDController::class, 'getPasilleros'])->name('warehouse-inventory.tcd.get-pasilleros');
+		Route::post('warehouse-inventory/tcd/asignar-productos', [TCDController::class, 'asignarProductos'])->name('warehouse-inventory.tcd.asignar-productos');
+		Route::get('warehouse-inventory/tcd/get-ordenes', [TCDController::class, 'getOrdenes'])->name('warehouse-inventory.tcd.get-ordenes');
+		Route::get('warehouse-inventory/tcd/get-asignaciones-por-orden', [TCDController::class, 'getAsignacionesPorOrden'])->name('warehouse-inventory.tcd.get-asignaciones-por-orden');
+		Route::get('warehouse-inventory/tcd/mis-asignaciones', [TCDController::class, 'getMisAsignaciones'])->name('warehouse-inventory.tcd.mis-asignaciones');
+		Route::post('warehouse-inventory/tcd/procesar-asignacion', [TCDController::class, 'procesarAsignacion'])->name('warehouse-inventory.tcd.procesar-asignacion');
+		Route::get('warehouse-inventory/tcd/buscar-ubicacion', [TCDController::class, 'buscarUbicacion'])->name('warehouse-inventory.tcd.buscar-ubicacion');
+		Route::post('warehouse-inventory/tcd/confirmar-orden', [TCDController::class, 'confirmarOrden'])->name('warehouse-inventory.tcd.confirmar-orden');
+		Route::post('warehouse-inventory/tcd/escanear-ticket-despacho', [TCDController::class, 'escanearTicketDespacho'])->name('warehouse-inventory.tcd.escanear-ticket-despacho');
 		
 		// ================ RUTAS PARA INVENTARIAR PRODUCTOS ================
 		Route::get('inventario/inventariar', [InventarioController::class, 'inventariar'])->name('inventario.inventariar');
