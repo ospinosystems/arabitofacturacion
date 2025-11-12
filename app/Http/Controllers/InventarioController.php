@@ -2258,6 +2258,17 @@ class InventarioController extends Controller
                 ];
             });
 
+            // Verificar si hay movimientos de PLANILLA INVENTARIO en los últimos 3 meses
+            $fechaHace3Meses = now()->subMonths(3);
+            $tieneMovimientoPlanilla = \App\Models\movimientosInventariounitario::where('id_producto', $producto->id)
+                ->where('origen', 'PLANILLA INVENTARIO')
+                ->where('created_at', '>=', $fechaHace3Meses)
+                ->exists();
+
+            // Si hay movimiento de PLANILLA INVENTARIO en los últimos 3 meses, usar cantidad absoluta = false
+            // Si NO hay movimiento, usar cantidad absoluta = true
+            $usarCantidadAbsoluta = !$tieneMovimientoPlanilla;
+
             return Response::json([
                 'estado' => true,
                 'producto' => [
@@ -2276,6 +2287,7 @@ class InventarioController extends Controller
                     'total_en_ubicaciones' => $totalEnUbicaciones,
                     'numero_ubicaciones' => $numeroUbicaciones,
                     'ubicaciones' => $ubicacionesDetalle,
+                    'usar_cantidad_absoluta' => $usarCantidadAbsoluta,
                 ]
             ]);
 

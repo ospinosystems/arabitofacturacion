@@ -68,15 +68,16 @@
                                         <span class="font-bold text-blue-700 text-xl" id="productoCantidadActual"></span>
                                     </div>
                                     <div class="mt-0.5 text-xs text-gray-600" id="productoCantidadAnterior"></div>
-                                    <!-- Check para usar cantidad absoluta (visible solo si cantidad != 0) -->
+                                    <!-- Check para usar cantidad absoluta (visible solo si cantidad != 0, automático desde backend) -->
                                     <div id="checkCantidadAbsolutaContainer" class="mt-1" style="display: none;">
-                                        <label class="flex items-center cursor-pointer">
+                                        <label class="flex items-center">
                                             <input type="checkbox" 
                                                    id="usarCantidadAbsoluta" 
                                                    class="mr-1 w-3.5 h-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                                                   checked="false">
-                                            <span class="text-xs text-gray-700 font-medium">
-                                                Usar cantidad absoluta
+                                                   checked="false"
+                                                   disabled>
+                                            <span class="text-xs text-gray-600 font-medium">
+                                                Usar cantidad absoluta (automático)
                                             </span>
                                         </label>
                                     </div>
@@ -419,13 +420,17 @@ function mostrarInfoProducto(producto) {
     const cantidadActual = parseFloat(producto.cantidad_actual) || 0;
     document.getElementById('productoCantidadActual').textContent = cantidadActual;
     
+    // Obtener el valor de usar_cantidad_absoluta del backend (determinado automáticamente)
+    const usarCantidadAbsoluta = producto.usar_cantidad_absoluta !== undefined ? producto.usar_cantidad_absoluta : false;
+    
     // Mostrar check para cantidad absoluta solo si cantidad != 0
     const checkContainer = document.getElementById('checkCantidadAbsolutaContainer');
     const checkAbsoluta = document.getElementById('usarCantidadAbsoluta');
     if (cantidadActual != 0) {
-        // Si tiene cantidad, mostrar el check para permitir usar cantidad absoluta
+        // Si tiene cantidad, mostrar el check pero deshabilitado (solo informativo)
         checkContainer.style.display = 'block';
-        checkAbsoluta.checked = false; // Por defecto false (sumar)
+        checkAbsoluta.checked = usarCantidadAbsoluta; // Usar valor del backend
+        checkAbsoluta.disabled = true; // Deshabilitar para que sea automático
     } else {
         // Si no tiene cantidad, ocultar el check
         checkContainer.style.display = 'none';
