@@ -28,7 +28,7 @@
                         <i id="ubicacionesChevron" class="fas fa-chevron-down ml-2 text-xs transition-transform duration-200"></i>
                     </a>
                     <!-- Submenú -->
-                    <div id="ubicacionesSubmenu" class="absolute left-0 mt-1 w-56 bg-white rounded-lg shadow-lg transition-all duration-200 z-10 lg:opacity-0 lg:invisible lg:group-hover:opacity-100 lg:group-hover:visible hidden lg:block">
+                    <div id="ubicacionesSubmenu" class="absolute left-0 mt-1 w-56 bg-white rounded-lg shadow-lg transition-all duration-200 z-10 hidden lg:block lg:opacity-0 lg:invisible lg:pointer-events-none lg:group-hover:opacity-100 lg:group-hover:visible lg:group-hover:pointer-events-auto">
                         <div class="py-1">
                             <a href="{{ route('warehouses.index') }}" 
                                class="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition {{ request()->routeIs('warehouses.index') ? 'bg-blue-50 text-blue-700 font-medium' : '' }}">
