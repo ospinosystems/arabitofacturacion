@@ -18,31 +18,19 @@
         <!-- Navegación -->
         <div id="warehouseNavLinks" class="hidden lg:block">
             <div class="grid grid-cols-1 gap-2 lg:flex lg:flex-wrap">
-                <!-- Ubicaciones con submenú -->
-                <div class="relative group" id="ubicacionesMenu">
-                    <a href="{{ route('warehouses.index') }}" 
-                       onclick="if(window.innerWidth < 1024) { event.preventDefault(); toggleUbicacionesSubmenu(); }"
-                       class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition cursor-pointer {{ request()->routeIs('warehouses.index') || request()->is('warehouses/cargar-por-rango') ? 'bg-white text-blue-700 shadow-md' : '  ' }}">
-                        <i class="fas fa-map-marker-alt mr-2"></i>
-                        <span>Ubicaciones</span>
-                        <i id="ubicacionesChevron" class="fas fa-chevron-down ml-2 text-xs transition-transform duration-200"></i>
-                    </a>
-                    <!-- Submenú -->
-                    <div id="ubicacionesSubmenu" class="absolute left-0 mt-1 w-56 bg-white rounded-lg shadow-lg transition-all duration-200 z-10 hidden lg:block lg:opacity-0 lg:invisible lg:pointer-events-none lg:group-hover:opacity-100 lg:group-hover:visible lg:group-hover:pointer-events-auto">
-                        <div class="py-1">
-                            <a href="{{ route('warehouses.index') }}" 
-                               class="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition {{ request()->routeIs('warehouses.index') ? 'bg-blue-50 text-blue-700 font-medium' : '' }}">
-                                <i class="fas fa-list mr-2"></i>
-                                <span>Lista de Ubicaciones</span>
-                            </a>
-                            <a href="/warehouses/cargar-por-rango" 
-                               class="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition {{ request()->is('warehouses/cargar-por-rango') ? 'bg-blue-50 text-blue-700 font-medium' : '' }}">
-                                <i class="fas fa-layer-group mr-2"></i>
-                                <span>Cargar por Rango</span>
-                            </a>
-                        </div>
-                    </div>
-                </div>
+                <!-- Ubicaciones -->
+                <a href="{{ route('warehouses.index') }}" 
+                   class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('warehouses.index') ? 'bg-white text-blue-700 shadow-md' : '  ' }}">
+                    <i class="fas fa-map-marker-alt mr-2"></i>
+                    <span>Ubicaciones</span>
+                </a>
+                
+                <!-- Cargar por Rango -->
+                <a href="/warehouses/cargar-por-rango" 
+                   class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->is('warehouses/cargar-por-rango') ? 'bg-white text-blue-700 shadow-md' : '  ' }}">
+                    <i class="fas fa-layer-group mr-2"></i>
+                    <span>Cargar por Rango</span>
+                </a>
                 
                 <!-- Inventario por Ubicaciones -->
                 <a href="{{ route('warehouse-inventory.index') }}" 
@@ -121,43 +109,5 @@ function toggleWarehouseNav() {
     }
 }
 
-function toggleUbicacionesSubmenu() {
-    const submenu = document.getElementById('ubicacionesSubmenu');
-    const chevron = document.getElementById('ubicacionesChevron');
-    
-    if (!submenu || !chevron) return;
-    
-    // Solo funciona en móvil
-    if (window.innerWidth < 1024) {
-        if (submenu.classList.contains('hidden')) {
-            submenu.classList.remove('hidden');
-            submenu.classList.add('block');
-            submenu.style.position = 'static';
-            chevron.style.transform = 'rotate(180deg)';
-        } else {
-            submenu.classList.add('hidden');
-            submenu.classList.remove('block');
-            chevron.style.transform = 'rotate(0deg)';
-        }
-    }
-}
-
-// Cerrar submenú al hacer click fuera en móvil
-document.addEventListener('click', function(event) {
-    const ubicacionesMenu = document.getElementById('ubicacionesMenu');
-    const submenu = document.getElementById('ubicacionesSubmenu');
-    
-    if (window.innerWidth < 1024 && ubicacionesMenu && submenu) {
-        if (!ubicacionesMenu.contains(event.target) && !submenu.classList.contains('hidden')) {
-            submenu.classList.add('hidden');
-            submenu.classList.remove('block', 'opacity-100', 'visible');
-            submenu.classList.add('opacity-0', 'invisible');
-            const chevron = document.getElementById('ubicacionesChevron');
-            if (chevron) {
-                chevron.classList.remove('rotate-180');
-            }
-        }
-    }
-});
 </script>
 

@@ -12,6 +12,9 @@
             <div class="d-flex justify-content-between align-items-center">
                 <h1 class="h3 mb-3"><i class="fas fa-warehouse"></i> Gestión de Ubicaciones</h1>
                 <div>
+                    <a href="/warehouses/cargar-por-rango" class="btn btn-info me-2">
+                        <i class="fas fa-layer-group"></i> Cargar por Rango
+                    </a>
                     <button type="button" class="btn btn-warning me-2" onclick="imprimirSeleccionadas()" id="btnImprimirSeleccionadas" style="display: none;">
                         <i class="fas fa-print"></i> Imprimir Seleccionadas (<span id="contadorSeleccionadas">0</span>)
                     </button>
