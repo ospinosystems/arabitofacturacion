@@ -18,19 +18,30 @@
         <!-- Navegación -->
         <div id="warehouseNavLinks" class="hidden lg:block">
             <div class="grid grid-cols-1 gap-2 lg:flex lg:flex-wrap">
-                <!-- Ubicaciones -->
-                <a href="{{ route('warehouses.index') }}" 
-                   class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('warehouses.index') ? 'bg-white text-blue-700 shadow-md' : '  ' }}">
-                    <i class="fas fa-map-marker-alt mr-2"></i>
-                    <span>Ubicaciones</span>
-                </a>
-                
-                <!-- Cargar por Rango (dentro de Ubicaciones) -->
-                <a href="{{ route('warehouses.cargar-por-rango') }}" 
-                   class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('warehouses.cargar-por-rango') ? 'bg-white text-blue-700 shadow-md' : '  ' }}">
-                    <i class="fas fa-layer-group mr-2"></i>
-                    <span>Cargar por Rango</span>
-                </a>
+                <!-- Ubicaciones con submenú -->
+                <div class="relative group">
+                    <a href="{{ route('warehouses.index') }}" 
+                       class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('warehouses.index') || request()->is('warehouses/cargar-por-rango') ? 'bg-white text-blue-700 shadow-md' : '  ' }}">
+                        <i class="fas fa-map-marker-alt mr-2"></i>
+                        <span>Ubicaciones</span>
+                        <i class="fas fa-chevron-down ml-2 text-xs"></i>
+                    </a>
+                    <!-- Submenú -->
+                    <div class="absolute left-0 mt-1 w-56 bg-white rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
+                        <div class="py-1">
+                            <a href="{{ route('warehouses.index') }}" 
+                               class="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition {{ request()->routeIs('warehouses.index') ? 'bg-blue-50 text-blue-700 font-medium' : '' }}">
+                                <i class="fas fa-list mr-2"></i>
+                                <span>Lista de Ubicaciones</span>
+                            </a>
+                            <a href="/warehouses/cargar-por-rango" 
+                               class="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition {{ request()->is('warehouses/cargar-por-rango') ? 'bg-blue-50 text-blue-700 font-medium' : '' }}">
+                                <i class="fas fa-layer-group mr-2"></i>
+                                <span>Cargar por Rango</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
                 
                 <!-- Inventario por Ubicaciones -->
                 <a href="{{ route('warehouse-inventory.index') }}" 
