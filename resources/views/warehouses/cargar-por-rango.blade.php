@@ -1,10 +1,8 @@
 @extends('layouts.app')
 
-@section('nav')
-    @include('warehouse-inventory.partials.nav')
-@endsection
-
 @section('content')
+@include('warehouse-inventory.partials.nav')
+
 <div class="container-fluid px-4 py-3">
     <div class="mb-4">
         <h1 class="text-2xl font-bold text-gray-800 flex items-center">
