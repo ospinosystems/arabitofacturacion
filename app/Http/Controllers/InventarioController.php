@@ -2395,7 +2395,7 @@ class InventarioController extends Controller
             $request->validate([
                 'producto_id' => 'required|exists:inventarios,id',
                 'warehouse_id' => 'required|exists:warehouses,id',
-                'cantidad' => 'required|numeric|min:0.01',
+                'cantidad' => 'required|numeric', // Permite cantidades negativas
                 'usar_cantidad_absoluta' => 'sometimes|boolean',
             ]);
 
@@ -2408,9 +2408,24 @@ class InventarioController extends Controller
             $cantidadAnterior = $producto->cantidad ?? 0;
             $cantidadActual = $cantidadAnterior;
             
-            // Si usar_cantidad_absoluta es true, setear la cantidad directamente, sino sumar
+            // Determinar si es una operación de entrada (positivo) o salida (negativo)
+            $esEntrada = $request->cantidad >= 0;
+            $cantidadAbsoluta = abs($request->cantidad);
+            
+            // Si usar_cantidad_absoluta es true, setear la cantidad directamente, sino sumar/restar
             $usarCantidadAbsoluta = $request->has('usar_cantidad_absoluta') && $request->usar_cantidad_absoluta;
-            $nuevaCantidad = $usarCantidadAbsoluta ? $request->cantidad : ($cantidadAnterior + $request->cantidad);
+            
+            if ($usarCantidadAbsoluta) {
+                $nuevaCantidad = $request->cantidad;
+            } else {
+                // Si es negativo, restar; si es positivo, sumar
+                $nuevaCantidad = $esEntrada ? ($cantidadAnterior + $request->cantidad) : ($cantidadAnterior + $request->cantidad);
+            }
+            
+            // Validar que la cantidad final no sea negativa
+            if ($nuevaCantidad < 0) {
+                throw new \Exception('No se puede restar más cantidad de la disponible. Cantidad actual: ' . $cantidadAnterior);
+            }
 
             // Guardar producto con nueva cantidad usando guardarProducto
             $resultado = $this->guardarProducto([
@@ -2436,12 +2451,7 @@ class InventarioController extends Controller
 
             $productoId = is_numeric($resultado) ? $resultado : $producto->id;
 
-            // Verificar capacidad de la ubicación
-            if (!$warehouse->tieneCapacidad($request->cantidad)) {
-                throw new \Exception('La ubicación no tiene capacidad suficiente');
-            }
-
-            // Buscar o crear WarehouseInventory
+            // Buscar WarehouseInventory
             $warehouseInventory = \App\Models\WarehouseInventory::where('warehouse_id', $warehouse->id)
                 ->where('inventario_id', $productoId)
                 ->where(function($query) {
@@ -2450,17 +2460,41 @@ class InventarioController extends Controller
                 })
                 ->first();
 
+            // Si es salida (negativo), validar stock disponible en la ubicación
+            if (!$esEntrada) {
+                $stockDisponibleUbicacion = $warehouseInventory ? ($warehouseInventory->cantidad - ($warehouseInventory->cantidad_bloqueada ?? 0)) : 0;
+                if ($stockDisponibleUbicacion < $cantidadAbsoluta) {
+                    throw new \Exception("No hay suficiente stock en la ubicación. Disponible: {$stockDisponibleUbicacion}, Solicitado: {$cantidadAbsoluta}");
+                }
+            }
+
+            // Verificar capacidad de la ubicación solo si es entrada
+            if ($esEntrada && !$warehouse->tieneCapacidad($request->cantidad)) {
+                throw new \Exception('La ubicación no tiene capacidad suficiente');
+            }
+
             if ($warehouseInventory) {
                 // Actualizar cantidad existente
                 if ($usarCantidadAbsoluta) {
                     $warehouseInventory->cantidad = $request->cantidad;
                 } else {
-                    $warehouseInventory->cantidad += $request->cantidad;
+                    $warehouseInventory->cantidad += $request->cantidad; // Suma o resta según el signo
                 }
-                $warehouseInventory->fecha_entrada = now();
+                
+                // Asegurar que la cantidad no sea negativa
+                if ($warehouseInventory->cantidad < 0) {
+                    throw new \Exception('No se puede restar más cantidad de la disponible en la ubicación');
+                }
+                
+                $warehouseInventory->fecha_entrada = $esEntrada ? now() : $warehouseInventory->fecha_entrada;
                 $warehouseInventory->save();
             } else {
-                // Crear nuevo registro
+                // Si no existe y es salida, no se puede restar
+                if (!$esEntrada) {
+                    throw new \Exception('No existe stock en esta ubicación para restar');
+                }
+                
+                // Crear nuevo registro solo si es entrada
                 $warehouseInventory = \App\Models\WarehouseInventory::create([
                     'warehouse_id' => $warehouse->id,
                     'inventario_id' => $productoId,
@@ -2471,16 +2505,22 @@ class InventarioController extends Controller
                 ]);
             }
 
+            // Determinar tipo de movimiento y observaciones
+            $tipoMovimiento = $esEntrada ? 'entrada' : 'salida';
+            $observaciones = $esEntrada 
+                ? 'Inventariado manual - Entrada' 
+                : 'Inventariado manual - Salida (ajuste negativo)';
+
             // Registrar movimiento
             \App\Models\WarehouseMovement::create([
-                'tipo' => 'entrada',
+                'tipo' => $tipoMovimiento,
                 'inventario_id' => $productoId,
-                'warehouse_origen_id' => null,
-                'warehouse_destino_id' => $warehouse->id,
-                'cantidad' => $request->cantidad,
+                'warehouse_origen_id' => $esEntrada ? null : $warehouse->id,
+                'warehouse_destino_id' => $esEntrada ? $warehouse->id : null,
+                'cantidad' => $esEntrada ? $request->cantidad : $cantidadAbsoluta, // Guardar cantidad absoluta para salidas
                 'lote' => null,
                 'usuario_id' => session('id_usuario'),
-                'observaciones' => 'Inventariado manual',
+                'observaciones' => $observaciones,
                 'fecha_movimiento' => now(),
             ]);
 
@@ -2488,11 +2528,14 @@ class InventarioController extends Controller
 
             return Response::json([
                 'estado' => true,
-                'msj' => 'Producto inventariado exitosamente',
+                'msj' => $esEntrada 
+                    ? 'Producto inventariado exitosamente (entrada)' 
+                    : 'Producto descontado exitosamente (salida)',
+                'tipo_movimiento' => $tipoMovimiento,
                 'producto' => [
                     'id' => $productoId,
                     'cantidad_anterior' => $cantidadAnterior,
-                    'cantidad_agregada' => $usarCantidadAbsoluta ? 0 : $request->cantidad,
+                    'cantidad_modificada' => $usarCantidadAbsoluta ? 0 : $request->cantidad,
                     'cantidad_total' => $nuevaCantidad,
                 ],
                 'warehouse' => [

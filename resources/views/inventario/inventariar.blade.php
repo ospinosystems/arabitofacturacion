@@ -225,7 +225,7 @@
                             <span class="bg-orange-500 text-white rounded-full w-6 h-6 inline-flex items-center justify-center mr-1 text-xs">3</span>
                             Ingresar Cantidad
                         </h3>
-                        <p class="text-xs text-gray-600 mb-1">Ingresa la cantidad a inventariar</p>
+                        <p class="text-xs text-gray-600 mb-1">Ingresa la cantidad a inventariar (positivo para agregar, negativo para restar)</p>
                         <div class="relative">
                             <input type="text" 
                                    id="inputCantidad" 
@@ -394,14 +394,21 @@ function desbloquearInput(inputId) {
 function validarCantidad(input) {
     let valor = input.value;
     
+    // Permitir signo negativo al inicio
+    const tieneSignoNegativo = valor.startsWith('-');
+    const valorSinSigno = valor.replace(/^-/, '');
+    
     // Remover cualquier carácter que no sea número o punto decimal
-    valor = valor.replace(/[^0-9.]/g, '');
+    let valorLimpio = valorSinSigno.replace(/[^0-9.]/g, '');
     
     // Evitar múltiples puntos decimales
-    const partes = valor.split('.');
+    const partes = valorLimpio.split('.');
     if (partes.length > 2) {
-        valor = partes[0] + '.' + partes.slice(1).join('');
+        valorLimpio = partes[0] + '.' + partes.slice(1).join('');
     }
+    
+    // Reconstruir el valor con el signo negativo si existía
+    valor = tieneSignoNegativo ? '-' + valorLimpio : valorLimpio;
     
     // Actualizar el valor del input
     if (input.value !== valor) {
@@ -409,7 +416,7 @@ function validarCantidad(input) {
         // Mostrar mensaje de advertencia
         const mensajeCantidad = document.getElementById('mensajeCantidad');
         if (mensajeCantidad) {
-            mensajeCantidad.innerHTML = '<span class="text-red-600 text-xs"><i class="fas fa-exclamation-circle mr-1"></i>Solo se permiten números y decimales</span>';
+            mensajeCantidad.innerHTML = '<span class="text-red-600 text-xs"><i class="fas fa-exclamation-circle mr-1"></i>Solo se permiten números, decimales y signo negativo</span>';
             setTimeout(() => {
                 mensajeCantidad.innerHTML = '';
             }, 2000);
@@ -419,6 +426,18 @@ function validarCantidad(input) {
         const mensajeCantidad = document.getElementById('mensajeCantidad');
         if (mensajeCantidad && mensajeCantidad.innerHTML.includes('Solo se permiten')) {
             mensajeCantidad.innerHTML = '';
+        }
+        
+        // Mostrar indicador si es negativo
+        if (mensajeCantidad) {
+            const cantidad = parseFloat(valor);
+            if (!isNaN(cantidad) && cantidad < 0) {
+                mensajeCantidad.innerHTML = '<span class="text-orange-600 text-xs"><i class="fas fa-minus-circle mr-1"></i>Se restará del inventario</span>';
+            } else if (!isNaN(cantidad) && cantidad > 0) {
+                mensajeCantidad.innerHTML = '<span class="text-green-600 text-xs"><i class="fas fa-plus-circle mr-1"></i>Se sumará al inventario</span>';
+            } else if (valor === '' || valor === '-') {
+                mensajeCantidad.innerHTML = '';
+            }
         }
     }
     
@@ -431,13 +450,22 @@ function validarPegado(event) {
     event.preventDefault();
     const textoPegado = (event.clipboardData || window.clipboardData).getData('text');
     
+    // Permitir signo negativo al inicio
+    const tieneSignoNegativo = textoPegado.trim().startsWith('-');
+    const textoSinSigno = textoPegado.replace(/^-/, '');
+    
     // Extraer solo números y punto decimal
-    let valorValido = textoPegado.replace(/[^0-9.]/g, '');
+    let valorValido = textoSinSigno.replace(/[^0-9.]/g, '');
     
     // Evitar múltiples puntos decimales
     const partes = valorValido.split('.');
     if (partes.length > 2) {
         valorValido = partes[0] + '.' + partes.slice(1).join('');
+    }
+    
+    // Reconstruir con signo negativo si existía
+    if (tieneSignoNegativo && valorValido) {
+        valorValido = '-' + valorValido;
     }
     
     // Insertar el valor válido en el input
@@ -778,12 +806,20 @@ function guardarInventario() {
         return;
     }
     
-    // Validar que sea un número válido
+    // Validar que sea un número válido (permite negativos)
     const cantidad = parseFloat(valorCantidad);
-    if (isNaN(cantidad) || cantidad <= 0) {
-        mostrarNotificacion('Ingrese una cantidad válida (solo números y decimales)', 'warning');
+    if (isNaN(cantidad) || cantidad === 0) {
+        mostrarNotificacion('Ingrese una cantidad válida diferente de cero', 'warning');
         inputCantidad.focus();
         return;
+    }
+    
+    // Si es negativo, confirmar que se quiere restar
+    if (cantidad < 0) {
+        const cantidadAbsoluta = Math.abs(cantidad);
+        if (!confirm(`¿Está seguro de restar ${cantidadAbsoluta} unidades del inventario?`)) {
+            return;
+        }
     }
     
     // Obtener el valor del check de cantidad absoluta
@@ -805,6 +841,8 @@ function guardarInventario() {
     .then(response => response.json())
     .then(data => {
         if (data.estado) {
+            const tipoMovimiento = data.tipo_movimiento || 'entrada';
+            const icono = tipoMovimiento === 'salida' ? 'fa-minus-circle' : 'fa-plus-circle';
             mostrarNotificacion(data.msj || 'Producto inventariado exitosamente', 'success');
             resetearTodo();
         } else {
