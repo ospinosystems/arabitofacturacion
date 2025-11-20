@@ -569,6 +569,10 @@ export default function Facturar({
         {value:"0171 ACTIVO TITANIO 0229", text:"0171 ACTIVO TITANIO 0229"},
 
         { value: "0105", text: "0105 MERCANTIL" },
+        { value: "0105 MERCANTIL TITANIO 6669", text: "0105 MERCANTIL TITANIO 6669" },
+        { value: "0105 MERCANTIL EL HENAOUI TITANIO 7894", text: "0105 MERCANTIL EL HENAOUI TITANIO 7894" },
+
+
         { value: "0102", text: "0102 BANCO DE VENEZUELA" },
         { value: "0114", text: "0114 BANCO DEL CARIBE" },
         { value: "0151", text: "0151 BANCO FONDO COMÚN BFC" },

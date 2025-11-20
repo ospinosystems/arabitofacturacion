@@ -20,7 +20,7 @@ export default function EstadisticaInventario({
 	categorias,
 	getEstaInventario,
 }) {
-	useEffect(() => {
+	/* useEffect(() => {
 		getEstaInventario();
 	}, [
 		fechaQEstaInve,
@@ -29,7 +29,7 @@ export default function EstadisticaInventario({
 		orderByEstaInv,
 		categoriaEstaInve,
 		orderByColumEstaInv,
-	]);
+	]); */
 
 
 	let data = []
@@ -43,7 +43,7 @@ export default function EstadisticaInventario({
 
 	return (
 		<div className="container">
-			<div className="input-group">
+			<form className="input-group" onSubmit={e=>{e.preventDefault();getEstaInventario();}}>
 				<select
 					className={("form-control form-control-sm ")}
 					value={categoriaEstaInve}
@@ -61,7 +61,14 @@ export default function EstadisticaInventario({
 					<option value="asc">ASC</option>
 					<option value="desc">DESC</option>
 				</select>
-			</div>
+				<button
+					className="btn btn-sinapsis "
+					type="submit"
+					style={{ marginLeft: "8px" }}
+				>
+					Buscar
+				</button>
+			</form>
 			<table className="table">
 				<thead>
 					<tr>
