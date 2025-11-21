@@ -75,7 +75,6 @@ class AuthenticateUser
         "warehouse-inventory/buscar-productos",
         "warehouse-inventory/buscar-codigo",
         "warehouse-inventory/producto/{inventarioId}",
-        "warehouse-inventory/producto/{inventarioId}/ubicaciones",
         "warehouse-inventory/ubicacion/{warehouseId}",
         "warehouse-inventory/por-ubicacion",
         "warehouse-inventory/{id}/ticket",

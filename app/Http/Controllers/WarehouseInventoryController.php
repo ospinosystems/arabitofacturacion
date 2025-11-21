@@ -604,31 +604,42 @@ class WarehouseInventoryController extends Controller
     }
 
     /**
-     * Obtener ubicaciones de un producto en formato JSON
+     * Obtener ubicaciones de un producto en formato JSON (API)
      */
     public function obtenerUbicacionesProducto($inventarioId)
     {
         try {
+            $producto = inventario::findOrFail($inventarioId);
+            
             $ubicaciones = WarehouseInventory::with(['warehouse'])
                 ->where('inventario_id', $inventarioId)
-                ->where('cantidad', '>', 0)
+                ->conStock()
                 ->orderBy('fecha_entrada', 'asc')
                 ->get();
             
-            $ubicacionesData = $ubicaciones->map(function($item) {
+            $totalStock = $ubicaciones->sum('cantidad');
+            
+            $ubicacionesData = $ubicaciones->map(function($ubicacion) {
                 return [
-                    'id' => $item->warehouse->id,
-                    'codigo' => $item->warehouse->codigo,
-                    'nombre' => $item->warehouse->nombre,
-                    'cantidad' => $item->cantidad,
-                    'fecha_entrada' => $item->fecha_entrada,
+                    'id' => $ubicacion->id,
+                    'warehouse_id' => $ubicacion->warehouse_id,
+                    'codigo' => $ubicacion->warehouse->codigo ?? 'N/A',
+                    'nombre' => $ubicacion->warehouse->nombre ?? 'Sin nombre',
+                    'cantidad' => $ubicacion->cantidad,
+                    'fecha_entrada' => $ubicacion->fecha_entrada,
+                    'lote' => $ubicacion->lote,
                 ];
             });
             
             return Response::json([
                 'estado' => true,
+                'producto' => [
+                    'id' => $producto->id,
+                    'codigo_barras' => $producto->codigo_barras,
+                    'descripcion' => $producto->descripcion,
+                ],
                 'ubicaciones' => $ubicacionesData,
-                'total' => $ubicaciones->sum('cantidad'),
+                'total_stock' => $totalStock,
                 'total_ubicaciones' => $ubicaciones->count()
             ]);
         } catch (\Exception $e) {
