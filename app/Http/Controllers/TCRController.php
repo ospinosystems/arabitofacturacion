@@ -54,6 +54,7 @@ class TCRController extends Controller
      */
     public function getPedidosCentral(Request $request)
     {
+
         try {
             $sendCentral = new sendCentral();
             $codigo_origen = $sendCentral->getOrigen();
@@ -61,8 +62,8 @@ class TCRController extends Controller
             $response = \Http::post($sendCentral->path() . '/respedidos', [
                 "codigo_origen" => $codigo_origen,
                 "qpedidoscentralq" => $request->qpedidoscentralq ?? '',
-                "qpedidocentrallimit" => $request->qpedidocentrallimit ?? '',
-                "qpedidocentralestado" => $request->qpedidocentralestado ?? 4, // Solo revisados
+                "qpedidocentrallimit" => $request->qpedidocentrallimit ?? '20',
+                "qpedidocentralestado" => $request->qpedidocentralestado, // Solo revisados
                 "qpedidocentralemisor" => $request->qpedidocentralemisor ?? '',
             ]);
             
@@ -433,125 +434,109 @@ class TCRController extends Controller
      */
     public function confirmarPedido(Request $request)
     {
-        $chequeadorId = session('id_usuario');
-        if (!$chequeadorId) {
+        $tipo_usuario = session('tipo_usuario');
+        if ($tipo_usuario != 7) {
+            return Response::json(['msj' => '¡No tienes permisos para verificar pedidos central, solo DICI!', 'estado' => false]);
+        }
+        
+        $pedidoId = $request->pedido_id ?? $request->pedido['id'] ?? null;
+        
+        if (!$pedidoId) {
             return Response::json([
                 'estado' => false,
-                'msj' => 'Usuario no autenticado'
-            ], 401);
+                'msj' => 'ID de pedido requerido'
+            ]);
         }
         
         try {
             DB::beginTransaction();
             
-            // Si recibe 'asignaciones', procesar las asignaciones TCR primero
-            if ($request->has('asignaciones') && $request->asignaciones) {
-                $pedidoId = $request->pedido_id ?? $request->pedido['id'] ?? null;
-                
-                if (!$pedidoId) {
-                    throw new \Exception('ID de pedido requerido para procesar asignaciones');
-                }
-                
-                // Verificar que todas las asignaciones del pedido estén listas (en_espera o completado)
-                $totalAsignaciones = TCRAsignacion::where('pedido_central_id', $pedidoId)
-                    ->where('chequeador_id', $chequeadorId)
-                    ->count();
-                
-                if ($totalAsignaciones === 0) {
-                    throw new \Exception('No hay asignaciones para este pedido');
-                }
-                
-                $asignacionesListas = TCRAsignacion::where('pedido_central_id', $pedidoId)
-                    ->where('chequeador_id', $chequeadorId)
-                    ->whereIn('estado', ['en_espera', 'completado'])
-                    ->count();
-                
-                if ($asignacionesListas < $totalAsignaciones) {
-                    throw new \Exception("Aún hay asignaciones pendientes. Listas: {$asignacionesListas}/{$totalAsignaciones}");
-                }
-                
-                // Obtener todas las asignaciones en espera del pedido
-                $asignaciones = TCRAsignacion::where('pedido_central_id', $pedidoId)
-                    ->where('chequeador_id', $chequeadorId)
-                    ->where('estado', 'en_espera')
-                    ->get();
-                
-                if ($asignaciones->isEmpty()) {
-                    // Si no hay en espera, verificar si ya están todas completadas
-                    $completadas = TCRAsignacion::where('pedido_central_id', $pedidoId)
-                        ->where('chequeador_id', $chequeadorId)
-                        ->where('estado', 'completado')
-                        ->count();
-                    
-                    if ($completadas === $totalAsignaciones) {
-                        // Ya están todas completadas, continuar con checkPedidosCentral
-                    } else {
-                        throw new \Exception('No hay asignaciones en espera para procesar');
+            // Obtener el pedido completo desde central
+            $sendCentral = new sendCentral();
+            $getPedido = $sendCentral->getPedidoCentralImport($pedidoId);
+            
+            if (!isset($getPedido['estado']) || $getPedido['estado'] !== true || !isset($getPedido['pedido'])) {
+                throw new \Exception('Error al obtener pedido desde central: ' . ($getPedido['msj'] ?? 'Error desconocido'));
+            }
+            
+            $pedidoCentral = $getPedido['pedido'];
+            
+            // Obtener todas las asignaciones TCR del pedido para mapear warehouse_codigo
+            $asignacionesTCR = TCRAsignacion::where('pedido_central_id', $pedidoId)
+                ->where('chequeador_id', session('id_usuario'))
+                ->where('estado', 'completado')
+                ->with('warehouse')
+                ->get();
+            
+            // Crear un mapa de item_id -> warehouse_codigo
+            $warehouseMap = [];
+            foreach ($asignacionesTCR as $asig) {
+                $itemId = $asig->item_pedido_id;
+                if ($asig->warehouse && $asig->warehouse->codigo) {
+                    if (!isset($warehouseMap[$itemId])) {
+                        $warehouseMap[$itemId] = [];
                     }
-                } else {
-                    // Procesar cada asignación: crear warehouse_inventory y registrar movimientos
-                    foreach ($asignaciones as $asignacion) {
-                        // Buscar producto en inventario local
-                        $producto = inventario::where('codigo_barras', $asignacion->codigo_barras)
-                            ->orWhere('codigo_proveedor', $asignacion->codigo_proveedor)
-                            ->first();
-                        
-                        if (!$producto) {
-                            throw new \Exception("Producto no encontrado: {$asignacion->descripcion}");
-                        }
-                        
-                        if (!$asignacion->warehouse_id) {
-                            throw new \Exception("Asignación sin ubicación: {$asignacion->descripcion}");
-                        }
-                        
-                        // Crear o actualizar warehouse_inventory
-                        $warehouseInventory = WarehouseInventory::where('warehouse_id', $asignacion->warehouse_id)
-                            ->where('inventario_id', $producto->id)
-                            ->first();
-                        
-                        if ($warehouseInventory) {
-                            $warehouseInventory->cantidad += $asignacion->cantidad_asignada;
-                            $warehouseInventory->save();
-                        } else {
-                            $warehouseInventory = WarehouseInventory::create([
-                                'warehouse_id' => $asignacion->warehouse_id,
-                                'inventario_id' => $producto->id,
-                                'cantidad' => $asignacion->cantidad_asignada,
-                                'lote' => null,
-                                'fecha_entrada' => now(),
-                                'estado' => 'disponible',
-                            ]);
-                        }
-                        
-                        // Registrar movimiento
-                        WarehouseMovement::create([
-                            'tipo' => 'entrada',
-                            'inventario_id' => $producto->id,
-                            'warehouse_origen_id' => null,
-                            'warehouse_destino_id' => $asignacion->warehouse_id,
-                            'cantidad' => $asignacion->cantidad_asignada,
-                            'lote' => null,
-                            'fecha_vencimiento' => null,
-                            'usuario_id' => $chequeadorId,
-                            'documento_referencia' => "TCR-Pedido-{$asignacion->pedido_central_id}",
-                            'observaciones' => "Asignación TCR confirmada - Pasillero: {$asignacion->pasillero_id}",
-                            'fecha_movimiento' => now(),
-                        ]);
-                        
-                        // Marcar asignación como completada
-                        $asignacion->estado = 'completado';
-                        $asignacion->save();
+                    // Si hay múltiples asignaciones para el mismo item, usar la primera
+                    if (empty($warehouseMap[$itemId])) {
+                        $warehouseMap[$itemId] = $asig->warehouse->codigo;
                     }
                 }
             }
             
+            // Preparar los items del pedido con la información necesaria para checkPedidosCentral
+            $itemsPreparados = [];
+            foreach ($pedidoCentral['items'] as $item) {
+                $itemId = $item['id'];
+                
+                // Buscar producto en inventario local por código de barras o proveedor
+                $productoLocal = inventario::where('codigo_barras', $item['producto']['codigo_barras'] ?? '')
+                    ->orWhere('codigo_proveedor', $item['producto']['codigo_proveedor'] ?? '')
+                    ->first();
+                
+                $vinculoReal = $productoLocal ? $productoLocal->id : null;
+                $idinsucursalVinculo = $vinculoReal;
+                
+                // Preparar item con formato que espera checkPedidosCentral
+                $itemPreparado = [
+                    'id' => $itemId,
+                    'producto' => $item['producto'],
+                    'cantidad' => $item['cantidad'],
+                    'base' => $item['base'] ?? $item['producto']['precio_base'] ?? 0,
+                    'venta' => $item['venta'] ?? $item['producto']['precio'] ?? 0,
+                    'aprobado' => true, // Todos aprobados porque ya pasaron por el proceso TCR
+                    'vinculo_real' => $vinculoReal,
+                    'idinsucursal_vinculo' => $idinsucursalVinculo,
+                    'barras_real' => $item['producto']['codigo_barras'] ?? null,
+                    'warehouse_codigo' => $warehouseMap[$itemId] ?? null, // Agregar warehouse_codigo si existe
+                ];
+                
+                $itemsPreparados[] = $itemPreparado;
+            }
+            
+            // Preparar el pedido en el formato que espera checkPedidosCentral
+            $pedidoPreparado = [
+                'id' => $pedidoCentral['id'],
+                'id_origen' => $pedidoCentral['origen']['id'] ?? null,
+                'items' => $itemsPreparados
+            ];
+            
+            // Crear un nuevo Request con los datos preparados
+            $requestPreparado = new Request([
+                'pedido' => $pedidoPreparado,
+                'pathcentral' => $sendCentral->path()
+            ]);
+            
             // Llamar al método checkPedidosCentral del InventarioController
             $inventarioController = new \App\Http\Controllers\InventarioController();
-            $resultado = $inventarioController->checkPedidosCentral($request);
+            $resultado = $inventarioController->checkPedidosCentral($requestPreparado);
             
             // Si el resultado es un array con 'estado', retornarlo directamente
             if (is_array($resultado) && isset($resultado['estado'])) {
-                DB::commit();
+                if ($resultado['estado'] === false) {
+                    DB::rollBack();
+                } else {
+                    DB::commit();
+                }
                 return Response::json($resultado);
             }
             

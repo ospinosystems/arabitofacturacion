@@ -43,12 +43,37 @@
                             </button>
                         </div>
                         <p class="text-sm text-gray-600 mb-3">Escanea el código de barras o código de proveedor del producto</p>
-                        <input type="text" 
-                               id="inputProducto" 
-                               class="w-full px-4 py-3 text-lg font-mono border-2 border-green-400 rounded-lg focus:ring-2 focus:ring-green-500"
-                               placeholder="Escanea código de barras o proveedor"
-                               autofocus>
+                        <div class="flex gap-2">
+                            <input type="text" 
+                                   id="inputProducto" 
+                                   class="flex-1 px-4 py-3 text-lg font-mono border-2 border-green-400 rounded-lg focus:ring-2 focus:ring-green-500"
+                                   placeholder="Escanea código de barras o proveedor"
+                                   autofocus>
+                            <button onclick="mostrarBusquedaManual()" class="px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition" title="Búsqueda Manual">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
                         <div id="mensajeProducto" class="mt-2 text-sm"></div>
+                        
+                        <!-- Buscador Manual (Oculto por defecto) -->
+                        <div id="buscadorManual" class="mt-4 p-4 bg-white rounded-lg border border-gray-200 shadow-sm hidden">
+                            <h4 class="font-bold text-gray-700 mb-3 flex items-center gap-2">
+                                <i class="fas fa-search text-blue-500"></i> Búsqueda Manual
+                            </h4>
+                            <input type="text" 
+                                   id="inputBusquedaManual" 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 mb-3"
+                                   placeholder="Escribe nombre o código..."
+                                   onkeyup="filtrarProductosManual()">
+                            
+                            <div id="listaProductosManual" class="space-y-2 max-h-60 overflow-y-auto border rounded-lg p-2 bg-gray-50">
+                                <!-- Resultados de búsqueda -->
+                            </div>
+                            
+                            <button onclick="ocultarBusquedaManual()" class="mt-3 text-sm text-gray-500 hover:text-gray-700 underline w-full text-center">
+                                Cancelar búsqueda manual
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -435,6 +460,61 @@ function mostrarPasoCantidad() {
     document.getElementById('inputCantidad').focus();
     const cantidadPendiente = asignacionActual.cantidad - asignacionActual.cantidad_asignada;
     document.getElementById('inputCantidad').max = cantidadPendiente;
+}
+
+function mostrarBusquedaManual() {
+    document.getElementById('buscadorManual').classList.remove('hidden');
+    document.getElementById('inputBusquedaManual').value = '';
+    document.getElementById('inputBusquedaManual').focus();
+    filtrarProductosManual(); // Mostrar todos inicialmente
+}
+
+function ocultarBusquedaManual() {
+    document.getElementById('buscadorManual').classList.add('hidden');
+    document.getElementById('inputProducto').focus();
+}
+
+function filtrarProductosManual() {
+    const termino = document.getElementById('inputBusquedaManual').value.toLowerCase();
+    const lista = document.getElementById('listaProductosManual');
+    
+    if (!pedidoSeleccionado) return;
+    
+    // Filtrar asignaciones pendientes
+    const productosFiltrados = pedidoSeleccionado.asignaciones.filter(a => {
+        const pendiente = (a.cantidad - a.cantidad_asignada) > 0;
+        const coincide = a.descripcion.toLowerCase().includes(termino) || 
+                        (a.codigo_barras || '').toLowerCase().includes(termino) || 
+                        (a.codigo_proveedor || '').toLowerCase().includes(termino);
+        return pendiente && coincide;
+    });
+    
+    if (productosFiltrados.length === 0) {
+        lista.innerHTML = '<div class="text-center text-gray-400 py-4 text-sm">No se encontraron productos pendientes</div>';
+        return;
+    }
+    
+    lista.innerHTML = productosFiltrados.map(p => `
+        <div onclick="seleccionarProductoManual(${p.id})" class="p-2 bg-white border border-gray-200 rounded hover:bg-blue-50 cursor-pointer transition flex flex-col gap-1">
+            <div class="font-semibold text-sm text-gray-800">${p.descripcion}</div>
+            <div class="flex justify-between text-xs text-gray-500">
+                <span>Cod: ${p.codigo_barras || p.codigo_proveedor || 'N/A'}</span>
+                <span class="font-bold text-orange-600">Pend: ${(p.cantidad - p.cantidad_asignada)}</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+function seleccionarProductoManual(asignacionId) {
+    asignacionActual = pedidoSeleccionado.asignaciones.find(a => a.id === asignacionId);
+    if (asignacionActual) {
+        const mensaje = document.getElementById('mensajeProducto');
+        mensaje.innerHTML = `<span class="text-green-600"><i class="fas fa-check-circle"></i> Producto seleccionado manualmente: ${asignacionActual.descripcion}</span>`;
+        
+        ocultarBusquedaManual();
+        mostrarInfoAsignacion();
+        mostrarPasoUbicacion();
+    }
 }
 
 function usarCantidadTotal() {

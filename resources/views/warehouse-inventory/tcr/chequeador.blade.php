@@ -18,18 +18,27 @@
     <div class="bg-white rounded-lg shadow p-4 mb-4">
         <form id="formBuscarPedidos" class="space-y-3">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div class="md:col-span-2">
+                <div class="md:col-span-1">
                     <label class="block text-sm font-medium text-gray-700 mb-1">Nº Transferencia</label>
                     <input type="text" id="qpedidoscentralq" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400" placeholder="Buscar por ID...">
                 </div>
                 <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                    <select id="qpedidocentralestado" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400">
+                        <option value="">Todos</option>
+                        <option value="4">REVISADO</option>
+                        <option value="3">EN REVISIÓN</option>
+                        <option value="1">PENDIENTE</option>
+                    </select>
+                </div>
+                <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Límite</label>
                     <select id="qpedidocentrallimit" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400">
-                        <option value="">Todo</option>
                         <option value="5">5</option>
                         <option value="10">10</option>
-                        <option value="20">20</option>
+                        <option value="20" selected>20</option>
                         <option value="50">50</option>
+                        <option value="">Todo</option>
                     </select>
                 </div>
                 <div>
@@ -89,7 +98,13 @@
                 <!-- Tab: Asignar Productos -->
                 <div id="contenidoAsignar" class="tab-content">
                     <div class="mb-4">
-                        <h3 class="font-bold text-gray-700 mb-3">Productos</h3>
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-bold text-gray-700">Productos</h3>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="checkTodo" onchange="toggleSeleccionarTodos(this.checked)" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                                <span class="text-sm font-semibold text-gray-700">Seleccionar Todos</span>
+                            </label>
+                        </div>
                         <div id="listaProductos" class="space-y-2 max-h-[400px] overflow-y-auto">
                         </div>
                     </div>
@@ -275,6 +290,7 @@ function buscarPedidos() {
     const qpedidoscentralq = document.getElementById('qpedidoscentralq').value;
     const qpedidocentrallimit = document.getElementById('qpedidocentrallimit').value;
     const qpedidocentralemisor = document.getElementById('qpedidocentralemisor').value;
+    const qpedidocentralestado = document.getElementById('qpedidocentralestado').value;
 
     fetch('/warehouse-inventory/tcr/get-pedidos-central', {
         method: 'POST',
@@ -285,7 +301,7 @@ function buscarPedidos() {
         body: JSON.stringify({
             qpedidoscentralq,
             qpedidocentrallimit,
-            qpedidocentralestado: 4,
+            qpedidocentralestado,
             qpedidocentralemisor
         })
     })
@@ -317,18 +333,61 @@ function mostrarListaPedidos() {
         return;
     }
 
-    listaPedidos.innerHTML = pedidosCentral.map((pedido, index) => `
-        <div class="p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 transition ${pedidoSeleccionado?.id === pedido.id ? 'bg-blue-100 border-blue-400' : ''}" 
+    listaPedidos.innerHTML = pedidosCentral.map((pedido, index) => {
+        // Determinar color según estado
+        let estadoColor = '';
+        let estadoTexto = '';
+        let borderColor = '';
+        
+        if (pedido.estado == 1) {
+            // PENDIENTE - Rojo
+            estadoColor = 'bg-red-50';
+            borderColor = 'border-red-300';
+            estadoTexto = 'PENDIENTE';
+        } else if (pedido.estado == 3) {
+            // EN REVISIÓN - Naranja
+            estadoColor = 'bg-orange-50';
+            borderColor = 'border-orange-300';
+            estadoTexto = 'EN REVISIÓN';
+        } else if (pedido.estado == 4) {
+            // REVISADO - Verde/Azul
+            estadoColor = 'bg-blue-50';
+            borderColor = 'border-blue-300';
+            estadoTexto = 'REVISADO';
+        } else {
+            // Estado desconocido - Gris
+            estadoColor = 'bg-gray-50';
+            borderColor = 'border-gray-300';
+            estadoTexto = 'DESCONOCIDO';
+        }
+        
+        // Si está seleccionado, usar color más intenso
+        const isSelected = pedidoSeleccionado?.id === pedido.id;
+        const selectedClass = isSelected ? 'ring-2 ring-blue-400 shadow-md' : '';
+        
+        return `
+        <div class="p-3 border-2 ${borderColor} ${estadoColor} rounded-lg cursor-pointer hover:shadow-md transition ${selectedClass}" 
              onclick="seleccionarPedido(${index})">
             <div class="flex items-center justify-between mb-2">
-                <span class="font-bold text-gray-700">#${pedido.id}</span>
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-gray-700">#${pedido.id}</span>
+                    <span class="px-2 py-0.5 text-[10px] font-bold rounded border ${
+                        pedido.estado == 1 ? 'bg-red-100 text-red-700 border-red-200' :
+                        pedido.estado == 3 ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                        pedido.estado == 4 ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                        'bg-gray-100 text-gray-600 border-gray-200'
+                    }">
+                        ${estadoTexto}
+                    </span>
+                </div>
                 <span class="text-xs text-gray-500">${pedido.items.length} items</span>
             </div>
             <div class="text-xs text-gray-600">
                 ${pedido.origen?.codigo || 'N/A'} | ${pedido.created_at || ''}
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 function seleccionarPedido(index) {
@@ -351,6 +410,9 @@ function mostrarDetallePedido() {
 
     const listaProductos = document.getElementById('listaProductos');
     productosSeleccionados = [];
+    // Resetear checkbox de seleccionar todos
+    const checkTodo = document.getElementById('checkTodo');
+    if (checkTodo) checkTodo.checked = false;
     
     listaProductos.innerHTML = pedidoSeleccionado.items.map((item, index) => {
         const cantidadPendiente = item.cantidad_pendiente || item.cantidad;
@@ -398,13 +460,35 @@ function toggleProducto(index) {
     const itemId = parseInt(checkbox.getAttribute('data-item-id'));
     
     if (checkbox.checked) {
-        productosSeleccionados.push({
-            item_id: itemId,
-            cantidad: parseFloat(cantidadInput.value)
-        });
+        // Verificar si ya está seleccionado para evitar duplicados
+        const existe = productosSeleccionados.some(p => p.item_id === itemId);
+        if (!existe) {
+            productosSeleccionados.push({
+                item_id: itemId,
+                cantidad: parseFloat(cantidadInput.value)
+            });
+        }
     } else {
         productosSeleccionados = productosSeleccionados.filter(p => p.item_id !== itemId);
     }
+}
+
+function toggleSeleccionarTodos(checked) {
+    const checkboxes = document.querySelectorAll('.checkbox-producto');
+    
+    // Si desmarcamos, limpiamos todo
+    if (!checked) {
+        productosSeleccionados = [];
+        checkboxes.forEach(cb => cb.checked = false);
+        return;
+    }
+    
+    // Si marcamos, seleccionamos todo
+    checkboxes.forEach(cb => {
+        cb.checked = true;
+        const index = cb.getAttribute('data-index');
+        toggleProducto(index);
+    });
 }
 
 function cargarPasilleros() {
@@ -715,4 +799,3 @@ function guardarPedido() {
 }
 </script>
 @endsection
-

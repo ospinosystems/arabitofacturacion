@@ -163,7 +163,7 @@ export default function TCRModule({
     return (
         <div className="min-h-screen bg-gray-50 p-4 lg:p-6">
             {/* Header mejorado - Más compacto */}
-          {/*   <div className="mb-4 bg-white rounded-lg shadow p-4 border-l-4 border-blue-400">
+            <div className="mb-4 bg-white rounded-lg shadow p-4 border-l-4 border-blue-400">
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
                     <div>
                         <h1 className="text-2xl lg:text-3xl font-bold text-gray-700 flex items-center gap-2">
@@ -179,7 +179,7 @@ export default function TCRModule({
                         <span className="font-semibold">Sistema de Pistoleo</span>
                     </div>
                 </div>
-            </div> */}
+            </div>
         
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 {/* Columna Izquierda: Filtros y Lista */}
@@ -331,6 +331,16 @@ export default function TCRModule({
                                                                         }}
                                                                     >
                                                                         {e.origen.codigo}
+                                                                    </span>
+                                                                    <span className={`px-2 py-1 text-[10px] font-bold rounded border ${
+                                                                        e.estado == 1 ? 'bg-red-100 text-red-700 border-red-200' :
+                                                                        e.estado == 3 ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                                                                        e.estado == 4 ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                                        'bg-gray-100 text-gray-600 border-gray-200'
+                                                                    }`}>
+                                                                        {e.estado == 1 ? 'PENDIENTE' :
+                                                                         e.estado == 3 ? 'EN REVISIÓN' :
+                                                                         e.estado == 4 ? 'REVISADO' : 'DESCONOCIDO'}
                                                                     </span>
                                                                 </div>
                                                                 <span className="text-xs text-gray-500 font-semibold">

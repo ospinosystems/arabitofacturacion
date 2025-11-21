@@ -207,6 +207,14 @@ class InventarioController extends Controller
 
         $tipoestadopedido = 1;
 
+        // Si ambas fechas son vacías, no ejecutar la búsqueda y retornar un error o arreglo vacío
+        if (empty($fecha1pedido) && empty($fecha2pedido)) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Debe indicar un rango de fechas para consultar las estadísticas.'
+            ]);
+        }
+
         return inventario::with([
             'proveedor',
             'categoria',
@@ -222,7 +230,7 @@ class InventarioController extends Controller
                             ->when($fecha1pedido != '', function ($q) use ($fecha1pedido, $fecha2pedido) {
                                 $q->whereBetween('created_at', ["$fecha1pedido 00:00:00", "$fecha2pedido 23:59:59"]);
                             })
-                            ->whereIn('id', pago_pedidos::where('tipo', '<>', 4)->select('id_pedido'))
+                            // ->whereIn('id', pago_pedidos::where('tipo', '<>', 4)->select('id_pedido'))
                             ->select('id');
                     })
                     ->select('id_producto');
@@ -235,7 +243,7 @@ class InventarioController extends Controller
                     ->orWhere('descripcion', 'LIKE', "%$fechaQEstaInve%")
                     ->orWhere('codigo_proveedor', 'LIKE', "%$fechaQEstaInve%");
             })
-            ->selectRaw('*,@cantidadtotal := (SELECT sum(cantidad) FROM items_pedidos WHERE id_producto=inventarios.id ' . ($fecha1pedido == '' ? '' : ("AND created_at BETWEEN '$fecha1pedido 00:00:00' AND '$fecha2pedido 23:59:59'")) . ') as cantidadtotal,(@cantidadtotal*inventarios.precio) as totalventa')
+            ->selectRaw('*,@cantidadtotal := (SELECT sum(cantidad) FROM items_pedidos WHERE id_producto=inventarios.id ' . ($fecha1pedido == '' ? '' : ("AND created_at BETWEEN '$fecha1pedido 00:00:00' AND '$fecha2pedido 23:59:59'")) . ') as cantidadtotal,(@cantidadtotal*inventarios.precio) as totalventa, @cantidad_credito := (SELECT COALESCE(sum(cantidad), 0) FROM items_pedidos WHERE id_producto=inventarios.id AND id_pedido IN (SELECT id_pedido FROM pago_pedidos WHERE tipo=4) ' . ($fecha1pedido == '' ? '' : ("AND created_at BETWEEN '$fecha1pedido 00:00:00' AND '$fecha2pedido 23:59:59'")) . ') as cantidad_credito, (@cantidad_credito*inventarios.precio) as totalventa_credito, @cantidad_contado := (SELECT COALESCE(sum(cantidad), 0) FROM items_pedidos WHERE id_producto=inventarios.id AND id_pedido NOT IN (SELECT id_pedido FROM pago_pedidos WHERE tipo=4) ' . ($fecha1pedido == '' ? '' : ("AND created_at BETWEEN '$fecha1pedido 00:00:00' AND '$fecha2pedido 23:59:59'")) . ') as cantidad_contado, (@cantidad_contado*inventarios.precio) as totalventa_contado')
             ->orderByRaw(" $orderByColumEstaInv" . ' ' . $orderByEstaInv)
             ->get();
         // ->map(function($q)use ($fecha1pedido,$fecha2pedido){

@@ -532,56 +532,38 @@ export default function Facturar({
         // - En Sublime Text: Mantén presionada "Ctrl" (Windows/Linux) o "Command" (Mac) y haz clic para agregar cursores.
         // - En JetBrains (WebStorm, PyCharm, etc): Mantén "Alt" (Windows/Linux) o "Option" (Mac) y haz clic.
 
-        { value: "0134", text: "0134 BANESCO (TRANSFERENCIAS)" },
-        {
-            value: "0191 BNC AMER PERSONAL 9783",
-            text: "0191 BNC AMER PERSONAL 9783 (TRANSFERENCIAS EL HENAOUI TITANIO)",
-        },
-
-        { value: "0134 BANESCO TITANIO", text: "0134 BANESCO TITANIO" },
-        {
-            value: "0134 BANESCO ARABITO PUNTOS 9935",
-            text: "0134 BANESCO ARABITO PUNTOS 9935",
-        },
-
-        {
-            value: "0108 PROVINCIAL AMER 9483",
-            text: "0108 PROVINCIAL AMER 9483",
-        },
-        {
-            value: "0134 BANESCO TITANIO EL HENAOUI 2765",
-            text: "0134 BANESCO TITANIO EL HENAOUI 2765",
-        },
-        {
-            value: "0191 BNC EL HENAOUI TITANIO 7402",
-            text: "0191 BNC EL HENAOUI TITANIO 7402",
-        },
-        {
-            value: "0114 BANCARIBE TITANIO FP 6042",
-            text: "0114 BANCARIBE TITANIO FP 6042",
-        },
-
-        { value: "0108", text: "0108 PROVINCIAL" },
-        { value: "0191", text: "0191 BANCO NACIONAL DE CRÉDITO BNC" },
-
+        
+        {value: "0134", text: "0134 BANESCO (TRANSFERENCIAS)" },
+        {value: "0134 BANESCO TITANIO", text: "0134 BANESCO TITANIO" },
+        {value: "0134 BANESCO ARABITO PUNTOS 9935",text: "0134 BANESCO ARABITO PUNTOS 9935",},
+        {value: "0134 BANESCO TITANIO EL HENAOUI 2765",text: "0134 BANESCO TITANIO EL HENAOUI 2765",},
+        
+        {value: "0108", text: "0108 PROVINCIAL" },
+        {value: "0108 PROVINCIAL AMER 9483",text: "0108 PROVINCIAL AMER 9483",},
+        
+        {value: "0191", text: "0191 BANCO NACIONAL DE CRÉDITO BNC" },
+        {value: "0191 BNC EL HENAOUI TITANIO 7402",text: "0191 BNC EL HENAOUI TITANIO 7402",},
+        {value: "0191 BNC AMER PERSONAL 9783",text: "0191 BNC AMER PERSONAL 9783 (TRANSFERENCIAS EL HENAOUI TITANIO)",},
+        
         {value:"0171 ACTIVO ARABITO 0194", text:"0171 ACTIVO ARABITO 0194"},
         {value:"0171 ACTIVO EL HENAOUI 0176", text:"0171 ACTIVO EL HENAOUI 0176"},
         {value:"0171 ACTIVO TITANIO 0229", text:"0171 ACTIVO TITANIO 0229"},
+        
+        {value: "0105", text: "0105 MERCANTIL" },
+        {value: "0105 MERCANTIL TITANIO 6669", text: "0105 MERCANTIL TITANIO 6669" },
+        {value: "0105 MERCANTIL EL HENAOUI TITANIO 7894", text: "0105 MERCANTIL EL HENAOUI TITANIO 7894" },
+        
+        {value: "0114", text: "0114 BANCO DEL CARIBE" },
+        {value: "0114 BANCARIBE TITANIO FP 6042",text: "0114 BANCARIBE TITANIO FP 6042",},
+        
+        {value: "0102", text: "0102 BANCO DE VENEZUELA" },
+        {value: "0151", text: "0151 BANCO FONDO COMÚN BFC" },
+        {value: "0175", text: "0175 BICENTENARIO" },
+        {value: "0115", text: "0115 EXTERIOR" },
 
-        { value: "0105", text: "0105 MERCANTIL" },
-        { value: "0105 MERCANTIL TITANIO 6669", text: "0105 MERCANTIL TITANIO 6669" },
-        { value: "0105 MERCANTIL EL HENAOUI TITANIO 7894", text: "0105 MERCANTIL EL HENAOUI TITANIO 7894" },
-
-
-        { value: "0102", text: "0102 BANCO DE VENEZUELA" },
-        { value: "0114", text: "0114 BANCO DEL CARIBE" },
-        { value: "0151", text: "0151 BANCO FONDO COMÚN BFC" },
-        { value: "0175", text: "0175 BICENTENARIO" },
-        { value: "0115", text: "0115 EXTERIOR" },
-
-        { value: "ZELLE", text: "ZELLE" },
-        { value: "BINANCE", text: "BINANCE" },
-        { value: "AirTM", text: "AirTM" },
+        {value: "ZELLE", text: "ZELLE" },
+        {value: "BINANCE", text: "BINANCE" },
+        {value: "AirTM", text: "AirTM" },
     ];
 
     const getControlEfec = () => {

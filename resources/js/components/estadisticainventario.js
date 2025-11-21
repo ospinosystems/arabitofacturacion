@@ -79,6 +79,10 @@ export default function EstadisticaInventario({
 						<th className="pointer" onClick={()=>setorderByColumEstaInv("descripcion")}>Descripción</th>
 						<th className="pointer" onClick={()=>setorderByColumEstaInv("cantidad")}>Stock</th>
 						<th className="pointer" onClick={()=>setorderByColumEstaInv("precio")}>Precio</th>
+						<th className="pointer" onClick={()=>setorderByColumEstaInv("cantidad_contado")}>Cant. Contado</th>
+						<th className="pointer" onClick={()=>setorderByColumEstaInv("totalventa_contado")}>Monto Contado</th>
+						<th className="pointer" onClick={()=>setorderByColumEstaInv("cantidad_credito")}>Cant. Credito</th>
+						<th className="pointer" onClick={()=>setorderByColumEstaInv("totalventa_credito")}>Monto Credito</th>
 						<th className="pointer" onClick={()=>setorderByColumEstaInv("cantidadtotal")}>Total Ventas Unitarias</th>
 						<th className="pointer" onClick={()=>setorderByColumEstaInv("totalventa")}>Total Monto Venta</th>
 					</tr>
@@ -92,12 +96,39 @@ export default function EstadisticaInventario({
 							<td>{e.descripcion}</td>
 							<td>{e.cantidad}</td>
 							<td className="text-success">{moneda(e.precio)}</td>
+							<td className="text-sinapsis">{e.cantidad_contado}</td>
+							<td className="text-success">{moneda(e.totalventa_contado)}</td>
+							<td className="text-sinapsis">{e.cantidad_credito}</td>
+							<td className="text-success">{moneda(e.totalventa_credito)}</td>
 							<td className="text-sinapsis">{e.cantidadtotal}</td>
 							<td className="text-success">{moneda(e.totalventa)}</td>
 
 						</tr>
 						):null}
 				</tbody>
+				<tfoot>
+					<tr className="font-weight-bold bg-light">
+						<td colSpan="6" className="text-right">Totales:</td>
+						<td className="text-sinapsis">
+							{data ? data.reduce((acc, el) => acc + (parseFloat(el.cantidad_contado) || 0), 0) : 0}
+						</td>
+						<td className="text-success">
+							{moneda(data ? data.reduce((acc, el) => acc + (parseFloat(el.totalventa_contado) || 0), 0) : 0)}
+						</td>
+						<td className="text-sinapsis">
+							{data ? data.reduce((acc, el) => acc + (parseFloat(el.cantidad_credito) || 0), 0) : 0}
+						</td>
+						<td className="text-success">
+							{moneda(data ? data.reduce((acc, el) => acc + (parseFloat(el.totalventa_credito) || 0), 0) : 0)}
+						</td>
+						<td className="text-sinapsis">
+							{data ? data.reduce((acc, el) => acc + (parseFloat(el.cantidadtotal) || 0), 0) : 0}
+						</td>
+						<td className="text-success">
+							{moneda(data ? data.reduce((acc, el) => acc + (parseFloat(el.totalventa) || 0), 0) : 0)}
+						</td>
+					</tr>
+				</tfoot>
 			</table>
 		</div>
 	)
