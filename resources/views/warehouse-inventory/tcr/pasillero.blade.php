@@ -4,73 +4,74 @@
 @endsection
 
 @section('content')
-<div class="container-fluid px-4 py-3">
-    <div class="mb-4">
-        <h1 class="text-2xl font-bold text-gray-800 flex items-center">
-            <i class="fas fa-barcode text-green-500 mr-2"></i>
-            TCR - Pasillero
+<div class="container-fluid px-2 sm:px-4 py-2 sm:py-3">
+    <div class="mb-3 sm:mb-4">
+        <h1 class="text-lg sm:text-2xl font-bold text-gray-800 flex items-center flex-wrap gap-2">
+            <i class="fas fa-barcode text-green-500"></i>
+            <span>TCR - Pasillero</span>
         </h1>
-        <p class="text-gray-600 mt-1">Escanea ubicación, producto y asigna cantidad</p>
+        <p class="text-gray-600 mt-1 text-xs sm:text-sm">Escanea ubicación, producto y asigna cantidad</p>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         <!-- Panel de Escaneo -->
-        <div class="lg:col-span-2">
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-xl font-bold text-gray-700 mb-4">Procesar Asignación</h2>
+        <div class="lg:col-span-2 order-2 lg:order-1">
+            <div class="bg-white rounded-lg shadow p-3 sm:p-4 md:p-6">
+                <h2 class="text-lg sm:text-xl font-bold text-gray-700 mb-3 sm:mb-4">Procesar Asignación</h2>
                 
                 <!-- Paso 1: Seleccionar Pedido -->
-                <div id="pasoSeleccionarPedido" class="space-y-4">
+                <div id="pasoSeleccionarPedido" class="space-y-3 sm:space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Seleccione un pedido</label>
-                        <select id="selectPedido" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400" onchange="seleccionarPedido()">
+                        <label class="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">Seleccione un pedido</label>
+                        <select id="selectPedido" class="w-full px-3 py-3 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400" onchange="seleccionarPedido()">
                             <option value="">Seleccione un pedido...</option>
                         </select>
                     </div>
-                    <button onclick="cargarAsignaciones()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition">
+                    <button onclick="cargarAsignaciones()" class="w-full sm:w-auto px-4 py-3 sm:py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition text-sm sm:text-base">
                         <i class="fas fa-sync-alt mr-2"></i>
                         Actualizar Lista
                     </button>
                 </div>
 
                 <!-- Paso 2: Escanear Producto -->
-                <div id="pasoProducto" class="space-y-4 mt-6" style="display: none;">
-                    <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded">
-                        <div class="flex items-center justify-between mb-2">
-                            <h3 class="font-bold text-green-700">Pedido #<span id="pedidoSeleccionadoId"></span> - Escanear Producto</h3>
-                            <button onclick="volverASeleccionarPedido()" class="text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded">
+                <div id="pasoProducto" class="space-y-3 sm:space-y-4 mt-4 sm:mt-6" style="display: none;">
+                    <div class="bg-green-50 border-l-4 border-green-500 p-3 sm:p-4 rounded">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                            <h3 class="font-bold text-green-700 text-sm sm:text-base">Pedido #<span id="pedidoSeleccionadoId"></span> - Escanear Producto</h3>
+                            <button onclick="volverASeleccionarPedido()" class="text-xs px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded w-full sm:w-auto">
                                 <i class="fas fa-arrow-left mr-1"></i> Cambiar Pedido
                             </button>
                         </div>
-                        <p class="text-sm text-gray-600 mb-3">Escanea el código de barras o código de proveedor del producto</p>
-                        <div class="flex gap-2">
+                        <p class="text-xs sm:text-sm text-gray-600 mb-3">Escanea el código de barras o código de proveedor del producto</p>
+                        <div class="flex flex-col sm:flex-row gap-2">
                             <input type="text" 
                                    id="inputProducto" 
-                                   class="flex-1 px-4 py-3 text-lg font-mono border-2 border-green-400 rounded-lg focus:ring-2 focus:ring-green-500"
+                                   class="flex-1 px-4 py-4 sm:py-3 text-lg sm:text-base font-mono border-2 border-green-400 rounded-lg focus:ring-2 focus:ring-green-500"
                                    placeholder="Escanea código de barras o proveedor"
                                    autofocus>
-                            <button onclick="mostrarBusquedaManual()" class="px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition" title="Búsqueda Manual">
-                                <i class="fas fa-search"></i>
+                            <button onclick="mostrarBusquedaManual()" class="px-4 py-4 sm:py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition text-sm sm:text-base w-full sm:w-auto" title="Búsqueda Manual">
+                                <i class="fas fa-search mr-2 sm:mr-0"></i>
+                                <span class="sm:hidden">Búsqueda Manual</span>
                             </button>
                         </div>
-                        <div id="mensajeProducto" class="mt-2 text-sm"></div>
+                        <div id="mensajeProducto" class="mt-2 text-xs sm:text-sm"></div>
                         
                         <!-- Buscador Manual (Oculto por defecto) -->
-                        <div id="buscadorManual" class="mt-4 p-4 bg-white rounded-lg border border-gray-200 shadow-sm hidden">
-                            <h4 class="font-bold text-gray-700 mb-3 flex items-center gap-2">
+                        <div id="buscadorManual" class="mt-3 sm:mt-4 p-3 sm:p-4 bg-white rounded-lg border border-gray-200 shadow-sm hidden">
+                            <h4 class="font-bold text-gray-700 mb-2 sm:mb-3 flex items-center gap-2 text-sm sm:text-base">
                                 <i class="fas fa-search text-blue-500"></i> Búsqueda Manual
                             </h4>
                             <input type="text" 
                                    id="inputBusquedaManual" 
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 mb-3"
+                                   class="w-full px-3 py-3 sm:py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 mb-3"
                                    placeholder="Escribe nombre o código..."
                                    onkeyup="filtrarProductosManual()">
                             
-                            <div id="listaProductosManual" class="space-y-2 max-h-60 overflow-y-auto border rounded-lg p-2 bg-gray-50">
+                            <div id="listaProductosManual" class="space-y-2 max-h-48 sm:max-h-60 overflow-y-auto border rounded-lg p-2 bg-gray-50">
                                 <!-- Resultados de búsqueda -->
                             </div>
                             
-                            <button onclick="ocultarBusquedaManual()" class="mt-3 text-sm text-gray-500 hover:text-gray-700 underline w-full text-center">
+                            <button onclick="ocultarBusquedaManual()" class="mt-3 text-xs sm:text-sm text-gray-500 hover:text-gray-700 underline w-full text-center py-2">
                                 Cancelar búsqueda manual
                             </button>
                         </div>
@@ -78,49 +79,49 @@
                 </div>
 
                 <!-- Paso 3: Escanear Ubicación -->
-                <div id="pasoUbicacion" class="space-y-4 mt-6" style="display: none;">
-                    <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-                        <h3 class="font-bold text-blue-700 mb-2">Paso 2: Escanear Ubicación</h3>
+                <div id="pasoUbicacion" class="space-y-3 sm:space-y-4 mt-4 sm:mt-6" style="display: none;">
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-3 sm:p-4 rounded">
+                        <h3 class="font-bold text-blue-700 mb-2 text-sm sm:text-base">Paso 2: Escanear Ubicación</h3>
                         <input type="text" 
                                id="inputUbicacion" 
-                               class="w-full px-4 py-3 text-lg font-mono border-2 border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500"
+                               class="w-full px-4 py-4 sm:py-3 text-lg sm:text-base font-mono border-2 border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500"
                                placeholder="Escanea o ingresa código de ubicación"
                                autofocus>
-                        <div id="mensajeUbicacion" class="mt-2 text-sm"></div>
+                        <div id="mensajeUbicacion" class="mt-2 text-xs sm:text-sm"></div>
                     </div>
                 </div>
 
                 <!-- Paso 5: Ingresar Cantidad -->
-                <div id="pasoCantidad" class="space-y-4 mt-6" style="display: none;">
-                    <div class="bg-orange-50 border-l-4 border-orange-500 p-4 rounded">
-                        <h3 class="font-bold text-orange-700 mb-2">Paso 3: Ingresar Cantidad</h3>
-                        <div class="mb-2">
-                            <span class="text-sm text-gray-600">Cantidad pendiente: </span>
-                            <span id="cantidadPendiente" class="font-bold text-lg text-orange-600"></span>
+                <div id="pasoCantidad" class="space-y-3 sm:space-y-4 mt-4 sm:mt-6" style="display: none;">
+                    <div class="bg-orange-50 border-l-4 border-orange-500 p-3 sm:p-4 rounded">
+                        <h3 class="font-bold text-orange-700 mb-2 text-sm sm:text-base">Paso 3: Ingresar Cantidad</h3>
+                        <div class="mb-2 sm:mb-3">
+                            <span class="text-xs sm:text-sm text-gray-600">Cantidad pendiente: </span>
+                            <span id="cantidadPendiente" class="font-bold text-base sm:text-lg text-orange-600"></span>
                         </div>
                         <input type="number" 
                                id="inputCantidad" 
                                step="0.0001"
                                min="0.0001"
-                               class="w-full px-4 py-3 text-lg font-mono border-2 border-orange-400 rounded-lg focus:ring-2 focus:ring-orange-500"
+                               class="w-full px-4 py-4 sm:py-3 text-lg sm:text-base font-mono border-2 border-orange-400 rounded-lg focus:ring-2 focus:ring-orange-500"
                                placeholder="Ingrese cantidad"
                                autofocus>
-                        <div class="mt-2 flex gap-2">
-                            <button onclick="usarCantidadTotal()" class="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition">
+                        <div class="mt-2 sm:mt-3 flex flex-col sm:flex-row gap-2">
+                            <button onclick="usarCantidadTotal()" class="flex-1 px-4 py-3 sm:py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition text-sm sm:text-base">
                                 Usar Cantidad Total
                             </button>
-                            <button onclick="usarCantidadParcial()" class="flex-1 px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition">
+                            <button onclick="usarCantidadParcial()" class="flex-1 px-4 py-3 sm:py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition text-sm sm:text-base">
                                 Cantidad Parcial
                             </button>
                         </div>
-                        <div id="mensajeCantidad" class="mt-2 text-sm"></div>
+                        <div id="mensajeCantidad" class="mt-2 text-xs sm:text-sm"></div>
                     </div>
                 </div>
 
                 <!-- Botón Finalizar -->
-                <div id="pasoFinalizar" class="mt-6" style="display: none;">
+                <div id="pasoFinalizar" class="mt-4 sm:mt-6" style="display: none;">
                     <button onclick="procesarAsignacion()" 
-                            class="w-full px-6 py-4 bg-green-500 hover:bg-green-600 text-white font-bold text-lg rounded-lg shadow-lg transition">
+                            class="w-full px-4 sm:px-6 py-4 bg-green-500 hover:bg-green-600 text-white font-bold text-base sm:text-lg rounded-lg shadow-lg transition">
                         <i class="fas fa-check-circle mr-2"></i>
                         Confirmar y Enviar a Revisión
                     </button>
@@ -129,24 +130,24 @@
         </div>
 
         <!-- Panel de Información -->
-        <div class="lg:col-span-1">
-            <div class="bg-white rounded-lg shadow p-4 mb-4">
-                <h3 class="font-bold text-gray-700 mb-4">Información de Asignación</h3>
-                <div id="infoAsignacion" class="space-y-3 text-sm">
-                    <div class="text-center text-gray-400 py-8">
-                        <i class="fas fa-info-circle text-4xl mb-2"></i>
-                        <p>Seleccione un pedido para comenzar</p>
+        <div class="lg:col-span-1 order-1 lg:order-2">
+            <div class="bg-white rounded-lg shadow p-3 sm:p-4 mb-3 sm:mb-4">
+                <h3 class="font-bold text-gray-700 mb-3 sm:mb-4 text-sm sm:text-base">Información de Asignación</h3>
+                <div id="infoAsignacion" class="space-y-2 sm:space-y-3 text-xs sm:text-sm">
+                    <div class="text-center text-gray-400 py-6 sm:py-8">
+                        <i class="fas fa-info-circle text-3xl sm:text-4xl mb-2"></i>
+                        <p class="text-xs sm:text-sm">Seleccione un pedido para comenzar</p>
                     </div>
                 </div>
             </div>
 
             <!-- Lista de Pedidos con Asignaciones -->
-            <div class="bg-white rounded-lg shadow p-4">
-                <h3 class="font-bold text-gray-700 mb-4">Mis Pedidos</h3>
-                <div id="listaPedidos" class="space-y-2 max-h-[500px] overflow-y-auto">
+            <div class="bg-white rounded-lg shadow p-3 sm:p-4">
+                <h3 class="font-bold text-gray-700 mb-3 sm:mb-4 text-sm sm:text-base">Mis Pedidos</h3>
+                <div id="listaPedidos" class="space-y-2 max-h-[300px] sm:max-h-[500px] overflow-y-auto">
                     <div class="text-center text-gray-400 py-4">
-                        <i class="fas fa-spinner fa-spin"></i>
-                        <p class="mt-2">Cargando...</p>
+                        <i class="fas fa-spinner fa-spin text-xl sm:text-2xl"></i>
+                        <p class="mt-2 text-xs sm:text-sm">Cargando...</p>
                     </div>
                 </div>
             </div>
@@ -155,7 +156,7 @@
 </div>
 
 <!-- Contenedor de notificaciones -->
-<div id="notificacionesContainer" class="fixed bottom-4 right-4 z-50 space-y-2 max-w-sm"></div>
+<div id="notificacionesContainer" class="fixed bottom-2 right-2 sm:bottom-4 sm:right-4 z-50 space-y-2 w-[calc(100%-1rem)] sm:w-auto sm:max-w-sm"></div>
 
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
@@ -185,12 +186,12 @@ function mostrarNotificacion(mensaje, tipo = 'info') {
     
     const notificacion = document.createElement('div');
     notificacion.id = id;
-    notificacion.className = `${colores[tipo]} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-slide-up`;
+    notificacion.className = `${colores[tipo]} text-white px-3 sm:px-4 py-2 sm:py-3 rounded-lg shadow-lg flex items-center gap-2 animate-slide-up text-xs sm:text-sm`;
     notificacion.innerHTML = `
-        <i class="fas ${iconos[tipo]}"></i>
-        <span class="flex-1 text-sm">${mensaje}</span>
-        <button onclick="cerrarNotificacion('${id}')" class="text-white hover:text-gray-200">
-            <i class="fas fa-times"></i>
+        <i class="fas ${iconos[tipo]} text-sm sm:text-base"></i>
+        <span class="flex-1">${mensaje}</span>
+        <button onclick="cerrarNotificacion('${id}')" class="text-white hover:text-gray-200 flex-shrink-0">
+            <i class="fas fa-times text-sm sm:text-base"></i>
         </button>
     `;
     
@@ -306,15 +307,15 @@ function mostrarListaPedidos() {
         const enProceso = pedido.en_proceso;
         
         return `
-            <div class="p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 transition ${pedidoSeleccionado?.pedido_id === pedido.pedido_id ? 'bg-blue-50 border-blue-400' : ''}" 
+            <div class="p-2 sm:p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 transition ${pedidoSeleccionado?.pedido_id === pedido.pedido_id ? 'bg-blue-50 border-blue-400' : ''}" 
                  onclick="seleccionarPedidoDesdeLista(${pedido.pedido_id})">
-                <div class="font-semibold text-gray-700 mb-2">Pedido #${pedido.pedido_id}</div>
+                <div class="font-semibold text-gray-700 mb-1 sm:mb-2 text-sm sm:text-base">Pedido #${pedido.pedido_id}</div>
                 <div class="text-xs text-gray-600 space-y-1">
-                    <div>Total: <span class="font-bold">${total}</span></div>
-                    <div class="flex gap-2">
-                        <span class="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs">Pendientes: ${pendientes}</span>
-                        <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">En proceso: ${enProceso}</span>
-                        <span class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">En espera: ${completadas}</span>
+                    <div class="text-xs sm:text-sm">Total: <span class="font-bold">${total}</span></div>
+                    <div class="flex flex-wrap gap-1 sm:gap-2">
+                        <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-orange-100 text-orange-700 rounded text-[10px] sm:text-xs">Pend: ${pendientes}</span>
+                        <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-blue-100 text-blue-700 rounded text-[10px] sm:text-xs">Proceso: ${enProceso}</span>
+                        <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-green-100 text-green-700 rounded text-[10px] sm:text-xs">Espera: ${completadas}</span>
                     </div>
                 </div>
             </div>
@@ -362,14 +363,14 @@ function mostrarInfoAsignacion() {
     
     info.innerHTML = `
         <div>
-            <div class="font-semibold text-gray-700 mb-2">${asignacionActual.descripcion}</div>
-            <div class="space-y-1 text-gray-600">
-                <div><span class="font-medium">Código Barras:</span> <span class="font-mono text-xs">${asignacionActual.codigo_barras || 'N/A'}</span></div>
-                <div><span class="font-medium">Código Proveedor:</span> <span class="font-mono text-xs">${asignacionActual.codigo_proveedor || 'N/A'}</span></div>
+            <div class="font-semibold text-gray-700 mb-2 text-xs sm:text-sm break-words">${asignacionActual.descripcion}</div>
+            <div class="space-y-1 text-gray-600 text-xs sm:text-sm">
+                <div class="break-all"><span class="font-medium">Código Barras:</span> <span class="font-mono text-[10px] sm:text-xs">${asignacionActual.codigo_barras || 'N/A'}</span></div>
+                <div class="break-all"><span class="font-medium">Código Proveedor:</span> <span class="font-mono text-[10px] sm:text-xs">${asignacionActual.codigo_proveedor || 'N/A'}</span></div>
                 <div><span class="font-medium">Cantidad Total:</span> ${asignacionActual.cantidad}</div>
                 <div><span class="font-medium">Cantidad Asignada:</span> ${asignacionActual.cantidad_asignada}</div>
                 <div><span class="font-medium text-orange-600">Cantidad Pendiente:</span> <span class="font-bold">${cantidadPendiente}</span></div>
-                <div><span class="font-medium">Estado:</span> <span class="px-2 py-1 bg-${asignacionActual.estado === 'pendiente' ? 'orange' : 'blue'}-100 text-${asignacionActual.estado === 'pendiente' ? 'orange' : 'blue'}-700 rounded text-xs">${asignacionActual.estado === 'pendiente' ? 'Pendiente' : 'En proceso'}</span></div>
+                <div><span class="font-medium">Estado:</span> <span class="px-2 py-0.5 sm:py-1 bg-${asignacionActual.estado === 'pendiente' ? 'orange' : 'blue'}-100 text-${asignacionActual.estado === 'pendiente' ? 'orange' : 'blue'}-700 rounded text-[10px] sm:text-xs">${asignacionActual.estado === 'pendiente' ? 'Pendiente' : 'En proceso'}</span></div>
             </div>
         </div>
     `;
@@ -495,10 +496,10 @@ function filtrarProductosManual() {
     }
     
     lista.innerHTML = productosFiltrados.map(p => `
-        <div onclick="seleccionarProductoManual(${p.id})" class="p-2 bg-white border border-gray-200 rounded hover:bg-blue-50 cursor-pointer transition flex flex-col gap-1">
-            <div class="font-semibold text-sm text-gray-800">${p.descripcion}</div>
-            <div class="flex justify-between text-xs text-gray-500">
-                <span>Cod: ${p.codigo_barras || p.codigo_proveedor || 'N/A'}</span>
+        <div onclick="seleccionarProductoManual(${p.id})" class="p-2 sm:p-3 bg-white border border-gray-200 rounded hover:bg-blue-50 cursor-pointer transition flex flex-col gap-1">
+            <div class="font-semibold text-xs sm:text-sm text-gray-800 break-words">${p.descripcion}</div>
+            <div class="flex flex-col sm:flex-row sm:justify-between gap-1 text-[10px] sm:text-xs text-gray-500">
+                <span class="break-all">Cod: ${p.codigo_barras || p.codigo_proveedor || 'N/A'}</span>
                 <span class="font-bold text-orange-600">Pend: ${(p.cantidad - p.cantidad_asignada)}</span>
             </div>
         </div>
@@ -592,9 +593,9 @@ function resetearFormulario() {
     document.getElementById('pasoFinalizar').style.display = 'none';
     document.getElementById('inputProducto').focus();
     document.getElementById('infoAsignacion').innerHTML = `
-        <div class="text-center text-gray-400 py-8">
-            <i class="fas fa-info-circle text-4xl mb-2"></i>
-            <p>Escanea un producto del pedido</p>
+        <div class="text-center text-gray-400 py-6 sm:py-8">
+            <i class="fas fa-info-circle text-3xl sm:text-4xl mb-2"></i>
+            <p class="text-xs sm:text-sm">Escanea un producto del pedido</p>
         </div>
     `;
 }
@@ -614,9 +615,9 @@ function volverASeleccionarPedido() {
     document.getElementById('pasoCantidad').style.display = 'none';
     document.getElementById('pasoFinalizar').style.display = 'none';
     document.getElementById('infoAsignacion').innerHTML = `
-        <div class="text-center text-gray-400 py-8">
-            <i class="fas fa-info-circle text-4xl mb-2"></i>
-            <p>Seleccione un pedido para comenzar</p>
+        <div class="text-center text-gray-400 py-6 sm:py-8">
+            <i class="fas fa-info-circle text-3xl sm:text-4xl mb-2"></i>
+            <p class="text-xs sm:text-sm">Seleccione un pedido para comenzar</p>
         </div>
     `;
 }
