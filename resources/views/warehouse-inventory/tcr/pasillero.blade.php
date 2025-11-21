@@ -44,17 +44,34 @@
                         </div>
                         <p class="text-xs sm:text-sm text-gray-600 mb-3">Escanea el código de barras o código de proveedor del producto</p>
                         <div class="flex flex-col sm:flex-row gap-2">
-                            <input type="text" 
-                                   id="inputProducto" 
-                                   class="flex-1 px-4 py-4 sm:py-3 text-lg sm:text-base font-mono border-2 border-green-400 rounded-lg focus:ring-2 focus:ring-green-500"
-                                   placeholder="Escanea código de barras o proveedor"
-                                   autofocus>
+                            <div class="relative flex-1">
+                                <input type="text" 
+                                       id="inputProducto" 
+                                       class="w-full px-4 pr-10 py-4 sm:py-3 text-lg sm:text-base font-mono border-2 border-green-400 rounded-lg focus:ring-2 focus:ring-green-500"
+                                       placeholder="Escanea código de barras o proveedor"
+                                       autofocus>
+                                <button onclick="limpiarInputProducto()" 
+                                        id="btnLimpiarProducto"
+                                        class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-red-500 transition hidden"
+                                        title="Limpiar">
+                                    <i class="fas fa-times text-lg sm:text-xl"></i>
+                                </button>
+                            </div>
                             <button onclick="mostrarBusquedaManual()" class="px-4 py-4 sm:py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition text-sm sm:text-base w-full sm:w-auto" title="Búsqueda Manual">
                                 <i class="fas fa-search mr-2 sm:mr-0"></i>
                                 <span class="sm:hidden">Búsqueda Manual</span>
                             </button>
                         </div>
                         <div id="mensajeProducto" class="mt-2 text-xs sm:text-sm"></div>
+                        <!-- Mostrar cantidad que llegó cuando se encuentra el producto -->
+                        <div id="cantidadLlego" class="mt-2 hidden">
+                            <div class="bg-blue-100 border border-blue-300 rounded-lg p-2 sm:p-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs sm:text-sm font-medium text-blue-800">Cantidad que llegó:</span>
+                                    <span id="cantidadLlegoValor" class="text-base sm:text-lg font-bold text-blue-900"></span>
+                                </div>
+                            </div>
+                        </div>
                         
                         <!-- Buscador Manual (Oculto por defecto) -->
                         <div id="buscadorManual" class="mt-3 sm:mt-4 p-3 sm:p-4 bg-white rounded-lg border border-gray-200 shadow-sm hidden">
@@ -260,6 +277,16 @@ document.getElementById('inputProducto').addEventListener('keypress', function(e
     }
 });
 
+// Mostrar/ocultar botón de limpiar cuando hay texto en el input
+document.getElementById('inputProducto').addEventListener('input', function(e) {
+    const btnLimpiar = document.getElementById('btnLimpiarProducto');
+    if (e.target.value.trim() !== '') {
+        btnLimpiar.classList.remove('hidden');
+    } else {
+        btnLimpiar.classList.add('hidden');
+    }
+});
+
 document.getElementById('inputCantidad').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
         e.preventDefault();
@@ -415,6 +442,26 @@ function procesarUbicacion() {
     });
 }
 
+// Función para limpiar el input del producto
+function limpiarInputProducto() {
+    document.getElementById('inputProducto').value = '';
+    document.getElementById('btnLimpiarProducto').classList.add('hidden');
+    document.getElementById('cantidadLlego').classList.add('hidden');
+    asignacionActual = null;
+    document.getElementById('inputProducto').focus();
+    document.getElementById('mensajeProducto').innerHTML = '';
+    // Resetear pasos
+    document.getElementById('pasoUbicacion').style.display = 'none';
+    document.getElementById('pasoCantidad').style.display = 'none';
+    document.getElementById('pasoFinalizar').style.display = 'none';
+    document.getElementById('infoAsignacion').innerHTML = `
+        <div class="text-center text-gray-400 py-6 sm:py-8">
+            <i class="fas fa-info-circle text-3xl sm:text-4xl mb-2"></i>
+            <p class="text-xs sm:text-sm">Escanea un producto del pedido</p>
+        </div>
+    `;
+}
+
 // Buscar producto por código escaneado en las asignaciones del pedido
 function buscarProductoPorCodigo() {
     const codigo = document.getElementById('inputProducto').value.trim().toUpperCase();
@@ -447,10 +494,14 @@ function buscarProductoPorCodigo() {
 
     if (asignacionActual) {
         mensaje.innerHTML = `<span class="text-green-600"><i class="fas fa-check-circle"></i> Producto encontrado: ${asignacionActual.descripcion}</span>`;
+        // Mostrar cantidad que llegó
+        document.getElementById('cantidadLlegoValor').textContent = asignacionActual.cantidad;
+        document.getElementById('cantidadLlego').classList.remove('hidden');
         mostrarInfoAsignacion();
         mostrarPasoUbicacion();
     } else {
         mensaje.innerHTML = '<span class="text-red-600"><i class="fas fa-times-circle"></i> Producto no encontrado en este pedido o ya está completado</span>';
+        document.getElementById('cantidadLlego').classList.add('hidden');
         asignacionActual = null;
     }
 }
@@ -511,6 +562,15 @@ function seleccionarProductoManual(asignacionId) {
     if (asignacionActual) {
         const mensaje = document.getElementById('mensajeProducto');
         mensaje.innerHTML = `<span class="text-green-600"><i class="fas fa-check-circle"></i> Producto seleccionado manualmente: ${asignacionActual.descripcion}</span>`;
+        
+        // Mostrar cantidad que llegó
+        document.getElementById('cantidadLlegoValor').textContent = asignacionActual.cantidad;
+        document.getElementById('cantidadLlego').classList.remove('hidden');
+        
+        // Poner el código en el input para que se muestre el botón X
+        const codigo = asignacionActual.codigo_barras || asignacionActual.codigo_proveedor || '';
+        document.getElementById('inputProducto').value = codigo;
+        document.getElementById('btnLimpiarProducto').classList.remove('hidden');
         
         ocultarBusquedaManual();
         mostrarInfoAsignacion();
@@ -587,6 +647,8 @@ function resetearFormulario() {
     document.getElementById('inputUbicacion').value = '';
     document.getElementById('inputProducto').value = '';
     document.getElementById('inputCantidad').value = '';
+    document.getElementById('btnLimpiarProducto').classList.add('hidden');
+    document.getElementById('cantidadLlego').classList.add('hidden');
     document.getElementById('pasoUbicacion').style.display = 'none';
     document.getElementById('pasoProducto').style.display = 'block'; // Volver al paso de escanear producto
     document.getElementById('pasoCantidad').style.display = 'none';
@@ -609,6 +671,8 @@ function volverASeleccionarPedido() {
     document.getElementById('inputUbicacion').value = '';
     document.getElementById('inputProducto').value = '';
     document.getElementById('inputCantidad').value = '';
+    document.getElementById('btnLimpiarProducto').classList.add('hidden');
+    document.getElementById('cantidadLlego').classList.add('hidden');
     document.getElementById('pasoSeleccionarPedido').style.display = 'block';
     document.getElementById('pasoUbicacion').style.display = 'none';
     document.getElementById('pasoProducto').style.display = 'none';
