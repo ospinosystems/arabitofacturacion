@@ -111,7 +111,7 @@ function Header({
                 {/* Contenido del Sidebar */}
                 <div className="h-full p-3 overflow-y-auto">
                     <nav className="space-y-1">
-                        {user.tipo_usuario == 7 ? (
+                        {user.tipo_usuario == 7 || user.tipo_usuario == 8 ? (
                             /* Navegación para DICI */
                             <>
                                 <button

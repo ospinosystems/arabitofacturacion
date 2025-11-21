@@ -123,8 +123,10 @@ class TCRController extends Controller
      */
     public function asignarProductos(Request $request)
     {
+
+        
         $request->validate([
-            'pedido_id' => 'required|integer',
+            'pedido_id' => 'required',
             'items' => 'required|array',
             'items.*.item_id' => 'required|integer',
             'items.*.pasillero_id' => 'required|integer',
@@ -142,7 +144,6 @@ class TCRController extends Controller
             
             // Obtener información del pedido una sola vez
             $pedidos = $this->getPedidosCentralData($request->pedido_id);
-            
             if (!$pedidos || !isset($pedidos['items'])) {
                 throw new \Exception('No se pudo obtener información del pedido');
             }
@@ -461,6 +462,11 @@ class TCRController extends Controller
             
             $pedidoCentral = $getPedido['pedido'];
             
+            // Validar que el pedido tenga items
+            if (!isset($pedidoCentral['items']) || !is_array($pedidoCentral['items']) || empty($pedidoCentral['items'])) {
+                throw new \Exception('El pedido no tiene items para procesar');
+            }
+            
             // Obtener todas las asignaciones TCR del pedido para mapear warehouse_codigo
             $asignacionesTCR = TCRAsignacion::where('pedido_central_id', $pedidoId)
                 ->where('chequeador_id', session('id_usuario'))
@@ -513,6 +519,11 @@ class TCRController extends Controller
                 $itemsPreparados[] = $itemPreparado;
             }
             
+            // Validar que haya items preparados
+            if (empty($itemsPreparados)) {
+                throw new \Exception('No se pudieron preparar los items del pedido. Items encontrados: ' . count($pedidoCentral['items']));
+            }
+            
             // Preparar el pedido en el formato que espera checkPedidosCentral
             $pedidoPreparado = [
                 'id' => $pedidoCentral['id'],
@@ -520,11 +531,23 @@ class TCRController extends Controller
                 'items' => $itemsPreparados
             ];
             
-            // Crear un nuevo Request con los datos preparados
-            $requestPreparado = new Request([
+            // Verificar que el pedido preparado tenga la estructura correcta
+            if (!isset($pedidoPreparado['items']) || empty($pedidoPreparado['items'])) {
+                throw new \Exception('El pedido preparado no tiene items. Items preparados: ' . count($itemsPreparados));
+            }
+            
+            // Crear un nuevo Request con los datos preparados usando merge para que se acceda correctamente
+            $requestPreparado = new Request();
+            $requestPreparado->merge([
                 'pedido' => $pedidoPreparado,
                 'pathcentral' => $sendCentral->path()
             ]);
+            
+            // Verificar que el request tenga los datos correctos
+            $pedidoEnRequest = $requestPreparado->input('pedido');
+            if (!$pedidoEnRequest || !isset($pedidoEnRequest['items']) || empty($pedidoEnRequest['items'])) {
+                throw new \Exception('Error al preparar el request. Items en request: ' . (isset($pedidoEnRequest['items']) ? count($pedidoEnRequest['items']) : 0));
+            }
             
             // Llamar al método checkPedidosCentral del InventarioController
             $inventarioController = new \App\Http\Controllers\InventarioController();
@@ -613,7 +636,7 @@ class TCRController extends Controller
                 "codigo_origen" => $codigo_origen,
                 "qpedidoscentralq" => $pedidoId,
                 "qpedidocentrallimit" => 1,
-                "qpedidocentralestado" => 4,
+                "qpedidocentralestado" => "",
                 "qpedidocentralemisor" => '',
             ]);
             
