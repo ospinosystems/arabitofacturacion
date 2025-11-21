@@ -604,6 +604,42 @@ class WarehouseInventoryController extends Controller
     }
 
     /**
+     * Obtener ubicaciones de un producto en formato JSON
+     */
+    public function obtenerUbicacionesProducto($inventarioId)
+    {
+        try {
+            $ubicaciones = WarehouseInventory::with(['warehouse'])
+                ->where('inventario_id', $inventarioId)
+                ->where('cantidad', '>', 0)
+                ->orderBy('fecha_entrada', 'asc')
+                ->get();
+            
+            $ubicacionesData = $ubicaciones->map(function($item) {
+                return [
+                    'id' => $item->warehouse->id,
+                    'codigo' => $item->warehouse->codigo,
+                    'nombre' => $item->warehouse->nombre,
+                    'cantidad' => $item->cantidad,
+                    'fecha_entrada' => $item->fecha_entrada,
+                ];
+            });
+            
+            return Response::json([
+                'estado' => true,
+                'ubicaciones' => $ubicacionesData,
+                'total' => $ubicaciones->sum('cantidad'),
+                'total_ubicaciones' => $ubicaciones->count()
+            ]);
+        } catch (\Exception $e) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error al obtener ubicaciones: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Consultar productos en una ubicación específica
      */
     public function consultarPorUbicacion($warehouseId)

@@ -638,6 +638,8 @@ function limpiarFormTraslado() {
     document.getElementById('traslado_warehouse_destino_id').value = '';
     document.getElementById('traslado_producto_info').textContent = '';
     document.getElementById('traslado_producto_info').classList.add('hidden');
+    document.getElementById('traslado_ubicaciones_producto').classList.add('hidden');
+    document.getElementById('traslado_lista_ubicaciones').innerHTML = '';
     document.getElementById('traslado_origen_info').textContent = '';
     document.getElementById('traslado_origen_info').classList.add('hidden');
     document.getElementById('traslado_destino_info').textContent = '';
@@ -766,17 +768,75 @@ function buscarProductoTraslado() {
                 document.getElementById('traslado_producto_info').textContent = 
                     `✓ ${producto.codigo_barras} - ${producto.descripcion}`;
                 document.getElementById('traslado_producto_info').classList.remove('hidden');
+                
+                // Consultar todas las ubicaciones del producto
+                consultarUbicacionesProducto(producto.id);
+                
                 // Auto-focus al campo origen
                 document.getElementById('traslado_origen_codigo').focus();
             } else {
                 mostrarNotificacion('Producto no encontrado', 'warning');
                 document.getElementById('traslado_producto_codigo').value = '';
                 document.getElementById('traslado_producto_codigo').focus();
+                // Ocultar ubicaciones si no se encuentra el producto
+                document.getElementById('traslado_ubicaciones_producto').classList.add('hidden');
             }
         })
         .catch(error => {
             console.error('Error:', error);
             mostrarNotificacion('Error al buscar producto', 'error');
+            document.getElementById('traslado_ubicaciones_producto').classList.add('hidden');
+        });
+}
+
+// MODAL TRASLADO: Consultar ubicaciones del producto
+function consultarUbicacionesProducto(inventarioId) {
+    fetch(`/warehouse-inventory/producto/${inventarioId}/ubicaciones`)
+        .then(response => response.json())
+        .then(data => {
+            const contenedorUbicaciones = document.getElementById('traslado_ubicaciones_producto');
+            const listaUbicaciones = document.getElementById('traslado_lista_ubicaciones');
+            const totalUbicaciones = document.getElementById('traslado_total_ubicaciones');
+            
+            if (data.estado && data.ubicaciones && data.ubicaciones.length > 0) {
+                // Mostrar contenedor
+                contenedorUbicaciones.classList.remove('hidden');
+                
+                // Mostrar total
+                totalUbicaciones.textContent = `${data.total_ubicaciones} ubicación${data.total_ubicaciones > 1 ? 'es' : ''} - Total: ${parseFloat(data.total).toFixed(2)} unidades`;
+                
+                // Mostrar lista de ubicaciones
+                listaUbicaciones.innerHTML = data.ubicaciones.map(ubicacion => `
+                    <div class="flex items-center justify-between p-2 bg-white border border-gray-200 rounded hover:bg-blue-50 transition">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono font-semibold text-sm text-blue-600">${ubicacion.codigo}</span>
+                                <span class="text-xs text-gray-600">${ubicacion.nombre || 'Sin nombre'}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">
+                                ${parseFloat(ubicacion.cantidad).toFixed(2)} unidades
+                            </span>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                // Si no hay ubicaciones, mostrar mensaje
+                contenedorUbicaciones.classList.remove('hidden');
+                totalUbicaciones.textContent = 'Sin ubicaciones';
+                listaUbicaciones.innerHTML = `
+                    <div class="text-center py-4 text-gray-400 text-sm">
+                        <i class="fas fa-inbox text-2xl mb-2"></i>
+                        <p>Este producto no tiene ubicaciones asignadas</p>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error al consultar ubicaciones:', error);
+            // Ocultar contenedor si hay error
+            document.getElementById('traslado_ubicaciones_producto').classList.add('hidden');
         });
 }
 
@@ -1079,6 +1139,19 @@ function guardarTraslado(event) {
                        onchange="buscarProductoTraslado()"
                        autocomplete="off">
                 <div id="traslado_producto_info" class="hidden mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800"></div>
+                <!-- Contenedor para mostrar todas las ubicaciones del producto -->
+                <div id="traslado_ubicaciones_producto" class="hidden mt-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <div class="flex items-center justify-between mb-2">
+                        <h4 class="text-sm font-semibold text-gray-700">
+                            <i class="fas fa-map-marker-alt text-blue-500 mr-1"></i>
+                            Ubicaciones del Producto:
+                        </h4>
+                        <span id="traslado_total_ubicaciones" class="text-xs text-gray-500"></span>
+                    </div>
+                    <div id="traslado_lista_ubicaciones" class="space-y-2 max-h-48 overflow-y-auto">
+                        <!-- Las ubicaciones se mostrarán aquí -->
+                    </div>
+                </div>
             </div>
             
             <!-- Paso 2: Ubicación Origen -->
