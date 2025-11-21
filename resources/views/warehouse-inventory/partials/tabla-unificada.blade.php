@@ -757,23 +757,37 @@ function buscarProductoTraslado() {
     const codigo = document.getElementById('traslado_producto_codigo').value.trim();
     if (!codigo) return;
     
+    // Mostrar loading
+    const productoInfo = document.getElementById('traslado_producto_info');
+    productoInfo.innerHTML = '<div class="text-blue-600"><i class="fas fa-spinner fa-spin"></i> Buscando producto...</div>';
+    productoInfo.classList.remove('hidden');
+    
     fetch(`/inventarios/buscar?codigo=${encodeURIComponent(codigo)}`)
         .then(response => response.json())
         .then(data => {
             if (data.estado && data.data) {
                 const producto = data.data;
                 document.getElementById('traslado_inventario_id').value = producto.id;
-                document.getElementById('traslado_producto_info').innerHTML = 
-                    `<div class="mb-2">✓ <strong>${producto.codigo_barras}</strong> - ${producto.descripcion}</div>`;
-                document.getElementById('traslado_producto_info').classList.remove('hidden');
+                productoInfo.innerHTML = 
+                    `<div class="mb-2">✓ <strong>${producto.codigo_barras}</strong> - ${producto.descripcion}</div>
+                     <div class="text-xs text-blue-600"><i class="fas fa-spinner fa-spin"></i> Consultando ubicaciones...</div>`;
                 
                 // Consultar ubicaciones del producto
                 fetch(`/warehouse-inventory/producto/${producto.id}/ubicaciones`)
-                    .then(response => response.json())
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
                     .then(ubicacionesData => {
+                        console.log('Datos de ubicaciones recibidos:', ubicacionesData);
+                        
                         if (ubicacionesData.estado && ubicacionesData.ubicaciones) {
                             const ubicaciones = ubicacionesData.ubicaciones;
                             const totalStock = ubicacionesData.total_stock || 0;
+                            
+                            let htmlBase = `<div class="mb-2">✓ <strong>${producto.codigo_barras}</strong> - ${producto.descripcion}</div>`;
                             
                             if (ubicaciones.length > 0) {
                                 let htmlUbicaciones = `
@@ -802,9 +816,9 @@ function buscarProductoTraslado() {
                                     </div>
                                 `;
                                 
-                                document.getElementById('traslado_producto_info').innerHTML += htmlUbicaciones;
+                                productoInfo.innerHTML = htmlBase + htmlUbicaciones;
                             } else {
-                                document.getElementById('traslado_producto_info').innerHTML += `
+                                productoInfo.innerHTML = htmlBase + `
                                     <div class="mt-3 pt-3 border-t border-blue-300">
                                         <div class="text-xs text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
                                             <i class="fas fa-exclamation-triangle mr-1"></i>
@@ -813,16 +827,34 @@ function buscarProductoTraslado() {
                                     </div>
                                 `;
                             }
+                        } else {
+                            productoInfo.innerHTML = htmlBase + `
+                                <div class="mt-3 pt-3 border-t border-blue-300">
+                                    <div class="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">
+                                        <i class="fas fa-exclamation-circle mr-1"></i>
+                                        Error: ${ubicacionesData.msj || 'No se pudieron obtener las ubicaciones'}
+                                    </div>
+                                </div>
+                            `;
                         }
                     })
                     .catch(error => {
                         console.error('Error al obtener ubicaciones:', error);
-                        // Continuar sin mostrar ubicaciones si hay error
+                        productoInfo.innerHTML = `<div class="mb-2">✓ <strong>${producto.codigo_barras}</strong> - ${producto.descripcion}</div>
+                            <div class="mt-3 pt-3 border-t border-blue-300">
+                                <div class="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">
+                                    <i class="fas fa-exclamation-circle mr-1"></i>
+                                    Error al consultar ubicaciones: ${error.message}
+                                </div>
+                            </div>`;
                     });
                 
                 // Auto-focus al campo origen
-                document.getElementById('traslado_origen_codigo').focus();
+                setTimeout(() => {
+                    document.getElementById('traslado_origen_codigo').focus();
+                }, 500);
             } else {
+                productoInfo.innerHTML = '<div class="text-red-600">✗ Producto no encontrado</div>';
                 mostrarNotificacion('Producto no encontrado', 'warning');
                 document.getElementById('traslado_producto_codigo').value = '';
                 document.getElementById('traslado_producto_codigo').focus();
@@ -830,6 +862,7 @@ function buscarProductoTraslado() {
         })
         .catch(error => {
             console.error('Error:', error);
+            productoInfo.innerHTML = '<div class="text-red-600">✗ Error al buscar producto</div>';
             mostrarNotificacion('Error al buscar producto', 'error');
         });
 }
@@ -1131,6 +1164,7 @@ function guardarTraslado(event) {
                        class="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                        placeholder="Escanee código de barras del producto..."
                        onchange="buscarProductoTraslado()"
+                       onkeypress="if(event.key === 'Enter') { event.preventDefault(); buscarProductoTraslado(); }"
                        autocomplete="off">
                 <div id="traslado_producto_info" class="hidden mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800"></div>
             </div>

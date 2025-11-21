@@ -286,8 +286,8 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		// Consultas de inventario (antes de las rutas con parámetros)
 		Route::get('warehouse-inventory/buscar-productos', [WarehouseInventoryController::class, 'buscarProductos'])->name('warehouse-inventory.buscar-productos');
 		Route::get('warehouse-inventory/buscar-codigo', [WarehouseInventoryController::class, 'buscarPorCodigo'])->name('warehouse-inventory.buscar-codigo');
-		Route::get('warehouse-inventory/producto/{inventarioId}', [WarehouseInventoryController::class, 'consultarUbicaciones'])->name('warehouse-inventory.producto');
 		Route::get('warehouse-inventory/producto/{inventarioId}/ubicaciones', [WarehouseInventoryController::class, 'obtenerUbicacionesProducto'])->name('warehouse-inventory.producto.ubicaciones');
+		Route::get('warehouse-inventory/producto/{inventarioId}', [WarehouseInventoryController::class, 'consultarUbicaciones'])->name('warehouse-inventory.producto');
 		Route::get('warehouse-inventory/ubicacion/{warehouseId}', [WarehouseInventoryController::class, 'consultarPorUbicacion'])->name('warehouse-inventory.ubicacion');
 		Route::get('warehouse-inventory/por-ubicacion', [WarehouseInventoryController::class, 'porUbicacion'])->name('warehouse-inventory.por-ubicacion');
 		Route::get('warehouse-inventory/{id}/ticket', [WarehouseInventoryController::class, 'imprimirTicket'])->name('warehouse-inventory.ticket');
