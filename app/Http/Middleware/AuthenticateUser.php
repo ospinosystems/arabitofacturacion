@@ -75,6 +75,7 @@ class AuthenticateUser
         "warehouse-inventory/buscar-productos",
         "warehouse-inventory/buscar-codigo",
         "warehouse-inventory/producto/{inventarioId}",
+        "warehouse-inventory/producto/{inventarioId}/ubicaciones",
         "warehouse-inventory/ubicacion/{warehouseId}",
         "warehouse-inventory/por-ubicacion",
         "warehouse-inventory/{id}/ticket",
@@ -240,7 +241,25 @@ class AuthenticateUser
         // Tipo 7 (DICI/Chequeador) solo tiene acceso a rutas específicas
         if ($userType == 7) {
             $routeUri = $request->route() ? $request->route()->uri : $request->path();
-            return in_array($routeUri, self::DICI_ALLOWED_ROUTES);
+            $path = $request->path();
+            
+            // Verificar coincidencia exacta
+            if (in_array($routeUri, self::DICI_ALLOWED_ROUTES)) {
+                return true;
+            }
+            
+            // Verificar rutas con parámetros usando patrones
+            foreach (self::DICI_ALLOWED_ROUTES as $allowedRoute) {
+                // Si la ruta tiene parámetros {param}, crear un patrón regex
+                if (strpos($allowedRoute, '{') !== false) {
+                    $pattern = '#^' . preg_replace('/\{[^}]+\}/', '[^/]+', $allowedRoute) . '$#';
+                    if (preg_match($pattern, $path)) {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
         }
         
         // Tipo 8 (Pasillero) solo tiene acceso a rutas del pasillero
@@ -306,7 +325,25 @@ class AuthenticateUser
         // Tipo 7 (DICI) solo tiene acceso a rutas específicas
         if ($userType == 7) {
             $routeUri = $request->route() ? $request->route()->uri : $request->path();
-            return in_array($routeUri, self::DICI_ALLOWED_ROUTES);
+            $path = $request->path();
+            
+            // Verificar coincidencia exacta
+            if (in_array($routeUri, self::DICI_ALLOWED_ROUTES)) {
+                return true;
+            }
+            
+            // Verificar rutas con parámetros usando patrones
+            foreach (self::DICI_ALLOWED_ROUTES as $allowedRoute) {
+                // Si la ruta tiene parámetros {param}, crear un patrón regex
+                if (strpos($allowedRoute, '{') !== false) {
+                    $pattern = '#^' . preg_replace('/\{[^}]+\}/', '[^/]+', $allowedRoute) . '$#';
+                    if (preg_match($pattern, $path)) {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
         }
         
         return false;
