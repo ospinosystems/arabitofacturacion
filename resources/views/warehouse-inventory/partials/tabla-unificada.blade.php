@@ -783,11 +783,12 @@ function buscarProductoTraslado() {
                     .then(ubicacionesData => {
                         console.log('Datos de ubicaciones recibidos:', ubicacionesData);
                         
+                        // Definir htmlBase fuera del condicional para que esté disponible en todos los casos
+                        const htmlBase = `<div class="mb-2">✓ <strong>${producto.codigo_barras}</strong> - ${producto.descripcion}</div>`;
+                        
                         if (ubicacionesData.estado && ubicacionesData.ubicaciones) {
                             const ubicaciones = ubicacionesData.ubicaciones;
                             const totalStock = ubicacionesData.total_stock || 0;
-                            
-                            let htmlBase = `<div class="mb-2">✓ <strong>${producto.codigo_barras}</strong> - ${producto.descripcion}</div>`;
                             
                             if (ubicaciones.length > 0) {
                                 let htmlUbicaciones = `
