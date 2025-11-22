@@ -272,9 +272,8 @@
                                         <input type="number" 
                                                id="inputCantidadLlego" 
                                                step="0.0001"
-                                               min="0"
                                                class="flex-1 px-2 py-1.5 text-sm font-mono border border-blue-400 rounded focus:ring-2 focus:ring-blue-500"
-                                               placeholder="Cantidad">
+                                               placeholder="Cantidad (+ para sumar, - para restar)">
                                         <button onclick="guardarCantidadLlego()" 
                                                 class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded transition text-xs">
                                             <i class="fas fa-save mr-1"></i>Guardar
@@ -1538,9 +1537,19 @@ function guardarCantidadLlego() {
     }
     
     const cantidad = parseFloat(document.getElementById('inputCantidadLlego').value);
-    if (isNaN(cantidad) || cantidad < 0) {
-        mostrarNotificacion('Ingrese una cantidad válida', 'warning');
+    if (isNaN(cantidad) || cantidad === 0) {
+        mostrarNotificacion('Ingrese una cantidad válida (diferente de cero)', 'warning');
         return;
+    }
+    
+    // Si es negativo, validar que no exceda la cantidad existente
+    if (cantidad < 0 && novedadActual) {
+        const cantidadExistente = parseFloat(novedadActual.cantidad_llego) || 0;
+        const valorAbsoluto = Math.abs(cantidad);
+        if (valorAbsoluto > cantidadExistente) {
+            mostrarNotificacion(`No puede restar más de ${cantidadExistente} (cantidad actual)`, 'error');
+            return;
+        }
     }
     
     fetch('/warehouse-inventory/tcr/actualizar-cantidad-llego-novedad', {
