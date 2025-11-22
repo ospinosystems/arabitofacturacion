@@ -28,7 +28,7 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-5 gap-3 sm:gap-4">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         <!-- Panel de Escaneo -->
         <div id="panelAsignaciones" class="lg:col-span-2 order-2 lg:order-1">
             <div class="bg-white rounded-lg shadow p-3 sm:p-4 md:p-6">
@@ -346,7 +346,7 @@
         </div>
 
         <!-- Panel Lateral (Siempre visible) -->
-        <div class="lg:col-span-2 order-1 lg:order-2">
+        <div class="lg:col-span-1 order-1 lg:order-2">
             <!-- Información de Asignación (solo visible en tab de asignaciones) -->
             <div id="infoAsignacionContainer" class="bg-white rounded-lg shadow p-3 sm:p-4 mb-3 sm:mb-4">
                 <h3 class="font-bold text-gray-700 mb-3 sm:mb-4 text-sm sm:text-sm">Información de Asignación</h3>
@@ -383,7 +383,7 @@
                         </button>
                     </div>
                 </div>
-                <div id="reporteNovedades" class="max-h-[400px] sm:max-h-[600px] overflow-auto text-xs">
+                <div id="reporteNovedades" class="space-y-2 max-h-[400px] sm:max-h-[600px] overflow-y-auto text-xs">
                     <div class="text-center text-gray-400 py-4">
                         <i class="fas fa-info-circle text-xl mb-2"></i>
                         <p>No hay novedades registradas</p>
@@ -1746,23 +1746,7 @@ function mostrarReporteNovedades(novedades) {
         return;
     }
     
-    // Crear tabla tipo Excel
-    reporte.innerHTML = `
-        <div class="overflow-x-auto">
-            <table class="w-full border-collapse border border-gray-300 text-xs">
-                <thead>
-                    <tr class="bg-gray-100 border-b-2 border-gray-400">
-                        <th class="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700">Producto</th>
-                        <th class="border border-gray-300 px-2 py-2 text-left font-semibold text-gray-700">Código</th>
-                        <th class="border border-gray-300 px-2 py-2 text-center font-semibold text-gray-700">Fecha</th>
-                        <th class="border border-gray-300 px-2 py-2 text-center font-semibold text-gray-700">Llegó</th>
-                        <th class="border border-gray-300 px-2 py-2 text-center font-semibold text-gray-700">Enviada</th>
-                        <th class="border border-gray-300 px-2 py-2 text-center font-semibold text-gray-700">Diferencia</th>
-                        <th class="border border-gray-300 px-2 py-2 text-center font-semibold text-gray-700">Estado</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${novedades.map((n, index) => {
+    reporte.innerHTML = novedades.map(n => {
         const fecha = new Date(n.created_at).toLocaleString('es-VE', {
             day: '2-digit',
             month: '2-digit',
@@ -1805,6 +1789,7 @@ function mostrarReporteNovedades(novedades) {
         
         // Si diferencia es 0 y tiene cantidad_llego, es correcto
         if (n.diferencia == 0 && n.cantidad_llego > 0) {
+            // Verificar si las observaciones indican que es correcto o si no hay observaciones de diferencia
             if (!n.observaciones || n.observaciones.includes('Cantidad correcta')) {
                 tipoNovedad = 'correcto';
                 badgeColor = 'bg-blue-100 text-blue-700';
@@ -1813,46 +1798,76 @@ function mostrarReporteNovedades(novedades) {
             }
         }
         
-        const rowColor = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
-        const diferenciaColor = n.diferencia > 0 ? 'text-green-600 font-semibold' : n.diferencia < 0 ? 'text-red-600 font-semibold' : 'text-gray-700';
+        const historialHtml = n.historial && n.historial.length > 0 ? `
+            <div class="mt-2">
+                <div class="font-semibold mb-1 text-[10px] text-gray-700">Historial de agregaciones:</div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-[10px] border border-gray-200 rounded">
+                        <thead>
+                            <tr class="bg-gray-100">
+                                <th class="px-1 py-0.5 text-left border-b border-gray-300">Hora</th>
+                                <th class="px-1 py-0.5 text-center border-b border-gray-300">Cantidad</th>
+                                <th class="px-1 py-0.5 text-center border-b border-gray-300">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${n.historial.map((h, idx) => {
+                                const hFecha = new Date(h.created_at).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+                                const cantidad = parseFloat(h.cantidad_agregada) || 0;
+                                const signo = cantidad >= 0 ? '+' : '';
+                                const color = cantidad < 0 ? 'text-red-600' : 'text-green-600';
+                                const bgColor = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                                return `
+                                    <tr class="${bgColor}">
+                                        <td class="px-1 py-0.5 text-gray-600">${hFecha}</td>
+                                        <td class="px-1 py-0.5 text-center ${color} font-semibold">${signo}${h.cantidad_agregada}</td>
+                                        <td class="px-1 py-0.5 text-center font-semibold">${h.cantidad_total || h.cantidad_despues || 0}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        ` : '';
+        
+        const observacionesHtml = n.observaciones ? `
+            <div class="mt-1 text-[10px] text-gray-600 italic">
+                <i class="fas fa-comment mr-1"></i>${n.observaciones}
+            </div>
+        ` : '';
         
         return `
-                    <tr class="${rowColor} hover:bg-gray-100">
-                        <td class="border border-gray-300 px-2 py-2 text-left">
-                            <div class="font-medium text-gray-800">${n.descripcion}</div>
-                            ${n.historial && n.historial.length > 0 ? `
-                                <details class="mt-1">
-                                    <summary class="text-[10px] text-blue-600 cursor-pointer">Ver historial (${n.historial.length})</summary>
-                                    <div class="mt-1 text-[10px]">
-                                        ${n.historial.map(h => {
-                                            const hFecha = new Date(h.created_at).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
-                                            const cantidad = parseFloat(h.cantidad_agregada) || 0;
-                                            const signo = cantidad >= 0 ? '+' : '';
-                                            const color = cantidad < 0 ? 'text-red-600' : 'text-green-600';
-                                            return `<div class="pl-2 ${color}">${signo}${h.cantidad_agregada} (${hFecha}) → ${h.cantidad_total || 0}</div>`;
-                                        }).join('')}
-                                    </div>
-                                </details>
-                            ` : ''}
-                            ${n.observaciones ? `<div class="text-[10px] text-gray-500 italic mt-1">${n.observaciones.substring(0, 50)}${n.observaciones.length > 50 ? '...' : ''}</div>` : ''}
-                        </td>
-                        <td class="border border-gray-300 px-2 py-2 text-left font-mono text-[11px]">${n.codigo_barras || n.codigo_proveedor || 'N/A'}</td>
-                        <td class="border border-gray-300 px-2 py-2 text-center text-gray-600">${fecha}</td>
-                        <td class="border border-gray-300 px-2 py-2 text-center font-semibold text-blue-700">${n.cantidad_llego}</td>
-                        <td class="border border-gray-300 px-2 py-2 text-center font-semibold text-green-700">${n.cantidad_enviada}</td>
-                        <td class="border border-gray-300 px-2 py-2 text-center font-semibold ${diferenciaColor}">${n.diferencia}</td>
-                        <td class="border border-gray-300 px-2 py-2 text-center">
-                            <span class="px-2 py-0.5 rounded text-[10px] ${badgeColor} inline-block">
-                                <i class="fas ${badgeIcon} mr-1"></i>${badgeText}
-                            </span>
-                        </td>
-                    </tr>
+            <div class="border border-gray-200 rounded-lg p-2 mb-2">
+                <div class="flex items-start justify-between mb-1">
+                    <div class="font-semibold text-xs flex-1">${n.descripcion}</div>
+                    <span class="px-2 py-0.5 rounded text-[10px] ${badgeColor}">
+                        <i class="fas ${badgeIcon} mr-1"></i>${badgeText}
+                    </span>
+                </div>
+                <div class="grid grid-cols-2 gap-1 text-[10px] mb-1">
+                    <div><span class="text-gray-600">Código:</span> <span class="font-mono">${n.codigo_barras || n.codigo_proveedor || 'N/A'}</span></div>
+                    <div><span class="text-gray-600">Fecha:</span> ${fecha}</div>
+                </div>
+                <div class="grid grid-cols-3 gap-1 text-[10px]">
+                    <div class="bg-blue-50 p-1 rounded">
+                        <div class="text-gray-600">Llegó</div>
+                        <div class="font-bold text-blue-700">${n.cantidad_llego}</div>
+                    </div>
+                    <div class="bg-green-50 p-1 rounded">
+                        <div class="text-gray-600">Enviada</div>
+                        <div class="font-bold text-green-700">${n.cantidad_enviada}</div>
+                    </div>
+                    <div class="bg-yellow-100 p-1 rounded">
+                        <div class="text-gray-600">Diferencia</div>
+                        <div class="font-bold text-orange-700">${n.diferencia}</div>
+                    </div>
+                </div>
+                ${observacionesHtml}
+                ${historialHtml}
+            </div>
         `;
-    }).join('')}
-                </tbody>
-            </table>
-        </div>
-    `;
+    }).join('');
 }
 
 // Limpiar input de producto novedad
