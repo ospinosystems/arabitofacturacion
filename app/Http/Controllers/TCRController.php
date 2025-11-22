@@ -747,6 +747,17 @@ class TCRController extends Controller
                 if ($request->observaciones) {
                     $observacionesAnteriores = $novedadExistente->observaciones ? $novedadExistente->observaciones . ' | ' : '';
                     $novedadExistente->observaciones = $observacionesAnteriores . $request->observaciones;
+                } else {
+                    // Si no hay observaciones nuevas pero hay cantidad_enviada, actualizar observaciones según la nueva diferencia
+                    if ($novedadExistente->cantidad_enviada > 0) {
+                        if ($novedadExistente->diferencia == 0) {
+                            $novedadExistente->observaciones = "Cantidad correcta. Cantidad esperada: {$novedadExistente->cantidad_enviada}, Cantidad real: {$novedadExistente->cantidad_llego}";
+                        } elseif ($novedadExistente->diferencia > 0) {
+                            $novedadExistente->observaciones = "Diferencia detectada: sobrante de {$novedadExistente->diferencia}. Cantidad esperada: {$novedadExistente->cantidad_enviada}, Cantidad real: {$novedadExistente->cantidad_llego}";
+                        } else {
+                            $novedadExistente->observaciones = "Diferencia detectada: faltante de " . abs($novedadExistente->diferencia) . ". Cantidad esperada: {$novedadExistente->cantidad_enviada}, Cantidad real: {$novedadExistente->cantidad_llego}";
+                        }
+                    }
                 }
                 
                 $novedadExistente->save();
@@ -824,6 +835,21 @@ class TCRController extends Controller
             $novedad->observaciones = $request->observaciones ?? null;
             $novedad->save();
             
+            // Registrar cantidad inicial en historial
+            DB::table('tcr_novedades_historial')->insert([
+                'novedad_id' => $novedad->id,
+                'cantidad_agregada' => $cantidadLlego,
+                'cantidad_total' => $novedad->cantidad_llego,
+                'pasillero_id' => $pasilleroId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            
+            // Cargar historial actualizado
+            $novedad->load(['historial' => function($query) {
+                $query->orderBy('created_at', 'desc');
+            }]);
+            
             DB::commit();
             
             return Response::json([
@@ -890,6 +916,18 @@ class TCRController extends Controller
             
             // Recalcular diferencia
             $novedad->diferencia = $novedad->cantidad_llego - $novedad->cantidad_enviada;
+            
+            // Actualizar observaciones según la nueva diferencia si hay cantidad_enviada
+            if ($novedad->cantidad_enviada > 0) {
+                if ($novedad->diferencia == 0) {
+                    $novedad->observaciones = "Cantidad correcta. Cantidad esperada: {$novedad->cantidad_enviada}, Cantidad real: {$novedad->cantidad_llego}";
+                } elseif ($novedad->diferencia > 0) {
+                    $novedad->observaciones = "Diferencia detectada: sobrante de {$novedad->diferencia}. Cantidad esperada: {$novedad->cantidad_enviada}, Cantidad real: {$novedad->cantidad_llego}";
+                } else {
+                    $novedad->observaciones = "Diferencia detectada: faltante de " . abs($novedad->diferencia) . ". Cantidad esperada: {$novedad->cantidad_enviada}, Cantidad real: {$novedad->cantidad_llego}";
+                }
+            }
+            
             $novedad->save();
             
             // Registrar en historial
