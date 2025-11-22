@@ -262,15 +262,33 @@ class TCRController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
         
-        // Agrupar por pedido
-        $asignacionesPorPedido = $asignaciones->groupBy('pedido_central_id')->map(function($asigs, $pedidoId) {
+        // Agrupar por pedido y obtener información del pedido una sola vez por pedido
+        $pedidosIds = $asignaciones->pluck('pedido_central_id')->unique()->filter();
+        $pedidosData = [];
+        
+        // Obtener información de pedidos de central (una vez por pedido único)
+        foreach ($pedidosIds as $pedidoId) {
+            try {
+                $pedidoData = $this->getPedidosCentralData($pedidoId);
+                if ($pedidoData) {
+                    $pedidosData[$pedidoId] = $pedidoData;
+                }
+            } catch (\Exception $e) {
+                // Si hay error, continuar sin datos del pedido
+                $pedidosData[$pedidoId] = null;
+            }
+        }
+        
+        // Agrupar por pedido e incluir información del pedido
+        $asignacionesPorPedido = $asignaciones->groupBy('pedido_central_id')->map(function($asigs, $pedidoId) use ($pedidosData) {
             return [
                 'pedido_id' => $pedidoId,
                 'total_asignaciones' => $asigs->count(),
                 'completadas' => $asigs->where('estado', 'completado')->count(),
                 'pendientes' => $asigs->where('estado', 'pendiente')->count(),
                 'en_proceso' => $asigs->where('estado', 'en_proceso')->count(),
-                'asignaciones' => $asigs->values()
+                'asignaciones' => $asigs->values(),
+                'pedido_info' => $pedidosData[$pedidoId] ?? null
             ];
         })->values();
         
@@ -960,39 +978,12 @@ class TCRController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
         
-        // Optimización: Agrupar novedades por pedido_central_id y hacer una sola llamada por pedido
-        $pedidosIds = $novedades->pluck('pedido_central_id')->filter()->unique()->values();
-        $pedidosData = [];
-        
-        // Hacer una sola llamada por pedido único (en lugar de una por novedad)
-        foreach ($pedidosIds as $pedidoId) {
-            try {
-                $pedidoData = $this->getPedidosCentralData($pedidoId);
-                if ($pedidoData) {
-                    $pedidosData[$pedidoId] = $pedidoData;
-                }
-            } catch (\Exception $e) {
-                // Si hay error, continuar sin datos del pedido
-                $pedidosData[$pedidoId] = null;
-            }
-        }
-        
-        // Agregar información del pedido a cada novedad usando el cache
-        $novedadesConPedido = $novedades->map(function($novedad) use ($pedidosData) {
-            $pedidoData = null;
-            if ($novedad->pedido_central_id && isset($pedidosData[$novedad->pedido_central_id])) {
-                $pedidoData = $pedidosData[$novedad->pedido_central_id];
-            }
-            
-            $novedadArray = $novedad->toArray();
-            $novedadArray['pedido_info'] = $pedidoData;
-            
-            return $novedadArray;
-        });
+        // Ya no obtenemos información del pedido desde central aquí
+        // El frontend debe usar la información guardada cuando se seleccionó el pedido
         
         return Response::json([
             'estado' => true,
-            'novedades' => $novedadesConPedido
+            'novedades' => $novedades
         ]);
     }
     

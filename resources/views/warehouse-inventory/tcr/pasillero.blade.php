@@ -405,6 +405,7 @@ let asignacionActual = null;
 let ubicacionActual = null;
 let novedadActual = null;
 let novedades = [];
+let pedidoInfoSeleccionado = null; // Guardar información del pedido seleccionado
 
 // Función para mostrar notificaciones
 function mostrarNotificacion(mensaje, tipo = 'info') {
@@ -590,13 +591,15 @@ function seleccionarPedido() {
     
     pedidoSeleccionado = asignacionesPorPedido.find(p => p.pedido_id === pedidoId);
     if (pedidoSeleccionado) {
+        // Guardar información del pedido para usar en el reporte
+        pedidoInfoSeleccionado = pedidoSeleccionado.pedido_info || null;
         mostrarAsignacionesDelPedido();
     }
 }
 
 function seleccionarPedidoDesdeLista(pedidoId) {
     document.getElementById('selectPedido').value = pedidoId;
-    seleccionarPedido();
+    seleccionarPedido(); // Esta función ya guarda pedidoInfoSeleccionado
 }
 
 function mostrarAsignacionesDelPedido() {
@@ -2065,14 +2068,12 @@ function imprimirReporteNovedades() {
         const novedades = data.novedades;
         const ventana = window.open('', '_blank');
         
-        // Obtener información del pedido (usar la primera novedad que tenga pedido_info)
-        let pedidoInfo = null;
+        // Usar la información del pedido guardada cuando se seleccionó (más eficiente)
+        let pedidoInfo = pedidoInfoSeleccionado;
         let usuarioReviso = null;
         
+        // Obtener usuario que revisó de las novedades
         for (let n of novedades) {
-            if (n.pedido_info) {
-                pedidoInfo = n.pedido_info;
-            }
             if (n.pasillero && n.pasillero.nombre) {
                 usuarioReviso = n.pasillero.nombre;
                 break; // Usar el primer usuario encontrado
