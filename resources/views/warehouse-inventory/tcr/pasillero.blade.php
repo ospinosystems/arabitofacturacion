@@ -93,9 +93,8 @@
                                         <input type="number" 
                                                id="inputCantidadRealLlego" 
                                                step="0.0001"
-                                               min="0"
                                                class="flex-1 px-3 py-2 text-lg font-mono border-2 border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                               placeholder="Ingrese cantidad real"
+                                               placeholder="Cantidad real (+ para sumar, - para restar)"
                                                autofocus>
                                         <button onclick="verificarCantidadReal()" 
                                                 class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition">
@@ -272,8 +271,9 @@
                                         <input type="number" 
                                                id="inputCantidadLlego" 
                                                step="0.0001"
+                                               min="0"
                                                class="flex-1 px-2 py-1.5 text-sm font-mono border border-blue-400 rounded focus:ring-2 focus:ring-blue-500"
-                                               placeholder="Cantidad (+ para sumar, - para restar)">
+                                               placeholder="Cantidad">
                                         <button onclick="guardarCantidadLlego()" 
                                                 class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded transition text-xs">
                                             <i class="fas fa-save mr-1"></i>Guardar
@@ -853,8 +853,8 @@ function verificarCantidadReal() {
     const cantidadReal = parseFloat(document.getElementById('inputCantidadRealLlego').value);
     const mensaje = document.getElementById('mensajeCantidadReal');
     
-    if (isNaN(cantidadReal) || cantidadReal < 0) {
-        mensaje.innerHTML = '<span class="text-red-600">Ingrese una cantidad válida</span>';
+    if (isNaN(cantidadReal) || cantidadReal === 0) {
+        mensaje.innerHTML = '<span class="text-red-600">Ingrese una cantidad válida (diferente de cero)</span>';
         return;
     }
     
@@ -1537,19 +1537,9 @@ function guardarCantidadLlego() {
     }
     
     const cantidad = parseFloat(document.getElementById('inputCantidadLlego').value);
-    if (isNaN(cantidad) || cantidad === 0) {
-        mostrarNotificacion('Ingrese una cantidad válida (diferente de cero)', 'warning');
+    if (isNaN(cantidad) || cantidad < 0) {
+        mostrarNotificacion('Ingrese una cantidad válida', 'warning');
         return;
-    }
-    
-    // Si es negativo, validar que no exceda la cantidad existente
-    if (cantidad < 0 && novedadActual) {
-        const cantidadExistente = parseFloat(novedadActual.cantidad_llego) || 0;
-        const valorAbsoluto = Math.abs(cantidad);
-        if (valorAbsoluto > cantidadExistente) {
-            mostrarNotificacion(`No puede restar más de ${cantidadExistente} (cantidad actual)`, 'error');
-            return;
-        }
     }
     
     fetch('/warehouse-inventory/tcr/actualizar-cantidad-llego-novedad', {
