@@ -660,7 +660,7 @@ class TCRController extends Controller
     {
         $request->validate([
             'codigo' => 'required|string',
-            'cantidad_llego' => 'nullable|numeric|min:0',
+            'cantidad_llego' => 'nullable|numeric',
             'pedido_id' => 'nullable|integer',
             'item_pedido_id' => 'nullable|integer',
         ]);
@@ -958,7 +958,7 @@ class TCRController extends Controller
     {
         $request->validate([
             'novedad_id' => 'required|exists:tcr_novedades,id',
-            'cantidad_llego' => 'required|numeric|min:0',
+            'cantidad_llego' => 'required|numeric',
         ]);
         
         try {
