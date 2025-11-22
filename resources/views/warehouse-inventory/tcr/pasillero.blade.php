@@ -210,7 +210,15 @@
         <!-- Panel de Novedades (Oculto por defecto) -->
         <div id="panelNovedades" class="lg:col-span-2 order-2 lg:order-1 hidden">
             <div class="bg-white rounded-lg shadow p-3 sm:p-4 md:p-6 mb-3 sm:mb-4">
-                <h2 class="text-lg sm:text-xl font-bold text-gray-700 mb-3 sm:mb-4">Registrar Novedades</h2>
+                <div class="flex items-center justify-between mb-3 sm:mb-4">
+                    <h2 class="text-lg sm:text-xl font-bold text-gray-700">Registrar Novedades</h2>
+                    <button onclick="cargarNovedades()" 
+                            class="px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition text-sm flex items-center gap-2"
+                            title="Actualizar Novedades">
+                        <i class="fas fa-sync-alt"></i>
+                        <span class="hidden sm:inline">Actualizar</span>
+                    </button>
+                </div>
                 
                 <!-- Escanear Producto para Novedad -->
                 <div class="bg-purple-50 border-l-4 border-purple-500 p-3 sm:p-4 rounded mb-4">
@@ -359,6 +367,11 @@
                         Novedades (Tiempo Real)
                     </h3>
                     <div class="flex gap-2">
+                        <button onclick="cargarNovedades()" 
+                                class="px-2 py-1 bg-green-500 hover:bg-green-600 text-white rounded text-xs"
+                                title="Actualizar Novedades">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
                         <button onclick="imprimirReporteNovedades()" 
                                 class="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs"
                                 title="Imprimir">
