@@ -1702,6 +1702,7 @@ function agregarCantidadNovedad() {
                 ? `Cantidad agregada: +${cantidad}` 
                 : `Cantidad corregida: ${cantidad}`;
             mostrarNotificacion(mensaje, 'success');
+            // Recargar novedades para actualizar el badge en el reporte
             cargarNovedades();
         } else {
             mostrarNotificacion(data.msj || 'Error al agregar cantidad', 'error');
@@ -1787,14 +1788,51 @@ function mostrarReporteNovedades(novedades) {
             }
         }
         
-        // Si diferencia es 0 y tiene cantidad_llego, es correcto
+        // Determinar tipo de novedad basado en la diferencia actual (no solo observaciones)
         if (n.diferencia == 0 && n.cantidad_llego > 0) {
-            // Verificar si las observaciones indican que es correcto o si no hay observaciones de diferencia
-            if (!n.observaciones || n.observaciones.includes('Cantidad correcta')) {
-                tipoNovedad = 'correcto';
-                badgeColor = 'bg-blue-100 text-blue-700';
-                badgeText = 'Correcto';
-                badgeIcon = 'fa-check-circle';
+            // Si diferencia es 0, es correcto
+            tipoNovedad = 'correcto';
+            badgeColor = 'bg-blue-100 text-blue-700';
+            badgeText = 'Correcto';
+            badgeIcon = 'fa-check-circle';
+        } else if (n.diferencia > 0 && n.cantidad_enviada > 0) {
+            // Si diferencia es positiva y hay cantidad enviada, es sobrante
+            tipoNovedad = 'sobrante';
+            badgeColor = 'bg-green-100 text-green-700';
+            badgeText = 'Sobrante';
+            badgeIcon = 'fa-plus-circle';
+        } else if (n.diferencia < 0 && n.cantidad_enviada > 0) {
+            // Si diferencia es negativa y hay cantidad enviada, es faltante
+            tipoNovedad = 'faltante';
+            badgeColor = 'bg-red-100 text-red-700';
+            badgeText = 'Faltante';
+            badgeIcon = 'fa-minus-circle';
+        }
+        
+        // Si las observaciones tienen información más específica, usarla como respaldo
+        if (n.observaciones && !tipoNovedad || tipoNovedad === 'normal') {
+            if (n.observaciones.includes('Sobrante')) {
+                tipoNovedad = 'sobrante';
+                badgeColor = 'bg-green-100 text-green-700';
+                badgeText = 'Sobrante';
+                badgeIcon = 'fa-plus-circle';
+            } else if (n.observaciones.includes('Faltante')) {
+                tipoNovedad = 'faltante';
+                badgeColor = 'bg-red-100 text-red-700';
+                badgeText = 'Faltante';
+                badgeIcon = 'fa-minus-circle';
+            } else if (n.observaciones.includes('Diferencia detectada')) {
+                if (n.observaciones.includes('sobrante')) {
+                    tipoNovedad = 'sobrante';
+                    badgeColor = 'bg-green-100 text-green-700';
+                    badgeText = 'Sobrante';
+                    badgeIcon = 'fa-plus-circle';
+                } else if (n.observaciones.includes('faltante')) {
+                    tipoNovedad = 'faltante';
+                    badgeColor = 'bg-red-100 text-red-700';
+                    badgeText = 'Faltante';
+                    badgeIcon = 'fa-minus-circle';
+                }
             }
         }
         
