@@ -681,14 +681,44 @@ class TCRController extends Controller
                       ->orWhere('codigo_proveedor', $codigo);
             })->first();
             
-            // Buscar si ya existe una novedad para este producto (por código)
-            $novedadExistente = TCRNovedad::where(function($query) use ($codigo) {
-                $query->where('codigo_barras', $codigo)
-                      ->orWhere('codigo_proveedor', $codigo);
-            })
-            ->where('pasillero_id', $pasilleroId)
-            ->where('estado', 'pendiente')
-            ->first();
+            // Buscar si ya existe una novedad para este producto
+            // Si el producto existe en inventario, buscar por inventario_id (más preciso)
+            // Si no existe en inventario, buscar por código escaneado
+            $novedadExistente = null;
+            
+            if ($productoInventario) {
+                // Buscar por inventario_id primero (más preciso)
+                $novedadExistente = TCRNovedad::where('inventario_id', $productoInventario->id)
+                    ->where('pasillero_id', $pasilleroId)
+                    ->where('estado', 'pendiente')
+                    ->first();
+                
+                // Si no se encuentra por inventario_id, buscar por códigos del inventario
+                if (!$novedadExistente) {
+                    $novedadExistente = TCRNovedad::where(function($query) use ($productoInventario) {
+                        $query->where(function($q) use ($productoInventario) {
+                            if ($productoInventario->codigo_barras) {
+                                $q->where('codigo_barras', $productoInventario->codigo_barras);
+                            }
+                            if ($productoInventario->codigo_proveedor) {
+                                $q->orWhere('codigo_proveedor', $productoInventario->codigo_proveedor);
+                            }
+                        });
+                    })
+                    ->where('pasillero_id', $pasilleroId)
+                    ->where('estado', 'pendiente')
+                    ->first();
+                }
+            } else {
+                // Si no existe en inventario, buscar por código escaneado
+                $novedadExistente = TCRNovedad::where(function($query) use ($codigo) {
+                    $query->where('codigo_barras', $codigo)
+                          ->orWhere('codigo_proveedor', $codigo);
+                })
+                ->where('pasillero_id', $pasilleroId)
+                ->where('estado', 'pendiente')
+                ->first();
+            }
             
             if ($novedadExistente) {
                 // Si existe, actualizar la cantidad que llegó sumando la nueva cantidad
