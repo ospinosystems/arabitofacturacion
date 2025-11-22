@@ -681,8 +681,58 @@ class TCRController extends Controller
                       ->orWhere('codigo_proveedor', $codigo);
             })->first();
             
-            // Siempre crear una nueva fila para cada registro de novedad
-            // Esto permite tener un historial completo de cuándo se registró cada cantidad
+            // Buscar si ya existe una novedad para este producto (por código)
+            $novedadExistente = TCRNovedad::where(function($query) use ($codigo) {
+                $query->where('codigo_barras', $codigo)
+                      ->orWhere('codigo_proveedor', $codigo);
+            })
+            ->where('pasillero_id', $pasilleroId)
+            ->where('estado', 'pendiente')
+            ->first();
+            
+            if ($novedadExistente) {
+                // Si existe, actualizar la cantidad que llegó sumando la nueva cantidad
+                $cantidadAnterior = $novedadExistente->cantidad_llego;
+                $cantidadNueva = $request->cantidad_llego ?? 0;
+                $novedadExistente->cantidad_llego += $cantidadNueva;
+                
+                // Recalcular diferencia
+                $novedadExistente->diferencia = $novedadExistente->cantidad_llego - $novedadExistente->cantidad_enviada;
+                
+                // Actualizar observaciones si hay nuevas
+                if ($request->observaciones) {
+                    $observacionesAnteriores = $novedadExistente->observaciones ? $novedadExistente->observaciones . ' | ' : '';
+                    $novedadExistente->observaciones = $observacionesAnteriores . $request->observaciones;
+                }
+                
+                $novedadExistente->save();
+                
+                // Registrar movimiento en historial
+                DB::table('tcr_novedades_historial')->insert([
+                    'novedad_id' => $novedadExistente->id,
+                    'cantidad_agregada' => $cantidadNueva,
+                    'cantidad_total' => $novedadExistente->cantidad_llego,
+                    'pasillero_id' => $pasilleroId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                
+                // Cargar historial actualizado
+                $novedadExistente->load(['historial' => function($query) {
+                    $query->orderBy('created_at', 'desc');
+                }]);
+                
+                DB::commit();
+                
+                return Response::json([
+                    'estado' => true,
+                    'novedad' => $novedadExistente,
+                    'existe' => true,
+                    'msj' => "Cantidad actualizada: +{$cantidadNueva} (Total: {$novedadExistente->cantidad_llego})"
+                ]);
+            }
+            
+            // Si no existe, crear nueva novedad
             $novedad = new TCRNovedad();
             
             // Si el producto existe en inventario, usar sus datos
@@ -845,47 +895,9 @@ class TCRController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
         
-        // Agrupar novedades por producto (mismo código de barras o proveedor)
-        $novedadesAgrupadas = $novedades->groupBy(function($novedad) {
-            // Usar código de barras o proveedor como clave de agrupación
-            return $novedad->codigo_barras ?: $novedad->codigo_proveedor;
-        });
-        
-        // Crear estructura agrupada con información de registros múltiples
-        $novedadesConAgrupacion = [];
-        foreach ($novedadesAgrupadas as $codigo => $grupo) {
-            if ($grupo->count() > 1) {
-                // Si hay múltiples registros, crear un objeto agrupado
-                $novedadesConAgrupacion[] = [
-                    'agrupado' => true,
-                    'codigo' => $codigo,
-                    'descripcion' => $grupo->first()->descripcion,
-                    'codigo_barras' => $grupo->first()->codigo_barras,
-                    'codigo_proveedor' => $grupo->first()->codigo_proveedor,
-                    'registros' => $grupo->map(function($n) {
-                        return [
-                            'id' => $n->id,
-                            'cantidad_llego' => $n->cantidad_llego,
-                            'cantidad_enviada' => $n->cantidad_enviada,
-                            'diferencia' => $n->diferencia,
-                            'created_at' => $n->created_at,
-                            'observaciones' => $n->observaciones,
-                            'historial' => $n->historial
-                        ];
-                    })->values(),
-                    'total_cantidad_llego' => $grupo->sum('cantidad_llego'),
-                    'total_cantidad_enviada' => $grupo->sum('cantidad_enviada'),
-                    'total_diferencia' => $grupo->sum('diferencia')
-                ];
-            } else {
-                // Si solo hay un registro, agregarlo normalmente
-                $novedadesConAgrupacion[] = $grupo->first();
-            }
-        }
-        
         return Response::json([
             'estado' => true,
-            'novedades' => $novedadesConAgrupacion
+            'novedades' => $novedades
         ]);
     }
     

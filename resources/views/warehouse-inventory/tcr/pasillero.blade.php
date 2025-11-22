@@ -1565,24 +1565,47 @@ function guardarCantidadLlego() {
 // Mostrar historial de agregaciones
 function mostrarHistorialNovedad(historial) {
     const lista = document.getElementById('novedadHistorialLista');
-    lista.innerHTML = historial.map(h => {
-        const fecha = new Date(h.created_at).toLocaleString('es-VE', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-        return `
-            <div class="bg-gray-50 border border-gray-200 rounded p-2">
-                <div class="flex justify-between items-center">
-                    <span class="text-gray-600">+${h.cantidad_agregada}</span>
-                    <span class="font-semibold">Total: ${h.cantidad_total}</span>
-                </div>
-                <div class="text-gray-500 text-[10px] mt-1">${fecha}</div>
-            </div>
-        `;
-    }).join('');
+    if (!historial || historial.length === 0) {
+        lista.innerHTML = '<div class="text-xs text-gray-400 italic text-center py-2">No hay historial de agregaciones</div>';
+        return;
+    }
+    
+    lista.innerHTML = `
+        <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+                <thead>
+                    <tr class="bg-gray-100 border-b border-gray-300">
+                        <th class="px-2 py-1.5 text-left font-semibold text-gray-700">Fecha/Hora</th>
+                        <th class="px-2 py-1.5 text-center font-semibold text-gray-700">Cantidad</th>
+                        <th class="px-2 py-1.5 text-center font-semibold text-gray-700">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${historial.map((h, index) => {
+                        const fecha = new Date(h.created_at).toLocaleString('es-VE', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        const cantidad = parseFloat(h.cantidad_agregada) || 0;
+                        const esNegativo = cantidad < 0;
+                        const signo = cantidad >= 0 ? '+' : '';
+                        const color = esNegativo ? 'text-red-600' : 'text-green-600';
+                        const bgColor = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                        return `
+                            <tr class="${bgColor} border-b border-gray-200 hover:bg-gray-100">
+                                <td class="px-2 py-1.5 text-gray-600">${fecha}</td>
+                                <td class="px-2 py-1.5 text-center ${color} font-semibold">${signo}${h.cantidad_agregada}</td>
+                                <td class="px-2 py-1.5 text-center font-semibold text-gray-700">${h.cantidad_total || h.cantidad_despues || 0}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
     document.getElementById('novedadHistorial').classList.remove('hidden');
 }
 
@@ -1676,83 +1699,6 @@ function mostrarReporteNovedades(novedades) {
     }
     
     reporte.innerHTML = novedades.map(n => {
-        // Si es un grupo agrupado (múltiples registros del mismo producto)
-        if (n.agrupado) {
-            const registrosHtml = n.registros.map((registro, index) => {
-                const fecha = new Date(registro.created_at).toLocaleString('es-VE', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-                return `
-                    <div class="border-l-2 border-blue-300 pl-2 ml-2 mb-2">
-                        <div class="text-[9px] text-gray-500 mb-1">
-                            <i class="fas fa-clock mr-1"></i>Registro ${index + 1} - ${fecha}
-                        </div>
-                        <div class="grid grid-cols-3 gap-1 text-[10px]">
-                            <div class="bg-blue-50 p-1 rounded">
-                                <div class="text-gray-600">Llegó</div>
-                                <div class="font-bold text-blue-700">${registro.cantidad_llego}</div>
-                            </div>
-                            <div class="bg-green-50 p-1 rounded">
-                                <div class="text-gray-600">Enviada</div>
-                                <div class="font-bold text-green-700">${registro.cantidad_enviada}</div>
-                            </div>
-                            <div class="bg-yellow-100 p-1 rounded">
-                                <div class="text-gray-600">Diferencia</div>
-                                <div class="font-bold text-orange-700">${registro.diferencia}</div>
-                            </div>
-                        </div>
-                        ${registro.observaciones ? `
-                            <div class="mt-1 text-[9px] text-gray-600 italic">
-                                <i class="fas fa-comment mr-1"></i>${registro.observaciones}
-                            </div>
-                        ` : ''}
-                    </div>
-                `;
-            }).join('');
-            
-            return `
-                <div class="border-2 border-blue-300 rounded-lg p-2 mb-2 bg-blue-50">
-                    <div class="flex items-start justify-between mb-2">
-                        <div class="font-bold text-xs flex-1">
-                            <i class="fas fa-layer-group mr-1 text-blue-600"></i>${n.descripcion}
-                        </div>
-                        <span class="px-2 py-0.5 rounded text-[10px] bg-blue-100 text-blue-700">
-                            <i class="fas fa-list mr-1"></i>${n.registros.length} registros
-                        </span>
-                    </div>
-                    <div class="text-[10px] mb-2">
-                        <span class="text-gray-600">Código:</span> <span class="font-mono">${n.codigo_barras || n.codigo_proveedor || 'N/A'}</span>
-                    </div>
-                    <div class="mb-2">
-                        <div class="text-[9px] font-semibold text-gray-700 mb-1">Historial de registros:</div>
-                        ${registrosHtml}
-                    </div>
-                    <div class="border-t border-blue-200 pt-2 mt-2">
-                        <div class="text-[9px] font-semibold text-gray-700 mb-1">Totales:</div>
-                        <div class="grid grid-cols-3 gap-1 text-[10px]">
-                            <div class="bg-blue-100 p-1 rounded">
-                                <div class="text-gray-600">Total Llegó</div>
-                                <div class="font-bold text-blue-800">${n.total_cantidad_llego}</div>
-                            </div>
-                            <div class="bg-green-100 p-1 rounded">
-                                <div class="text-gray-600">Total Enviada</div>
-                                <div class="font-bold text-green-800">${n.total_cantidad_enviada}</div>
-                            </div>
-                            <div class="bg-yellow-200 p-1 rounded">
-                                <div class="text-gray-600">Total Diferencia</div>
-                                <div class="font-bold text-orange-800">${n.total_diferencia}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-        
-        // Si es un registro individual (no agrupado)
         const fecha = new Date(n.created_at).toLocaleString('es-VE', {
             day: '2-digit',
             month: '2-digit',
@@ -1802,12 +1748,35 @@ function mostrarReporteNovedades(novedades) {
         }
         
         const historialHtml = n.historial && n.historial.length > 0 ? `
-            <div class="mt-2 text-[10px] text-gray-500">
-                <div class="font-semibold mb-1">Historial de agregaciones:</div>
-                ${n.historial.map(h => {
-                    const hFecha = new Date(h.created_at).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
-                    return `<div class="pl-2">+${h.cantidad_agregada} (${hFecha}) → Total: ${h.cantidad_total}</div>`;
-                }).join('')}
+            <div class="mt-2">
+                <div class="font-semibold mb-1 text-[10px] text-gray-700">Historial de agregaciones:</div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-[10px] border border-gray-200 rounded">
+                        <thead>
+                            <tr class="bg-gray-100">
+                                <th class="px-1 py-0.5 text-left border-b border-gray-300">Hora</th>
+                                <th class="px-1 py-0.5 text-center border-b border-gray-300">Cantidad</th>
+                                <th class="px-1 py-0.5 text-center border-b border-gray-300">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${n.historial.map((h, idx) => {
+                                const hFecha = new Date(h.created_at).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+                                const cantidad = parseFloat(h.cantidad_agregada) || 0;
+                                const signo = cantidad >= 0 ? '+' : '';
+                                const color = cantidad < 0 ? 'text-red-600' : 'text-green-600';
+                                const bgColor = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                                return `
+                                    <tr class="${bgColor}">
+                                        <td class="px-1 py-0.5 text-gray-600">${hFecha}</td>
+                                        <td class="px-1 py-0.5 text-center ${color} font-semibold">${signo}${h.cantidad_agregada}</td>
+                                        <td class="px-1 py-0.5 text-center font-semibold">${h.cantidad_total || h.cantidad_despues || 0}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         ` : '';
         
