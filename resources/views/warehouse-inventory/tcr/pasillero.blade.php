@@ -1862,8 +1862,6 @@ function exportarPDFNovedades() {
     imprimirReporteNovedades();
 }
 
-// Cargar novedades al iniciar y actualizar en tiempo real
-cargarNovedades(); // Cargar inmediatamente
-setInterval(cargarNovedades, 3000); // Actualizar cada 3 segundos para tiempo real
+// Las novedades se cargarán solo cuando se registre una o cuando se cambie a la pestaña de novedades
 </script>
 @endsection

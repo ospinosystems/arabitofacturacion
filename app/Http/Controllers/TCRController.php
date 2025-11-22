@@ -726,16 +726,18 @@ class TCRController extends Controller
             
             $cantidadLlego = $request->cantidad_llego ?? 0;
             $novedad->cantidad_llego = $cantidadLlego;
-            $novedad->cantidad_enviada = 0;
             
-            // Si hay observaciones con diferencia, extraer cantidad esperada para calcular diferencia real
+            // Si hay observaciones con diferencia, extraer cantidad esperada (cantidad enviada)
             $cantidadEsperada = null;
             if ($request->observaciones && preg_match('/Cantidad esperada: ([\d.]+)/', $request->observaciones, $matches)) {
                 $cantidadEsperada = floatval($matches[1]);
-                // La diferencia real es la diferencia con lo esperado (no con lo enviado)
+                $novedad->cantidad_enviada = $cantidadEsperada;
+                // La diferencia real es la diferencia con lo esperado
                 $novedad->diferencia = $cantidadLlego - $cantidadEsperada;
             } else {
-                // Si no hay cantidad esperada, la diferencia es igual a cantidad_llego (aún no se ha enviado nada)
+                // Si no hay cantidad esperada, significa que el producto no estaba en el pedido
+                $novedad->cantidad_enviada = 0;
+                // La diferencia es igual a cantidad_llego (aún no se ha enviado nada)
                 $novedad->diferencia = $cantidadLlego;
             }
             
