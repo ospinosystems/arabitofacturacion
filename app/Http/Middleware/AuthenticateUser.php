@@ -88,6 +88,7 @@ class AuthenticateUser
         "warehouse-inventory/{id}/estado",
         "warehouse-inventory/stock-ubicacion",
         "warehouse-inventory/ticket-producto/{productoId}",
+        "warehouse-inventory/imprimir-ticket-producto",
         
         // Módulo TCR (nuevo sistema con chequeador y pasillero)
         "warehouse-inventory/tcr",
