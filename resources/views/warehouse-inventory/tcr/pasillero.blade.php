@@ -2065,6 +2065,69 @@ function imprimirReporteNovedades() {
         const novedades = data.novedades;
         const ventana = window.open('', '_blank');
         
+        // Obtener información del pedido (usar la primera novedad que tenga pedido_info)
+        let pedidoInfo = null;
+        let usuarioReviso = null;
+        
+        for (let n of novedades) {
+            if (n.pedido_info) {
+                pedidoInfo = n.pedido_info;
+            }
+            if (n.pasillero && n.pasillero.nombre) {
+                usuarioReviso = n.pasillero.nombre;
+                break; // Usar el primer usuario encontrado
+            }
+        }
+        
+        // Generar encabezado con información del pedido
+        let encabezadoHTML = '';
+        if (pedidoInfo) {
+            // Obtener información de origen
+            let sucursalOrigen = 'N/A';
+            if (pedidoInfo.origen) {
+                if (typeof pedidoInfo.origen === 'object') {
+                    sucursalOrigen = pedidoInfo.origen.nombre || pedidoInfo.origen.codigo || pedidoInfo.origen.descripcion || 'N/A';
+                } else {
+                    sucursalOrigen = pedidoInfo.origen;
+                }
+            }
+            
+            // Obtener información de destino
+            let sucursalDestino = 'N/A';
+            if (pedidoInfo.destino) {
+                if (typeof pedidoInfo.destino === 'object') {
+                    sucursalDestino = pedidoInfo.destino.nombre || pedidoInfo.destino.codigo || pedidoInfo.destino.descripcion || 'N/A';
+                } else {
+                    sucursalDestino = pedidoInfo.destino;
+                }
+            }
+            
+            // Obtener número de pedido, ID e ID en sucursal
+            const numeroPedido = pedidoInfo.numero || pedidoInfo.numero_pedido || pedidoInfo.id || 'N/A';
+            const idPedido = pedidoInfo.id || 'N/A';
+            const idinsucursal = pedidoInfo.idinsucursal || pedidoInfo.id_sucursal || pedidoInfo.idinsucursal_pedido || 'N/A';
+            
+            encabezadoHTML = `
+                <div style="background-color: #f9fafb; border: 1px solid #d1d5db; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+                    <h2 style="margin: 0 0 15px 0; font-size: 16px; color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px;">Información del Pedido</h2>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px;">
+                        <div><strong>Sucursal Origen:</strong> ${sucursalOrigen}</div>
+                        <div><strong>Sucursal Destino:</strong> ${sucursalDestino}</div>
+                        <div><strong>Número de Pedido:</strong> ${numeroPedido}</div>
+                        <div><strong>ID Pedido:</strong> ${idPedido}</div>
+                        <div><strong>ID en Sucursal:</strong> ${idinsucursal}</div>
+                        ${usuarioReviso ? `<div><strong>Usuario que Revisó:</strong> ${usuarioReviso}</div>` : ''}
+                    </div>
+                </div>
+            `;
+        } else if (usuarioReviso) {
+            encabezadoHTML = `
+                <div style="background-color: #f9fafb; border: 1px solid #d1d5db; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+                    <div style="font-size: 12px;"><strong>Usuario que Revisó:</strong> ${usuarioReviso}</div>
+                </div>
+            `;
+        }
+        
         // Generar tabla HTML
         let tablaHTML = `
             <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
@@ -2180,6 +2243,7 @@ function imprimirReporteNovedades() {
                     hour: '2-digit',
                     minute: '2-digit'
                 })}</div>
+                ${encabezadoHTML}
                 ${tablaHTML}
             </body>
             </html>

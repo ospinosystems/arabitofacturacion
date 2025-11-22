@@ -955,14 +955,31 @@ class TCRController extends Controller
             ->where('estado', 'pendiente')
             ->with(['historial' => function($query) {
                 $query->orderBy('created_at', 'desc');
-            }, 'inventario'])
+            }, 'inventario', 'pasillero'])
             ->orderBy('updated_at', 'desc')
             ->orderBy('created_at', 'desc')
             ->get();
         
+        // Agregar información del pedido a cada novedad
+        $novedadesConPedido = $novedades->map(function($novedad) {
+            $pedidoData = null;
+            if ($novedad->pedido_central_id) {
+                try {
+                    $pedidoData = $this->getPedidosCentralData($novedad->pedido_central_id);
+                } catch (\Exception $e) {
+                    // Si hay error, continuar sin datos del pedido
+                }
+            }
+            
+            $novedadArray = $novedad->toArray();
+            $novedadArray['pedido_info'] = $pedidoData;
+            
+            return $novedadArray;
+        });
+        
         return Response::json([
             'estado' => true,
-            'novedades' => $novedades
+            'novedades' => $novedadesConPedido
         ]);
     }
     
