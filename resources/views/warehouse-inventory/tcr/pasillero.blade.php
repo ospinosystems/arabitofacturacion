@@ -1869,11 +1869,11 @@ function mostrarReporteNovedades(novedades) {
             </div>
         ` : '';
         
-        const observacionesHtml = n.observaciones ? `
+        /* const observacionesHtml = n.observaciones ? `
             <div class="mt-1 text-[10px] text-gray-600 italic">
                 <i class="fas fa-comment mr-1"></i>${n.observaciones}
             </div>
-        ` : '';
+        ` : ''; */
         
         return `
             <div class="border border-gray-200 rounded-lg p-2 mb-2">
