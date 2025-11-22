@@ -1762,7 +1762,7 @@ function mostrarReporteNovedades(novedades) {
         let badgeText = 'Novedad';
         let badgeIcon = 'fa-info-circle';
         
-        if (n.observaciones) {
+        if (n.observaciones && typeof n.observaciones === 'string') {
             if (n.observaciones.includes('Sobrante')) {
                 tipoNovedad = 'sobrante';
                 badgeColor = 'bg-green-100 text-green-700';
@@ -1810,7 +1810,7 @@ function mostrarReporteNovedades(novedades) {
         }
         
         // Si las observaciones tienen información más específica, usarla como respaldo
-        if (n.observaciones && !tipoNovedad || tipoNovedad === 'normal') {
+        if ((!tipoNovedad || tipoNovedad === 'normal') && n.observaciones && typeof n.observaciones === 'string') {
             if (n.observaciones.includes('Sobrante')) {
                 tipoNovedad = 'sobrante';
                 badgeColor = 'bg-green-100 text-green-700';
