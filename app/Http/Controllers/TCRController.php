@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\TCRAsignacion;
 use App\Models\TCRNovedad;
+use App\Models\TCRNovedadHistorial;
 use App\Models\Warehouse;
 use App\Models\WarehouseInventory;
 use App\Models\WarehouseMovement;
@@ -707,10 +708,21 @@ class TCRController extends Controller
             
             // Si no existe, crear nueva novedad
             $novedad = new TCRNovedad();
-            $novedad->codigo_barras = $productoInventario ? $productoInventario->codigo_barras : null;
-            $novedad->codigo_proveedor = $productoInventario ? $productoInventario->codigo_proveedor : null;
-            $novedad->descripcion = $productoInventario ? $productoInventario->descripcion : 'Producto no encontrado';
-            $novedad->inventario_id = $productoInventario ? $productoInventario->id : null;
+            
+            // Si el producto existe en inventario, usar sus datos
+            if ($productoInventario) {
+                $novedad->codigo_barras = $productoInventario->codigo_barras;
+                $novedad->codigo_proveedor = $productoInventario->codigo_proveedor;
+                $novedad->descripcion = $productoInventario->descripcion;
+                $novedad->inventario_id = $productoInventario->id;
+            } else {
+                // Si no existe, usar el código escaneado
+                // Intentar determinar si es código de barras o proveedor (por ahora, guardar en ambos)
+                $novedad->codigo_barras = $codigo;
+                $novedad->codigo_proveedor = $codigo;
+                $novedad->descripcion = 'Producto no encontrado - Código: ' . $codigo;
+                $novedad->inventario_id = null;
+            }
             $novedad->cantidad_llego = $request->cantidad_llego ?? 0;
             $novedad->cantidad_enviada = 0;
             $novedad->diferencia = $novedad->cantidad_llego;
@@ -827,5 +839,45 @@ class TCRController extends Controller
             'estado' => true,
             'novedades' => $novedades
         ]);
+    }
+    
+    /**
+     * Actualizar cantidad que llegó de una novedad
+     */
+    public function actualizarCantidadLlegoNovedad(Request $request)
+    {
+        $request->validate([
+            'novedad_id' => 'required|exists:tcr_novedades,id',
+            'cantidad_llego' => 'required|numeric|min:0',
+        ]);
+        
+        try {
+            $pasilleroId = session('id_usuario');
+            if (!$pasilleroId) {
+                throw new \Exception('Usuario no autenticado');
+            }
+            
+            $novedad = TCRNovedad::findOrFail($request->novedad_id);
+            
+            if ($novedad->pasillero_id != $pasilleroId) {
+                throw new \Exception('No tienes permiso para modificar esta novedad');
+            }
+            
+            $novedad->cantidad_llego = $request->cantidad_llego;
+            $novedad->calcularDiferencia();
+            $novedad->save();
+            
+            return Response::json([
+                'estado' => true,
+                'novedad' => $novedad->fresh(),
+                'msj' => 'Cantidad que llegó actualizada exitosamente'
+            ]);
+            
+        } catch (\Exception $e) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

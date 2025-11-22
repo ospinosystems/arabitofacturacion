@@ -13,9 +13,21 @@
         <p class="text-gray-600 mt-1 text-xs sm:text-sm">Escanea ubicación, producto y asigna cantidad</p>
     </div>
 
+    <!-- Tabs para cambiar entre Asignaciones y Novedades -->
+    <div class="mb-3 sm:mb-4">
+        <div class="flex space-x-2 border-b border-gray-200">
+            <button onclick="mostrarTab('asignaciones')" id="tabAsignaciones" class="px-4 py-2 text-sm font-medium border-b-2 border-blue-500 text-blue-600">
+                <i class="fas fa-tasks mr-2"></i>Asignaciones
+            </button>
+            <button onclick="mostrarTab('novedades')" id="tabNovedades" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                <i class="fas fa-exclamation-triangle mr-2"></i>Novedades
+            </button>
+        </div>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         <!-- Panel de Escaneo -->
-        <div class="lg:col-span-2 order-2 lg:order-1">
+        <div id="panelAsignaciones" class="lg:col-span-2 order-2 lg:order-1">
             <div class="bg-white rounded-lg shadow p-3 sm:p-4 md:p-6">
                 <h2 class="text-lg sm:text-xl font-bold text-gray-700 mb-3 sm:mb-4">Procesar Asignación</h2>
                 
@@ -146,6 +158,121 @@
             </div>
         </div>
 
+        <!-- Panel de Novedades (Oculto por defecto) -->
+        <div id="panelNovedades" class="lg:col-span-2 order-2 lg:order-1 hidden">
+            <div class="bg-white rounded-lg shadow p-3 sm:p-4 md:p-6">
+                <h2 class="text-lg sm:text-xl font-bold text-gray-700 mb-3 sm:mb-4">Registrar Novedades</h2>
+                
+                <!-- Escanear Producto para Novedad -->
+                <div class="bg-purple-50 border-l-4 border-purple-500 p-3 sm:p-4 rounded mb-4">
+                    <h3 class="font-bold text-purple-700 mb-2 text-sm sm:text-base">Escanear Producto</h3>
+                    <p class="text-xs sm:text-sm text-gray-600 mb-3">Escanea el código de barras o código de proveedor del producto</p>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <div class="relative flex-1">
+                            <input type="text" 
+                                   id="inputProductoNovedad" 
+                                   class="w-full px-4 pr-10 py-4 sm:py-3 text-lg sm:text-base font-mono border-2 border-purple-400 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                   placeholder="Escanea código de barras o proveedor"
+                                   autofocus>
+                            <button onclick="limpiarInputProductoNovedad()" 
+                                    id="btnLimpiarProductoNovedad"
+                                    class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-red-500 transition hidden"
+                                    title="Limpiar">
+                                <i class="fas fa-times text-lg sm:text-xl"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="mensajeProductoNovedad" class="mt-2 text-xs sm:text-sm"></div>
+                </div>
+
+                <!-- Información del Producto Escaneado -->
+                <div id="infoNovedad" class="bg-white border border-gray-200 rounded-lg p-3 sm:p-4 mb-4 hidden">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="flex-1">
+                            <h4 class="font-bold text-gray-800 text-base mb-2" id="novedadDescripcion"></h4>
+                            <div class="grid grid-cols-2 gap-2 text-xs sm:text-sm mb-3">
+                                <div><span class="font-medium text-gray-600">Código Barras:</span> <span class="font-mono" id="novedadCodigoBarras"></span></div>
+                                <div><span class="font-medium text-gray-600">Código Proveedor:</span> <span class="font-mono" id="novedadCodigoProveedor"></span></div>
+                            </div>
+                            
+                            <!-- Cantidad que llegó con botón de imprimir -->
+                            <div class="bg-blue-100 border border-blue-300 rounded-lg p-2 sm:p-3 mb-3">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs sm:text-sm font-medium text-blue-800">Cantidad que llegó:</span>
+                                    <div class="flex items-center gap-2">
+                                        <span id="novedadCantidadLlego" class="sm:text-lg font-bold text-blue-900">0</span>
+                                        <button onclick="imprimirTicketNovedad()" 
+                                                class="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg transition flex items-center text-xs sm:text-sm">
+                                            <i class="fas fa-print mr-1"></i>
+                                            Imprimir
+                                        </button>
+                                    </div>
+                                </div>
+                                <!-- Campo para ingresar/editar cantidad que llegó (solo si es nueva o no tiene cantidad) -->
+                                <div id="campoCantidadLlego" class="hidden">
+                                    <label class="block text-xs text-gray-700 mb-1">Ingresar cantidad que llegó:</label>
+                                    <div class="flex gap-2">
+                                        <input type="number" 
+                                               id="inputCantidadLlego" 
+                                               step="0.0001"
+                                               min="0"
+                                               class="flex-1 px-2 py-1.5 text-sm font-mono border border-blue-400 rounded focus:ring-2 focus:ring-blue-500"
+                                               placeholder="Cantidad">
+                                        <button onclick="guardarCantidadLlego()" 
+                                                class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded transition text-xs">
+                                            <i class="fas fa-save mr-1"></i>Guardar
+                                        </button>
+                                    </div>
+                                </div>
+                                <button id="btnEditarCantidadLlego" onclick="mostrarEditarCantidadLlego()" 
+                                        class="text-xs text-blue-600 hover:text-blue-800 underline mt-1">
+                                    <i class="fas fa-edit mr-1"></i>Editar cantidad que llegó
+                                </button>
+                            </div>
+
+                            <!-- Cantidad Enviada y Diferencia -->
+                            <div class="grid grid-cols-2 gap-2 mb-3">
+                                <div class="bg-green-50 border border-green-300 rounded-lg p-2">
+                                    <div class="text-xs text-gray-600 mb-1">Cantidad Enviada</div>
+                                    <div id="novedadCantidadEnviada" class="text-lg font-bold text-green-700">0</div>
+                                </div>
+                                <div class="bg-orange-50 border border-orange-300 rounded-lg p-2">
+                                    <div class="text-xs text-gray-600 mb-1">Diferencia</div>
+                                    <div id="novedadDiferencia" class="text-lg font-bold text-orange-700">0</div>
+                                </div>
+                            </div>
+
+                            <!-- Historial de Agregaciones -->
+                            <div id="novedadHistorial" class="mb-3 hidden">
+                                <h5 class="font-semibold text-gray-700 text-xs sm:text-sm mb-2">Historial de Agregaciones:</h5>
+                                <div id="novedadHistorialLista" class="space-y-1 max-h-32 overflow-y-auto text-xs"></div>
+                            </div>
+
+                            <!-- Agregar Cantidad -->
+                            <div class="border-t pt-3">
+                                <label class="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Agregar Cantidad</label>
+                                <div class="flex gap-2">
+                                    <input type="number" 
+                                           id="inputCantidadNovedad" 
+                                           step="0.0001"
+                                           min="0.0001"
+                                           class="flex-1 px-3 py-2 text-base font-mono border-2 border-purple-400 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                           placeholder="Cantidad">
+                                    <button onclick="agregarCantidadNovedad()" 
+                                            class="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition">
+                                        <i class="fas fa-plus mr-1"></i>Agregar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="limpiarNovedad()" class="ml-4 text-red-500 hover:text-red-700 p-2">
+                            <i class="fas fa-times-circle text-2xl"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Panel de Información -->
         <div class="lg:col-span-1 order-1 lg:order-2">
             <div class="bg-white rounded-lg shadow p-3 sm:p-4 mb-3 sm:mb-4">
@@ -159,12 +286,35 @@
             </div>
 
             <!-- Lista de Pedidos con Asignaciones -->
-            <div class="bg-white rounded-lg shadow p-3 sm:p-4">
+            <div class="bg-white rounded-lg shadow p-3 sm:p-4 mb-3 sm:mb-4">
                 <h3 class="font-bold text-gray-700 mb-3 sm:mb-4 text-sm sm:text-base">Mis Pedidos</h3>
                 <div id="listaPedidos" class="space-y-2 max-h-[300px] sm:max-h-[500px] overflow-y-auto">
                     <div class="text-center text-gray-400 py-4">
                         <i class="fas fa-spinner fa-spin text-xl sm:text-2xl"></i>
                         <p class="mt-2 text-xs sm:text-sm">Cargando...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel de Reporte de Novedades -->
+            <div id="panelReporteNovedades" class="bg-white rounded-lg shadow p-3 sm:p-4 sticky top-2">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-bold text-gray-700 text-sm sm:text-base">Reporte de Novedades</h3>
+                    <div class="flex gap-2">
+                        <button onclick="imprimirReporteNovedades()" 
+                                class="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs">
+                            <i class="fas fa-print"></i>
+                        </button>
+                        <button onclick="exportarPDFNovedades()" 
+                                class="px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-xs">
+                            <i class="fas fa-file-pdf"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="reporteNovedades" class="space-y-2 max-h-[400px] sm:max-h-[600px] overflow-y-auto text-xs">
+                    <div class="text-center text-gray-400 py-4">
+                        <i class="fas fa-info-circle text-xl mb-2"></i>
+                        <p>No hay novedades registradas</p>
                     </div>
                 </div>
             </div>
@@ -181,6 +331,8 @@ let asignacionesPorPedido = [];
 let pedidoSeleccionado = null;
 let asignacionActual = null;
 let ubicacionActual = null;
+let novedadActual = null;
+let novedades = [];
 
 // Función para mostrar notificaciones
 function mostrarNotificacion(mensaje, tipo = 'info') {
@@ -842,5 +994,407 @@ function imprimirTicket() {
         document.body.removeChild(form);
     }, 100);
 }
+
+// ============ FUNCIONES PARA NOVEDADES ============
+
+// Cambiar entre tabs
+function mostrarTab(tab) {
+    if (tab === 'asignaciones') {
+        document.getElementById('tabAsignaciones').classList.add('border-blue-500', 'text-blue-600');
+        document.getElementById('tabAsignaciones').classList.remove('border-transparent', 'text-gray-500');
+        document.getElementById('tabNovedades').classList.remove('border-blue-500', 'text-blue-600');
+        document.getElementById('tabNovedades').classList.add('border-transparent', 'text-gray-500');
+        document.getElementById('panelAsignaciones').classList.remove('hidden');
+        document.getElementById('panelNovedades').classList.add('hidden');
+    } else {
+        document.getElementById('tabNovedades').classList.add('border-blue-500', 'text-blue-600');
+        document.getElementById('tabNovedades').classList.remove('border-transparent', 'text-gray-500');
+        document.getElementById('tabAsignaciones').classList.remove('border-blue-500', 'text-blue-600');
+        document.getElementById('tabAsignaciones').classList.add('border-transparent', 'text-gray-500');
+        document.getElementById('panelAsignaciones').classList.add('hidden');
+        document.getElementById('panelNovedades').classList.remove('hidden');
+        cargarNovedades();
+    }
+}
+
+// Event listener para escanear producto en novedades
+document.getElementById('inputProductoNovedad')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        buscarORegistrarNovedad();
+    }
+});
+
+// Mostrar/ocultar botón de limpiar cuando hay texto
+document.getElementById('inputProductoNovedad')?.addEventListener('input', function(e) {
+    const btnLimpiar = document.getElementById('btnLimpiarProductoNovedad');
+    if (e.target.value.trim() !== '') {
+        btnLimpiar.classList.remove('hidden');
+    } else {
+        btnLimpiar.classList.add('hidden');
+    }
+});
+
+// Buscar o registrar novedad
+function buscarORegistrarNovedad() {
+    const codigo = document.getElementById('inputProductoNovedad').value.trim();
+    const mensaje = document.getElementById('mensajeProductoNovedad');
+    
+    if (!codigo) {
+        mensaje.innerHTML = '<span class="text-red-600">Ingrese un código de producto</span>';
+        return;
+    }
+    
+    mensaje.innerHTML = '<span class="text-blue-600"><i class="fas fa-spinner fa-spin"></i> Buscando producto...</span>';
+    
+    fetch('/warehouse-inventory/tcr/buscar-o-registrar-novedad', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken
+        },
+        body: JSON.stringify({
+            codigo: codigo
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.estado) {
+            novedadActual = data.novedad;
+            mostrarInfoNovedad(data.novedad, data.existe);
+            if (data.existe) {
+                mensaje.innerHTML = '<span class="text-yellow-600"><i class="fas fa-info-circle"></i> Producto ya registrado. Puede agregar más cantidad.</span>';
+            } else {
+                mensaje.innerHTML = '<span class="text-green-600"><i class="fas fa-check-circle"></i> Novedad registrada exitosamente</span>';
+            }
+            cargarNovedades();
+        } else {
+            mensaje.innerHTML = `<span class="text-red-600"><i class="fas fa-times-circle"></i> ${data.msj}</span>`;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        mensaje.innerHTML = '<span class="text-red-600">Error al buscar producto</span>';
+    });
+}
+
+// Mostrar información de la novedad
+function mostrarInfoNovedad(novedad, existe) {
+    document.getElementById('novedadDescripcion').textContent = novedad.descripcion;
+    document.getElementById('novedadCodigoBarras').textContent = novedad.codigo_barras || 'N/A';
+    document.getElementById('novedadCodigoProveedor').textContent = novedad.codigo_proveedor || 'N/A';
+    document.getElementById('novedadCantidadLlego').textContent = novedad.cantidad_llego || 0;
+    document.getElementById('novedadCantidadEnviada').textContent = novedad.cantidad_enviada || 0;
+    document.getElementById('novedadDiferencia').textContent = novedad.diferencia || 0;
+    
+    // Si no tiene cantidad que llegó o es nueva, mostrar campo para ingresarla
+    if (!existe || !novedad.cantidad_llego || novedad.cantidad_llego == 0) {
+        document.getElementById('campoCantidadLlego').classList.remove('hidden');
+        document.getElementById('btnEditarCantidadLlego').classList.add('hidden');
+        document.getElementById('inputCantidadLlego').value = novedad.cantidad_llego || '';
+    } else {
+        document.getElementById('campoCantidadLlego').classList.add('hidden');
+        document.getElementById('btnEditarCantidadLlego').classList.remove('hidden');
+    }
+    
+    // Mostrar historial si existe
+    if (novedad.historial && novedad.historial.length > 0) {
+        mostrarHistorialNovedad(novedad.historial);
+    } else {
+        document.getElementById('novedadHistorial').classList.add('hidden');
+    }
+    
+    document.getElementById('infoNovedad').classList.remove('hidden');
+    document.getElementById('inputCantidadNovedad').focus();
+}
+
+// Mostrar campo para editar cantidad que llegó
+function mostrarEditarCantidadLlego() {
+    document.getElementById('campoCantidadLlego').classList.remove('hidden');
+    document.getElementById('btnEditarCantidadLlego').classList.add('hidden');
+    document.getElementById('inputCantidadLlego').value = novedadActual.cantidad_llego || '';
+    document.getElementById('inputCantidadLlego').focus();
+}
+
+// Guardar cantidad que llegó
+function guardarCantidadLlego() {
+    if (!novedadActual) {
+        mostrarNotificacion('No hay novedad seleccionada', 'warning');
+        return;
+    }
+    
+    const cantidad = parseFloat(document.getElementById('inputCantidadLlego').value);
+    if (isNaN(cantidad) || cantidad < 0) {
+        mostrarNotificacion('Ingrese una cantidad válida', 'warning');
+        return;
+    }
+    
+    fetch('/warehouse-inventory/tcr/actualizar-cantidad-llego-novedad', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken
+        },
+        body: JSON.stringify({
+            novedad_id: novedadActual.id,
+            cantidad_llego: cantidad
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.estado) {
+            novedadActual = data.novedad;
+            document.getElementById('novedadCantidadLlego').textContent = data.novedad.cantidad_llego;
+            document.getElementById('novedadDiferencia').textContent = data.novedad.diferencia;
+            document.getElementById('campoCantidadLlego').classList.add('hidden');
+            document.getElementById('btnEditarCantidadLlego').classList.remove('hidden');
+            mostrarNotificacion('Cantidad que llegó actualizada', 'success');
+            cargarNovedades();
+        } else {
+            mostrarNotificacion(data.msj || 'Error al actualizar', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        mostrarNotificacion('Error al actualizar cantidad', 'error');
+    });
+}
+
+// Mostrar historial de agregaciones
+function mostrarHistorialNovedad(historial) {
+    const lista = document.getElementById('novedadHistorialLista');
+    lista.innerHTML = historial.map(h => {
+        const fecha = new Date(h.created_at).toLocaleString('es-VE', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        return `
+            <div class="bg-gray-50 border border-gray-200 rounded p-2">
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-600">+${h.cantidad_agregada}</span>
+                    <span class="font-semibold">Total: ${h.cantidad_total}</span>
+                </div>
+                <div class="text-gray-500 text-[10px] mt-1">${fecha}</div>
+            </div>
+        `;
+    }).join('');
+    document.getElementById('novedadHistorial').classList.remove('hidden');
+}
+
+// Agregar cantidad a novedad
+function agregarCantidadNovedad() {
+    if (!novedadActual) {
+        mostrarNotificacion('No hay novedad seleccionada', 'warning');
+        return;
+    }
+    
+    const cantidad = parseFloat(document.getElementById('inputCantidadNovedad').value);
+    if (!cantidad || cantidad <= 0) {
+        mostrarNotificacion('Ingrese una cantidad válida', 'warning');
+        return;
+    }
+    
+    fetch('/warehouse-inventory/tcr/agregar-cantidad-novedad', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken
+        },
+        body: JSON.stringify({
+            novedad_id: novedadActual.id,
+            cantidad: cantidad
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.estado) {
+            novedadActual = data.novedad;
+            mostrarInfoNovedad(data.novedad, true);
+            document.getElementById('inputCantidadNovedad').value = '';
+            mostrarNotificacion('Cantidad agregada exitosamente', 'success');
+            cargarNovedades();
+        } else {
+            mostrarNotificacion(data.msj || 'Error al agregar cantidad', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        mostrarNotificacion('Error al agregar cantidad', 'error');
+    });
+}
+
+// Cargar todas las novedades para el reporte
+function cargarNovedades() {
+    fetch('/warehouse-inventory/tcr/get-novedades', {
+        headers: {
+            'X-CSRF-TOKEN': csrfToken
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.estado) {
+            novedades = data.novedades;
+            mostrarReporteNovedades(data.novedades);
+        }
+    })
+    .catch(error => {
+        console.error('Error al cargar novedades:', error);
+    });
+}
+
+// Mostrar reporte de novedades
+function mostrarReporteNovedades(novedades) {
+    const reporte = document.getElementById('reporteNovedades');
+    
+    if (novedades.length === 0) {
+        reporte.innerHTML = `
+            <div class="text-center text-gray-400 py-4">
+                <i class="fas fa-info-circle text-xl mb-2"></i>
+                <p>No hay novedades registradas</p>
+            </div>
+        `;
+        return;
+    }
+    
+    reporte.innerHTML = novedades.map(n => {
+        const fecha = new Date(n.created_at).toLocaleString('es-VE', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        const historialHtml = n.historial && n.historial.length > 0 ? `
+            <div class="mt-2 text-[10px] text-gray-500">
+                <div class="font-semibold mb-1">Historial:</div>
+                ${n.historial.map(h => {
+                    const hFecha = new Date(h.created_at).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+                    return `<div class="pl-2">+${h.cantidad_agregada} (${hFecha}) → Total: ${h.cantidad_total}</div>`;
+                }).join('')}
+            </div>
+        ` : '';
+        
+        return `
+            <div class="border border-gray-200 rounded-lg p-2 mb-2">
+                <div class="font-semibold text-xs mb-1">${n.descripcion}</div>
+                <div class="grid grid-cols-2 gap-1 text-[10px] mb-1">
+                    <div><span class="text-gray-600">Código:</span> <span class="font-mono">${n.codigo_barras || n.codigo_proveedor || 'N/A'}</span></div>
+                    <div><span class="text-gray-600">Fecha:</span> ${fecha}</div>
+                </div>
+                <div class="grid grid-cols-3 gap-1 text-[10px]">
+                    <div class="bg-blue-50 p-1 rounded">
+                        <div class="text-gray-600">Llegó</div>
+                        <div class="font-bold text-blue-700">${n.cantidad_llego}</div>
+                    </div>
+                    <div class="bg-green-50 p-1 rounded">
+                        <div class="text-gray-600">Enviada</div>
+                        <div class="font-bold text-green-700">${n.cantidad_enviada}</div>
+                    </div>
+                    <div class="bg-orange-50 p-1 rounded">
+                        <div class="text-gray-600">Diferencia</div>
+                        <div class="font-bold text-orange-700">${n.diferencia}</div>
+                    </div>
+                </div>
+                ${historialHtml}
+            </div>
+        `;
+    }).join('');
+}
+
+// Limpiar input de producto novedad
+function limpiarInputProductoNovedad() {
+    document.getElementById('inputProductoNovedad').value = '';
+    document.getElementById('btnLimpiarProductoNovedad').classList.add('hidden');
+    document.getElementById('mensajeProductoNovedad').innerHTML = '';
+    limpiarNovedad();
+}
+
+// Limpiar novedad
+function limpiarNovedad() {
+    novedadActual = null;
+    document.getElementById('infoNovedad').classList.add('hidden');
+    document.getElementById('inputCantidadNovedad').value = '';
+    document.getElementById('inputProductoNovedad').focus();
+}
+
+// Imprimir ticket de novedad
+function imprimirTicketNovedad() {
+    if (!novedadActual) {
+        mostrarNotificacion('No hay novedad seleccionada', 'warning');
+        return;
+    }
+    
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/warehouse-inventory/imprimir-ticket-producto';
+    form.target = '_blank';
+    
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = '_token';
+    csrfInput.value = csrfToken;
+    form.appendChild(csrfInput);
+    
+    const campos = [
+        { name: 'codigo_barras', value: novedadActual.codigo_barras || '' },
+        { name: 'codigo_proveedor', value: novedadActual.codigo_proveedor || '' },
+        { name: 'descripcion', value: novedadActual.descripcion || '' },
+        { name: 'marca', value: '' }
+    ];
+    
+    campos.forEach(campo => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = campo.name;
+        input.value = campo.value;
+        form.appendChild(input);
+    });
+    
+    document.body.appendChild(form);
+    form.submit();
+    
+    setTimeout(() => {
+        document.body.removeChild(form);
+    }, 100);
+}
+
+// Imprimir reporte de novedades
+function imprimirReporteNovedades() {
+    const ventana = window.open('', '_blank');
+    const contenido = document.getElementById('reporteNovedades').innerHTML;
+    
+    ventana.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Reporte de Novedades TCR</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; }
+                h1 { text-align: center; }
+                .novedad { border: 1px solid #ddd; margin-bottom: 10px; padding: 10px; }
+            </style>
+        </head>
+        <body>
+            <h1>Reporte de Novedades TCR</h1>
+            <p>Fecha: ${new Date().toLocaleString('es-VE')}</p>
+            ${contenido}
+        </body>
+        </html>
+    `);
+    ventana.document.close();
+    ventana.print();
+}
+
+// Exportar PDF de novedades (usando window.print por ahora)
+function exportarPDFNovedades() {
+    imprimirReporteNovedades();
+}
+
+// Cargar novedades al iniciar
+setInterval(cargarNovedades, 5000); // Actualizar cada 5 segundos
 </script>
 @endsection

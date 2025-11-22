@@ -277,6 +277,7 @@ class AuthenticateUser
                 // Rutas de novedades TCR
                 'warehouse-inventory/tcr/buscar-o-registrar-novedad',
                 'warehouse-inventory/tcr/agregar-cantidad-novedad',
+                'warehouse-inventory/tcr/actualizar-cantidad-llego-novedad',
                 'warehouse-inventory/tcr/get-novedades',
                 // Rutas TCD Pasillero
                 'warehouse-inventory/tcd/pasillero',
@@ -296,6 +297,7 @@ class AuthenticateUser
                 'warehouse-inventory.tcr.buscar-ubicacion',
                 'warehouse-inventory.tcr.buscar-o-registrar-novedad',
                 'warehouse-inventory.tcr.agregar-cantidad-novedad',
+                'warehouse-inventory.tcr.actualizar-cantidad-llego-novedad',
                 'warehouse-inventory.tcr.get-novedades',
                 'warehouse-inventory.tcd.pasillero',
                 'warehouse-inventory.tcd.mis-asignaciones',
@@ -316,6 +318,7 @@ class AuthenticateUser
                 || str_starts_with($path, 'warehouse-inventory/tcr/buscar-ubicacion')
                 || str_starts_with($path, 'warehouse-inventory/tcr/buscar-o-registrar-novedad')
                 || str_starts_with($path, 'warehouse-inventory/tcr/agregar-cantidad-novedad')
+                || str_starts_with($path, 'warehouse-inventory/tcr/actualizar-cantidad-llego-novedad')
                 || str_starts_with($path, 'warehouse-inventory/tcr/get-novedades')
                 || str_starts_with($path, 'warehouse-inventory/tcd/mis-asignaciones')
                 || str_starts_with($path, 'warehouse-inventory/tcd/procesar-asignacion')

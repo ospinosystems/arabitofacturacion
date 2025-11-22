@@ -317,6 +317,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		// Rutas de novedades TCR
 		Route::post('warehouse-inventory/tcr/buscar-o-registrar-novedad', [TCRController::class, 'buscarORegistrarNovedad'])->name('warehouse-inventory.tcr.buscar-o-registrar-novedad');
 		Route::post('warehouse-inventory/tcr/agregar-cantidad-novedad', [TCRController::class, 'agregarCantidadNovedad'])->name('warehouse-inventory.tcr.agregar-cantidad-novedad');
+		Route::post('warehouse-inventory/tcr/actualizar-cantidad-llego-novedad', [TCRController::class, 'actualizarCantidadLlegoNovedad'])->name('warehouse-inventory.tcr.actualizar-cantidad-llego-novedad');
 		Route::get('warehouse-inventory/tcr/get-novedades', [TCRController::class, 'getNovedades'])->name('warehouse-inventory.tcr.get-novedades');
 		
 		// Rutas del módulo TCD (Torre de Control de Despacho)

@@ -49,6 +49,11 @@ class TCRNovedad extends Model
         return $this->belongsTo(inventario::class, 'inventario_id');
     }
     
+    public function historial()
+    {
+        return $this->hasMany(TCRNovedadHistorial::class, 'novedad_id')->orderBy('created_at', 'desc');
+    }
+    
     // Scopes
     public function scopePorPasillero($query, $pasilleroId)
     {
