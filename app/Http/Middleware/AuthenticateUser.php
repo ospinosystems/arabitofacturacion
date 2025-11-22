@@ -279,6 +279,8 @@ class AuthenticateUser
                 'warehouse-inventory/tcd/mis-asignaciones',
                 'warehouse-inventory/tcd/procesar-asignacion',
                 'warehouse-inventory/tcd/buscar-ubicacion',
+                // Ruta para imprimir ticket de producto
+                'warehouse-inventory/imprimir-ticket-producto',
             ];
             
             $pasilleroRouteNames = [
@@ -290,6 +292,7 @@ class AuthenticateUser
                 'warehouse-inventory.tcd.mis-asignaciones',
                 'warehouse-inventory.tcd.procesar-asignacion',
                 'warehouse-inventory.tcd.buscar-ubicacion',
+                'warehouse-inventory.imprimir-ticket-producto',
             ];
             
             // Verificar por URI, nombre de ruta o path
@@ -303,7 +306,8 @@ class AuthenticateUser
                 || str_starts_with($path, 'warehouse-inventory/tcr/buscar-ubicacion')
                 || str_starts_with($path, 'warehouse-inventory/tcd/mis-asignaciones')
                 || str_starts_with($path, 'warehouse-inventory/tcd/procesar-asignacion')
-                || str_starts_with($path, 'warehouse-inventory/tcd/buscar-ubicacion');
+                || str_starts_with($path, 'warehouse-inventory/tcd/buscar-ubicacion')
+                || str_starts_with($path, 'warehouse-inventory/imprimir-ticket-producto');
         }
         
         return false;

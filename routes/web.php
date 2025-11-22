@@ -51,9 +51,6 @@ Route::get('completePed', [PedidosController::class, "completePed"]);
 Route::get('repareId', [PedidosController::class, "repareId"]);
 
 
-// Ruta pública para imprimir ticket de producto (no requiere autenticación) - POST
-Route::post('warehouse-inventory/imprimir-ticket-producto', [WarehouseInventoryController::class, 'imprimirTicketProducto'])->name('warehouse-inventory.imprimir-ticket-producto');
-
 Route::get('/backup', function () {
     \Illuminate\Support\Facades\Artisan::call('database:backup');
     return 'Respaldo Exitoso!';
@@ -301,6 +298,9 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('warehouse-inventory/retirar', [WarehouseInventoryController::class, 'retirar'])->name('warehouse-inventory.retirar');
 		Route::put('warehouse-inventory/{id}/estado', [WarehouseInventoryController::class, 'actualizarEstado'])->name('warehouse-inventory.actualizar-estado');
 		Route::get('warehouse-inventory/stock-ubicacion', [WarehouseInventoryController::class, 'consultarStockUbicacion'])->name('warehouse-inventory.stock-ubicacion');
+		
+		// Ruta para imprimir ticket de producto
+		Route::post('warehouse-inventory/imprimir-ticket-producto', [WarehouseInventoryController::class, 'imprimirTicketProducto'])->name('warehouse-inventory.imprimir-ticket-producto');
 		
 		// Rutas del módulo TCR (nuevo sistema con chequeador y pasillero)
 		Route::get('warehouse-inventory/tcr', [TCRController::class, 'chequeador'])->name('warehouse-inventory.tcr.chequeador');
