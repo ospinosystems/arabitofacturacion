@@ -340,8 +340,25 @@ class TCRController extends Controller
             $asignacion->warehouse_id = $warehouse->id;
             // Si está completo, queda en "en_espera" para revisión del chequeador
             // Si no está completo, queda en "en_proceso"
-            $asignacion->estado = $asignacion->estaCompleto() ? 'en_espera' : 'en_proceso';
+            // Determinar el nuevo estado
+            $nuevoEstado = $asignacion->estaCompleto() ? 'en_espera' : 'en_proceso';
+            
+            // Validar que el estado sea uno de los valores permitidos
+            $estadosPermitidos = ['pendiente', 'en_proceso', 'en_espera', 'completado', 'cancelado'];
+            if (!in_array($nuevoEstado, $estadosPermitidos)) {
+                throw new \Exception('Estado inválido: ' . $nuevoEstado);
+            }
+            
+            // Guardar los campos primero (sin el estado)
             $asignacion->save();
+            
+            // Actualizar el estado directamente con DB para evitar problemas con ENUM
+            DB::table('tcr_asignaciones')
+                ->where('id', $asignacion->id)
+                ->update(['estado' => $nuevoEstado]);
+            
+            // Refrescar el modelo para obtener el estado actualizado
+            $asignacion->refresh();
             
             // NO crear warehouse_inventory todavía - se creará cuando el chequeador confirme
             // NO registrar movimiento todavía - se registrará cuando el chequeador confirme
