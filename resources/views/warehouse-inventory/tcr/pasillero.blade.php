@@ -87,6 +87,34 @@
                                 </div>
                             </div>
                         </div>
+                        <!-- Modal para ingresar cantidad cuando no se encuentra el producto -->
+                        <div id="modalCantidadNovedad" class="mt-3 hidden">
+                            <div class="bg-orange-50 border-l-4 border-orange-500 p-3 sm:p-4 rounded">
+                                <h4 class="font-bold text-orange-700 mb-2 text-sm sm:text-base">
+                                    <i class="fas fa-exclamation-triangle mr-1"></i>
+                                    Producto no encontrado - Registrar como novedad
+                                </h4>
+                                <p class="text-xs sm:text-sm text-gray-600 mb-3">Ingrese la cantidad que llegó para registrar la novedad:</p>
+                                <div class="flex gap-2">
+                                    <input type="number" 
+                                           id="inputCantidadLlegoNovedad" 
+                                           step="0.0001"
+                                           min="0"
+                                           class="flex-1 px-3 py-2 text-base font-mono border-2 border-orange-400 rounded-lg focus:ring-2 focus:ring-orange-500"
+                                           placeholder="Cantidad que llegó"
+                                           autofocus>
+                                    <button onclick="confirmarRegistrarNovedad()" 
+                                            class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition">
+                                        <i class="fas fa-check mr-1"></i>Registrar
+                                    </button>
+                                    <button onclick="cancelarRegistrarNovedad()" 
+                                            class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition">
+                                        <i class="fas fa-times mr-1"></i>Cancelar
+                                    </button>
+                                </div>
+                                <div id="mensajeCantidadNovedad" class="mt-2 text-xs"></div>
+                            </div>
+                        </div>
                         
                         <!-- Buscador Manual (Oculto por defecto) -->
                         <div id="buscadorManual" class="mt-3 sm:mt-4 p-3 sm:p-4 bg-white rounded-lg border border-gray-200 shadow-sm hidden">
@@ -689,19 +717,38 @@ function buscarProductoPorCodigo() {
         mostrarInfoAsignacion();
         mostrarPasoUbicacion();
     } else {
-        // Producto no encontrado - Registrar automáticamente como novedad en tiempo real
-        mensaje.innerHTML = '<span class="text-orange-600"><i class="fas fa-exclamation-triangle"></i> Producto no encontrado. Registrando como novedad...</span>';
+        // Producto no encontrado - Mostrar modal para ingresar cantidad
+        mensaje.innerHTML = '<span class="text-orange-600"><i class="fas fa-exclamation-triangle"></i> Producto no encontrado en este pedido</span>';
         
-        // Registrar automáticamente como novedad
-        registrarNovedadAutomatica(codigo, pedidoSeleccionado.pedido_id);
+        // Guardar código para registrar después
+        window.codigoProductoNoEncontrado = codigo;
+        
+        // Mostrar modal para ingresar cantidad
+        document.getElementById('modalCantidadNovedad').classList.remove('hidden');
+        document.getElementById('inputCantidadLlegoNovedad').focus();
         
         document.getElementById('cantidadLlego').classList.add('hidden');
         asignacionActual = null;
     }
 }
 
-// Registrar novedad automáticamente cuando no se encuentra el producto (en tiempo real)
-function registrarNovedadAutomatica(codigo, pedidoId) {
+// Confirmar registrar novedad con cantidad
+function confirmarRegistrarNovedad() {
+    const cantidad = parseFloat(document.getElementById('inputCantidadLlegoNovedad').value);
+    const mensaje = document.getElementById('mensajeCantidadNovedad');
+    
+    if (isNaN(cantidad) || cantidad < 0) {
+        mensaje.innerHTML = '<span class="text-red-600">Ingrese una cantidad válida</span>';
+        return;
+    }
+    
+    if (!window.codigoProductoNoEncontrado) {
+        mensaje.innerHTML = '<span class="text-red-600">Error: No hay código de producto</span>';
+        return;
+    }
+    
+    mensaje.innerHTML = '<span class="text-blue-600"><i class="fas fa-spinner fa-spin"></i> Registrando novedad...</span>';
+    
     fetch('/warehouse-inventory/tcr/buscar-o-registrar-novedad', {
         method: 'POST',
         headers: {
@@ -709,30 +756,49 @@ function registrarNovedadAutomatica(codigo, pedidoId) {
             'X-CSRF-TOKEN': csrfToken
         },
         body: JSON.stringify({
-            codigo: codigo,
-            pedido_id: pedidoId
+            codigo: window.codigoProductoNoEncontrado,
+            pedido_id: pedidoSeleccionado ? pedidoSeleccionado.pedido_id : null,
+            cantidad_llego: cantidad
         })
     })
     .then(response => response.json())
     .then(data => {
         if (data.estado) {
-            mostrarNotificacion('⚠️ Producto no encontrado - Registrado como novedad automáticamente', 'warning');
-            // Limpiar input para continuar escaneando
-            document.getElementById('inputProducto').value = '';
-            document.getElementById('btnLimpiarProducto').classList.add('hidden');
+            mostrarNotificacion('✅ Novedad registrada exitosamente', 'success');
+            // Limpiar todo
+            cancelarRegistrarNovedad();
             // Actualizar reporte de novedades inmediatamente (tiempo real)
             setTimeout(() => {
                 cargarNovedades();
             }, 500);
         } else {
-            mostrarNotificacion('Error al registrar novedad: ' + (data.msj || 'Error desconocido'), 'error');
+            mensaje.innerHTML = `<span class="text-red-600">${data.msj || 'Error al registrar novedad'}</span>`;
         }
     })
     .catch(error => {
         console.error('Error al registrar novedad:', error);
-        mostrarNotificacion('Error al registrar novedad automáticamente', 'error');
+        mensaje.innerHTML = '<span class="text-red-600">Error al registrar novedad</span>';
     });
 }
+
+// Cancelar registro de novedad
+function cancelarRegistrarNovedad() {
+    document.getElementById('modalCantidadNovedad').classList.add('hidden');
+    document.getElementById('inputCantidadLlegoNovedad').value = '';
+    document.getElementById('mensajeCantidadNovedad').innerHTML = '';
+    window.codigoProductoNoEncontrado = null;
+    document.getElementById('inputProducto').value = '';
+    document.getElementById('btnLimpiarProducto').classList.add('hidden');
+    document.getElementById('inputProducto').focus();
+}
+
+// Event listener para Enter en el campo de cantidad de novedad
+document.getElementById('inputCantidadLlegoNovedad')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmarRegistrarNovedad();
+    }
+});
 
 // Función para cargar las ubicaciones del producto
 function cargarUbicacionesProducto() {
