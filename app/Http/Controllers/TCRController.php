@@ -749,6 +749,8 @@ class TCRController extends Controller
                     $novedadExistente->observaciones = $observacionesAnteriores . $request->observaciones;
                 }
                 
+                // Actualizar updated_at para que aparezca como más reciente
+                $novedadExistente->touch();
                 $novedadExistente->save();
                 
                 // Registrar movimiento en historial
@@ -900,6 +902,8 @@ class TCRController extends Controller
             
             // Recalcular diferencia
             $novedad->diferencia = $novedad->cantidad_llego - $novedad->cantidad_enviada;
+            // Actualizar updated_at para que aparezca como más reciente en la lista
+            $novedad->touch();
             $novedad->save();
             
             // Registrar en historial
@@ -952,6 +956,7 @@ class TCRController extends Controller
             ->with(['historial' => function($query) {
                 $query->orderBy('created_at', 'desc');
             }, 'inventario'])
+            ->orderBy('updated_at', 'desc')
             ->orderBy('created_at', 'desc')
             ->get();
         
