@@ -305,14 +305,17 @@
                                     <input type="number" 
                                            id="inputCantidadNovedad" 
                                            step="0.0001"
-                                           min="0.0001"
                                            class="flex-1 px-3 py-2 text-lg font-mono border-2 border-purple-400 rounded-lg focus:ring-2 focus:ring-purple-500"
-                                           placeholder="Cantidad">
+                                           placeholder="Cantidad (+ para sumar, - para restar)">
                                     <button onclick="agregarCantidadNovedad()" 
                                             class="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition">
-                                        <i class="fas fa-plus mr-1"></i>Agregar
+                                        <i class="fas fa-edit mr-1"></i>Aplicar
                                     </button>
                                 </div>
+                                <p class="text-xs text-gray-500 mt-1">
+                                    <i class="fas fa-info-circle mr-1"></i>
+                                    Use números negativos para corregir (máximo: -${novedadActual?.cantidad_llego || 0})
+                                </p>
                             </div>
                         </div>
                         <button onclick="limpiarNovedad()" class="ml-4 text-red-500 hover:text-red-700 p-2">
@@ -876,7 +879,7 @@ function verificarCantidadReal() {
             </div>
         `;
     } else {
-        // Hay diferencia - mostrar opciones: registrar novedad y continuar o continuar con asignación
+        // Hay diferencia - OBLIGATORIO registrar novedad, no se puede omitir
         const tipoDiferencia = diferencia > 0 ? 'sobrante' : 'faltante';
         const mensajeDiferencia = diferencia > 0 
             ? `Sobrante de ${Math.abs(diferencia)}` 
@@ -888,16 +891,11 @@ function verificarCantidadReal() {
                     <i class="fas fa-exclamation-triangle text-orange-600 mr-2"></i>
                     <span class="font-semibold text-orange-700">${mensajeDiferencia} detectado</span>
                 </div>
-                <div class="flex gap-2">
-                    <button onclick="registrarDiferenciaYContinuar(${cantidadReal}, ${diferencia}, '${tipoDiferencia}')" 
-                            class="flex-1 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition text-sm">
-                        <i class="fas fa-save mr-1"></i>Registrar Novedad y Continuar
-                    </button>
-                    <button onclick="continuarConAsignacion()" 
-                            class="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition text-sm">
-                        <i class="fas fa-arrow-right mr-1"></i>Continuar con Asignación
-                    </button>
-                </div>
+                <p class="text-xs text-gray-600 mb-3">Debe registrar la novedad antes de continuar</p>
+                <button onclick="registrarDiferenciaYContinuar(${cantidadReal}, ${diferencia}, '${tipoDiferencia}')" 
+                        class="w-full px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition text-sm font-semibold">
+                    <i class="fas fa-save mr-2"></i>Registrar Novedad y Continuar
+                </button>
             </div>
         `;
     }
@@ -1498,6 +1496,16 @@ function mostrarInfoNovedad(novedad, existe) {
         document.getElementById('novedadHistorial').classList.add('hidden');
     }
     
+    // Actualizar mensaje de corrección con el máximo permitido
+    const mensajeCorreccion = document.getElementById('mensajeCorreccion');
+    if (mensajeCorreccion) {
+        const cantidadTotal = parseFloat(novedad.cantidad_llego) || 0;
+        mensajeCorreccion.innerHTML = `
+            <i class="fas fa-info-circle mr-1"></i>
+            Use números negativos para corregir (máximo: -${cantidadTotal})
+        `;
+    }
+    
     document.getElementById('infoNovedad').classList.remove('hidden');
     document.getElementById('inputCantidadNovedad').focus();
 }
@@ -1586,9 +1594,20 @@ function agregarCantidadNovedad() {
     }
     
     const cantidad = parseFloat(document.getElementById('inputCantidadNovedad').value);
-    if (!cantidad || cantidad <= 0) {
-        mostrarNotificacion('Ingrese una cantidad válida', 'warning');
+    if (isNaN(cantidad) || cantidad === 0) {
+        mostrarNotificacion('Ingrese una cantidad válida (diferente de cero)', 'warning');
         return;
+    }
+    
+    // Si es negativo, validar que no exceda el total cargado
+    if (cantidad < 0) {
+        const cantidadTotalCargada = parseFloat(novedadActual.cantidad_llego) || 0;
+        const valorAbsoluto = Math.abs(cantidad);
+        
+        if (valorAbsoluto > cantidadTotalCargada) {
+            mostrarNotificacion(`No puede restar más de ${cantidadTotalCargada} (cantidad total cargada)`, 'error');
+            return;
+        }
     }
     
     fetch('/warehouse-inventory/tcr/agregar-cantidad-novedad', {
@@ -1608,7 +1627,10 @@ function agregarCantidadNovedad() {
             novedadActual = data.novedad;
             mostrarInfoNovedad(data.novedad, true);
             document.getElementById('inputCantidadNovedad').value = '';
-            mostrarNotificacion('Cantidad agregada exitosamente', 'success');
+            const mensaje = cantidad > 0 
+                ? `Cantidad agregada: +${cantidad}` 
+                : `Cantidad corregida: ${cantidad}`;
+            mostrarNotificacion(mensaje, 'success');
             cargarNovedades();
         } else {
             mostrarNotificacion(data.msj || 'Error al agregar cantidad', 'error');

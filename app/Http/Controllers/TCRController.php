@@ -789,19 +789,37 @@ class TCRController extends Controller
                 throw new \Exception('No tienes permiso para modificar esta novedad');
             }
             
-            // Agregar cantidad
-            $cantidadAnterior = $novedad->cantidad_enviada;
-            $novedad->cantidad_enviada += $request->cantidad;
-            $novedad->calcularDiferencia();
+            $cantidad = $request->cantidad;
+            
+            // Validar si es negativo, que no exceda la cantidad total cargada
+            if ($cantidad < 0) {
+                $cantidadTotalCargada = $novedad->cantidad_llego;
+                $valorAbsoluto = abs($cantidad);
+                
+                if ($valorAbsoluto > $cantidadTotalCargada) {
+                    throw new \Exception("No puede restar más de {$cantidadTotalCargada} (cantidad total cargada)");
+                }
+            }
+            
+            // Actualizar cantidad que llegó (no cantidad_enviada)
+            $cantidadAnterior = $novedad->cantidad_llego;
+            $novedad->cantidad_llego += $cantidad;
+            
+            // Asegurar que no sea negativa
+            if ($novedad->cantidad_llego < 0) {
+                $novedad->cantidad_llego = 0;
+            }
+            
+            // Recalcular diferencia
+            $novedad->diferencia = $novedad->cantidad_llego - $novedad->cantidad_enviada;
             $novedad->save();
             
             // Registrar en historial
             DB::table('tcr_novedades_historial')->insert([
                 'novedad_id' => $novedad->id,
-                'cantidad_agregada' => $request->cantidad,
-                'cantidad_total' => $novedad->cantidad_enviada,
+                'cantidad_agregada' => $cantidad,
+                'cantidad_total' => $novedad->cantidad_llego,
                 'pasillero_id' => $pasilleroId,
-                'observaciones' => $request->observaciones,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
