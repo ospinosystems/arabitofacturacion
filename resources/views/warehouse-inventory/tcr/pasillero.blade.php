@@ -2133,6 +2133,7 @@ function imprimirReporteNovedades() {
             <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
                 <thead>
                     <tr style="background-color: #f3f4f6; border-bottom: 2px solid #d1d5db;">
+                        <th style="padding: 12px; text-align: center; border: 1px solid #d1d5db; font-weight: bold; width: 50px;">#</th>
                         <th style="padding: 12px; text-align: left; border: 1px solid #d1d5db; font-weight: bold;">Código</th>
                         <th style="padding: 12px; text-align: left; border: 1px solid #d1d5db; font-weight: bold;">Descripción</th>
                         <th style="padding: 12px; text-align: center; border: 1px solid #d1d5db; font-weight: bold;">Cantidad Enviada</th>
@@ -2169,6 +2170,7 @@ function imprimirReporteNovedades() {
             
             tablaHTML += `
                 <tr style="background-color: ${bgColor};">
+                    <td style="padding: 10px; border: 1px solid #d1d5db; text-align: center; font-size: 12px; font-weight: bold;">${index + 1}</td>
                     <td style="padding: 10px; border: 1px solid #d1d5db; font-family: monospace; font-size: 11px;">${codigo}</td>
                     <td style="padding: 10px; border: 1px solid #d1d5db; font-size: 12px;">${n.descripcion || 'N/A'}</td>
                     <td style="padding: 10px; border: 1px solid #d1d5db; text-align: center; font-size: 12px; font-weight: bold;">${n.cantidad_enviada || 0}</td>
@@ -2179,8 +2181,16 @@ function imprimirReporteNovedades() {
             `;
         });
         
+        // Agregar total de productos al final
         tablaHTML += `
                 </tbody>
+                <tfoot>
+                    <tr style="background-color: #f3f4f6; border-top: 2px solid #d1d5db; font-weight: bold;">
+                        <td style="padding: 10px; border: 1px solid #d1d5db; text-align: center; font-size: 12px;" colspan="3">Total de Productos:</td>
+                        <td style="padding: 10px; border: 1px solid #d1d5db; text-align: center; font-size: 12px;">${novedades.length}</td>
+                        <td style="padding: 10px; border: 1px solid #d1d5db; text-align: center; font-size: 12px;" colspan="3"></td>
+                    </tr>
+                </tfoot>
             </table>
         `;
         
