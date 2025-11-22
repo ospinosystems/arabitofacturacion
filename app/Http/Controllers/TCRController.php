@@ -960,15 +960,28 @@ class TCRController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
         
-        // Agregar información del pedido a cada novedad
-        $novedadesConPedido = $novedades->map(function($novedad) {
-            $pedidoData = null;
-            if ($novedad->pedido_central_id) {
-                try {
-                    $pedidoData = $this->getPedidosCentralData($novedad->pedido_central_id);
-                } catch (\Exception $e) {
-                    // Si hay error, continuar sin datos del pedido
+        // Optimización: Agrupar novedades por pedido_central_id y hacer una sola llamada por pedido
+        $pedidosIds = $novedades->pluck('pedido_central_id')->filter()->unique()->values();
+        $pedidosData = [];
+        
+        // Hacer una sola llamada por pedido único (en lugar de una por novedad)
+        foreach ($pedidosIds as $pedidoId) {
+            try {
+                $pedidoData = $this->getPedidosCentralData($pedidoId);
+                if ($pedidoData) {
+                    $pedidosData[$pedidoId] = $pedidoData;
                 }
+            } catch (\Exception $e) {
+                // Si hay error, continuar sin datos del pedido
+                $pedidosData[$pedidoId] = null;
+            }
+        }
+        
+        // Agregar información del pedido a cada novedad usando el cache
+        $novedadesConPedido = $novedades->map(function($novedad) use ($pedidosData) {
+            $pedidoData = null;
+            if ($novedad->pedido_central_id && isset($pedidosData[$novedad->pedido_central_id])) {
+                $pedidoData = $pedidosData[$novedad->pedido_central_id];
             }
             
             $novedadArray = $novedad->toArray();
