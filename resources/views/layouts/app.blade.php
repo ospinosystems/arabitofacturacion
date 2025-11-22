@@ -19,6 +19,8 @@
     
     <div id="app" class=""></div>
     
+    @yield('nav')
+    
     @yield('content')
     
 </body>

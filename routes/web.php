@@ -314,6 +314,11 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::get('warehouse-inventory/tcr/asignaciones-por-pedido', [TCRController::class, 'getAsignacionesPorPedido'])->name('warehouse-inventory.tcr.asignaciones-por-pedido');
 		Route::post('warehouse-inventory/tcr/confirmar-pedido', [TCRController::class, 'confirmarPedido'])->name('warehouse-inventory.tcr.confirmar-pedido');
 		
+		// Rutas de novedades TCR
+		Route::post('warehouse-inventory/tcr/buscar-o-registrar-novedad', [TCRController::class, 'buscarORegistrarNovedad'])->name('warehouse-inventory.tcr.buscar-o-registrar-novedad');
+		Route::post('warehouse-inventory/tcr/agregar-cantidad-novedad', [TCRController::class, 'agregarCantidadNovedad'])->name('warehouse-inventory.tcr.agregar-cantidad-novedad');
+		Route::get('warehouse-inventory/tcr/get-novedades', [TCRController::class, 'getNovedades'])->name('warehouse-inventory.tcr.get-novedades');
+		
 		// Rutas del módulo TCD (Torre de Control de Despacho)
 		Route::get('warehouse-inventory/tcd', [TCDController::class, 'chequeador'])->name('warehouse-inventory.tcd.chequeador');
 		Route::get('warehouse-inventory/tcd/pasillero', [TCDController::class, 'pasillero'])->name('warehouse-inventory.tcd.pasillero');

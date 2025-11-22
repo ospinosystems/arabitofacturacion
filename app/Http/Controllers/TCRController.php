@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\TCRAsignacion;
+use App\Models\TCRNovedad;
 use App\Models\Warehouse;
 use App\Models\WarehouseInventory;
 use App\Models\WarehouseMovement;
@@ -649,5 +650,182 @@ class TCRController extends Controller
         } catch (\Exception $e) {
             return null;
         }
+    }
+    
+    /**
+     * Buscar o registrar novedad de producto
+     */
+    public function buscarORegistrarNovedad(Request $request)
+    {
+        $request->validate([
+            'codigo' => 'required|string',
+            'cantidad_llego' => 'nullable|numeric|min:0',
+            'pedido_id' => 'nullable|integer',
+            'item_pedido_id' => 'nullable|integer',
+        ]);
+        
+        try {
+            DB::beginTransaction();
+            
+            $pasilleroId = session('id_usuario');
+            if (!$pasilleroId) {
+                throw new \Exception('Usuario no autenticado');
+            }
+            
+            $codigo = strtoupper(trim($request->codigo));
+            
+            // Buscar producto en inventario por código de barras o proveedor
+            $productoInventario = inventario::where(function($query) use ($codigo) {
+                $query->where('codigo_barras', $codigo)
+                      ->orWhere('codigo_proveedor', $codigo);
+            })->first();
+            
+            // Buscar si ya existe una novedad para este producto (por código)
+            $novedadExistente = TCRNovedad::where(function($query) use ($codigo) {
+                $query->where('codigo_barras', $codigo)
+                      ->orWhere('codigo_proveedor', $codigo);
+            })
+            ->where('pasillero_id', $pasilleroId)
+            ->where('estado', 'pendiente')
+            ->first();
+            
+            if ($novedadExistente) {
+                // Si existe, retornar la novedad existente
+                $novedadExistente->load(['historial' => function($query) {
+                    $query->orderBy('created_at', 'desc');
+                }]);
+                
+                DB::commit();
+                
+                return Response::json([
+                    'estado' => true,
+                    'novedad' => $novedadExistente,
+                    'existe' => true,
+                    'msj' => 'Producto ya registrado. Puede agregar más cantidad.'
+                ]);
+            }
+            
+            // Si no existe, crear nueva novedad
+            $novedad = new TCRNovedad();
+            $novedad->codigo_barras = $productoInventario ? $productoInventario->codigo_barras : null;
+            $novedad->codigo_proveedor = $productoInventario ? $productoInventario->codigo_proveedor : null;
+            $novedad->descripcion = $productoInventario ? $productoInventario->descripcion : 'Producto no encontrado';
+            $novedad->inventario_id = $productoInventario ? $productoInventario->id : null;
+            $novedad->cantidad_llego = $request->cantidad_llego ?? 0;
+            $novedad->cantidad_enviada = 0;
+            $novedad->diferencia = $novedad->cantidad_llego;
+            $novedad->pedido_central_id = $request->pedido_id;
+            $novedad->item_pedido_id = $request->item_pedido_id;
+            $novedad->pasillero_id = $pasilleroId;
+            $novedad->estado = 'pendiente';
+            $novedad->save();
+            
+            DB::commit();
+            
+            return Response::json([
+                'estado' => true,
+                'novedad' => $novedad,
+                'existe' => false,
+                'msj' => 'Novedad registrada exitosamente'
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Agregar cantidad a una novedad existente
+     */
+    public function agregarCantidadNovedad(Request $request)
+    {
+        $request->validate([
+            'novedad_id' => 'required|exists:tcr_novedades,id',
+            'cantidad' => 'required|numeric|min:0.0001',
+            'observaciones' => 'nullable|string',
+        ]);
+        
+        try {
+            DB::beginTransaction();
+            
+            $pasilleroId = session('id_usuario');
+            if (!$pasilleroId) {
+                throw new \Exception('Usuario no autenticado');
+            }
+            
+            $novedad = TCRNovedad::findOrFail($request->novedad_id);
+            
+            if ($novedad->pasillero_id != $pasilleroId) {
+                throw new \Exception('No tienes permiso para modificar esta novedad');
+            }
+            
+            // Agregar cantidad
+            $cantidadAnterior = $novedad->cantidad_enviada;
+            $novedad->cantidad_enviada += $request->cantidad;
+            $novedad->calcularDiferencia();
+            $novedad->save();
+            
+            // Registrar en historial
+            DB::table('tcr_novedades_historial')->insert([
+                'novedad_id' => $novedad->id,
+                'cantidad_agregada' => $request->cantidad,
+                'cantidad_total' => $novedad->cantidad_enviada,
+                'pasillero_id' => $pasilleroId,
+                'observaciones' => $request->observaciones,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            
+            DB::commit();
+            
+            // Cargar historial actualizado
+            $novedad->load(['historial' => function($query) {
+                $query->orderBy('created_at', 'desc');
+            }]);
+            
+            return Response::json([
+                'estado' => true,
+                'novedad' => $novedad,
+                'msj' => 'Cantidad agregada exitosamente'
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Obtener todas las novedades del pasillero actual
+     */
+    public function getNovedades(Request $request)
+    {
+        $pasilleroId = session('id_usuario');
+        if (!$pasilleroId) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Usuario no autenticado'
+            ], 401);
+        }
+        
+        $novedades = TCRNovedad::porPasillero($pasilleroId)
+            ->where('estado', 'pendiente')
+            ->with(['historial' => function($query) {
+                $query->orderBy('created_at', 'desc');
+            }, 'inventario'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        return Response::json([
+            'estado' => true,
+            'novedades' => $novedades
+        ]);
     }
 }

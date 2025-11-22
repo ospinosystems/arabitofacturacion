@@ -274,6 +274,10 @@ class AuthenticateUser
                 'warehouse-inventory/tcr/mis-asignaciones',
                 'warehouse-inventory/tcr/procesar-asignacion',
                 'warehouse-inventory/tcr/buscar-ubicacion',
+                // Rutas de novedades TCR
+                'warehouse-inventory/tcr/buscar-o-registrar-novedad',
+                'warehouse-inventory/tcr/agregar-cantidad-novedad',
+                'warehouse-inventory/tcr/get-novedades',
                 // Rutas TCD Pasillero
                 'warehouse-inventory/tcd/pasillero',
                 'warehouse-inventory/tcd/mis-asignaciones',
@@ -290,6 +294,9 @@ class AuthenticateUser
                 'warehouse-inventory.tcr.mis-asignaciones',
                 'warehouse-inventory.tcr.procesar-asignacion',
                 'warehouse-inventory.tcr.buscar-ubicacion',
+                'warehouse-inventory.tcr.buscar-o-registrar-novedad',
+                'warehouse-inventory.tcr.agregar-cantidad-novedad',
+                'warehouse-inventory.tcr.get-novedades',
                 'warehouse-inventory.tcd.pasillero',
                 'warehouse-inventory.tcd.mis-asignaciones',
                 'warehouse-inventory.tcd.procesar-asignacion',
@@ -307,6 +314,9 @@ class AuthenticateUser
                 || str_starts_with($path, 'warehouse-inventory/tcr/mis-asignaciones')
                 || str_starts_with($path, 'warehouse-inventory/tcr/procesar-asignacion')
                 || str_starts_with($path, 'warehouse-inventory/tcr/buscar-ubicacion')
+                || str_starts_with($path, 'warehouse-inventory/tcr/buscar-o-registrar-novedad')
+                || str_starts_with($path, 'warehouse-inventory/tcr/agregar-cantidad-novedad')
+                || str_starts_with($path, 'warehouse-inventory/tcr/get-novedades')
                 || str_starts_with($path, 'warehouse-inventory/tcd/mis-asignaciones')
                 || str_starts_with($path, 'warehouse-inventory/tcd/procesar-asignacion')
                 || str_starts_with($path, 'warehouse-inventory/tcd/buscar-ubicacion')
