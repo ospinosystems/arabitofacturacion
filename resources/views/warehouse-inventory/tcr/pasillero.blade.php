@@ -68,7 +68,7 @@
                             <div class="bg-blue-100 border border-blue-300 rounded-lg p-2 sm:p-3">
                                 <div class="flex items-center justify-between">
                                     <span class="text-xs sm:text-sm font-medium text-blue-800">Cantidad que llegó:</span>
-                                    <span id="cantidadLlegoValor" class="text-base sm:text-lg font-bold text-blue-900"></span>
+                                    <span id="cantidadLlegoValor" class="sm:text-lg font-bold text-blue-900"></span>
                                 </div>
                             </div>
                         </div>
@@ -399,6 +399,21 @@ function mostrarInfoAsignacion() {
                 <div><span class="font-medium text-orange-600">Cantidad Pendiente:</span> <span class="font-bold">${cantidadPendiente}</span></div>
                 <div><span class="font-medium">Estado:</span> <span class="px-2 py-0.5 sm:py-1 bg-${asignacionActual.estado === 'pendiente' ? 'orange' : 'blue'}-100 text-${asignacionActual.estado === 'pendiente' ? 'orange' : 'blue'}-700 rounded text-[10px] sm:text-xs">${asignacionActual.estado === 'pendiente' ? 'Pendiente' : 'En proceso'}</span></div>
             </div>
+            <!-- Información de Ubicaciones -->
+            <div id="infoUbicacionesProducto" class="mt-3 sm:mt-4 p-2 sm:p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs sm:text-sm font-semibold text-gray-700">
+                        <i class="fas fa-map-marker-alt mr-1"></i>
+                        Ubicaciones del Producto:
+                    </span>
+                    <span id="cargandoUbicaciones" class="text-xs text-blue-600">
+                        <i class="fas fa-spinner fa-spin"></i> Cargando...
+                    </span>
+                </div>
+                <div id="contenidoUbicaciones" class="text-xs sm:text-sm">
+                    <!-- Se llenará dinámicamente -->
+                </div>
+            </div>
             <!-- Botón de Imprimir Ticket -->
             <div class="mt-3 sm:mt-4">
                 <button onclick="imprimirTicket()" 
@@ -411,6 +426,9 @@ function mostrarInfoAsignacion() {
     `;
     
     document.getElementById('cantidadPendiente').textContent = cantidadPendiente;
+    
+    // Cargar ubicaciones del producto
+    cargarUbicacionesProducto();
 }
 
 function mostrarPasoUbicacion() {
@@ -511,6 +529,92 @@ function buscarProductoPorCodigo() {
         mensaje.innerHTML = '<span class="text-red-600"><i class="fas fa-times-circle"></i> Producto no encontrado en este pedido o ya está completado</span>';
         document.getElementById('cantidadLlego').classList.add('hidden');
         asignacionActual = null;
+    }
+}
+
+// Función para cargar las ubicaciones del producto
+function cargarUbicacionesProducto() {
+    if (!asignacionActual) return;
+    
+    const codigo = asignacionActual.codigo_barras || asignacionActual.codigo_proveedor;
+    if (!codigo) {
+        mostrarUbicacionesError('No se puede buscar ubicaciones sin código de producto');
+        return;
+    }
+    
+    // Buscar el producto por código para obtener su inventario_id
+    fetch('/inventario/buscar-producto-inventariar', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken
+        },
+        body: JSON.stringify({ codigo: codigo })
+    })
+    .then(response => response.json())
+    .then(data => {
+        const cargando = document.getElementById('cargandoUbicaciones');
+        const contenido = document.getElementById('contenidoUbicaciones');
+        
+        if (cargando) cargando.style.display = 'none';
+        
+        if (data.estado && data.producto) {
+            const producto = data.producto;
+            const numeroUbicaciones = producto.numero_ubicaciones || 0;
+            const totalEnUbicaciones = producto.total_en_ubicaciones || 0;
+            const ubicaciones = producto.ubicaciones || [];
+            
+            if (numeroUbicaciones === 0) {
+                contenido.innerHTML = `
+                    <div class="p-2 bg-yellow-50 border border-yellow-300 rounded text-yellow-800">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>
+                        <span class="font-semibold">Este producto no tiene ubicaciones asignadas</span>
+                    </div>
+                `;
+            } else {
+                let htmlUbicaciones = `
+                    <div class="mb-2">
+                        <span class="font-semibold text-gray-700">Total en ubicaciones: </span>
+                        <span class="font-bold text-blue-600">${totalEnUbicaciones}</span>
+                        <span class="text-gray-600 ml-2">(${numeroUbicaciones} ubicación${numeroUbicaciones > 1 ? 'es' : ''})</span>
+                    </div>
+                    <div class="space-y-1 max-h-32 sm:max-h-40 overflow-y-auto">
+                `;
+                
+                ubicaciones.forEach(ubicacion => {
+                    htmlUbicaciones += `
+                        <div class="flex justify-between items-center p-1.5 bg-white border border-gray-200 rounded text-xs">
+                            <span class="font-mono font-semibold text-gray-800">${ubicacion.codigo}</span>
+                            <span class="font-bold text-green-600">${ubicacion.cantidad}</span>
+                        </div>
+                    `;
+                });
+                
+                htmlUbicaciones += '</div>';
+                contenido.innerHTML = htmlUbicaciones;
+            }
+        } else {
+            mostrarUbicacionesError('No se pudo obtener información de ubicaciones');
+        }
+    })
+    .catch(error => {
+        console.error('Error al cargar ubicaciones:', error);
+        mostrarUbicacionesError('Error al cargar ubicaciones del producto');
+    });
+}
+
+function mostrarUbicacionesError(mensaje) {
+    const cargando = document.getElementById('cargandoUbicaciones');
+    const contenido = document.getElementById('contenidoUbicaciones');
+    
+    if (cargando) cargando.style.display = 'none';
+    if (contenido) {
+        contenido.innerHTML = `
+            <div class="p-2 bg-red-50 border border-red-300 rounded text-red-800 text-xs">
+                <i class="fas fa-exclamation-circle mr-1"></i>
+                ${mensaje}
+            </div>
+        `;
     }
 }
 

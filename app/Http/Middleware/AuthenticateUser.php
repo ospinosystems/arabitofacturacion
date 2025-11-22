@@ -281,6 +281,8 @@ class AuthenticateUser
                 'warehouse-inventory/tcd/buscar-ubicacion',
                 // Ruta para imprimir ticket de producto
                 'warehouse-inventory/imprimir-ticket-producto',
+                // Ruta para buscar producto (para obtener ubicaciones)
+                'inventario/buscar-producto-inventariar',
             ];
             
             $pasilleroRouteNames = [
@@ -293,6 +295,7 @@ class AuthenticateUser
                 'warehouse-inventory.tcd.procesar-asignacion',
                 'warehouse-inventory.tcd.buscar-ubicacion',
                 'warehouse-inventory.imprimir-ticket-producto',
+                'inventario.buscar-producto-inventariar',
             ];
             
             // Verificar por URI, nombre de ruta o path
