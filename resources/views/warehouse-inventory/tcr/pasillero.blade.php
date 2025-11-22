@@ -1765,7 +1765,7 @@ function mostrarReporteNovedades(novedades) {
         if (n.observaciones && typeof n.observaciones === 'string') {
             if (n.observaciones.includes('Sobrante')) {
                 tipoNovedad = 'sobrante';
-                badgeColor = 'bg-green-100 text-green-700';
+                badgeColor = 'bg-blue-100 text-blue-700';
                 badgeText = 'Sobrante';
                 badgeIcon = 'fa-plus-circle';
             } else if (n.observaciones.includes('Faltante')) {
@@ -1776,7 +1776,7 @@ function mostrarReporteNovedades(novedades) {
             } else if (n.observaciones.includes('Diferencia detectada')) {
                 if (n.observaciones.includes('sobrante')) {
                     tipoNovedad = 'sobrante';
-                    badgeColor = 'bg-green-100 text-green-700';
+                    badgeColor = 'bg-blue-100 text-blue-700';
                     badgeText = 'Sobrante';
                     badgeIcon = 'fa-plus-circle';
                 } else if (n.observaciones.includes('faltante')) {
@@ -1792,13 +1792,13 @@ function mostrarReporteNovedades(novedades) {
         if (n.diferencia == 0 && n.cantidad_llego > 0) {
             // Si diferencia es 0, es correcto
             tipoNovedad = 'correcto';
-            badgeColor = 'bg-blue-100 text-blue-700';
+            badgeColor = 'bg-green-100 text-green-700';
             badgeText = 'Correcto';
             badgeIcon = 'fa-check-circle';
         } else if (n.diferencia > 0 && n.cantidad_enviada > 0) {
             // Si diferencia es positiva y hay cantidad enviada, es sobrante
             tipoNovedad = 'sobrante';
-            badgeColor = 'bg-green-100 text-green-700';
+            badgeColor = 'bg-blue-100 text-blue-700';
             badgeText = 'Sobrante';
             badgeIcon = 'fa-plus-circle';
         } else if (n.diferencia < 0 && n.cantidad_enviada > 0) {
@@ -1813,7 +1813,7 @@ function mostrarReporteNovedades(novedades) {
         if ((!tipoNovedad || tipoNovedad === 'normal') && n.observaciones && typeof n.observaciones === 'string') {
             if (n.observaciones.includes('Sobrante')) {
                 tipoNovedad = 'sobrante';
-                badgeColor = 'bg-green-100 text-green-700';
+                badgeColor = 'bg-blue-100 text-blue-700';
                 badgeText = 'Sobrante';
                 badgeIcon = 'fa-plus-circle';
             } else if (n.observaciones.includes('Faltante')) {
@@ -1824,7 +1824,7 @@ function mostrarReporteNovedades(novedades) {
             } else if (n.observaciones.includes('Diferencia detectada')) {
                 if (n.observaciones.includes('sobrante')) {
                     tipoNovedad = 'sobrante';
-                    badgeColor = 'bg-green-100 text-green-700';
+                    badgeColor = 'bg-blue-100 text-blue-700';
                     badgeText = 'Sobrante';
                     badgeIcon = 'fa-plus-circle';
                 } else if (n.observaciones.includes('faltante')) {
@@ -1883,8 +1883,9 @@ function mostrarReporteNovedades(novedades) {
                         <i class="fas ${badgeIcon} mr-1"></i>${badgeText}
                     </span>
                 </div>
-                <div class="grid grid-cols-2 gap-1 text-[10px] mb-1">
-                    <div><span class="text-gray-600">Código:</span> <span class="font-mono">${n.codigo_barras || n.codigo_proveedor || 'N/A'}</span></div>
+                <div class="grid grid-cols-3 gap-1 text-[10px] mb-1">
+                    <div><span class="text-gray-600">Cód. Barras:</span> <span class="font-mono">${n.codigo_barras || 'N/A'}</span></div>
+                    <div><span class="text-gray-600">Cód. Proveedor:</span> <span class="font-mono">${n.codigo_proveedor || 'N/A'}</span></div>
                     <div><span class="text-gray-600">Fecha:</span> ${fecha}</div>
                 </div>
                 <div class="grid grid-cols-3 gap-1 text-[10px]">
