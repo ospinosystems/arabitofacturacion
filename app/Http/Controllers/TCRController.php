@@ -254,7 +254,7 @@ class TCRController extends Controller
         
         // Obtener asignaciones agrupadas por pedido
         $asignaciones = TCRAsignacion::porPasillero($pasilleroId)
-            ->whereIn('estado', ['pendiente', 'en_espera', 'en_proceso'])
+            ->whereIn('estado', ['pendiente', 'completado', 'en_proceso'])
             ->with(['warehouse'])
             ->orderBy('pedido_central_id')
             ->orderBy('created_at', 'desc')
@@ -265,7 +265,7 @@ class TCRController extends Controller
             return [
                 'pedido_id' => $pedidoId,
                 'total_asignaciones' => $asigs->count(),
-                'completadas' => $asigs->where('estado', 'en_espera')->count(),
+                'completadas' => $asigs->where('estado', 'completado')->count(),
                 'pendientes' => $asigs->where('estado', 'pendiente')->count(),
                 'en_proceso' => $asigs->where('estado', 'en_proceso')->count(),
                 'asignaciones' => $asigs->values()
@@ -334,31 +334,14 @@ class TCRController extends Controller
             // el producto aún no existe en el inventario local (solo existe en arabitocentral).
             // El producto se agregará al inventario local cuando el chequeador confirme el pedido.
             
-            // Actualizar asignación - queda en "en_espera" hasta que el chequeador confirme
+            // Actualizar asignación - queda en "completado" cuando está completa, o "en_proceso" si está parcial
             $asignacion->cantidad_asignada += $request->cantidad;
             $asignacion->warehouse_codigo = $warehouse->codigo;
             $asignacion->warehouse_id = $warehouse->id;
-            // Si está completo, queda en "en_espera" para revisión del chequeador
+            // Si está completo, queda en "completado" para revisión del chequeador
             // Si no está completo, queda en "en_proceso"
-            // Determinar el nuevo estado
-            $nuevoEstado = $asignacion->estaCompleto() ? 'en_espera' : 'en_proceso';
-            
-            // Validar que el estado sea uno de los valores permitidos
-            $estadosPermitidos = ['pendiente', 'en_proceso', 'en_espera', 'completado', 'cancelado'];
-            if (!in_array($nuevoEstado, $estadosPermitidos)) {
-                throw new \Exception('Estado inválido: ' . $nuevoEstado);
-            }
-            
-            // Guardar los campos primero (sin el estado)
+            $asignacion->estado = $asignacion->estaCompleto() ? 'completado' : 'en_proceso';
             $asignacion->save();
-            
-            // Actualizar el estado directamente con DB para evitar problemas con ENUM
-            DB::table('tcr_asignaciones')
-                ->where('id', $asignacion->id)
-                ->update(['estado' => $nuevoEstado]);
-            
-            // Refrescar el modelo para obtener el estado actualizado
-            $asignacion->refresh();
             
             // NO crear warehouse_inventory todavía - se creará cuando el chequeador confirme
             // NO registrar movimiento todavía - se registrará cuando el chequeador confirme
@@ -370,7 +353,7 @@ class TCRController extends Controller
                 'msj' => 'Asignación procesada exitosamente. Esperando confirmación del chequeador.',
                 'asignacion' => $asignacion->fresh(),
                 'completo' => $asignacion->estaCompleto(),
-                'en_espera' => $asignacion->estado === 'en_espera'
+                'completado' => $asignacion->estado === 'completado'
             ]);
             
         } catch (\Exception $e) {
@@ -418,7 +401,6 @@ class TCRController extends Controller
                 'pasillero_id' => $pasilleroId,
                 'pasillero_nombre' => $pasillero->nombre ?? 'N/A',
                 'total_asignaciones' => $asigs->count(),
-                'en_espera' => $asigs->where('estado', 'en_espera')->count(),
                 'completadas' => $asigs->where('estado', 'completado')->count(),
                 'pendientes' => $asigs->where('estado', 'pendiente')->count(),
                 'en_proceso' => $asigs->where('estado', 'en_proceso')->count(),
@@ -426,9 +408,9 @@ class TCRController extends Controller
             ];
         })->values();
         
-        // Verificar si todas las asignaciones están en espera o completadas
+        // Verificar si todas las asignaciones están completadas
         $todasListas = $asignaciones->every(function($asig) {
-            return in_array($asig->estado, ['en_espera', 'completado']);
+            return $asig->estado === 'completado';
         });
         
         return Response::json([
@@ -440,7 +422,6 @@ class TCRController extends Controller
             'resumen' => [
                 'pendientes' => $asignaciones->where('estado', 'pendiente')->count(),
                 'en_proceso' => $asignaciones->where('estado', 'en_proceso')->count(),
-                'en_espera' => $asignaciones->where('estado', 'en_espera')->count(),
                 'completadas' => $asignaciones->where('estado', 'completado')->count(),
             ]
         ]);

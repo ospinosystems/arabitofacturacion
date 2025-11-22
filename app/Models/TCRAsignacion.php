@@ -69,10 +69,11 @@ class TCRAsignacion extends Model
         return $query->where('estado', 'completado');
     }
     
-    public function scopeEnEspera($query)
-    {
-        return $query->where('estado', 'en_espera');
-    }
+    // Scope eliminado: 'en_espera' no es un estado válido, usar 'completado' en su lugar
+    // public function scopeEnEspera($query)
+    // {
+    //     return $query->where('estado', 'en_espera');
+    // }
     
     public function scopePorPasillero($query, $pasilleroId)
     {

@@ -675,7 +675,6 @@ function mostrarEstadoAsignaciones(data) {
                 <div class="flex gap-2 text-xs">
                     <span class="px-2 py-1 bg-orange-100 text-orange-700 rounded">Pendientes: ${pasillero.pendientes}</span>
                     <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded">En proceso: ${pasillero.en_proceso}</span>
-                    <span class="px-2 py-1 bg-yellow-100 text-yellow-700 rounded">En espera: ${pasillero.en_espera}</span>
                     <span class="px-2 py-1 bg-green-100 text-green-700 rounded">Completadas: ${pasillero.completadas}</span>
                 </div>
             </div>
@@ -684,15 +683,13 @@ function mostrarEstadoAsignaciones(data) {
                     const estadoColor = {
                         'pendiente': 'bg-orange-50 border-orange-300',
                         'en_proceso': 'bg-blue-50 border-blue-300',
-                        'en_espera': 'bg-yellow-50 border-yellow-300',
                         'completado': 'bg-green-50 border-green-300'
                     }[asig.estado] || 'bg-gray-50 border-gray-300';
                     
                     const estadoTexto = {
                         'pendiente': 'Pendiente',
                         'en_proceso': 'En proceso',
-                        'en_espera': 'En espera (listo para confirmar)',
-                        'completado': 'Completado'
+                        'completado': 'Completado (listo para confirmar)'
                     }[asig.estado] || asig.estado;
                     
                     return `
@@ -705,7 +702,7 @@ function mostrarEstadoAsignaciones(data) {
                                         ${asig.warehouse_codigo ? `Ubicación: <span class="font-mono font-bold">${asig.warehouse_codigo}</span>` : 'Sin ubicación'}
                                     </div>
                                 </div>
-                                <span class="px-2 py-1 text-xs font-semibold rounded ${asig.estado === 'en_espera' ? 'bg-yellow-500 text-white' : asig.estado === 'completado' ? 'bg-green-500 text-white' : 'bg-gray-400 text-white'}">
+                                <span class="px-2 py-1 text-xs font-semibold rounded ${asig.estado === 'completado' ? 'bg-green-500 text-white' : asig.estado === 'en_proceso' ? 'bg-blue-500 text-white' : asig.estado === 'pendiente' ? 'bg-orange-500 text-white' : 'bg-gray-400 text-white'}">
                                     ${estadoTexto}
                                 </span>
                             </div>
@@ -718,7 +715,7 @@ function mostrarEstadoAsignaciones(data) {
     
     // Mostrar resumen
     resumenDiv.innerHTML = `
-        <div class="grid grid-cols-4 gap-4 text-center">
+        <div class="grid grid-cols-3 gap-4 text-center">
             <div>
                 <div class="text-2xl font-bold text-orange-600">${data.resumen.pendientes}</div>
                 <div class="text-xs text-gray-600">Pendientes</div>
@@ -726,10 +723,6 @@ function mostrarEstadoAsignaciones(data) {
             <div>
                 <div class="text-2xl font-bold text-blue-600">${data.resumen.en_proceso}</div>
                 <div class="text-xs text-gray-600">En Proceso</div>
-            </div>
-            <div>
-                <div class="text-2xl font-bold text-yellow-600">${data.resumen.en_espera}</div>
-                <div class="text-xs text-gray-600">En Espera</div>
             </div>
             <div>
                 <div class="text-2xl font-bold text-green-600">${data.resumen.completadas}</div>

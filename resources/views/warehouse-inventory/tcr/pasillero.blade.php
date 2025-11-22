@@ -738,7 +738,7 @@ function procesarAsignacion() {
             setTimeout(() => {
                 resetearFormulario();
                 cargarAsignaciones();
-                if (data.en_espera) {
+                if (data.completado) {
                     mostrarNotificacion('¡Asignación completada y enviada a revisión del chequeador!', 'success');
                 }
             }, 1500);
