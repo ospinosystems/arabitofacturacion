@@ -13,7 +13,7 @@
         <p class="text-gray-600 mt-1 text-xs sm:text-sm">Escanea ubicación, producto y asigna cantidad</p>
     </div>
 
-    <!-- Tabs para cambiar entre Asignaciones y Novedades -->
+    <!-- Tabs para cambiar entre Asignaciones, Novedades y Mis Pedidos -->
     <div class="mb-3 sm:mb-4">
         <div class="flex space-x-2 border-b border-gray-200">
             <button onclick="mostrarTab('asignaciones')" id="tabAsignaciones" class="px-4 py-2 text-sm font-medium border-b-2 border-blue-500 text-blue-600">
@@ -21,6 +21,9 @@
             </button>
             <button onclick="mostrarTab('novedades')" id="tabNovedades" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
                 <i class="fas fa-exclamation-triangle mr-2"></i>Novedades
+            </button>
+            <button onclick="mostrarTab('pedidos')" id="tabPedidos" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                <i class="fas fa-list mr-2"></i>Mis Pedidos
             </button>
         </div>
     </div>
@@ -160,7 +163,7 @@
 
         <!-- Panel de Novedades (Oculto por defecto) -->
         <div id="panelNovedades" class="lg:col-span-2 order-2 lg:order-1 hidden">
-            <div class="bg-white rounded-lg shadow p-3 sm:p-4 md:p-6">
+            <div class="bg-white rounded-lg shadow p-3 sm:p-4 md:p-6 mb-3 sm:mb-4">
                 <h2 class="text-lg sm:text-xl font-bold text-gray-700 mb-3 sm:mb-4">Registrar Novedades</h2>
                 
                 <!-- Escanear Producto para Novedad -->
@@ -273,9 +276,23 @@
             </div>
         </div>
 
-        <!-- Panel de Información -->
+        <!-- Panel de Mis Pedidos (Oculto por defecto) -->
+        <div id="panelPedidos" class="lg:col-span-2 order-2 lg:order-1 hidden">
+            <div class="bg-white rounded-lg shadow p-3 sm:p-4 md:p-6">
+                <h2 class="text-lg sm:text-xl font-bold text-gray-700 mb-3 sm:mb-4">Mis Pedidos</h2>
+                <div id="listaPedidos" class="space-y-2">
+                    <div class="text-center text-gray-400 py-4">
+                        <i class="fas fa-spinner fa-spin text-xl sm:text-2xl"></i>
+                        <p class="mt-2 text-xs sm:text-sm">Cargando...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel Lateral (Siempre visible) -->
         <div class="lg:col-span-1 order-1 lg:order-2">
-            <div class="bg-white rounded-lg shadow p-3 sm:p-4 mb-3 sm:mb-4">
+            <!-- Información de Asignación (solo visible en tab de asignaciones) -->
+            <div id="infoAsignacionContainer" class="bg-white rounded-lg shadow p-3 sm:p-4 mb-3 sm:mb-4">
                 <h3 class="font-bold text-gray-700 mb-3 sm:mb-4 text-sm sm:text-base">Información de Asignación</h3>
                 <div id="infoAsignacion" class="space-y-2 sm:space-y-3 text-xs sm:text-sm">
                     <div class="text-center text-gray-400 py-6 sm:py-8">
@@ -285,28 +302,22 @@
                 </div>
             </div>
 
-            <!-- Lista de Pedidos con Asignaciones -->
-            <div class="bg-white rounded-lg shadow p-3 sm:p-4 mb-3 sm:mb-4">
-                <h3 class="font-bold text-gray-700 mb-3 sm:mb-4 text-sm sm:text-base">Mis Pedidos</h3>
-                <div id="listaPedidos" class="space-y-2 max-h-[300px] sm:max-h-[500px] overflow-y-auto">
-                    <div class="text-center text-gray-400 py-4">
-                        <i class="fas fa-spinner fa-spin text-xl sm:text-2xl"></i>
-                        <p class="mt-2 text-xs sm:text-sm">Cargando...</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Panel de Reporte de Novedades -->
+            <!-- Panel de Reporte de Novedades (Siempre visible, tiempo real) -->
             <div id="panelReporteNovedades" class="bg-white rounded-lg shadow p-3 sm:p-4 sticky top-2">
                 <div class="flex items-center justify-between mb-3">
-                    <h3 class="font-bold text-gray-700 text-sm sm:text-base">Reporte de Novedades</h3>
+                    <h3 class="font-bold text-gray-700 text-sm sm:text-base">
+                        <i class="fas fa-exclamation-triangle text-orange-500 mr-1"></i>
+                        Novedades (Tiempo Real)
+                    </h3>
                     <div class="flex gap-2">
                         <button onclick="imprimirReporteNovedades()" 
-                                class="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs">
+                                class="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs"
+                                title="Imprimir">
                             <i class="fas fa-print"></i>
                         </button>
                         <button onclick="exportarPDFNovedades()" 
-                                class="px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-xs">
+                                class="px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-xs"
+                                title="Exportar PDF">
                             <i class="fas fa-file-pdf"></i>
                         </button>
                     </div>
@@ -678,10 +689,49 @@ function buscarProductoPorCodigo() {
         mostrarInfoAsignacion();
         mostrarPasoUbicacion();
     } else {
-        mensaje.innerHTML = '<span class="text-red-600"><i class="fas fa-times-circle"></i> Producto no encontrado en este pedido o ya está completado</span>';
+        // Producto no encontrado - Registrar automáticamente como novedad en tiempo real
+        mensaje.innerHTML = '<span class="text-orange-600"><i class="fas fa-exclamation-triangle"></i> Producto no encontrado. Registrando como novedad...</span>';
+        
+        // Registrar automáticamente como novedad
+        registrarNovedadAutomatica(codigo, pedidoSeleccionado.pedido_id);
+        
         document.getElementById('cantidadLlego').classList.add('hidden');
         asignacionActual = null;
     }
+}
+
+// Registrar novedad automáticamente cuando no se encuentra el producto (en tiempo real)
+function registrarNovedadAutomatica(codigo, pedidoId) {
+    fetch('/warehouse-inventory/tcr/buscar-o-registrar-novedad', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken
+        },
+        body: JSON.stringify({
+            codigo: codigo,
+            pedido_id: pedidoId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.estado) {
+            mostrarNotificacion('⚠️ Producto no encontrado - Registrado como novedad automáticamente', 'warning');
+            // Limpiar input para continuar escaneando
+            document.getElementById('inputProducto').value = '';
+            document.getElementById('btnLimpiarProducto').classList.add('hidden');
+            // Actualizar reporte de novedades inmediatamente (tiempo real)
+            setTimeout(() => {
+                cargarNovedades();
+            }, 500);
+        } else {
+            mostrarNotificacion('Error al registrar novedad: ' + (data.msj || 'Error desconocido'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error al registrar novedad:', error);
+        mostrarNotificacion('Error al registrar novedad automáticamente', 'error');
+    });
 }
 
 // Función para cargar las ubicaciones del producto
@@ -999,22 +1049,52 @@ function imprimirTicket() {
 
 // Cambiar entre tabs
 function mostrarTab(tab) {
+    // Resetear todos los tabs
+    const tabAsignaciones = document.getElementById('tabAsignaciones');
+    const tabNovedades = document.getElementById('tabNovedades');
+    const tabPedidos = document.getElementById('tabPedidos');
+    const panelAsignaciones = document.getElementById('panelAsignaciones');
+    const panelNovedades = document.getElementById('panelNovedades');
+    const panelPedidos = document.getElementById('panelPedidos');
+    
+    // Resetear estilos de todos los tabs
+    [tabAsignaciones, tabNovedades, tabPedidos].forEach(t => {
+        t.classList.remove('border-blue-500', 'text-blue-600');
+        t.classList.add('border-transparent', 'text-gray-500');
+    });
+    
+    // Ocultar todos los panels
+    [panelAsignaciones, panelNovedades, panelPedidos].forEach(p => {
+        if (p) p.classList.add('hidden');
+    });
+    
+    // Activar el tab seleccionado
     if (tab === 'asignaciones') {
-        document.getElementById('tabAsignaciones').classList.add('border-blue-500', 'text-blue-600');
-        document.getElementById('tabAsignaciones').classList.remove('border-transparent', 'text-gray-500');
-        document.getElementById('tabNovedades').classList.remove('border-blue-500', 'text-blue-600');
-        document.getElementById('tabNovedades').classList.add('border-transparent', 'text-gray-500');
-        document.getElementById('panelAsignaciones').classList.remove('hidden');
-        document.getElementById('panelNovedades').classList.add('hidden');
-    } else {
-        document.getElementById('tabNovedades').classList.add('border-blue-500', 'text-blue-600');
-        document.getElementById('tabNovedades').classList.remove('border-transparent', 'text-gray-500');
-        document.getElementById('tabAsignaciones').classList.remove('border-blue-500', 'text-blue-600');
-        document.getElementById('tabAsignaciones').classList.add('border-transparent', 'text-gray-500');
-        document.getElementById('panelAsignaciones').classList.add('hidden');
-        document.getElementById('panelNovedades').classList.remove('hidden');
+        tabAsignaciones.classList.add('border-blue-500', 'text-blue-600');
+        tabAsignaciones.classList.remove('border-transparent', 'text-gray-500');
+        if (panelAsignaciones) panelAsignaciones.classList.remove('hidden');
+        if (document.getElementById('infoAsignacionContainer')) {
+            document.getElementById('infoAsignacionContainer').classList.remove('hidden');
+        }
+    } else if (tab === 'novedades') {
+        tabNovedades.classList.add('border-blue-500', 'text-blue-600');
+        tabNovedades.classList.remove('border-transparent', 'text-gray-500');
+        if (panelNovedades) panelNovedades.classList.remove('hidden');
+        if (document.getElementById('infoAsignacionContainer')) {
+            document.getElementById('infoAsignacionContainer').classList.add('hidden');
+        }
         cargarNovedades();
+    } else if (tab === 'pedidos') {
+        tabPedidos.classList.add('border-blue-500', 'text-blue-600');
+        tabPedidos.classList.remove('border-transparent', 'text-gray-500');
+        if (panelPedidos) panelPedidos.classList.remove('hidden');
+        if (document.getElementById('infoAsignacionContainer')) {
+            document.getElementById('infoAsignacionContainer').classList.add('hidden');
+        }
+        cargarAsignaciones();
     }
+    
+    // El panel de reporte de novedades siempre está visible
 }
 
 // Event listener para escanear producto en novedades
@@ -1394,7 +1474,8 @@ function exportarPDFNovedades() {
     imprimirReporteNovedades();
 }
 
-// Cargar novedades al iniciar
-setInterval(cargarNovedades, 5000); // Actualizar cada 5 segundos
+// Cargar novedades al iniciar y actualizar en tiempo real
+cargarNovedades(); // Cargar inmediatamente
+setInterval(cargarNovedades, 3000); // Actualizar cada 3 segundos para tiempo real
 </script>
 @endsection
