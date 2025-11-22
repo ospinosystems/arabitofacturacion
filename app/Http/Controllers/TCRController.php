@@ -724,7 +724,21 @@ class TCRController extends Controller
                 // Si existe, actualizar la cantidad que llegó sumando la nueva cantidad
                 $cantidadAnterior = $novedadExistente->cantidad_llego;
                 $cantidadNueva = $request->cantidad_llego ?? 0;
+                
+                // Si es negativo, validar que no exceda la cantidad existente
+                if ($cantidadNueva < 0) {
+                    $valorAbsoluto = abs($cantidadNueva);
+                    if ($valorAbsoluto > $cantidadAnterior) {
+                        throw new \Exception("No puede restar más de {$cantidadAnterior} (cantidad actual)");
+                    }
+                }
+                
                 $novedadExistente->cantidad_llego += $cantidadNueva;
+                
+                // Asegurar que no sea negativa
+                if ($novedadExistente->cantidad_llego < 0) {
+                    $novedadExistente->cantidad_llego = 0;
+                }
                 
                 // Recalcular diferencia
                 $novedadExistente->diferencia = $novedadExistente->cantidad_llego - $novedadExistente->cantidad_enviada;
@@ -781,6 +795,12 @@ class TCRController extends Controller
             }
             
             $cantidadLlego = $request->cantidad_llego ?? 0;
+            
+            // Si es negativo y no hay novedad existente, no permitir
+            if ($cantidadLlego < 0) {
+                throw new \Exception("No puede registrar una cantidad negativa para un producto nuevo. Primero debe registrar una cantidad positiva.");
+            }
+            
             $novedad->cantidad_llego = $cantidadLlego;
             
             // Si hay observaciones con diferencia, extraer cantidad esperada (cantidad enviada)

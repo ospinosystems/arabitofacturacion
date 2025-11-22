@@ -118,9 +118,8 @@
                                     <input type="number" 
                                            id="inputCantidadLlegoNovedad" 
                                            step="0.0001"
-                                           min="0"
                                            class="flex-1 px-3 py-2 text-lg font-mono border-2 border-orange-400 rounded-lg focus:ring-2 focus:ring-orange-500"
-                                           placeholder="Cantidad que llegó"
+                                           placeholder="Cantidad (+ para sumar, - para restar)"
                                            autofocus>
                                     <button onclick="confirmarRegistrarNovedad()" 
                                             class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition">
@@ -766,8 +765,8 @@ function confirmarRegistrarNovedad() {
     const cantidad = parseFloat(document.getElementById('inputCantidadLlegoNovedad').value);
     const mensaje = document.getElementById('mensajeCantidadNovedad');
     
-    if (isNaN(cantidad) || cantidad < 0) {
-        mensaje.innerHTML = '<span class="text-red-600">Ingrese una cantidad válida</span>';
+    if (isNaN(cantidad) || cantidad === 0) {
+        mensaje.innerHTML = '<span class="text-red-600">Ingrese una cantidad válida (diferente de cero)</span>';
         return;
     }
     
