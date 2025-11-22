@@ -2049,29 +2049,148 @@ function imprimirTicketNovedad() {
 
 // Imprimir reporte de novedades
 function imprimirReporteNovedades() {
-    const ventana = window.open('', '_blank');
-    const contenido = document.getElementById('reporteNovedades').innerHTML;
-    
-    ventana.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Reporte de Novedades TCR</title>
-            <style>
-                body { font-family: Arial, sans-serif; padding: 20px; }
-                h1 { text-align: center; }
-                .novedad { border: 1px solid #ddd; margin-bottom: 10px; padding: 10px; }
-            </style>
-        </head>
-        <body>
-            <h1>Reporte de Novedades TCR</h1>
-            <p>Fecha: ${new Date().toLocaleString('es-VE')}</p>
-            ${contenido}
-        </body>
-        </html>
-    `);
-    ventana.document.close();
-    ventana.print();
+    // Obtener las novedades actuales
+    fetch('/warehouse-inventory/tcr/get-novedades', {
+        headers: {
+            'X-CSRF-TOKEN': csrfToken
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.estado || !data.novedades || data.novedades.length === 0) {
+            alert('No hay novedades para imprimir');
+            return;
+        }
+        
+        const novedades = data.novedades;
+        const ventana = window.open('', '_blank');
+        
+        // Generar tabla HTML
+        let tablaHTML = `
+            <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                <thead>
+                    <tr style="background-color: #f3f4f6; border-bottom: 2px solid #d1d5db;">
+                        <th style="padding: 12px; text-align: left; border: 1px solid #d1d5db; font-weight: bold;">Código</th>
+                        <th style="padding: 12px; text-align: left; border: 1px solid #d1d5db; font-weight: bold;">Descripción</th>
+                        <th style="padding: 12px; text-align: center; border: 1px solid #d1d5db; font-weight: bold;">Cantidad Enviada</th>
+                        <th style="padding: 12px; text-align: center; border: 1px solid #d1d5db; font-weight: bold;">Cantidad Recibida</th>
+                        <th style="padding: 12px; text-align: center; border: 1px solid #d1d5db; font-weight: bold;">Diferencia</th>
+                        <th style="padding: 12px; text-align: center; border: 1px solid #d1d5db; font-weight: bold;">Estatus</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        novedades.forEach((n, index) => {
+            // Determinar estatus basado en la diferencia
+            let estatus = 'Novedad';
+            let estatusColor = '#6b7280';
+            
+            if (n.diferencia == 0 && n.cantidad_llego > 0) {
+                estatus = 'Correcto';
+                estatusColor = '#10b981';
+            } else if (n.diferencia > 0 && n.cantidad_enviada > 0) {
+                estatus = 'Sobrante';
+                estatusColor = '#3b82f6';
+            } else if (n.diferencia < 0 && n.cantidad_enviada > 0) {
+                estatus = 'Faltante';
+                estatusColor = '#ef4444';
+            }
+            
+            // Usar código de barras o código de proveedor como código principal
+            const codigo = n.codigo_barras || n.codigo_proveedor || 'N/A';
+            
+            const bgColor = index % 2 === 0 ? '#ffffff' : '#f9fafb';
+            const diferenciaColor = n.diferencia > 0 ? '#3b82f6' : n.diferencia < 0 ? '#ef4444' : '#10b981';
+            const diferenciaSigno = n.diferencia > 0 ? '+' : '';
+            
+            tablaHTML += `
+                <tr style="background-color: ${bgColor};">
+                    <td style="padding: 10px; border: 1px solid #d1d5db; font-family: monospace; font-size: 11px;">${codigo}</td>
+                    <td style="padding: 10px; border: 1px solid #d1d5db; font-size: 12px;">${n.descripcion || 'N/A'}</td>
+                    <td style="padding: 10px; border: 1px solid #d1d5db; text-align: center; font-size: 12px; font-weight: bold;">${n.cantidad_enviada || 0}</td>
+                    <td style="padding: 10px; border: 1px solid #d1d5db; text-align: center; font-size: 12px; font-weight: bold;">${n.cantidad_llego || 0}</td>
+                    <td style="padding: 10px; border: 1px solid #d1d5db; text-align: center; font-size: 12px; font-weight: bold; color: ${diferenciaColor};">${diferenciaSigno}${n.diferencia || 0}</td>
+                    <td style="padding: 10px; border: 1px solid #d1d5db; text-align: center; font-size: 12px; font-weight: bold; color: ${estatusColor};">${estatus}</td>
+                </tr>
+            `;
+        });
+        
+        tablaHTML += `
+                </tbody>
+            </table>
+        `;
+        
+        ventana.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Reporte de Novedades TCR</title>
+                <style>
+                    @media print {
+                        body { margin: 0; padding: 15px; }
+                        @page { margin: 1cm; }
+                    }
+                    body { 
+                        font-family: Arial, sans-serif; 
+                        padding: 20px; 
+                        font-size: 12px;
+                    }
+                    h1 { 
+                        text-align: center; 
+                        margin-bottom: 10px;
+                        font-size: 20px;
+                        color: #1f2937;
+                    }
+                    .fecha {
+                        text-align: center;
+                        margin-bottom: 20px;
+                        color: #6b7280;
+                        font-size: 11px;
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-top: 10px;
+                    }
+                    th {
+                        background-color: #f3f4f6;
+                        font-weight: bold;
+                        padding: 12px 8px;
+                        text-align: left;
+                        border: 1px solid #d1d5db;
+                        font-size: 11px;
+                    }
+                    td {
+                        padding: 10px 8px;
+                        border: 1px solid #d1d5db;
+                        font-size: 11px;
+                    }
+                    tr:nth-child(even) {
+                        background-color: #f9fafb;
+                    }
+                </style>
+            </head>
+            <body>
+                <h1>Reporte de Novedades TCR</h1>
+                <div class="fecha">Fecha: ${new Date().toLocaleString('es-VE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })}</div>
+                ${tablaHTML}
+            </body>
+            </html>
+        `);
+        ventana.document.close();
+        ventana.print();
+    })
+    .catch(error => {
+        console.error('Error al cargar novedades para imprimir:', error);
+        alert('Error al cargar las novedades para imprimir');
+    });
 }
 
 // Exportar PDF de novedades (usando window.print por ahora)
