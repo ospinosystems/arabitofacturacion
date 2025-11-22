@@ -78,12 +78,31 @@
                             </button>
                         </div>
                         <div id="mensajeProducto" class="mt-2 text-xs sm:text-sm"></div>
-                        <!-- Mostrar cantidad que llegó cuando se encuentra el producto -->
+                        <!-- Mostrar cantidad esperada y campo para ingresar cantidad real -->
                         <div id="cantidadLlego" class="mt-2 hidden">
                             <div class="bg-blue-100 border border-blue-300 rounded-lg p-2 sm:p-3">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-xs sm:text-sm font-medium text-blue-800">Cantidad que llegó:</span>
-                                    <span id="cantidadLlegoValor" class="sm:text-lg font-bold text-blue-900"></span>
+                                <div class="mb-2">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span class="text-xs sm:text-sm font-medium text-blue-800">Cantidad esperada:</span>
+                                        <span id="cantidadEsperadaValor" class="sm:text-lg font-bold text-blue-900"></span>
+                                    </div>
+                                </div>
+                                <div class="border-t border-blue-300 pt-2 mt-2">
+                                    <label class="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Cantidad real que llegó:</label>
+                                    <div class="flex gap-2">
+                                        <input type="number" 
+                                               id="inputCantidadRealLlego" 
+                                               step="0.0001"
+                                               min="0"
+                                               class="flex-1 px-3 py-2 text-base font-mono border-2 border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                               placeholder="Ingrese cantidad real"
+                                               autofocus>
+                                        <button onclick="verificarCantidadReal()" 
+                                                class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition">
+                                            <i class="fas fa-check mr-1"></i>Verificar
+                                        </button>
+                                    </div>
+                                    <div id="mensajeCantidadReal" class="mt-2 text-xs"></div>
                                 </div>
                             </div>
                         </div>
@@ -711,11 +730,16 @@ function buscarProductoPorCodigo() {
 
     if (asignacionActual) {
         mensaje.innerHTML = `<span class="text-green-600"><i class="fas fa-check-circle"></i> Producto encontrado: ${asignacionActual.descripcion}</span>`;
-        // Mostrar cantidad que llegó
-        document.getElementById('cantidadLlegoValor').textContent = asignacionActual.cantidad;
+        // Mostrar cantidad esperada y campo para cantidad real
+        document.getElementById('cantidadEsperadaValor').textContent = asignacionActual.cantidad;
         document.getElementById('cantidadLlego').classList.remove('hidden');
-        mostrarInfoAsignacion();
-        mostrarPasoUbicacion();
+        document.getElementById('inputCantidadRealLlego').value = '';
+        document.getElementById('inputCantidadRealLlego').focus();
+        document.getElementById('mensajeCantidadReal').innerHTML = '';
+        // Guardar código para posible registro de novedad
+        window.codigoProductoEncontrado = codigo;
+        window.cantidadEsperada = asignacionActual.cantidad;
+        // No mostrar info de asignación todavía, esperar a verificar cantidad
     } else {
         // Producto no encontrado - Mostrar modal para ingresar cantidad
         mensaje.innerHTML = '<span class="text-orange-600"><i class="fas fa-exclamation-triangle"></i> Producto no encontrado en este pedido</span>';
@@ -799,6 +823,98 @@ document.getElementById('inputCantidadLlegoNovedad')?.addEventListener('keypress
         confirmarRegistrarNovedad();
     }
 });
+
+// Event listener para Enter en el campo de cantidad real
+document.getElementById('inputCantidadRealLlego')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        verificarCantidadReal();
+    }
+});
+
+// Verificar cantidad real vs esperada
+function verificarCantidadReal() {
+    const cantidadReal = parseFloat(document.getElementById('inputCantidadRealLlego').value);
+    const mensaje = document.getElementById('mensajeCantidadReal');
+    
+    if (isNaN(cantidadReal) || cantidadReal < 0) {
+        mensaje.innerHTML = '<span class="text-red-600">Ingrese una cantidad válida</span>';
+        return;
+    }
+    
+    if (!asignacionActual || !window.cantidadEsperada) {
+        mensaje.innerHTML = '<span class="text-red-600">Error: No hay producto seleccionado</span>';
+        return;
+    }
+    
+    const cantidadEsperada = parseFloat(window.cantidadEsperada);
+    const diferencia = cantidadReal - cantidadEsperada;
+    
+    if (diferencia === 0) {
+        // Cantidad correcta - continuar con el flujo normal
+        mensaje.innerHTML = '<span class="text-green-600"><i class="fas fa-check-circle"></i> Cantidad correcta</span>';
+        // Continuar con el flujo normal de asignación
+        mostrarInfoAsignacion();
+        mostrarPasoUbicacion();
+    } else {
+        // Hay diferencia - registrar como novedad
+        const tipoDiferencia = diferencia > 0 ? 'sobrante' : 'faltante';
+        const mensajeDiferencia = diferencia > 0 
+            ? `Sobrante de ${Math.abs(diferencia)}` 
+            : `Faltante de ${Math.abs(diferencia)}`;
+        
+        mensaje.innerHTML = `<span class="text-orange-600"><i class="fas fa-exclamation-triangle"></i> ${mensajeDiferencia}. Registrando diferencia como novedad...</span>`;
+        
+        // Registrar la diferencia como novedad
+        registrarDiferenciaComoNovedad(cantidadReal, diferencia, tipoDiferencia);
+    }
+}
+
+// Registrar diferencia como novedad
+function registrarDiferenciaComoNovedad(cantidadReal, diferencia, tipoDiferencia) {
+    if (!window.codigoProductoEncontrado || !asignacionActual) {
+        mostrarNotificacion('Error: No hay información del producto', 'error');
+        return;
+    }
+    
+    fetch('/warehouse-inventory/tcr/buscar-o-registrar-novedad', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken
+        },
+        body: JSON.stringify({
+            codigo: window.codigoProductoEncontrado,
+            pedido_id: pedidoSeleccionado ? pedidoSeleccionado.pedido_id : null,
+            cantidad_llego: cantidadReal,
+            observaciones: `Diferencia detectada: ${tipoDiferencia} de ${Math.abs(diferencia)}. Cantidad esperada: ${window.cantidadEsperada}, Cantidad real: ${cantidadReal}`
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.estado) {
+            const mensajeTipo = tipoDiferencia === 'sobrante' 
+                ? `✅ Sobrante de ${Math.abs(diferencia)} registrado como novedad`
+                : `⚠️ Faltante de ${Math.abs(diferencia)} registrado como novedad`;
+            mostrarNotificacion(mensajeTipo, tipoDiferencia === 'sobrante' ? 'success' : 'warning');
+            
+            // Continuar con el flujo normal usando la cantidad real
+            mostrarInfoAsignacion();
+            mostrarPasoUbicacion();
+            
+            // Actualizar reporte de novedades
+            setTimeout(() => {
+                cargarNovedades();
+            }, 500);
+        } else {
+            mostrarNotificacion('Error al registrar diferencia: ' + (data.msj || 'Error desconocido'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error al registrar diferencia:', error);
+        mostrarNotificacion('Error al registrar diferencia como novedad', 'error');
+    });
+}
 
 // Función para cargar las ubicaciones del producto
 function cargarUbicacionesProducto() {
@@ -1414,9 +1530,49 @@ function mostrarReporteNovedades(novedades) {
             minute: '2-digit'
         });
         
+        // Determinar tipo de novedad basado en observaciones
+        let tipoNovedad = 'normal';
+        let badgeColor = 'bg-gray-100 text-gray-700';
+        let badgeText = 'Novedad';
+        let badgeIcon = 'fa-info-circle';
+        
+        if (n.observaciones) {
+            if (n.observaciones.includes('Sobrante')) {
+                tipoNovedad = 'sobrante';
+                badgeColor = 'bg-green-100 text-green-700';
+                badgeText = 'Sobrante';
+                badgeIcon = 'fa-plus-circle';
+            } else if (n.observaciones.includes('Faltante')) {
+                tipoNovedad = 'faltante';
+                badgeColor = 'bg-red-100 text-red-700';
+                badgeText = 'Faltante';
+                badgeIcon = 'fa-minus-circle';
+            } else if (n.observaciones.includes('Diferencia detectada')) {
+                if (n.observaciones.includes('sobrante')) {
+                    tipoNovedad = 'sobrante';
+                    badgeColor = 'bg-green-100 text-green-700';
+                    badgeText = 'Sobrante';
+                    badgeIcon = 'fa-plus-circle';
+                } else if (n.observaciones.includes('faltante')) {
+                    tipoNovedad = 'faltante';
+                    badgeColor = 'bg-red-100 text-red-700';
+                    badgeText = 'Faltante';
+                    badgeIcon = 'fa-minus-circle';
+                }
+            }
+        }
+        
+        // Si diferencia es 0 y tiene cantidad_llego, es correcto
+        if (n.diferencia == 0 && n.cantidad_llego > 0 && !n.observaciones) {
+            tipoNovedad = 'correcto';
+            badgeColor = 'bg-blue-100 text-blue-700';
+            badgeText = 'Correcto';
+            badgeIcon = 'fa-check-circle';
+        }
+        
         const historialHtml = n.historial && n.historial.length > 0 ? `
             <div class="mt-2 text-[10px] text-gray-500">
-                <div class="font-semibold mb-1">Historial:</div>
+                <div class="font-semibold mb-1">Historial de agregaciones:</div>
                 ${n.historial.map(h => {
                     const hFecha = new Date(h.created_at).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
                     return `<div class="pl-2">+${h.cantidad_agregada} (${hFecha}) → Total: ${h.cantidad_total}</div>`;
@@ -1424,9 +1580,20 @@ function mostrarReporteNovedades(novedades) {
             </div>
         ` : '';
         
+        const observacionesHtml = n.observaciones ? `
+            <div class="mt-1 text-[10px] text-gray-600 italic">
+                <i class="fas fa-comment mr-1"></i>${n.observaciones}
+            </div>
+        ` : '';
+        
         return `
             <div class="border border-gray-200 rounded-lg p-2 mb-2">
-                <div class="font-semibold text-xs mb-1">${n.descripcion}</div>
+                <div class="flex items-start justify-between mb-1">
+                    <div class="font-semibold text-xs flex-1">${n.descripcion}</div>
+                    <span class="px-2 py-0.5 rounded text-[10px] ${badgeColor}">
+                        <i class="fas ${badgeIcon} mr-1"></i>${badgeText}
+                    </span>
+                </div>
                 <div class="grid grid-cols-2 gap-1 text-[10px] mb-1">
                     <div><span class="text-gray-600">Código:</span> <span class="font-mono">${n.codigo_barras || n.codigo_proveedor || 'N/A'}</span></div>
                     <div><span class="text-gray-600">Fecha:</span> ${fecha}</div>
@@ -1445,6 +1612,7 @@ function mostrarReporteNovedades(novedades) {
                         <div class="font-bold text-orange-700">${n.diferencia}</div>
                     </div>
                 </div>
+                ${observacionesHtml}
                 ${historialHtml}
             </div>
         `;

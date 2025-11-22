@@ -723,13 +723,27 @@ class TCRController extends Controller
                 $novedad->descripcion = 'Producto no encontrado - Código: ' . $codigo;
                 $novedad->inventario_id = null;
             }
-            $novedad->cantidad_llego = $request->cantidad_llego ?? 0;
+            
+            $cantidadLlego = $request->cantidad_llego ?? 0;
+            $novedad->cantidad_llego = $cantidadLlego;
             $novedad->cantidad_enviada = 0;
-            $novedad->diferencia = $novedad->cantidad_llego;
+            
+            // Si hay observaciones con diferencia, extraer cantidad esperada para calcular diferencia real
+            $cantidadEsperada = null;
+            if ($request->observaciones && preg_match('/Cantidad esperada: ([\d.]+)/', $request->observaciones, $matches)) {
+                $cantidadEsperada = floatval($matches[1]);
+                // La diferencia real es la diferencia con lo esperado (no con lo enviado)
+                $novedad->diferencia = $cantidadLlego - $cantidadEsperada;
+            } else {
+                // Si no hay cantidad esperada, la diferencia es igual a cantidad_llego (aún no se ha enviado nada)
+                $novedad->diferencia = $cantidadLlego;
+            }
+            
             $novedad->pedido_central_id = $request->pedido_id;
             $novedad->item_pedido_id = $request->item_pedido_id;
             $novedad->pasillero_id = $pasilleroId;
             $novedad->estado = 'pendiente';
+            $novedad->observaciones = $request->observaciones ?? null;
             $novedad->save();
             
             DB::commit();
