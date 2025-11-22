@@ -261,6 +261,7 @@ class InventarioController extends Controller
     {
         // Ejecutar sendComovamos solo cada 30 minutos
         try {
+            return DB::transaction(function () use ($id, $id_pedido, $cantidad, $type, $typeafter, $usuario, $devolucionTipo, $arrgarantia, $valinputsetclaveadmin) {
             $cantidad = !$cantidad ? 1 : $cantidad;
             // Validar que la cantidad sea un número positivo o negativo, pero no cero, y que su valor absoluto sea al menos 0.1
             if (!is_numeric($cantidad) || abs($cantidad) < 0.1) {
@@ -344,7 +345,7 @@ class InventarioController extends Controller
                     return ['msj' => 'El producto ya existe en el pedido', 'estado' => 'ok'];
                 }
 
-                $producto = inventario::select(['cantidad', 'precio'])->find($id);
+                $producto = inventario::select(['cantidad', 'precio'])->where('id', $id)->lockForUpdate()->first();
                 $precio = $producto->precio;
 
                 if ($precio > 40 && (floor($cantidad) != $cantidad)) {
@@ -432,7 +433,7 @@ class InventarioController extends Controller
 
                 return ['msj' => 'Agregado al pedido #' . $id_pedido . ' || Cant. ' . $cantidad, 'estado' => 'ok', 'num_pedido' => $id_pedido, 'type' => $typeafter];
             } else if ($type == 'upd') {
-                $checkIfExits = items_pedidos::select(['id_producto', 'cantidad', 'condicion', 'id_pedido'])->find($id);
+                $checkIfExits = items_pedidos::select(['id_producto', 'cantidad', 'condicion', 'id_pedido'])->where('id', $id)->lockForUpdate()->first();
                 $condicion = $checkIfExits->condicion;
                 if ($condicion == 1 || $devolucionTipo == 1) {
                     return ['msj' => 'Error: Producto ya agregado, elimine y vuelva a intentar ' . $checkIfExits->id_producto . ' || Cant. ' . $cantidad, 'estado' => 'ok'];
@@ -448,7 +449,7 @@ class InventarioController extends Controller
                 if ($checkPedidoPago !== true) {
                     return $checkPedidoPago;
                 }
-                $producto = inventario::select(['precio', 'cantidad'])->find($checkIfExits->id_producto);
+                $producto = inventario::select(['precio', 'cantidad'])->where('id', $checkIfExits->id_producto)->lockForUpdate()->first();
                 $precio = $producto->precio;
 
                 if ($precio > 20 && (floor($cantidad) != $cantidad)) {
@@ -476,7 +477,10 @@ class InventarioController extends Controller
                     return $checkPedidoPago;
                 }
 
-                $item = items_pedidos::find($id);
+                $item = items_pedidos::where('id', $id)->lockForUpdate()->first();
+                if (!$item) {
+                    return ['msj' => 'Item ya eliminado o no existe', 'estado' => 'ok'];
+                }
                 $old_ct = $item->cantidad;
                 $id_producto = $item->id_producto;
                 $pedido_id = $item->id_pedido;
@@ -487,7 +491,7 @@ class InventarioController extends Controller
                     throw new \Exception('Error: El pedido tiene garantias, no puede eliminar el item', 1);
                 }
 
-                $producto = inventario::select(['cantidad'])->find($id_producto);
+                $producto = inventario::select(['cantidad'])->where('id', $id_producto)->lockForUpdate()->first();
 
                 if ($item->delete()) {
                     $ctSeter = $producto->cantidad + ($old_ct);
@@ -504,6 +508,7 @@ class InventarioController extends Controller
                     return ['msj' => 'Item Eliminado', 'estado' => true];
                 }
             }
+            });
         } catch (\Exception $e) {
             return Response::json(['msj' => 'Error: ' . $e->getMessage(), 'estado' => false]);
         }
@@ -643,7 +648,54 @@ class InventarioController extends Controller
             $id_pedido = $ped_id['id'];
             $checkIfExitsFact = factura::where('id_pedido_central', $id_pedido)->first();
             if ($checkIfExitsFact) {
-                throw new \Exception('¡Factura ya existe!', 1);
+                // LÓGICA DE RECUPERACIÓN: Intentar notificar a Central nuevamente si es necesario
+                $getPedido = (new sendCentral)->getPedidoCentralImport($id_pedido);
+                
+                // Si devuelve estado true, significa que Central todavía lo tiene en estado 4 (Pendiente de Importar)
+                // Si devuelve false, probablemente ya está en estado 2 (Procesado)
+                if (isset($getPedido['estado']) && $getPedido['estado'] === true) {
+                    if (isset($getPedido['pedido'])) {
+                        $pedido = $getPedido['pedido'];
+                        $tareaspendientescentralArr = [
+                            'id_pedido' => $pedido['id'],
+                            'ids' => [],
+                        ];
+                        
+                        foreach ($pedido['items'] as $item) {
+                            // Intentar mapear producto local
+                            // Primero por ID directo (si están sincronizados)
+                            $localProduct = inventario::find($item['id_producto']);
+                            
+                            // Si no, buscar por código de barras
+                            if (!$localProduct && isset($item['producto']['codigo_barras'])) {
+                                $localProduct = inventario::where('codigo_barras', $item['producto']['codigo_barras'])->first();
+                            }
+                            
+                            if ($localProduct) {
+                                $tareaspendientescentralArr['ids'][] = [
+                                    'id_productoincentral' => $item['id_producto'],
+                                    'id_productosucursal' => $localProduct->id
+                                ];
+                            }
+                        }
+                        
+                        // Reenviar notificación a Central
+                        $tareaSend = (new sendCentral)->sendTareasPendientesCentral($tareaspendientescentralArr);
+                        
+                        if (isset($tareaSend['estado']) && $tareaSend['estado'] === true) {
+                             DB::commit(); // Commit de la transacción actual (aunque no hay cambios locales nuevos, cierra el proceso limpiamente)
+                             return Response::json(['msj' => '¡Factura ya existía, se recuperó la conexión y se notificó a Central con éxito!', 'estado' => true]);
+                        } else {
+                             return $tareaSend; // Retornar error de Central si falla de nuevo
+                        }
+                    }
+                } else {
+                    // Central ya no está en estado 4, asumimos que está sincronizado (Estado 2)
+                    DB::commit();
+                    return Response::json(['msj' => '¡Factura ya procesada correctamente!', 'estado' => true]);
+                }
+
+                throw new \Exception('¡Factura ya existe! No se pudo resincronizar.', 1);
             }
             $ids_to_csv = [];
             $getPedido = (new sendCentral)->getPedidoCentralImport($id_pedido);

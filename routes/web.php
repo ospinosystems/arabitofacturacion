@@ -605,4 +605,3 @@ Route::group(['middleware' => ['auth.user:admin']], function () {
     Route::post('updateMoneda', [MonedasController::class, 'updateMoneda']);
 });
 
-
