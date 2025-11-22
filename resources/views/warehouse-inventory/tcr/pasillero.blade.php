@@ -743,6 +743,9 @@ function buscarProductoPorCodigo() {
     });
 
     if (asignacionActual) {
+        // Buscar si el producto ya tiene una novedad registrada
+        buscarNovedadProducto(codigo, asignacionActual);
+        
         mensaje.innerHTML = `<span class="text-green-600"><i class="fas fa-check-circle"></i> Producto encontrado: ${asignacionActual.descripcion}</span>`;
         // Mostrar cantidad esperada y campo para cantidad real
         document.getElementById('cantidadEsperadaValor').textContent = asignacionActual.cantidad;
@@ -770,6 +773,86 @@ function buscarProductoPorCodigo() {
         document.getElementById('cantidadLlego').classList.add('hidden');
         asignacionActual = null;
     }
+}
+
+// Buscar si el producto ya tiene una novedad registrada
+function buscarNovedadProducto(codigo, asignacion) {
+    fetch('/warehouse-inventory/tcr/get-novedades', {
+        headers: {
+            'X-CSRF-TOKEN': csrfToken
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.estado && data.novedades) {
+            // Buscar novedad por código
+            const novedad = data.novedades.find(n => {
+                const codigoBarras = (n.codigo_barras || '').toUpperCase();
+                const codigoProveedor = (n.codigo_proveedor || '').toUpperCase();
+                return codigo === codigoBarras || codigo === codigoProveedor;
+            });
+            
+            if (novedad) {
+                // Mostrar información de la novedad
+                mostrarInfoNovedadProducto(novedad);
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error al buscar novedad:', error);
+    });
+}
+
+// Mostrar información de novedad cuando se escanea un producto
+function mostrarInfoNovedadProducto(novedad) {
+    const mensaje = document.getElementById('mensajeProducto');
+    
+    // Obtener la última agregación del historial
+    let ultimaAgregacion = null;
+    if (novedad.historial && novedad.historial.length > 0) {
+        // El historial ya viene ordenado desc, así que el primero es el más reciente
+        ultimaAgregacion = novedad.historial[0];
+    }
+    
+    let infoHtml = `
+        <div class="bg-purple-50 border-l-4 border-purple-500 p-2 mt-2 rounded">
+            <div class="flex items-center mb-1">
+                <i class="fas fa-info-circle text-purple-600 mr-2"></i>
+                <span class="font-semibold text-purple-700 text-xs">Producto ya registrado en novedades</span>
+            </div>
+    `;
+    
+    if (ultimaAgregacion) {
+        const fechaAgregacion = new Date(ultimaAgregacion.created_at).toLocaleString('es-VE', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        const cantidad = parseFloat(ultimaAgregacion.cantidad_agregada) || 0;
+        const signo = cantidad >= 0 ? '+' : '';
+        const color = cantidad < 0 ? 'text-red-600' : 'text-green-600';
+        
+        infoHtml += `
+            <div class="text-xs text-gray-700">
+                <div><span class="font-medium">Última agregación:</span> <span class="${color} font-semibold">${signo}${ultimaAgregacion.cantidad_agregada}</span></div>
+                <div><span class="font-medium">Total acumulado:</span> <span class="font-semibold">${ultimaAgregacion.cantidad_total || novedad.cantidad_llego || 0}</span></div>
+                <div><span class="font-medium">Fecha/Hora:</span> ${fechaAgregacion}</div>
+            </div>
+        `;
+    } else {
+        // Si no hay historial, mostrar la cantidad total
+        infoHtml += `
+            <div class="text-xs text-gray-700">
+                <div><span class="font-medium">Cantidad total registrada:</span> <span class="font-semibold">${novedad.cantidad_llego || 0}</span></div>
+            </div>
+        `;
+    }
+    
+    infoHtml += `</div>`;
+    
+    mensaje.innerHTML += infoHtml;
 }
 
 // Confirmar registrar novedad con cantidad
