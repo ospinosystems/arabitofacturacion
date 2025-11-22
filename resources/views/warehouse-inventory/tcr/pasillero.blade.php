@@ -739,7 +739,9 @@ function buscarProductoPorCodigo() {
         // Guardar código para posible registro de novedad
         window.codigoProductoEncontrado = codigo;
         window.cantidadEsperada = asignacionActual.cantidad;
-        // No mostrar info de asignación todavía, esperar a verificar cantidad
+        // Mostrar información de asignación y paso de ubicación inmediatamente
+        mostrarInfoAsignacion();
+        mostrarPasoUbicacion();
     } else {
         // Producto no encontrado - Mostrar modal para ingresar cantidad
         mensaje.innerHTML = '<span class="text-orange-600"><i class="fas fa-exclamation-triangle"></i> Producto no encontrado en este pedido</span>';
