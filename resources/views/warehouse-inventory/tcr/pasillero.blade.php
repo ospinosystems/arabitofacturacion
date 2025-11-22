@@ -399,6 +399,14 @@ function mostrarInfoAsignacion() {
                 <div><span class="font-medium text-orange-600">Cantidad Pendiente:</span> <span class="font-bold">${cantidadPendiente}</span></div>
                 <div><span class="font-medium">Estado:</span> <span class="px-2 py-0.5 sm:py-1 bg-${asignacionActual.estado === 'pendiente' ? 'orange' : 'blue'}-100 text-${asignacionActual.estado === 'pendiente' ? 'orange' : 'blue'}-700 rounded text-[10px] sm:text-xs">${asignacionActual.estado === 'pendiente' ? 'Pendiente' : 'En proceso'}</span></div>
             </div>
+            <!-- Botón de Imprimir Ticket -->
+            <div class="mt-3 sm:mt-4">
+                <button onclick="imprimirTicket()" 
+                        class="w-full px-4 py-3 sm:py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition flex items-center justify-center text-sm sm:text-base font-semibold">
+                    <i class="fas fa-print mr-2 sm:mr-1 text-base sm:text-sm"></i>
+                    Imprimir Ticket
+                </button>
+            </div>
         </div>
     `;
     
@@ -684,6 +692,51 @@ function volverASeleccionarPedido() {
             <p class="text-xs sm:text-sm">Seleccione un pedido para comenzar</p>
         </div>
     `;
+}
+
+function imprimirTicket() {
+    if (!asignacionActual) {
+        mostrarNotificacion('No hay producto seleccionado', 'warning');
+        return;
+    }
+    
+    // Crear formulario temporal para enviar los datos
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/warehouse-inventory/imprimir-ticket-producto';
+    form.target = '_blank';
+    
+    // Agregar token CSRF
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = '_token';
+    csrfInput.value = csrfToken;
+    form.appendChild(csrfInput);
+    
+    // Agregar datos del producto
+    const campos = [
+        { name: 'codigo_barras', value: asignacionActual.codigo_barras || '' },
+        { name: 'codigo_proveedor', value: asignacionActual.codigo_proveedor || '' },
+        { name: 'descripcion', value: asignacionActual.descripcion || '' },
+        { name: 'marca', value: asignacionActual.marca || '' }
+    ];
+    
+    campos.forEach(campo => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = campo.name;
+        input.value = campo.value;
+        form.appendChild(input);
+    });
+    
+    // Agregar formulario al body y enviarlo
+    document.body.appendChild(form);
+    form.submit();
+    
+    // Remover formulario después de enviarlo
+    setTimeout(() => {
+        document.body.removeChild(form);
+    }, 100);
 }
 </script>
 @endsection
