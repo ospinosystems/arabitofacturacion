@@ -851,11 +851,25 @@ function verificarCantidadReal() {
     const diferencia = cantidadReal - cantidadEsperada;
     
     if (diferencia === 0) {
-        // Cantidad correcta - continuar con el flujo normal
-        mensaje.innerHTML = '<span class="text-green-600"><i class="fas fa-check-circle"></i> Cantidad correcta</span>';
-        // Continuar con el flujo normal de asignación
-        mostrarInfoAsignacion();
-        mostrarPasoUbicacion();
+        // Cantidad correcta - ofrecer opciones
+        mensaje.innerHTML = `
+            <div class="bg-green-50 border border-green-300 rounded-lg p-3 mt-2">
+                <div class="flex items-center mb-2">
+                    <i class="fas fa-check-circle text-green-600 mr-2"></i>
+                    <span class="font-semibold text-green-700">Cantidad correcta</span>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="continuarConAsignacion()" 
+                            class="flex-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition text-sm">
+                        <i class="fas fa-map-marker-alt mr-1"></i>Asignar Ubicación
+                    </button>
+                    <button onclick="omitirUbicacionYContinuar()" 
+                            class="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition text-sm">
+                        <i class="fas fa-arrow-right mr-1"></i>Omitir y Continuar
+                    </button>
+                </div>
+            </div>
+        `;
     } else {
         // Hay diferencia - mostrar opciones: registrar novedad y continuar o continuar con asignación
         const tipoDiferencia = diferencia > 0 ? 'sobrante' : 'faltante';
@@ -884,11 +898,20 @@ function verificarCantidadReal() {
     }
 }
 
-// Continuar con asignación normal (ignorar diferencia)
+// Continuar con asignación normal (procesar ubicación)
 function continuarConAsignacion() {
     mostrarInfoAsignacion();
     mostrarPasoUbicacion();
-    document.getElementById('mensajeCantidadReal').innerHTML = '<span class="text-blue-600"><i class="fas fa-info-circle"></i> Continuando con asignación...</span>';
+    const mensaje = document.getElementById('mensajeCantidadReal');
+    if (mensaje) {
+        mensaje.innerHTML = '<span class="text-blue-600"><i class="fas fa-info-circle"></i> Continuando con asignación...</span>';
+    }
+}
+
+// Omitir ubicación y continuar con otro producto
+function omitirUbicacionYContinuar() {
+    mostrarNotificacion('Ubicación omitida. Puede continuar escaneando otro producto.', 'info');
+    resetearFormularioProducto();
 }
 
 // Registrar diferencia y continuar con otro producto
