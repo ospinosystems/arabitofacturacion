@@ -857,17 +857,121 @@ function verificarCantidadReal() {
         mostrarInfoAsignacion();
         mostrarPasoUbicacion();
     } else {
-        // Hay diferencia - registrar como novedad
+        // Hay diferencia - mostrar opciones: registrar novedad y continuar o continuar con asignación
         const tipoDiferencia = diferencia > 0 ? 'sobrante' : 'faltante';
         const mensajeDiferencia = diferencia > 0 
             ? `Sobrante de ${Math.abs(diferencia)}` 
             : `Faltante de ${Math.abs(diferencia)}`;
         
-        mensaje.innerHTML = `<span class="text-orange-600"><i class="fas fa-exclamation-triangle"></i> ${mensajeDiferencia}. Registrando diferencia como novedad...</span>`;
-        
-        // Registrar la diferencia como novedad
-        registrarDiferenciaComoNovedad(cantidadReal, diferencia, tipoDiferencia);
+        mensaje.innerHTML = `
+            <div class="bg-orange-50 border border-orange-300 rounded-lg p-3 mt-2">
+                <div class="flex items-center mb-2">
+                    <i class="fas fa-exclamation-triangle text-orange-600 mr-2"></i>
+                    <span class="font-semibold text-orange-700">${mensajeDiferencia} detectado</span>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="registrarDiferenciaYContinuar(${cantidadReal}, ${diferencia}, '${tipoDiferencia}')" 
+                            class="flex-1 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition text-sm">
+                        <i class="fas fa-save mr-1"></i>Registrar Novedad y Continuar
+                    </button>
+                    <button onclick="continuarConAsignacion()" 
+                            class="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition text-sm">
+                        <i class="fas fa-arrow-right mr-1"></i>Continuar con Asignación
+                    </button>
+                </div>
+            </div>
+        `;
     }
+}
+
+// Continuar con asignación normal (ignorar diferencia)
+function continuarConAsignacion() {
+    mostrarInfoAsignacion();
+    mostrarPasoUbicacion();
+    document.getElementById('mensajeCantidadReal').innerHTML = '<span class="text-blue-600"><i class="fas fa-info-circle"></i> Continuando con asignación...</span>';
+}
+
+// Registrar diferencia y continuar con otro producto
+function registrarDiferenciaYContinuar(cantidadReal, diferencia, tipoDiferencia) {
+    if (!window.codigoProductoEncontrado || !asignacionActual) {
+        mostrarNotificacion('Error: No hay información del producto', 'error');
+        return;
+    }
+    
+    const mensaje = document.getElementById('mensajeCantidadReal');
+    mensaje.innerHTML = '<span class="text-blue-600"><i class="fas fa-spinner fa-spin"></i> Registrando novedad...</span>';
+    
+    fetch('/warehouse-inventory/tcr/buscar-o-registrar-novedad', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken
+        },
+        body: JSON.stringify({
+            codigo: window.codigoProductoEncontrado,
+            pedido_id: pedidoSeleccionado ? pedidoSeleccionado.pedido_id : null,
+            cantidad_llego: cantidadReal,
+            observaciones: `Diferencia detectada: ${tipoDiferencia} de ${Math.abs(diferencia)}. Cantidad esperada: ${window.cantidadEsperada}, Cantidad real: ${cantidadReal}`
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.estado) {
+            const mensajeTipo = tipoDiferencia === 'sobrante' 
+                ? `✅ Sobrante de ${Math.abs(diferencia)} registrado como novedad`
+                : `⚠️ Faltante de ${Math.abs(diferencia)} registrado como novedad`;
+            mostrarNotificacion(mensajeTipo, tipoDiferencia === 'sobrante' ? 'success' : 'warning');
+            
+            // Limpiar formulario y continuar con otro producto
+            resetearFormularioProducto();
+            
+            // Actualizar reporte de novedades
+            setTimeout(() => {
+                cargarNovedades();
+            }, 500);
+        } else {
+            mensaje.innerHTML = `<span class="text-red-600">Error: ${data.msj || 'Error desconocido'}</span>`;
+        }
+    })
+    .catch(error => {
+        console.error('Error al registrar diferencia:', error);
+        mensaje.innerHTML = '<span class="text-red-600">Error al registrar diferencia como novedad</span>';
+    });
+}
+
+// Resetear formulario de producto para continuar con otro
+function resetearFormularioProducto() {
+    asignacionActual = null;
+    ubicacionActual = null;
+    window.codigoProductoEncontrado = null;
+    window.cantidadEsperada = null;
+    
+    // Limpiar inputs
+    document.getElementById('inputProducto').value = '';
+    document.getElementById('inputUbicacion').value = '';
+    document.getElementById('inputCantidad').value = '';
+    document.getElementById('inputCantidadRealLlego').value = '';
+    
+    // Ocultar elementos
+    document.getElementById('btnLimpiarProducto').classList.add('hidden');
+    document.getElementById('cantidadLlego').classList.add('hidden');
+    document.getElementById('pasoUbicacion').style.display = 'none';
+    document.getElementById('pasoCantidad').style.display = 'none';
+    document.getElementById('pasoFinalizar').style.display = 'none';
+    document.getElementById('mensajeProducto').innerHTML = '';
+    document.getElementById('mensajeCantidadReal').innerHTML = '';
+    
+    // Resetear info de asignación
+    document.getElementById('infoAsignacion').innerHTML = `
+        <div class="text-center text-gray-400 py-6 sm:py-8">
+            <i class="fas fa-info-circle text-3xl sm:text-4xl mb-2"></i>
+            <p class="text-xs sm:text-sm">Escanea un producto del pedido</p>
+        </div>
+    `;
+    
+    // Volver al paso de escanear producto
+    document.getElementById('pasoProducto').style.display = 'block';
+    document.getElementById('inputProducto').focus();
 }
 
 // Registrar diferencia como novedad
