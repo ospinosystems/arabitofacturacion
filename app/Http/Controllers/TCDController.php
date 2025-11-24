@@ -78,12 +78,26 @@ class TCDController extends Controller
             
             $productosFormateados = $productos->map(function($producto) {
                 try {
-                    // Obtener stock disponible (cantidad - cantidad_bloqueada)
-                    $stockDisponible = WarehouseInventory::where('inventario_id', $producto->id)
+                    // Obtener stock disponible desde WarehouseInventory (cantidad - cantidad_bloqueada)
+                    $stockDisponibleWarehouse = WarehouseInventory::where('inventario_id', $producto->id)
                         ->selectRaw('SUM(cantidad - COALESCE(cantidad_bloqueada, 0)) as disponible')
                         ->value('disponible');
                     
-                    $stockDisponible = $stockDisponible !== null ? (float)$stockDisponible : 0;
+                    $stockDisponibleWarehouse = $stockDisponibleWarehouse !== null ? (float)$stockDisponibleWarehouse : 0;
+                    
+                    // Obtener stock total desde WarehouseInventory
+                    $stockTotalWarehouse = WarehouseInventory::where('inventario_id', $producto->id)
+                        ->sum('cantidad') ?? 0;
+                    
+                    // Si no hay stock en WarehouseInventory, usar el stock general del inventario
+                    // Esto puede pasar cuando el producto tiene stock pero no está asignado a ubicaciones específicas
+                    if ($stockTotalWarehouse == 0 && isset($producto->cantidad) && $producto->cantidad > 0) {
+                        $stockDisponible = (float)$producto->cantidad;
+                        $stockTotal = (float)$producto->cantidad;
+                    } else {
+                        $stockDisponible = $stockDisponibleWarehouse;
+                        $stockTotal = (float)$stockTotalWarehouse;
+                    }
                     
                     // Obtener ubicación del producto (primera ubicación con stock disponible)
                     $warehouseInventory = WarehouseInventory::where('inventario_id', $producto->id)
@@ -97,10 +111,6 @@ class TCDController extends Controller
                         $ubicacion = $warehouseInventory->warehouse->codigo ?? 'N/A';
                     }
                     
-                    // Obtener stock total
-                    $stockTotal = WarehouseInventory::where('inventario_id', $producto->id)
-                        ->sum('cantidad') ?? 0;
-                    
                     return [
                         'id' => $producto->id,
                         'codigo_barras' => $producto->codigo_barras ?? '',
@@ -109,11 +119,13 @@ class TCDController extends Controller
                         'precio' => $producto->precio ?? 0,
                         'precio_base' => $producto->precio_base ?? 0,
                         'ubicacion' => $ubicacion,
-                        'stock_total' => (float)$stockTotal,
+                        'stock_total' => $stockTotal,
                         'stock_disponible' => $stockDisponible,
                     ];
                 } catch (\Exception $e) {
-                    // Si hay error procesando un producto, retornar datos básicos
+                    // Si hay error procesando un producto, intentar usar stock general como fallback
+                    $stockGeneral = isset($producto->cantidad) ? (float)$producto->cantidad : 0;
+                    
                     return [
                         'id' => $producto->id,
                         'codigo_barras' => $producto->codigo_barras ?? '',
@@ -122,8 +134,8 @@ class TCDController extends Controller
                         'precio' => $producto->precio ?? 0,
                         'precio_base' => $producto->precio_base ?? 0,
                         'ubicacion' => 'N/A',
-                        'stock_total' => 0,
-                        'stock_disponible' => 0,
+                        'stock_total' => $stockGeneral,
+                        'stock_disponible' => $stockGeneral,
                     ];
                 }
             })->values(); // values() para asegurar que sea un array indexado
@@ -181,10 +193,20 @@ class TCDController extends Controller
             foreach ($request->items as $item) {
                 $producto = inventario::findOrFail($item['inventario_id']);
                 
-                // Validar stock disponible (cantidad - cantidad_bloqueada)
-                $stockDisponible = WarehouseInventory::where('inventario_id', $producto->id)
+                // Validar stock disponible desde WarehouseInventory (cantidad - cantidad_bloqueada)
+                $stockDisponibleWarehouse = WarehouseInventory::where('inventario_id', $producto->id)
                     ->selectRaw('SUM(cantidad - COALESCE(cantidad_bloqueada, 0)) as disponible')
                     ->value('disponible') ?? 0;
+                
+                // Si no hay stock en WarehouseInventory, usar el stock general del inventario
+                $stockTotalWarehouse = WarehouseInventory::where('inventario_id', $producto->id)
+                    ->sum('cantidad') ?? 0;
+                
+                if ($stockTotalWarehouse == 0 && isset($producto->cantidad) && $producto->cantidad > 0) {
+                    $stockDisponible = (float)$producto->cantidad;
+                } else {
+                    $stockDisponible = (float)$stockDisponibleWarehouse;
+                }
                 
                 if ($stockDisponible < $item['cantidad']) {
                     throw new \Exception("Stock insuficiente para el producto '{$producto->descripcion}'. Disponible: {$stockDisponible}, Solicitado: {$item['cantidad']}");
@@ -335,10 +357,21 @@ class TCDController extends Controller
                 $inventarioId = $asig->ordenItem->inventario_id;
                 $cantidadPendiente = $asig->cantidad - $asig->cantidad_procesada;
                 
-                // Obtener stock disponible total
-                $stockDisponible = WarehouseInventory::where('inventario_id', $inventarioId)
+                // Obtener stock disponible total desde WarehouseInventory
+                $stockDisponibleWarehouse = WarehouseInventory::where('inventario_id', $inventarioId)
                     ->selectRaw('SUM(cantidad - COALESCE(cantidad_bloqueada, 0)) as disponible')
                     ->value('disponible') ?? 0;
+                
+                // Si no hay stock en WarehouseInventory, usar el stock general del inventario
+                $stockTotalWarehouse = WarehouseInventory::where('inventario_id', $inventarioId)
+                    ->sum('cantidad') ?? 0;
+                
+                $producto = inventario::find($inventarioId);
+                if ($stockTotalWarehouse == 0 && $producto && isset($producto->cantidad) && $producto->cantidad > 0) {
+                    $stockDisponible = (float)$producto->cantidad;
+                } else {
+                    $stockDisponible = (float)$stockDisponibleWarehouse;
+                }
                 
                 // Obtener TODAS las ubicaciones con stock disponible para este producto
                 $todasUbicaciones = WarehouseInventory::where('inventario_id', $inventarioId)

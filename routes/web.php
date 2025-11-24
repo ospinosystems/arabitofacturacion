@@ -213,6 +213,10 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('changepedidouser', [PedidosController::class,"changepedidouser"]);
 		
 		Route::post('delpedido', [PedidosController::class,"delpedido"]);
+
+		Route::post('cierre-v2/calcular', [App\Http\Controllers\CierreV2Controller::class, 'calcular']);
+		Route::post('cierre-v2/guardar', [App\Http\Controllers\CierreV2Controller::class, 'guardar']);
+		Route::post('cierre-v2/reversar', [App\Http\Controllers\CierreV2Controller::class, 'reversar']);
 		
 	});
 	Route::group(['middleware' => ['auth.user:vendedor']], function () {

@@ -49,14 +49,7 @@ class CierresController extends Controller
         $biopagos = [];
         foreach ($c as $key => $e) {
 
-            /* if($e->puntolote1montobs==""){return "Error: "."puntolote1montobs";}
-            if($e->puntolote1==""){return "Error: "."puntolote1";}
-            if($e->puntolote1banco==""){return "Error: "."puntolote1banco";}
-            if($e->puntolote2montobs==""){return "Error: "."puntolote2montobs";}
-            if($e->puntolote2==""){return "Error: "."puntolote2";}
-            if($e->puntolote2banco==""){return "Error: "."puntolote2banco";}
-            if($e->biopagoserialmontobs==""){return "Error: "."biopagoserialmontobs";}
-            if($e->biopagoserial==""){return "Error: "."biopagoserial";} */
+           
 
             if ($e->puntolote1montobs&&$e->puntolote1) {
                 array_push($lotes,[

@@ -421,6 +421,11 @@ const db = {
   getEstadisticasInventarioGarantias: data => axios.post(host + "getEstadisticasInventarioGarantias", data),
   
   // ================ FIN FUNCIONES INVENTARIO DE GARANTÍAS ================
+  
+  // Cierre V2
+  calcularCierreV2: data => axios.post(host + "cierre-v2/calcular", data),
+  guardarCierreV2: data => axios.post(host + "cierre-v2/guardar", data),
+  reversarCierreV2: data => axios.post(host + "cierre-v2/reversar", data),
 
 }
 

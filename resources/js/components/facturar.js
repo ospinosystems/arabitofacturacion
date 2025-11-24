@@ -27,6 +27,7 @@ import Clientes from "../components/clientes";
 import PedidosCentralComponent from "../components/pedidosCentral";
 
 import Cierres from "../components/cierre";
+import CierreV2 from "../components/CierreV2";
 import Inventario from "../components/inventario";
 
 import Seleccionar from "../components/seleccionar";
@@ -6397,7 +6398,10 @@ export default function Facturar({
                         />
                     ) : null}
 
-                    {view == "cierres" ? (
+                            {view == "cierres" ? (
+                                <CierreV2 totalizarcierre={totalizarcierre} onClose={() => setView("ventas")} bancos={bancos} />
+                            ) : null}
+                    {false && view == "cierres" ? (
                         <Cierres
                             bancos={bancos}
                             dataPuntosAdicionales={dataPuntosAdicionales}
