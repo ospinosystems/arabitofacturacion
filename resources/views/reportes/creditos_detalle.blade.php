@@ -57,9 +57,7 @@
         }
 
         .client-info {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0.15in;
+            display: block;
             margin-bottom: 0.15in;
         }
 
@@ -76,6 +74,9 @@
         }
 
         .client-field {
+            display: inline-block;
+            width: 32%;
+            vertical-align: top;
             margin-bottom: 0.05in;
         }
 
@@ -97,6 +98,7 @@
             text-align: center;
             font-weight: bold;
             font-size: 9px;
+            white-space: nowrap;
         }
 
         .products-table td {
@@ -104,6 +106,7 @@
             padding: 3px 3px;
             text-align: center;
             font-size: 8px;
+            white-space: nowrap;
         }
 
         .products-table .product-description {
@@ -174,8 +177,8 @@
         }
 
         .status-pendiente {
-            background-color: #ffc107;
-            color: black;
+            background-color: #6c757d;
+            color: white;
         }
 
         .abonos-table {
@@ -190,6 +193,7 @@
             border: 1px solid #ddd;
             padding: 2px 4px;
             text-align: right;
+            white-space: nowrap;
         }
 
         .abonos-table th {
@@ -286,7 +290,7 @@
                             @if($ee->tipo==2&&$ee->monto!=0)<span class="status-badge" style="background-color: #6c757d;">Deb. {{$ee->monto}}</span> @endif
                             @if($ee->tipo==3&&$ee->monto!=0)<span class="status-badge" style="background-color: #28a745;">Efec. {{$ee->monto}}</span> @endif
                             @if($ee->tipo==6&&$ee->monto!=0)<span class="status-badge" style="background-color: #dc3545;">Vuel. {{$ee->monto}}</span> @endif
-                            @if($ee->tipo==4&&$ee->monto!=0)<span class="status-badge" style="background-color: #ffc107; color: black;">Cred. {{$ee->monto}}</span> @endif
+                            @if($ee->tipo==4&&$ee->monto!=0)<span class="status-badge" style="background-color: #6c757d; color: white;">Cred. {{$ee->monto}}</span> @endif
                         @endforeach
                     </div>
 
@@ -365,8 +369,27 @@
                     @endforeach
                 </tbody>
             </table>
+            @php
+                $totalProductos = $pedido->items->reduce(function($carry, $val) {
+                    return $carry + (($val->cantidad) * ($val->producto->precio ?? 0));
+                }, 0);
+            @endphp
+            <table class="totals-table" style="margin-top: 0; margin-bottom: 0.1in;">
+                <tr class="total-row">
+                    <th class="text-left">Total productos (precios actuales)</th>
+                    <td style="width: 25%;">{{ moneda($totalProductos) }}</td>
+                </tr>
+            </table>
+            <div style="font-size: 7px; color: #666; margin-bottom: 0.1in;">
+                * El total de productos está calculado de acuerdo a los precios actuales.<br>
+                * El valor de "Crédito otorgado" corresponde al precio del día de creación del pedido.
+            </div>
         </div>
     @endforeach
+
+    <div style="font-size: 8px; margin-top: 0.1in; text-align: left; color: #555;">
+        Nota: Los créditos están sujetos a cambios de acuerdo a variaciones de precio del producto.
+    </div>
 
 </div>
 </body>

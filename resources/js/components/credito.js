@@ -115,7 +115,8 @@ function Credito({
       <div className="row align-items-center mb-3">
         <div className="col">
           <h3 className="mb-0">Cuentas por cobrar</h3>
-          <small className="text-muted">Gestión de créditos y abonos por cliente</small>
+          <small className="text-muted d-block">Gestión de créditos y abonos por cliente</small>
+          <small className="text-muted d-block">Nota: los créditos están sujetos a cambios de acuerdo a variaciones de precio del producto.</small>
         </div>
         <div className="col text-right">
           <button className="btn btn-outline-secondary mr-2" title="Imprimir resumen de créditos" onClick={printCreditos}>
@@ -303,29 +304,34 @@ function Credito({
                       <th>
                         <span className="badge badge-info">
                             {sumPedidosArr.length} pedido(s) seleccionado(s)
-                          </span>
-                          {sumPedidosArr.length ? (
-                            <div className="mb-2 d-flex align-items-center">
-                              <div className="btn-group btn-group-sm">
+                        </span>
+                        {sumPedidosArr.length ? (
+                          <div className="mb-2 d-flex align-items-center flex-column align-items-start">
+                            <div className="btn-group btn-group-sm mb-1">
+                             {/*  <a
+                                className="btn btn-success"
+                                target="_blank"
+                                href={"/sumpedidos?id="+sumPedidosArr}
+                              >
+                                Unificar
+                              </a> */}
+                              {deudoresList[selectDeudor] && creditsUpdated && (
                                 <a
-                                  className="btn btn-success"
+                                  className="btn btn-primary"
                                   target="_blank"
-                                  href={"/sumpedidos?id="+sumPedidosArr}
+                                  href={"/reporteCreditosCliente?id_cliente="+deudoresList[selectDeudor].id+"&ids="+sumPedidosArr.join(",")}
                                 >
-                                  Unificar
+                                  Créditos seleccionados
                                 </a>
-                                {deudoresList[selectDeudor] && (
-                                  <a
-                                    className="btn btn-primary"
-                                    target="_blank"
-                                    href={"/reporteCreditosCliente?id_cliente="+deudoresList[selectDeudor].id+"&ids="+sumPedidosArr.join(",")}
-                                  >
-                                    Créditos seleccionados
-                                  </a>
-                                )}
-                              </div>
+                              )}
                             </div>
-                          ) : null}
+                            {deudoresList[selectDeudor] && !creditsUpdated && (
+                              <small className="text-sinapsis">
+                                <i className="fa fa-lock"></i> Actualice los créditos para habilitar el reporte de facturas
+                              </small>
+                            )}
+                          </div>
+                        ) : null}
                       </th>
 
 
@@ -340,12 +346,12 @@ function Credito({
                     :null}
                   </tr>
                 <tr>
-                  <th className="">Acciones</th>
-                  <th className="text-right">Fecha vence</th>
-                  <th>Pedido</th>
-                  <th>Formas de pago</th>
-                  <th className="text-right ">Crédito</th>
-                  <th className="text-right ">Abono</th>
+                  <th className="" style={{width: '10%'}}>Acciones</th>
+                  <th className="text-right" style={{width: '15%'}}>Fecha vence</th>
+                  <th style={{width: '25%'}}>Pedido</th>
+                  <th style={{width: '25%'}}>Formas de pago</th>
+                  <th className="text-right" style={{width: '15%'}}>Crédito</th>
+                  <th className="text-right" style={{width: '10%'}}>Abono</th>
                 </tr>
               </thead>
               <tbody>
