@@ -197,6 +197,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('getClienteCrud', [ClientesController::class,"getpersona"]);
 		Route::post('delCliente', [ClientesController::class,"delCliente"]);
 		Route::get('sumpedidos', [PedidosController::class,"sumpedidos"]);
+		Route::get('reporteCreditosCliente', [PagoPedidosController::class,"reporteCreditosCliente"]);
 		
 		Route::post('imprimirTicked', [tickera::class,"imprimir"]);
 		Route::get('resetPrintingState', [App\Http\Controllers\tickera::class, 'resetPrintingState']);

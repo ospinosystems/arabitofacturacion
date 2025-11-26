@@ -112,38 +112,59 @@ function Credito({
   return (
     <div className="container"> 
     
-      <div className="row">
+      <div className="row align-items-center mb-3">
         <div className="col">
-          <h3>Cuentas por cobrar</h3> 
+          <h3 className="mb-0">Cuentas por cobrar</h3>
+          <small className="text-muted">Gestión de créditos y abonos por cliente</small>
         </div>
         <div className="col text-right">
-          <button className="btn btn-outline-success m-2" onClick={printCreditos}>
-            <i className="fa fa-print"></i>
+          <button className="btn btn-outline-secondary mr-2" title="Imprimir resumen de créditos" onClick={printCreditos}>
+            <i className="fa fa-print"></i> Imprimir
           </button>
           <button className="btn btn-outline-success" onClick={()=>{
-            let num = window.prompt("num")
+            let num = window.prompt("Cantidad de resultados a mostrar", limitdeudores)
 
             if (num) {
               setlimitdeudores(num)
             }
-          }}>Resultados. {limitdeudores}</button>
+          }}>Resultados: {limitdeudores}</button>
         </div>
       </div> 
 
       {
         selectDeudor===null?
         <div>
-          <form onSubmit={getDeudores}>
-            <input type="text" className="form-control" placeholder='Buscar...' value={qDeudores} name="qDeudores"  onChange={onchangecaja}/>
+          <form onSubmit={getDeudores} className="mb-3">
+            <input
+              type="text"
+              className="form-control"
+              placeholder='Buscar cliente por nombre o identificación...'
+              value={qDeudores}
+              name="qDeudores"
+              onChange={onchangecaja}
+            />
           </form>
           <table className="table table-hoverable">
             <thead>
               <tr>
-                <th className="text-center">Nombres</th>
-                <th className="text-center pointer hover" onClick={()=>orderbycolumdeudores=="vence"?setorderbyorderdeudores(orderbyorderdeudores=="desc"?"asc":"desc"):setorderbycolumdeudores("vence")}>Vence</th>
-                <th className="text-right pointer hover" onClick={()=>orderbycolumdeudores=="saldo"?setorderbyorderdeudores(orderbyorderdeudores=="desc"?"asc":"desc"):setorderbycolumdeudores("saldo")}>Balance</th>
+                <th className="text-center">Cliente</th>
+                <th
+                  className="text-center pointer hover"
+                  title="Ordenar por fecha de vencimiento"
+                  onClick={()=>orderbycolumdeudores=="vence"?setorderbyorderdeudores(orderbyorderdeudores=="desc"?"asc":"desc"):setorderbycolumdeudores("vence")}
+                >
+                  Vence
+                </th>
+                <th
+                  className="text-right pointer hover"
+                  title="Ordenar por saldo pendiente"
+                  onClick={()=>orderbycolumdeudores=="saldo"?setorderbyorderdeudores(orderbyorderdeudores=="desc"?"asc":"desc"):setorderbycolumdeudores("saldo")}
+                >
+                  Saldo
+                </th>
               </tr>
             </thead>
+
             <tbody>
               {deudoresList.length?deudoresList.map((e,i)=>
                 e?
@@ -152,12 +173,17 @@ function Credito({
                       setSelectDeudor(i)
                       setsumPedidosArr([])
                       
+
                       // Verificar si este cliente ya fue actualizado
                       const clienteYaActualizado = updatedClients.has(e.id);
                       setCreditsUpdated(clienteYaActualizado);
 
                     }}>
-                  <td>{e.id} - {e.nombre} - {e.identificacion}</td>
+                  <td>
+                    <div className="font-weight-bold">{e.nombre}</div>
+                    <small className="text-muted">{e.identificacion} · ID {e.id}</small>
+                  </td>
+
                   <td>{e.vence} ({e.dias} días)</td>
                   <td  className={(e.saldo>0?"text-success":"text-danger")+(" h2 text-right")}>
                     <button className={("btn ")+(e.saldo<0?"btn-outline-danger":"btn-outline-success")}>{moneda(e.saldo)}</button>
@@ -171,14 +197,28 @@ function Credito({
             {!deudoresList.length ? <div className='h3 text-center text-dark mt-2'><i>¡Sin resultados!</i></div> : null}
         </div>:
         <div className="p-4">
-          <h3 className="text-center"><i className="fa fa-times text-danger pointer" onClick={()=>{
-            setSelectDeudor(null)
-            setOnlyVueltos(0)
-            setCreditsUpdated(false)
-            setUpdateMessage('')
-          }}></i></h3>
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <button
+              type="button"
+              className="btn btn-link text-danger p-0"
+              onClick={()=>{
+                setSelectDeudor(null)
+                setOnlyVueltos(0)
+                setCreditsUpdated(false)
+                setUpdateMessage('')
+              }}
+            >
+              <i className="fa fa-arrow-left"></i> Volver a la lista de clientes
+            </button>
+            {deudoresList[selectDeudor] && (
+              <div className="text-right">
+                <div className="h5 mb-0">{deudoresList[selectDeudor].nombre}</div>
+                <small className="text-muted">{deudoresList[selectDeudor].identificacion}</small>
+              </div>
+            )}
+          </div>
           <hr/>
-          
+
           {/* Sección de actualización de créditos */}
           {selectDeudor !== null && deudoresList && deudoresList[selectDeudor] && (
             <div className="mb-4 p-3 border rounded bg-light">
@@ -228,21 +268,67 @@ function Credito({
                   <tr className="">
                     {detallesDeudor["pedido_total"]?
                     <>
-                      <th className="" colSpan="2">
+                      <th>
                         {deudoresList[selectDeudor]?
                         <div className="">
                           <span className="">{deudoresList[selectDeudor].identificacion}</span>
                           <h1 className="">{deudoresList[selectDeudor].nombre}</h1>
                         </div>:null}
-                        {sumPedidosArr?
-                          sumPedidosArr.map(e=><button key={e} className="btn btn-outline-success" data-id={e} data-tipo="del" onClick={sumPedidos}>{e}</button>)
-                        :null}
-                        {sumPedidosArr.length?
-                          <a className="" target="_blank" href={"/sumpedidos?id="+sumPedidosArr}>
-                            <button className="btn btn-success">Emitir Factura.</button>
-                          </a>
-                          :null}
+
+                        <div className="mb-2 d-flex align-items-center">
+                          <button
+                            className="btn btn-sm btn-outline-primary mr-2"
+                            onClick={() => {
+                              if (detallesDeudor && detallesDeudor["pedido"]) {
+                                const allIds = detallesDeudor["pedido"].map(p => p.id);
+                                setsumPedidosArr(allIds);
+                              }
+                            }}
+                          >
+                            Seleccionar todos
+                          </button>
+                          <button
+                            className="btn btn-sm btn-outline-secondary mr-3"
+                            onClick={() => {
+                              setsumPedidosArr([]);
+                            }}
+                          >
+                            Limpiar selección
+                          </button>
+
+                          
+                        </div>
                       </th>
+
+                      <th>
+                        <span className="badge badge-info">
+                            {sumPedidosArr.length} pedido(s) seleccionado(s)
+                          </span>
+                          {sumPedidosArr.length ? (
+                            <div className="mb-2 d-flex align-items-center">
+                              <div className="btn-group btn-group-sm">
+                                <a
+                                  className="btn btn-success"
+                                  target="_blank"
+                                  href={"/sumpedidos?id="+sumPedidosArr}
+                                >
+                                  Unificar
+                                </a>
+                                {deudoresList[selectDeudor] && (
+                                  <a
+                                    className="btn btn-primary"
+                                    target="_blank"
+                                    href={"/reporteCreditosCliente?id_cliente="+deudoresList[selectDeudor].id+"&ids="+sumPedidosArr.join(",")}
+                                  >
+                                    Créditos seleccionados
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          ) : null}
+                      </th>
+
+
                       {!onlyVueltos?
                         <>
                             <td className="text-right">Balance: <h2 className={(detallesDeudor["pedido_total"]["diferencia"]>0?"text-success":"text-danger")}>{detallesDeudor["pedido_total"]["diferencia"]}</h2></td>
@@ -254,11 +340,12 @@ function Credito({
                     :null}
                   </tr>
                 <tr>
-                  <th className="text-right">VENCE</th>
-                  <th>PEDIDO</th>
-                  <th>TIPO PAGO</th>
-                  <th className="text-right ">CRÉDITO</th>
-                  <th className="text-right ">ABONO</th>
+                  <th className="">Acciones</th>
+                  <th className="text-right">Fecha vence</th>
+                  <th>Pedido</th>
+                  <th>Formas de pago</th>
+                  <th className="text-right ">Crédito</th>
+                  <th className="text-right ">Abono</th>
                 </tr>
               </thead>
               <tbody>
@@ -308,27 +395,27 @@ function Credito({
                   detallesDeudor&&detallesDeudor["pedido"]?
                     detallesDeudor["pedido"].map(e=>
                       <tr key={e.id}>
-                        <td className="d-flex justify-content-between align-items-center">
+                        <td>
                           {!sumPedidosArr.filter(id_save=>id_save==e.id).length?
-                            <button className="btn btn-outline-success" data-id={e.id} data-tipo="add" onClick={sumPedidos}>Select</button>
+                            <button className="btn btn-sm btn-outline-success" data-id={e.id} data-tipo="add" onClick={sumPedidos}>Seleccionar</button>
                             :
-                          
-                            <button className="btn btn-outline-danger" data-id={e.id} data-tipo="del" onClick={sumPedidos}>UnSelect</button>
+                            <button className="btn btn-sm btn-outline-danger" data-id={e.id} data-tipo="del" onClick={sumPedidos}>Quitar</button>
                           }
-                          <div className="text-center">
+                        </td>
+                        <td className="">
                             <div className="font-weight-bold">{e.fecha_vence}</div>
                             <small className="text-muted">
                               Creado: {e.created_at ? new Date(e.created_at).toLocaleDateString() : 'N/A'}
                             </small>
-                          </div>
                         </td>
                         <td className="align-middle">
                           <div className="text-center">
-                            <button className="btn btn-secondary btn-lg w-50 mb-2" data-id={e.id} onClick={onClickEditPedido}>
-                              {e.id} <i className="fa fa-eye"></i>
+                            <button className="btn btn-secondary btn-sm w-75 mb-1" data-id={e.id} onClick={onClickEditPedido}>
+                              Ver pedido #{e.id} <i className="fa fa-eye"></i>
                             </button>
+
                             <div className="small text-muted">
-                              Items: {e.items_count || (e.items ? e.items.length : 'N/A')}
+                              Items: {e.items ? e.items.length : (typeof e.items_count !== 'undefined' ? e.items_count : 0)}
                             </div>
                           </div>
                         </td>

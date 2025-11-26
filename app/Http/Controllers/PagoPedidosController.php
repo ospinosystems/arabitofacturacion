@@ -641,7 +641,9 @@ class PagoPedidosController extends Controller
     function getDeudaFechaPago($id_cliente) {
         $getfecha = pedidos::with(["pagos"=>function($q){
             $q->orderBy("tipo","desc");
-        }])
+        },
+        // Cargar items para poder mostrar cantidad de productos por pedido en la interfaz de créditos
+        "items"])
         ->where(function($q){
             $q->whereIn("id",pago_pedidos::orWhere(function($q){
                 $q->where("cuenta",0); //Abono
@@ -661,12 +663,15 @@ class PagoPedidosController extends Controller
 
     public function getDeudaFun($onlyVueltos,$id_cliente)
     {
-        $pedidos = pedidos::with(["pagos"=>function($q) use ($onlyVueltos){
-            if ($onlyVueltos) {
-                $q->where("tipo",6)->where("monto","<>",0);
-            }
-            $q->orderBy("tipo","desc");
-        }])
+        $pedidos = pedidos::with([
+            "pagos"=>function($q) use ($onlyVueltos){
+                if ($onlyVueltos) {
+                    $q->where("tipo",6)->where("monto","<>",0);
+                }
+                $q->orderBy("tipo","desc");
+            },
+            // Cargar items para que el frontend pueda mostrar la cantidad de productos por pedido
+            "items"])
         ->where(function($q) use ($onlyVueltos){
             if ($onlyVueltos) {
                 $q->whereIn("id",pago_pedidos::where("tipo",6)->where("monto","<>",0)->select("id_pedido"));
@@ -742,6 +747,66 @@ class PagoPedidosController extends Controller
         $data = $this->getDeudoresFun($qDeudores,$orderbycolumdeudores,$orderbyorderdeudores,$today,200);
         
         return view("reportes.creditos",["data" => $data,"sucursal" => $sucursal,"today"=>$today]);
+    }
+    public function reporteCreditosCliente(Request $req)
+    {
+        $id_cliente = $req->id_cliente;
+        $ids = $req->ids;
+
+        if (!$id_cliente || !$ids) {
+            abort(404);
+        }
+
+        $idsArray = explode(",", $ids);
+
+        $cliente = clientes::findOrFail($id_cliente);
+
+        $pedidos = pedidos::with([
+                'cliente',
+                'pagos',
+                'items' => function ($q) {
+                    $q->with('producto');
+                }
+            ])
+            ->where('id_cliente', $id_cliente)
+            ->whereIn('id', $idsArray)
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($q) {
+                $q->saldoDebe = $q->pagos->where('tipo', 4)->sum('monto');
+                $q->saldoAbono = $q->pagos->where('cuenta', 0)->sum('monto');
+                return $q;
+            });
+
+        $totalCreditos = $pedidos->sum('saldoDebe');
+        $totalAbonos = $pedidos->sum('saldoAbono');
+        $saldo = $totalAbonos - $totalCreditos;
+
+        // Cantidad de movimientos de crédito (tipo 4) y de abono (cuenta 0)
+        $cantidadMovCreditos = 0;
+        $cantidadMovAbonos = 0;
+
+        foreach ($pedidos as $p) {
+            if (isset($p->pagos)) {
+                $cantidadMovCreditos += $p->pagos->where('tipo', 4)->where('monto', '<>', 0)->count();
+                $cantidadMovAbonos += $p->pagos->where('cuenta', 0)->where('monto', '<>', 0)->count();
+            }
+        }
+
+        $resumen = [
+            'cantidad_pedidos' => $pedidos->count(),
+            'total_creditos'   => $totalCreditos,
+            'total_abonos'     => $totalAbonos,
+            'saldo'            => $saldo,
+            'cantidad_mov_creditos' => $cantidadMovCreditos,
+            'cantidad_mov_abonos'   => $cantidadMovAbonos,
+        ];
+
+        return view('reportes.creditos_detalle', [
+            'cliente' => $cliente,
+            'pedidos' => $pedidos,
+            'resumen' => $resumen,
+        ]);
     }
     public function getDeudores(Request $req)
     {   
