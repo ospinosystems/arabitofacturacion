@@ -6398,10 +6398,10 @@ export default function Facturar({
                         />
                     ) : null}
 
-                            {view == "cierres" ? (
+                           {/*  {view == "cierres" ? (
                                 <CierreV2 totalizarcierre={totalizarcierre} onClose={() => setView("ventas")} bancos={bancos} />
-                            ) : null}
-                    {false && view == "cierres" ? (
+                            ) : null} */}
+                    {view == "cierres" ? (
                         <Cierres
                             bancos={bancos}
                             dataPuntosAdicionales={dataPuntosAdicionales}
