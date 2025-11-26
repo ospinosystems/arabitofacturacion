@@ -1255,7 +1255,7 @@ class PedidosController extends Controller
             return Response::json(["msj" => "Error: Fecha invalida", "estado" => false]);
         }
 
-        if ($check_pendiente) {
+        if ($check_pendiente && sucursal::first()->codigo != "galponvalencia1") {
             // Optimizacion: Pluck id para no cargar modelos completos
             $pedido_pendientes_check = pedidos::where("estado", 0)->pluck('id');
             if ($pedido_pendientes_check->isNotEmpty()) {
