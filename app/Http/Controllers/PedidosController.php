@@ -1255,12 +1255,13 @@ class PedidosController extends Controller
             return Response::json(["msj" => "Error: Fecha invalida", "estado" => false]);
         }
 
-        if ($check_pendiente && sucursal::first()->codigo != "galponvalencia1") {
-            // Optimizacion: Pluck id para no cargar modelos completos
-            $pedido_pendientes_check = pedidos::where("estado", 0)->pluck('id');
-            if ($pedido_pendientes_check->isNotEmpty()) {
+        if ($check_pendiente) {
+            $pedido_pendientes_check = pedidos::where("estado", 0)->get();
+            if (count($pedido_pendientes_check)) {
                 return Response::json([
-                    "msj" => "Error: Hay pedidos pendientes " . $pedido_pendientes_check->implode(','),
+                    "msj" => "Error: Hay pedidos pendientes " . $pedido_pendientes_check->map(function ($q) {
+                        return $q->id;
+                    }),
                     "estado" => false
                 ]);
             }
@@ -1284,15 +1285,8 @@ class PedidosController extends Controller
             $caja_inicialpeso = $ultimo_cierre->sum("dejar_peso");
             $caja_inicialbs = $ultimo_cierre->sum("dejar_bss");
         }
+        $pedido = pedidos::where("created_at", "LIKE", $fecha . "%")->where("estado",1)->whereIn("id_vendedor", $id_vendedor);
         
-        // Optimizacion: Query base para pedidos del dia
-        $pedidosDiaIds = pedidos::where("created_at", "LIKE", $fecha . "%")
-                                ->where("estado", 1)
-                                ->whereIn("id_vendedor", $id_vendedor)
-                                ->pluck('id');
-
-        // Optimizacion: Cargar todos los pagos relevantes de una vez
-        $pagosDia = pago_pedidos::whereIn('id_pedido', $pedidosDiaIds)->get();
 
         /////Montos de ganancias
         //Var vueltos_des
@@ -1301,17 +1295,13 @@ class PedidosController extends Controller
         //Var desc_total
         //Var ganancia
         //Var porcentaje
-        
-        // Optimizacion: Filtrar en memoria y cargar relaciones eficientemente
-        $vueltos_des_filtered = $pagosDia->where("tipo", 6)->where("monto", "<>", 0);
-        
-        $vueltosPedidoIds = $vueltos_des_filtered->pluck('id_pedido')->unique();
-        $vueltosPedidos = pedidos::with('cliente')->whereIn('id', $vueltosPedidoIds)->get()->keyBy('id');
-
-        $vueltos_des = $vueltos_des_filtered->map(function ($q) use ($vueltosPedidos) {
-                $q->cliente = $vueltosPedidos[$q->id_pedido] ?? null;
+        $vueltos_des = pago_pedidos::where("tipo", 6)->where("monto", "<>", 0)
+            ->whereIn("id_pedido", pedidos::where("created_at", "LIKE", $fecha . "%")->whereIn("id_vendedor", $id_vendedor)->select("id"))
+            ->get()
+            ->map(function ($q) {
+                $q->cliente = pedidos::with("cliente")->find($q->id_pedido);
                 return $q;
-            })->values();
+            });
 
         $puntosAdicional = cierres_puntos::whereIn("id_usuario", $id_vendedor)->where("fecha",$fecha)->get();
 
@@ -1322,7 +1312,13 @@ class PedidosController extends Controller
                 $q->with("cliente");
             }
         ])
-            ->whereIn("id_pedido", $pedidosDiaIds)
+            ->whereIn(
+                "id_pedido",
+                pedidos::where("created_at", "LIKE", $fecha . "%")
+                    ->whereIn("id_vendedor", $id_vendedor)
+                    ->where("estado", 1)
+                    ->select("id")
+            )
             ->get()
             ->map(function ($q) {
                 $q->monto_abono = 0;
@@ -1346,9 +1342,9 @@ class PedidosController extends Controller
             });
             
         $total_export = items_pedidos::whereIn("id_pedido",pedidos::where("created_at", "LIKE", $fecha . "%")->where("export",1)->select("id") )->sum("monto");
-        
-        // Optimizacion: Sumar desde la coleccion en memoria
-        $total_credito = $pagosDia->where("tipo", 4)->sum("monto") + $total_export;
+        $total_credito = pago_pedidos::whereIn("id_pedido", pedidos::where("created_at", "LIKE", $fecha . "%")->whereIn("id_vendedor", $id_vendedor)->where("tipo", 4)->select("id"))
+            ->get()
+            ->sum("monto")+$total_export;
 
         
 
@@ -1393,6 +1389,7 @@ class PedidosController extends Controller
 
 
 
+
         /////End Montos de ganancias
         $tipo_accion = cierres::where("fecha", $fecha)->where("id_usuario", session("id_usuario"))->first();
         if ($tipo_accion) {
@@ -1431,8 +1428,13 @@ class PedidosController extends Controller
         ///Abonos del Dia
         $abonosdeldia = 0;
         $pedidos_abonos = pedidos::with(["pagos", "cliente"])
-            ->whereHas('pagos', function ($q) {
-                $q->where("cuenta", 0)->where("monto", "<>", 0);
+            ->where(function ($q) {
+                $q
+                    ->whereIn("id", pago_pedidos::orWhere(function ($q) {
+                        $q->orWhere("cuenta", 0); //Abono
+                    })
+                        ->where("monto", "<>", 0)
+                        ->select("id_pedido"));
             })
             ->where("created_at", "LIKE", $fecha . "%")
             ->get()
@@ -1502,9 +1504,11 @@ class PedidosController extends Controller
 
         ];
         $numventas_arr = [];
-        
-        $pagosDia->sortByDesc("id")
-            ->each(function ($q) use (&$arr_pagos, &$numventas_arr) {
+        pago_pedidos::whereIn("id_pedido", $pedido->select("id"))
+            ->where("monto", "<>", 0)
+            ->orderBy("id", "desc")
+            ->get()
+            ->map(function ($q) use (&$arr_pagos, &$numventas_arr) {
                 if (array_key_exists($q->tipo, $arr_pagos)) {
                     $arr_pagos[$q->tipo] += $q->monto;
                 } else {
@@ -1553,7 +1557,7 @@ class PedidosController extends Controller
             $diff_efectivo = $total_caja - $arr_pagos[3];
         }
         $arr_pagos["descuadre"] = $diff_debito + $diff_biopago + $diff_efectivo; 
-        
+
         $arr_pagos["transferencia_digital"] = $arr_pagos[1];
         $arr_pagos["debito_digital"] = $arr_pagos[2];
         $arr_pagos["efectivo_digital"] = $arr_pagos[3];
