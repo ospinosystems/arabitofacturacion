@@ -726,13 +726,33 @@ function Pedidos({
 																	</>
 																) : ee.tipo == 2 ? (
 																	<>
-																		D.{ee.monto}
-																		{ee.bs !== undefined && (
-																			<span className="ml-1 text-xs text-gray-800">/Bs {ee.bs}</span>
+																		{ee.monto_original && ee.moneda === 'bs' ? (
+																			<>
+																				D.Bs {parseFloat(ee.monto_original).toFixed(2)}
+																				<span className="ml-1 text-[10px] text-gray-600">(${parseFloat(ee.monto).toFixed(2)})</span>
+																				{ee.referencia && (
+																					<span className="ml-1 text-[10px] text-gray-500">#{ee.referencia}</span>
+																				)}
+																			</>
+																		) : (
+																			<>
+																				D.${parseFloat(ee.monto).toFixed(2)}
+																				{ee.referencia && (
+																					<span className="ml-1 text-[10px] text-gray-500">#{ee.referencia}</span>
+																				)}
+																			</>
 																		)}
 																	</>
 																) : ee.tipo == 3 ? (
-																	"E." + ee.monto
+																	<>
+																		{ee.moneda === 'bs' ? (
+																			`E.Bs ${parseFloat(ee.monto_original || ee.monto).toFixed(2)}`
+																		) : ee.moneda === 'cop' ? (
+																			`E.COP ${parseFloat(ee.monto_original || ee.monto).toFixed(0)}`
+																		) : (
+																			`E.$${parseFloat(ee.monto).toFixed(2)}`
+																		)}
+																	</>
 																) : ee.tipo == 4 ? (
 																	"C." + ee.monto
 																) : ee.tipo == 5 ? (

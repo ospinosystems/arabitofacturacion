@@ -1,6 +1,13 @@
 import { useState, useEffect } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 
+const MODULOS = [
+    { id: 'Central', label: 'Central', icon: 'fa-building' },
+    { id: 'AutoPagoMovil', label: 'Pago Móvil', icon: 'fa-mobile' },
+    { id: 'AutoBanescoBanesco', label: 'Banesco-Banesco', icon: 'fa-university' },
+    { id: 'AutoInterbancaria', label: 'Interbancaria', icon: 'fa-exchange' },
+];
+
 export default function ModalRefPago({
     addRefPago,
     descripcion_referenciapago,
@@ -25,14 +32,94 @@ export default function ModalRefPago({
     const [isrefbanbs, setisrefbanbs] = useState(true);
     const [errors, setErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [showBancoReferencia, setShowBancoReferencia] = useState(false);
+
+    // Estado para el módulo seleccionado
+    const [moduloSeleccionado, setModuloSeleccionado] = useState('Central');
+
+    // Obtener fecha de hoy en formato YYYY-MM-DD
+    const getTodayDate = () => {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    // Nuevos campos para los módulos
+    const [fechaPago, setFechaPago] = useState(getTodayDate());
+    const [telefonoPago, setTelefonoPago] = useState('');
+    const [codigoBancoOrigen, setCodigoBancoOrigen] = useState('');
+
+    // Obtener configuración de campos según módulo
+    const getModuloConfig = () => {
+        switch (moduloSeleccionado) {
+            case 'Central':
+                return {
+                    showAllFields: true,
+                    showBanco: true,
+                    showReferencia: true,
+                    referenciaMaxLength: null,
+                    referenciaPlaceholder: 'Referencia completa de la transacción...',
+                    showFechaPago: false,
+                    showTelefonoPago: false,
+                    showCodigoBancoOrigen: false,
+                };
+            case 'AutoPagoMovil':
+                return {
+                    showAllFields: false,
+                    showBanco: false,
+                    showReferencia: true,
+                    referenciaMaxLength: 6,
+                    referenciaPlaceholder: 'Últimos 6 dígitos numéricos...',
+                    showFechaPago: true,
+                    showTelefonoPago: true,
+                    showCodigoBancoOrigen: true,
+                };
+            case 'AutoBanescoBanesco':
+                return {
+                    showAllFields: false,
+                    showBanco: false,
+                    showReferencia: true,
+                    referenciaMaxLength: 12,
+                    referenciaPlaceholder: 'Últimos 12 dígitos numéricos...',
+                    showFechaPago: false,
+                    showTelefonoPago: false,
+                    showCodigoBancoOrigen: false,
+                };
+            case 'AutoInterbancaria':
+                return {
+                    showAllFields: false,
+                    showBanco: false,
+                    showReferencia: true,
+                    referenciaMaxLength: 6,
+                    referenciaPlaceholder: 'Últimos 6 dígitos numéricos...',
+                    showFechaPago: true,
+                    showTelefonoPago: false,
+                    showCodigoBancoOrigen: true,
+                };
+            default:
+                return {
+                    showAllFields: true,
+                    showBanco: true,
+                    showReferencia: true,
+                    referenciaMaxLength: null,
+                    referenciaPlaceholder: 'Referencia completa de la transacción...',
+                    showFechaPago: false,
+                    showTelefonoPago: false,
+                    showCodigoBancoOrigen: false,
+                };
+        }
+    };
+
+    const moduloConfig = getModuloConfig();
 
     // Validar formulario
     const validateForm = () => {
         const newErrors = {};
 
-        // Validar banco y referencia solo si están visibles
-        if (showBancoReferencia) {
+        // Validación según módulo
+        if (moduloSeleccionado === 'Central') {
+            // Validar banco y referencia
             if (!descripcion_referenciapago || descripcion_referenciapago.trim() === '') {
                 newErrors.descripcion = 'La referencia es obligatoria';
             }
@@ -40,14 +127,29 @@ export default function ModalRefPago({
             if (!banco_referenciapago || banco_referenciapago === '') {
                 newErrors.banco = 'Debe seleccionar un banco';
             }
+        } else {
+            // Validaciones para módulos automáticos
+            if (!descripcion_referenciapago || descripcion_referenciapago.trim() === '') {
+                newErrors.descripcion = 'La referencia es obligatoria';
+            } else if (moduloConfig.referenciaMaxLength && descripcion_referenciapago.length !== moduloConfig.referenciaMaxLength) {
+                newErrors.descripcion = `La referencia debe tener ${moduloConfig.referenciaMaxLength} dígitos`;
+            }
+
+            if (moduloConfig.showFechaPago && !fechaPago) {
+                newErrors.fechaPago = 'La fecha de pago es obligatoria';
+            }
+
+            if (moduloConfig.showTelefonoPago && !telefonoPago) {
+                newErrors.telefonoPago = 'El teléfono es obligatorio';
+            }
+
+            if (moduloConfig.showCodigoBancoOrigen && !codigoBancoOrigen) {
+                newErrors.codigoBancoOrigen = 'El código de banco origen es obligatorio';
+            }
         }
 
         if (!monto_referenciapago || monto_referenciapago == 0) {
             newErrors.monto = 'El monto debe ser mayor a 0';
-        }
-
-        if (!tipo_referenciapago || tipo_referenciapago === '') {
-            newErrors.tipo = 'Debe seleccionar el tipo de pago';
         }
 
         setErrors(newErrors);
@@ -90,7 +192,7 @@ export default function ModalRefPago({
             banco_referenciapago == "ZELLE" ||
             banco_referenciapago == "BINANCE" ||
             banco_referenciapago == "AirTM"
-            ) {
+        ) {
             setisrefbanbs(false);
             setmonto_referenciapago(transferencia);
         } else {
@@ -111,10 +213,26 @@ export default function ModalRefPago({
         if (errors.monto && monto_referenciapago > 0) {
             setErrors(prev => ({ ...prev, monto: null }));
         }
-        if (errors.tipo && tipo_referenciapago) {
-            setErrors(prev => ({ ...prev, tipo: null }));
+        if (errors.fechaPago && fechaPago) {
+            setErrors(prev => ({ ...prev, fechaPago: null }));
         }
-    }, [descripcion_referenciapago, banco_referenciapago, monto_referenciapago, tipo_referenciapago]);
+        if (errors.telefonoPago && telefonoPago) {
+            setErrors(prev => ({ ...prev, telefonoPago: null }));
+        }
+        if (errors.codigoBancoOrigen && codigoBancoOrigen) {
+            setErrors(prev => ({ ...prev, codigoBancoOrigen: null }));
+        }
+    }, [descripcion_referenciapago, banco_referenciapago, monto_referenciapago, fechaPago, telefonoPago, codigoBancoOrigen]);
+
+    // Limpiar campos cuando cambia el módulo (excepto fechaPago que mantiene la fecha actual)
+    useEffect(() => {
+        setdescripcion_referenciapago('');
+        setTelefonoPago('');
+        setCodigoBancoOrigen('');
+        setErrors({});
+        // Resetear fecha a hoy cuando cambia de módulo
+        setFechaPago(getTodayDate());
+    }, [moduloSeleccionado]);
 
     // Hotkey para cerrar con ESC
     useHotkeys('esc', handleClose, { enableOnTags: ['INPUT', 'SELECT'] });
@@ -127,29 +245,12 @@ export default function ModalRefPago({
         }
     }, []);
 
-    // Cargar monto y tipo cuando se abra el modal
+    // Cargar monto cuando se abra el modal
     useEffect(() => {
         if (montoTraido && montoTraido > 0) {
             setmonto_referenciapago(montoTraido);
         }
-        if (tipoTraido) {
-            settipo_referenciapago(tipoTraido);
-        }
-    }, [montoTraido, tipoTraido]);
-
-    // Limpiar campos de banco y referencia cuando se ocultan
-    useEffect(() => {
-        if (!showBancoReferencia) {
-            setdescripcion_referenciapago("");
-            setbanco_referenciapago("");
-            // Limpiar errores relacionados
-            setErrors(prev => ({
-                ...prev,
-                descripcion: null,
-                banco: null
-            }));
-        }
-    }, [showBancoReferencia]);
+    }, [montoTraido]);
 
     return (
         <>
@@ -160,7 +261,7 @@ export default function ModalRefPago({
             ></div>
 
             {/* Modal flotante posicionado */}
-            <div className="fixed z-50 w-full max-w-sm overflow-hidden transform -translate-x-1/2 -translate-y-1/2 bg-white border border-gray-200 rounded-lg shadow-xl top-1/2 left-1/2">
+            <div className="fixed z-50 w-full max-w-2xl overflow-y-auto max-h-[90vh] transform -translate-x-1/2 -translate-y-1/2 bg-white border border-gray-200 rounded-lg shadow-xl top-1/2 left-1/2">
                 {/* Header compacto */}
                 <div className="px-4 py-3 border-b border-orange-100 bg-orange-50">
                     <div className="flex items-center justify-between">
@@ -175,6 +276,25 @@ export default function ModalRefPago({
                         >
                             <i className="text-xs fa fa-times"></i>
                         </button>
+                    </div>
+
+                    {/* Selector de módulos */}
+                    <div className="flex flex-wrap gap-1 mt-3">
+                        {MODULOS.map((modulo) => (
+                            <button
+                                key={modulo.id}
+                                type="button"
+                                onClick={() => setModuloSeleccionado(modulo.id)}
+                                className={`flex items-center px-2 py-1 text-xs font-medium rounded transition-colors ${
+                                    moduloSeleccionado === modulo.id
+                                        ? 'bg-orange-500 text-white'
+                                        : 'bg-white text-gray-600 hover:bg-orange-100'
+                                }`}
+                            >
+                                <i className={`mr-1 fa ${modulo.icon}`}></i>
+                                {modulo.label}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
@@ -197,25 +317,13 @@ export default function ModalRefPago({
                         />
                     </div>
 
-                    {/* Botón para mostrar/ocultar campos de banco y referencia */}
-                    <div className="flex justify-center">
-                        <button
-                            type="button"
-                            onClick={() => setShowBancoReferencia(!showBancoReferencia)}
-                            className="flex items-center px-3 py-1 text-xs font-medium text-gray-600 transition-colors bg-gray-100 rounded hover:bg-gray-200"
-                        >
-                            <i className={`mr-1 fa ${showBancoReferencia ? 'fa-eye-slash' : 'fa-eye'}`}></i>
-                            {showBancoReferencia ? 'Ocultar' : 'Mostrar'} Banco y Referencia
-                        </button>
-                    </div>
-
-                    {/* Campos de Banco y Referencia - Ocultos por defecto */}
-                    {showBancoReferencia && (
+                    {/* Módulo Central - Campos de banco y referencia siempre visibles */}
+                    {moduloSeleccionado === 'Central' && (
                         <>
                             {/* Banco */}
                             <div>
                                 <label className="block mb-1 text-xs font-medium text-gray-700">
-                                    Banco
+                                    Banco <span className="text-red-500">*</span>
                                 </label>
                                 <select
                                     value={banco_referenciapago}
@@ -246,7 +354,7 @@ export default function ModalRefPago({
                             {/* Referencia */}
                             <div>
                                 <label className="block mb-1 text-xs font-medium text-gray-700">
-                                    Referencia
+                                    Referencia <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="text"
@@ -268,59 +376,108 @@ export default function ModalRefPago({
                         </>
                     )}
 
-                    {/* Referencia */}
-                    {/*   <div>
-                            <label className="block mb-1 text-sm font-medium text-gray-700">
-                                Referencia <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                                type="text"
-                                placeholder="Referencia completa de la transacción..."
-                                value={descripcion_referenciapago}
-                                onChange={e => setdescripcion_referenciapago(
-                                    banco_referenciapago == "ZELLE" ? e.target.value : number(e.target.value)
+                    {/* Campos para módulos automáticos */}
+                    {moduloSeleccionado !== 'Central' && (
+                        <>
+                            {/* Referencia - siempre visible en módulos automáticos */}
+                            <div>
+                                <label className="block mb-1 text-xs font-medium text-gray-700">
+                                    Referencia <span className="text-red-500">*</span>
+                                    {moduloConfig.referenciaMaxLength && (
+                                        <span className="ml-1 text-gray-400">({moduloConfig.referenciaMaxLength} dígitos)</span>
+                                    )}
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder={moduloConfig.referenciaPlaceholder}
+                                    value={descripcion_referenciapago}
+                                    onChange={e => {
+                                        let value = number(e.target.value);
+                                        if (moduloConfig.referenciaMaxLength) {
+                                            value = value.slice(0, moduloConfig.referenciaMaxLength);
+                                        }
+                                        setdescripcion_referenciapago(value);
+                                    }}
+                                    onKeyPress={handleKeyPress}
+                                    maxLength={moduloConfig.referenciaMaxLength || undefined}
+                                    data-ref-input="true"
+                                    className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
+                                        errors.descripcion ? 'border-red-300' : 'border-gray-200'
+                                    }`}
+                                />
+                                {errors.descripcion && (
+                                    <p className="mt-1 text-xs text-red-600">{errors.descripcion}</p>
                                 )}
-                                onKeyPress={handleKeyPress}
-                                className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${
-                                    errors.descripcion ? 'border-red-300' : 'border-gray-300'
-                                }`}
-                            />
-                            {errors.descripcion && (
-                                <p className="mt-1 text-sm text-red-600">{errors.descripcion}</p>
-                            )}
-                        </div> */}
+                            </div>
 
-                    {/* Banco */}
-                    {/* <div>
-                            <label className="block mb-1 text-sm font-medium text-gray-700">
-                                Banco <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                                value={banco_referenciapago}
-                                onChange={e => {
-                                    setdescripcion_referenciapago("");
-                                    setbanco_referenciapago(e.target.value);
-                                }}
-                                onKeyPress={handleKeyPress}
-                                className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${
-                                    errors.banco ? 'border-red-300' : 'border-gray-300'
-                                }`}
-                            >
-                                <option value="">-- Seleccione un banco --</option>
-                                {bancos
-                                    .filter(e => e.value != "0134 BANESCO ARABITO PUNTOS 9935")
-                                    .filter(e => e.value != "0134 BANESCO TITANIO")
-                                    .map((e, i) => (
-                                        <option key={i} value={e.value}>
-                                            {e.text}
-                                        </option>
-                                    ))
-                                }
-                    </select>
-                            {errors.banco && (
-                                <p className="mt-1 text-sm text-red-600">{errors.banco}</p>
+                            {/* Fecha de Pago - AutoPagoMovil y AutoInterbancaria */}
+                            {moduloConfig.showFechaPago && (
+                                <div>
+                                    <label className="block mb-1 text-xs font-medium text-gray-700">
+                                        Fecha de Pago <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={fechaPago}
+                                        onChange={e => setFechaPago(e.target.value)}
+                                        onKeyPress={handleKeyPress}
+                                        className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
+                                            errors.fechaPago ? 'border-red-300' : 'border-gray-200'
+                                        }`}
+                                    />
+                                    {errors.fechaPago && (
+                                        <p className="mt-1 text-xs text-red-600">{errors.fechaPago}</p>
+                                    )}
+                                </div>
                             )}
-                    </div> */}
+
+                            {/* Teléfono - Solo AutoPagoMovil */}
+                            {moduloConfig.showTelefonoPago && (
+                                <div>
+                                    <label className="block mb-1 text-xs font-medium text-gray-700">
+                                        Número de Teléfono <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="Ej: 04121234567"
+                                        value={telefonoPago}
+                                        onChange={e => setTelefonoPago(number(e.target.value))}
+                                        onKeyPress={handleKeyPress}
+                                        maxLength={11}
+                                        className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
+                                            errors.telefonoPago ? 'border-red-300' : 'border-gray-200'
+                                        }`}
+                                    />
+                                    {errors.telefonoPago && (
+                                        <p className="mt-1 text-xs text-red-600">{errors.telefonoPago}</p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Código Banco Origen - AutoPagoMovil y AutoInterbancaria */}
+                            {moduloConfig.showCodigoBancoOrigen && (
+                                <div>
+                                    <label className="block mb-1 text-xs font-medium text-gray-700">
+                                        Código Banco Origen <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="Ej: 0102"
+                                        value={codigoBancoOrigen}
+                                        onChange={e => setCodigoBancoOrigen(number(e.target.value))}
+                                        onKeyPress={handleKeyPress}
+                                        maxLength={4}
+                                        className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
+                                            errors.codigoBancoOrigen ? 'border-red-300' : 'border-gray-200'
+                                        }`}
+                                    />
+                                    {errors.codigoBancoOrigen && (
+                                        <p className="mt-1 text-xs text-red-600">{errors.codigoBancoOrigen}</p>
+                                    )}
+                                </div>
+                            )}
+                        </>
+                    )}
 
                     {/* Monto */}
                     <div>
@@ -353,35 +510,6 @@ export default function ModalRefPago({
                         {errors.monto && (
                             <p className="mt-1 text-xs text-red-600">
                                 {errors.monto}
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Tipo de Pago */}
-                    <div>
-                        <label className="block mb-1 text-xs font-medium text-gray-700">
-                            Tipo de Pago <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                            value={tipo_referenciapago}
-                            onChange={(e) =>
-                                settipo_referenciapago(e.target.value)
-                            }
-                            onKeyPress={handleKeyPress}
-                            className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
-                                errors.tipo
-                                    ? "border-red-300"
-                                    : "border-gray-200"
-                            }`}
-                        >
-                            <option value="">Seleccionar tipo</option>
-                            <option value="1">Transferencia</option>
-                            {/* <option value="2">Débito</option> */}
-                            {/* <option value="5">BioPago</option> */}
-                        </select>
-                        {errors.tipo && (
-                            <p className="mt-1 text-xs text-red-600">
-                                {errors.tipo}
                             </p>
                         )}
                     </div>

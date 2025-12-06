@@ -252,12 +252,32 @@ class ItemsPedidosController extends Controller
 
     public function setCantidad(Request $req)
     {
+        // Verificar si el pedido tiene factura original asignada (es devolución)
+        $item = items_pedidos::find($req->index);
+        if ($item) {
+            $pedido = pedidos::find($item->id_pedido);
+            if ($pedido && $pedido->isdevolucionOriginalid) {
+                return Response::json([
+                    "msj" => "No se puede modificar la cantidad en un pedido de devolución vinculado a factura original",
+                    "estado" => false
+                ]);
+            }
+        }
+
         return (new InventarioController)->hacer_pedido($req->index,null,floatval($req->cantidad),"upd");
     }
 
     
     public function setDescuentoTotal(Request $req){
         try {
+            // Verificar si el pedido tiene factura original asignada (es devolución)
+            $pedido = pedidos::find($req->index);
+            if ($pedido && $pedido->isdevolucionOriginalid) {
+                return Response::json([
+                    "msj" => "No se puede aplicar descuento en un pedido de devolución vinculado a factura original",
+                    "estado" => false
+                ]);
+            }
 
             $descuento = floatval($req->descuento);
             if ($descuento>15) {

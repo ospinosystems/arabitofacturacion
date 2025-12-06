@@ -15,6 +15,7 @@ use App\Models\items_factura;
 use App\Models\items_movimiento;
 use App\Models\items_pedidos;
 use App\Models\marcas;
+use App\Models\moneda;
 use App\Models\movimientos;
 use App\Models\pago_pedidos;
 use App\Models\pedidos;
@@ -272,6 +273,9 @@ class InventarioController extends Controller
                 $cantidad = $cantidad * -1;
             } */
 
+            // Variable para guardar datos del item original en devoluciones
+            $itemOriginalDevolucion = null;
+
             if ($cantidad < 0) {
                 $cantidades_cero =items_pedidos::where('cantidad', '<', 0)->where('id_pedido', $id_pedido)->get();
                 if ($cantidades_cero->count() == 0) {
@@ -301,6 +305,18 @@ class InventarioController extends Controller
                         throw new \Exception('No tiene permisos para agregar productos con cantidad negativa', 1);
                     }
                 }
+                
+                // Validar devolución contra factura original y obtener datos del item original
+                if ($id_pedido != 'nuevo' && $id_pedido != 'ultimo') {
+                    $validacionDevolucion = (new PedidosController)->validarProductoDevolucion($id_pedido, $id, $cantidad);
+                    if (!$validacionDevolucion['valido']) {
+                        throw new \Exception($validacionDevolucion['mensaje'], 1);
+                    }
+                    // Guardar datos del item original para usar su precio y tasa
+                    if (isset($validacionDevolucion['item_original'])) {
+                        $itemOriginalDevolucion = $validacionDevolucion['item_original'];
+                    }
+                }
             }
            
             $old_ct = 0;
@@ -315,12 +331,7 @@ class InventarioController extends Controller
                         throw new \Exception('No hay disponible la cantidad solicitada', 1);
                     }
 
-                    $new_pedido = new pedidos;
-                    $new_pedido->estado = 0;
-                    $new_pedido->id_cliente = 1;
-                    $new_pedido->id_vendedor = $usuario;
-                    $new_pedido->save();
-                    $id_pedido = $new_pedido->id;
+                    $id_pedido = (new PedidosController)->addNewPedido();
                 }
 
                 if ($id_pedido == 'ultimo') {
@@ -346,7 +357,13 @@ class InventarioController extends Controller
                 }
 
                 $producto = inventario::select(['cantidad', 'precio'])->where('id', $id)->lockForUpdate()->first();
-                $precio = $producto->precio;
+                
+                // Si es devolución con item original, usar el precio de la factura original
+                if ($itemOriginalDevolucion && $cantidad < 0) {
+                    $precio = $itemOriginalDevolucion['precio_unitario'];
+                } else {
+                    $precio = $producto->precio;
+                }
 
                 if ($precio > 40 && (floor($cantidad) != $cantidad)) {
                     throw new \Exception('Para productos con precio mayor a 40, la cantidad debe ser un número entero ' . $cantidad . ' | ' . $precio, 1);
@@ -420,6 +437,37 @@ class InventarioController extends Controller
                     $this->descontarInventario($id, $ctSeter, $ctquehabia, $id_pedido, 'VENTA');
                     $this->checkFalla($id, $ctSeter);
                 }
+                
+                // Obtener tasa: usar la del item original si es devolución, sino la actual
+                $tasaParaGuardar = null;
+                if ($itemOriginalDevolucion && $cantidad < 0 && $itemOriginalDevolucion['tasa']) {
+                    $tasaParaGuardar = $itemOriginalDevolucion['tasa'];
+                } else {
+                    $tasaParaGuardar = Cache::get('bs');
+                    if (!$tasaParaGuardar) {
+                        $tasa_bs = moneda::where("tipo", 1)->orderBy("id", "desc")->first();
+                        $tasaParaGuardar = $tasa_bs ? $tasa_bs->valor : 1;
+                    }
+                }
+                
+                // Obtener tasa COP: usar la del item original si es devolución, sino la actual
+                $tasaCopParaGuardar = null;
+                if ($itemOriginalDevolucion && $cantidad < 0 && isset($itemOriginalDevolucion['tasa_cop'])) {
+                    $tasaCopParaGuardar = $itemOriginalDevolucion['tasa_cop'];
+                } else {
+                    $tasaCopParaGuardar = Cache::get('cop');
+                    if (!$tasaCopParaGuardar) {
+                        $tasa_cop = moneda::where("tipo", 2)->orderBy("id", "desc")->first();
+                        $tasaCopParaGuardar = $tasa_cop ? $tasa_cop->valor : 1;
+                    }
+                }
+                
+                // Obtener descuento: usar el del item original si es devolución, sino 0
+                $descuentoParaGuardar = 0;
+                if ($itemOriginalDevolucion && $cantidad < 0 && isset($itemOriginalDevolucion['descuento'])) {
+                    $descuentoParaGuardar = $itemOriginalDevolucion['descuento'];
+                }
+
                 items_pedidos::updateOrCreate([
                     'id_producto' => $id,
                     'id_pedido' => $id_pedido,
@@ -429,6 +477,10 @@ class InventarioController extends Controller
                     'cantidad' => $setcantidad,
                     'monto' => $setprecio,
                     'condicion' => $devolucionTipo,
+                    'tasa' => $tasaParaGuardar,
+                    'tasa_cop' => $tasaCopParaGuardar,
+                    'precio_unitario' => $precio,
+                    'descuento' => $descuentoParaGuardar,
                 ]);
 
                 return ['msj' => 'Agregado al pedido #' . $id_pedido . ' || Cant. ' . $cantidad, 'estado' => 'ok', 'num_pedido' => $id_pedido, 'type' => $typeafter];
@@ -463,10 +515,27 @@ class InventarioController extends Controller
                 $this->descontarInventario($checkIfExits->id_producto, $ctSeter, ($producto->cantidad), items_pedidos::find($id)->id_pedido ?? null, 'ACT.VENTA');
                 $this->checkFalla($checkIfExits->id_producto, $ctSeter);
 
+                // Obtener tasa actual
+                $tasaActual = Cache::get('bs');
+                if (!$tasaActual) {
+                    $tasa_bs = moneda::where("tipo", 1)->orderBy("id", "desc")->first();
+                    $tasaActual = $tasa_bs ? $tasa_bs->valor : 1;
+                }
+                
+                // Obtener tasa COP actual
+                $tasaCopActual = Cache::get('cop');
+                if (!$tasaCopActual) {
+                    $tasa_cop = moneda::where("tipo", 2)->orderBy("id", "desc")->first();
+                    $tasaCopActual = $tasa_cop ? $tasa_cop->valor : 1;
+                }
+
                 items_pedidos::updateOrCreate(['id' => $id], [
                     'cantidad' => $cantidad,
                     'monto' => $setprecio,
-                    'condicion' => $devolucionTipo
+                    'condicion' => $devolucionTipo,
+                    'tasa' => $tasaActual,
+                    'tasa_cop' => $tasaCopActual,
+                    'precio_unitario' => $precio,
                 ]);
                 return ['msj' => 'Actualizado Prod #' . $checkIfExits->id_producto . ' || Cant. ' . $cantidad, 'estado' => 'ok'];
             } else if ($type == 'del') {

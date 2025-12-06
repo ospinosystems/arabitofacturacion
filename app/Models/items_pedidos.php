@@ -37,5 +37,8 @@ class items_pedidos extends Model
         "ct_real",
         "barras_real",
         "alterno_real",
+        "tasa",
+        "tasa_cop",
+        "precio_unitario",
     ];
 }

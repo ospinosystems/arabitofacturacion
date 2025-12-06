@@ -215,6 +215,11 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		
 		Route::post('delpedido', [PedidosController::class,"delpedido"]);
 
+		// Rutas para devoluciones
+		Route::post('asignarPedidoOriginalDevolucion', [PedidosController::class,"asignarPedidoOriginalDevolucion"]);
+		Route::post('getItemsDisponiblesDevolucion', [PedidosController::class,"getItemsDisponiblesDevolucionEndpoint"]);
+		Route::post('eliminarPedidoOriginalDevolucion', [PedidosController::class,"eliminarPedidoOriginalDevolucion"]);
+
 		Route::post('cierre-v2/calcular', [App\Http\Controllers\CierreV2Controller::class, 'calcular']);
 		Route::post('cierre-v2/guardar', [App\Http\Controllers\CierreV2Controller::class, 'guardar']);
 		Route::post('cierre-v2/reversar', [App\Http\Controllers\CierreV2Controller::class, 'reversar']);
@@ -607,6 +612,5 @@ Route::group(['middleware' => ['auth.user:admin']], function () {
     Route::get('getMonedas', [MonedasController::class, 'getMonedas']);
     Route::get('getDollarRate', [MonedasController::class, 'getDollarRate']);
     Route::post('updateDollarRate', [MonedasController::class, 'updateDollarRate']);
-    Route::post('updateMoneda', [MonedasController::class, 'updateMoneda']);
 });
 

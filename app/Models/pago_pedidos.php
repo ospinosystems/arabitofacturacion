@@ -18,8 +18,11 @@ class pago_pedidos extends Model
     protected $fillable = [
         "tipo",
         "monto",
+        "monto_original",
         "cuenta",
-        "id_pedido"
+        "id_pedido",
+        "moneda",
+        "referencia"
     ];
 
 }

@@ -184,6 +184,10 @@ class GarantiaController extends Controller
                 $cantidad_negativa = $cantidad * -1;
                 $monto = $precio * $cantidad; // Monto positivo para el registro
                 
+                // Obtener tasas actuales
+                $tasa_bs = \App\Models\moneda::where("tipo", 1)->orderBy("id", "desc")->first();
+                $tasa_cop = \App\Models\moneda::where("tipo", 2)->orderBy("id", "desc")->first();
+                
                 // Crear item del pedido
                 items_pedidos::create([
                     "id_producto" => $id_producto,
@@ -191,6 +195,9 @@ class GarantiaController extends Controller
                     "cantidad" => $cantidad_negativa, // ¡MUY IMPORTANTE: cantidad negativa!
                     "monto" => $monto,
                     "condicion" => $condicion, // 1=garantía, 2=cambio/devolución
+                    "tasa" => $tasa_bs ? $tasa_bs->valor : 1,
+                    "tasa_cop" => $tasa_cop ? $tasa_cop->valor : 1,
+                    "precio_unitario" => $precio,
                     "created_at" => now(),
                     "updated_at" => now()
                 ]);
@@ -959,6 +966,10 @@ class GarantiaController extends Controller
             $precio = $producto->precio;
             $cantidad_negativa = $cantidad * -1;
             $monto = $precio * $cantidad;
+            
+            // Obtener tasas actuales
+            $tasa_bs = \App\Models\moneda::where("tipo", 1)->orderBy("id", "desc")->first();
+            $tasa_cop = \App\Models\moneda::where("tipo", 2)->orderBy("id", "desc")->first();
 
             // Crear item del pedido
             items_pedidos::create([
@@ -967,6 +978,9 @@ class GarantiaController extends Controller
                 "cantidad" => $cantidad_negativa,
                 "monto" => $monto,
                 "condicion" => $condicion,
+                "tasa" => $tasa_bs ? $tasa_bs->valor : 1,
+                "tasa_cop" => $tasa_cop ? $tasa_cop->valor : 1,
+                "precio_unitario" => $precio,
                 "created_at" => now(),
                 "updated_at" => now()
             ]);

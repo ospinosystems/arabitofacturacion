@@ -485,87 +485,81 @@ class Login extends Component{
 					)}
 				</div>
 
-				{/* Modal de Actualización del Dólar */}
+				{/* Modal de Actualización del Dólar - Compacto y Responsivo */}
 				{this.state.showDollarUpdate && (
-					<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-						<div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+					<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
+						<div className="bg-white rounded-lg shadow-xl max-w-sm w-full max-h-[95vh] overflow-y-auto p-4 sm:p-5">
 							<div className="text-center">
-								<div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
-									<i className="fas fa-exclamation-triangle text-yellow-600 text-2xl"></i>
+								<div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-3">
+									<i className="fas fa-exclamation-triangle text-yellow-600 text-lg"></i>
 								</div>
-								<h3 className="text-lg font-semibold text-gray-900 mb-2">
-									Actualización del Dólar Requerida
+								<h3 className="text-base font-semibold text-gray-900 mb-2">
+									Actualizar Dólar
 								</h3>
-								<p className="text-gray-600 mb-4">
-									El valor del dólar no ha sido actualizado hoy. Debe actualizarlo antes de continuar.
+								<p className="text-xs text-gray-600 mb-3">
+									El valor del dólar debe actualizarse antes de continuar.
 								</p>
-								<div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-									<p className="text-sm text-blue-800">
-										<strong>🔄 Automático:</strong> Se intentará actualizar automáticamente desde el BCV.
-									</p>
-								</div>
 								
 								{this.state.dollarStatus && (
-									<div className="bg-gray-50 rounded-lg p-4 mb-4 text-left">
-										<h4 className="font-medium text-gray-900 mb-2">Estado Actual:</h4>
-										<div className="space-y-1 text-sm text-gray-600">
-											<p><strong>Última actualización:</strong> {this.state.dollarStatus.last_update || 'No disponible'}</p>
-											<p><strong>Valor actual:</strong> ${this.state.dollarStatus.value || 'No disponible'}</p>
-											<p><strong>Origen:</strong> {this.state.dollarStatus.origin || 'No disponible'}</p>
+									<div className="bg-gray-50 rounded-lg p-2 mb-3 text-left">
+										<h4 className="text-xs font-medium text-gray-900 mb-1">Estado:</h4>
+										<div className="space-y-0.5 text-xs text-gray-600">
+											<p><strong>Última:</strong> {this.state.dollarStatus.last_update || 'N/A'}</p>
+											<p><strong>Valor:</strong> ${this.state.dollarStatus.value || 'N/A'}</p>
 										</div>
 									</div>
 								)}
 
 								{this.state.updateMessage && (
-									<div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-										<pre className="text-sm text-blue-800 whitespace-pre-wrap">{this.state.updateMessage}</pre>
+									<div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-3">
+										<pre className="text-xs text-blue-800 whitespace-pre-wrap">{this.state.updateMessage}</pre>
 									</div>
 								)}
 
-								<div className="flex flex-col space-y-3">
+								<div className="flex flex-col space-y-2">
 									{/* Botón principal - Actualización Automática */}
 									<button
 										type="button"
 										onClick={this.forceUpdateDollar}
 										disabled={this.state.updatingDollar}
-										className="w-full px-4 py-3 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+										className="w-full px-3 py-2 text-xs font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
 									>
 										{this.state.updatingDollar ? (
-											<>
-												<span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></span>
-												Conectando con BCV...
-											</>
+											<span className="flex items-center justify-center">
+												<span className="animate-spin inline-block h-3 w-3 border-2 border-white border-t-transparent rounded-full mr-2"></span>
+												Conectando...
+											</span>
 										) : (
-											<>
+											<span className="flex items-center justify-center">
 												<i className="fas fa-sync-alt mr-2"></i>
-												Actualizar Automáticamente (BCV)
-											</>
+												Actualizar (BCV)
+											</span>
 										)}
 									</button>
 									
 									{/* Botón secundario - Actualización Manual (solo si automática falla) */}
-									{this.state.updateMessage && this.state.updateMessage.includes('❌') && (
+									{this.state.updateMessage && this.state.updateMessage.includes('') && (
 										<>
 											<div className="text-center">
-												<span className="text-sm text-gray-500">o</span>
+												<span className="text-xs text-gray-500">o</span>
 											</div>
 											
 											<button
 												type="button"
 												onClick={this.manualUpdateDollar}
 												disabled={this.state.updatingDollar}
-												className="w-full px-4 py-2 text-sm font-medium text-orange-700 bg-orange-50 border border-orange-300 rounded-md hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
+												className="w-full px-3 py-2 text-xs font-medium text-orange-700 bg-orange-50 border border-orange-300 rounded-md hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
 											>
 												{this.state.updatingDollar ? (
-													<>
-														<span className="animate-spin h-4 w-4 border-2 border-orange-600 border-t-transparent rounded-full mr-2"></span>
+													<span className="flex items-center justify-center">
+														<span className="animate-spin inline-block h-3 w-3 border-2 border-orange-600 border-t-transparent rounded-full mr-2"></span>
 														Actualizando...
-													</>
+													</span>
 												) : (
-													<>
+													<span className="flex items-center justify-center">
 														<i className="fas fa-edit mr-2"></i>
-														Actualización Manual (Alternativa)
-													</>
+														Manual
+													</span>
 												)}
 											</button>
 										</>
@@ -575,7 +569,7 @@ class Login extends Component{
 									<button
 										type="button"
 										onClick={() => this.setState({ showDollarUpdate: false, dollarStatus: null })}
-										className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+										className="w-full px-3 py-2 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
 									>
 										Cancelar
 									</button>

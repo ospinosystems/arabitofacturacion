@@ -69,6 +69,9 @@ export default function ListProductosInterno({
   getProductos,
   qProductosMain,
   setQProductosMain,
+  // Props para modal de pedido original en devoluciones
+  setShowModalPedidoOriginal,
+  pedidoOriginalAsignado,
 }) {
 
 
@@ -607,12 +610,26 @@ export default function ListProductosInterno({
     }
   };
 
+  // Función para verificar si el pedido necesita asignar el pedido original de devolución
+  const necesitaPedidoOriginal = () => {
+    if (!pedidoData) return false;
+    // Si no tiene isdevolucionOriginalid y no tiene pedidoOriginalAsignado
+    return !pedidoData.isdevolucionOriginalid && !pedidoOriginalAsignado;
+  };
+
   // Función para agregar al carrito
   const handleAddToCart = () => {
     if (selectedProduct) {
       // Verificar si hay cantidades negativas en el pedido
       if (hasNegativeQuantities()) {
-        // Si hay cantidades negativas, abrir modal para escanear carnet
+        // PRIMERO: Verificar si necesita asignar el pedido original
+        if (necesitaPedidoOriginal() && setShowModalPedidoOriginal) {
+          // Mostrar modal de pedido original ANTES del modal de carnet
+          setShowModalPedidoOriginal(true);
+          return;
+        }
+        
+        // SEGUNDO: Si ya tiene pedido original, mostrar modal de carnet
         setShowModalCarnet(true);
         return;
       }

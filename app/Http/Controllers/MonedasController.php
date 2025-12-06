@@ -11,9 +11,56 @@ use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
 use Response;
 use Session;
+use App\Models\pedidos;
+use App\Models\items_pedidos;
 
 class MonedasController extends Controller
 {
+    /**
+     * Verificar si hay pedidos pendientes
+     */
+    private function hayPedidosPendientes()
+    {
+        $pedidosPendientes = pedidos::where("estado", 0)->pluck('id');
+        if ($pedidosPendientes->isNotEmpty()) {
+            return $pedidosPendientes;
+        }
+        return false;
+    }
+
+    /**
+     * Actualizar tasas de items de pedidos pendientes
+     */
+    private function actualizarTasasPedidosPendientes($nuevaTasaDolar, $nuevaTasaCop)
+    {
+        try {
+            // Obtener IDs de pedidos pendientes
+            $pedidosPendientesIds = pedidos::where("estado", 0)->pluck('id');
+            
+            if ($pedidosPendientesIds->isEmpty()) {
+                return ['actualizados' => 0, 'pedidos' => []];
+            }
+
+            // Actualizar items de pedidos pendientes
+            $itemsActualizados = items_pedidos::whereIn('id_pedido', $pedidosPendientesIds)
+                ->update([
+                    'tasa' => $nuevaTasaDolar,
+                    'tasa_cop' => $nuevaTasaCop,
+                    'updated_at' => now()
+                ]);
+
+            return [
+                'actualizados' => $itemsActualizados,
+                'pedidos' => $pedidosPendientesIds->toArray()
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error actualizando tasas de pedidos pendientes', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return ['actualizados' => 0, 'pedidos' => [], 'error' => $e->getMessage()];
+        }
+    }
     /**
      * Obtener todas las monedas
      */
@@ -153,6 +200,7 @@ class MonedasController extends Controller
     public function updateDollarRate()
     {
         try {
+            
             // Verificar si es necesario actualizar (máximo cada 30 minutos)
             // Solo para rutas protegidas, no para actualización forzada desde login
             $lastUpdate = DB::table('monedas')
@@ -305,6 +353,12 @@ class MonedasController extends Controller
                 ]);
 
             if ($updated) {
+                // Obtener tasa COP actual
+                $copRate = DB::table('monedas')->where('tipo', 2)->value('valor') ?? 0;
+                
+                // Actualizar tasas de pedidos pendientes
+                $resultadoActualizacion = $this->actualizarTasasPedidosPendientes($dollarValue, $copRate);
+                
                 // Clear all related caches
                 Cache::forget('bs');
                 Cache::forget('cop');
@@ -315,15 +369,23 @@ class MonedasController extends Controller
                     'value' => $dollarValue,
                     'source' => $source,
                     'last_update' => $lastUpdate,
-                    'datetime' => $data['datetime'] ?? null
+                    'datetime' => $data['datetime'] ?? null,
+                    'pedidos_actualizados' => $resultadoActualizacion
                 ]);
+
+                $mensaje = "Valor del dólar actualizado exitosamente";
+                if ($resultadoActualizacion['actualizados'] > 0) {
+                    $mensaje .= ". Se actualizaron las tasas de {$resultadoActualizacion['actualizados']} items en los pedidos pendientes: " . implode(', ', $resultadoActualizacion['pedidos']);
+                }
 
                 return Response::json([
                     "estado" => true,
-                    "msj" => "Valor del dólar actualizado exitosamente",
+                    "msj" => $mensaje,
                     "valor" => $dollarValue,
                     "fecha_actualizacion" => now()->toDateTimeString(),
-                    "origen" => $source
+                    "origen" => $source,
+                    "items_actualizados" => $resultadoActualizacion['actualizados'],
+                    "pedidos_afectados" => $resultadoActualizacion['pedidos']
                 ]);
             } else {
                 // Si no hay registros, crear uno nuevo
@@ -365,55 +427,7 @@ class MonedasController extends Controller
         }
     }
 
-    /**
-     * Actualizar moneda manualmente
-     */
-    public function updateMoneda(Request $request)
-    {
-        try {
-            $request->validate([
-                'id' => 'required|integer',
-                'valor' => 'required|numeric|min:0',
-                'origen' => 'nullable|string|max:100',
-                'notas' => 'nullable|string',
-                'estatus' => 'nullable|in:activo,inactivo'
-            ]);
-
-            $updated = DB::table('monedas')
-                ->where('id', $request->id)
-                ->update([
-                    'valor' => $request->valor,
-                    'fecha_ultima_actualizacion' => now(),
-                    'origen' => $request->origen,
-                    'notas' => $request->notas,
-                    'estatus' => $request->estatus ?? 'activo',
-                    'updated_at' => now()
-                ]);
-
-            if ($updated) {
-                // Clear all related caches
-                Cache::forget('bs');
-                Cache::forget('cop');
-                Cache::forget('moneda_rates_' . md5($request->valor));
-                
-                return Response::json([
-                    "estado" => true,
-                    "msj" => "Moneda actualizada exitosamente"
-                ]);
-            } else {
-                return Response::json([
-                    "estado" => false,
-                    "msj" => "No se pudo actualizar la moneda"
-                ]);
-            }
-
-        } catch (\Exception $e) {
-            return Response::json([
-                "estado" => false,
-                "msj" => "Error al actualizar moneda: " . $e->getMessage()
-            ]);
-        }
-    }
+  
 
     /**
      * Obtener monedas (compatibilidad con MonedaController)
@@ -429,6 +443,7 @@ class MonedasController extends Controller
      */
     public function setMoneda(Request $req)
     {
+        
         // Verificar que sea admin (tipo_usuario 1) o superadmin (tipo_usuario 0)
             // Si es actualización manual desde login, agregar fecha de actualización
             $updateData = [
@@ -453,12 +468,29 @@ class MonedasController extends Controller
             $moneda = new \App\Models\moneda();
             $moneda->updateOrCreate(["tipo" => $req->tipo], $updateData);
             
+            // Obtener ambas tasas actuales después de la actualización
+            $dollarRate = DB::table('monedas')->where('tipo', 1)->value('valor') ?? 0;
+            $copRate = DB::table('monedas')->where('tipo', 2)->value('valor') ?? 0;
+            
+            // Actualizar tasas de pedidos pendientes
+            $resultadoActualizacion = $this->actualizarTasasPedidosPendientes($dollarRate, $copRate);
+            
             // Clear all related caches
             Cache::forget('bs');
             Cache::forget('cop');
             Cache::forget('moneda_rates_' . md5($req->valor));
             
-            return Response::json(["msj" => "Moneda actualizada exitosamente", "estado" => true]);
+            $mensaje = "Moneda actualizada exitosamente";
+            if ($resultadoActualizacion['actualizados'] > 0) {
+                $mensaje .= ". Se actualizaron las tasas de {$resultadoActualizacion['actualizados']} items en los pedidos pendientes: " . implode(', ', $resultadoActualizacion['pedidos']);
+            }
+            
+            return Response::json([
+                "msj" => $mensaje,
+                "estado" => true,
+                "items_actualizados" => $resultadoActualizacion['actualizados'],
+                "pedidos_afectados" => $resultadoActualizacion['pedidos']
+            ]);
         return Response::json(["msj" => "No tienes permisos para realizar esta acción", "estado" => false]);
     }
 }

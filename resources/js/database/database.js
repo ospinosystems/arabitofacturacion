@@ -58,7 +58,9 @@ const db = {
   createDevolucion: data=>axios.post(host+"createDevolucion",data),
   setDevolucion: data=>axios.post(host+"setDevolucion",data),
   setpagoDevolucion: data=>axios.post(host+"setpagoDevolucion",data),
-  
+  asignarPedidoOriginalDevolucion: data=>axios.post(host+"asignarPedidoOriginalDevolucion",data),
+  getItemsDisponiblesDevolucion: data=>axios.post(host+"getItemsDisponiblesDevolucion",data),
+  eliminarPedidoOriginalDevolucion: data=>axios.post(host+"eliminarPedidoOriginalDevolucion",data),
   
   delpedido: data=>axios.post(host+"delpedido",data),
 

@@ -288,7 +288,44 @@ class PagoPedidosController extends Controller
 
 
         $total_real = $ped->clean_total;
-        $total_ins = floatval($req->debito)+floatval($req->efectivo)+floatval($req->transferencia)+floatval($req->biopago)+floatval($req->credito);
+        
+        // Obtener tasas del primer ítem del pedido (tasa histórica al momento de facturar)
+        $primerItem = items_pedidos::where("id_pedido", $req->id)->first();
+        $tasaDolar = $primerItem ? floatval($primerItem->tasa) : 1;
+        $tasaPeso = $primerItem ? floatval($primerItem->tasa_cop) : 1;
+        if ($tasaDolar <= 0) $tasaDolar = 1;
+        if ($tasaPeso <= 0) $tasaPeso = 1;
+        
+        // Calcular total de métodos de pago principales
+        // NOTA: debito viene en Bs, hay que convertirlo a USD
+        $debitoUSD = $req->debito ? floatval($req->debito) / $tasaDolar : 0;
+        $total_ins = $debitoUSD + floatval($req->efectivo) + floatval($req->transferencia) + floatval($req->biopago) + floatval($req->credito);
+        
+        // Agregar pagos adicionales de efectivo (Bs y Pesos) convertidos a dólares
+        $totalAdicUsdBs = 0;
+        $totalAdicUsdCop = 0;
+        $totalAdicUsdDolar = 0;
+        if ($req->pagosAdicionales && is_array($req->pagosAdicionales)) {
+            foreach ($req->pagosAdicionales as $pagoAdicional) {
+                if (isset($pagoAdicional['moneda']) && isset($pagoAdicional['monto_original'])) {
+                    $monto = floatval($pagoAdicional['monto_original']);
+                    
+                    if ($pagoAdicional['moneda'] === 'bs' && $tasaDolar > 0) {
+                        // Convertir Bs a dólares usando tasa del pedido
+                        $total_ins += $monto / $tasaDolar;
+                        $totalAdicUsdBs += $monto / $tasaDolar;
+                    } elseif ($pagoAdicional['moneda'] === 'peso' && $tasaPeso > 0) {
+                        // Convertir Pesos a dólares usando tasa del pedido
+                        $total_ins += $monto / $tasaPeso;
+                        $totalAdicUsdCop += $monto / $tasaPeso;
+                    } elseif ($pagoAdicional['moneda'] === 'dolar') {
+                        // Ya está en dólares
+                        $total_ins += $monto;
+                        $totalAdicUsdDolar += $monto;
+                    }
+                }
+            }
+        }
 
        
         
@@ -505,18 +542,85 @@ class PagoPedidosController extends Controller
                     } */
 
                 }
+                // Obtener tasas del pedido (del primer item)
+                $itemPedido = \App\Models\items_pedidos::where('id_pedido', $req->id)->first();
+                $tasaDolar = $itemPedido ? floatval($itemPedido->tasa) : 1;
+                $tasaPeso = $itemPedido ? floatval($itemPedido->tasa_cop) : 1;
+                
+                // Asegurar tasas válidas
+                if ($tasaDolar <= 0) $tasaDolar = 1;
+                if ($tasaPeso <= 0) $tasaPeso = 1;
+                
                 if($req->debito) {
-                    $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $req->debito, $metodos_pago, $cuenta, 2);
+                    $montoOriginalBs = floatval($req->debito); // Viene en Bs
+                    $montoDebito = $montoOriginalBs / $tasaDolar; // Convertir a USD
+                    
+                    // Validar referencia obligatoria para débito SOLO si es positivo (no devolución)
+                    if ($montoOriginalBs > 0 && !$req->debitoRef) {
+                        \DB::rollback();
+                        return Response::json([
+                            "msj" => "Error: Debe ingresar la referencia del pago con débito",
+                            "estado" => false
+                        ]);
+                    }
+                    
+                    $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $montoDebito, $metodos_pago, $cuenta, 2);
                     if ($resultadoValidacion !== true) {
                         return $resultadoValidacion;
                     }
+                    
+                    // Guardar pago de débito con referencia
+                    // monto = USD (convertido), monto_original = Bs, moneda = bs (siempre)
+                    pago_pedidos::updateOrCreate(
+                        ["id_pedido" => $req->id, "tipo" => 2],
+                        [
+                            "cuenta" => $cuenta, 
+                            "monto" => $montoDebito, // Convertido a USD
+                            "monto_original" => $montoOriginalBs, // Valor original en Bs
+                            "moneda" => "bs", // Débito siempre es en Bs
+                            "referencia" => $req->debitoRef ?? null
+                        ]
+                    );
                 }
                 // Función para recopilar todos los métodos de pago
                
 
                 if($req->efectivo) {
-                    pago_pedidos::updateOrCreate(["id_pedido"=>$req->id,"tipo"=>3],["cuenta"=>$cuenta,"monto"=>floatval($req->efectivo)]);
+                    // Efectivo en dólares: monto ya está en USD, moneda = dolar
+                    pago_pedidos::updateOrCreate(
+                        ["id_pedido"=>$req->id, "tipo"=>3, "moneda"=>"dolar"],
+                        ["cuenta"=>$cuenta, "monto"=>floatval($req->efectivo), "moneda"=>"dolar"]
+                    );
                 }
+                
+                // Procesar pagos adicionales de efectivo por moneda
+                // Recibe monto_original en moneda original, convierte a USD usando tasas del pedido
+                if($req->pagosAdicionales && is_array($req->pagosAdicionales)) {
+                    foreach($req->pagosAdicionales as $pagoAdicional) {
+                        if(isset($pagoAdicional['moneda']) && isset($pagoAdicional['monto_original']) && floatval($pagoAdicional['monto_original']) > 0) {
+                            $montoOriginal = floatval($pagoAdicional['monto_original']);
+                            $moneda = $pagoAdicional['moneda'];
+                            
+                            // Convertir a USD según la moneda
+                            $montoUSD = $montoOriginal;
+                            if ($moneda === 'bs') {
+                                $montoUSD = $montoOriginal / $tasaDolar;
+                            } elseif ($moneda === 'peso') {
+                                $montoUSD = $montoOriginal / $tasaPeso;
+                            }
+                            
+                            pago_pedidos::create([
+                                "id_pedido" => $req->id,
+                                "tipo" => 3, // Tipo efectivo
+                                "cuenta" => $cuenta,
+                                "monto" => $montoUSD, // Convertido a USD
+                                "moneda" => $moneda, // bs, peso
+                                "monto_original" => $montoOriginal // Valor en moneda original
+                            ]);
+                        }
+                    }
+                }
+                
                 if($req->credito) {
                     $pedido = pedidos::with("cliente")->find($req->id);
                     if ($pedido->cliente) {
@@ -585,8 +689,26 @@ class PagoPedidosController extends Controller
 
         }else{
             \DB::rollback();
-            return Response::json(["msj"=>"Error. Montos no coinciden. Real: ".round($total_real,3)." | Ins: ".round($total_ins,3),"estado"=>false]);
-            
+
+            // Detalle explícito de los montos para ayudar al usuario a corregir
+            $detalle = [];
+            $detalle[] = "Pedido: ".round($total_real,4)." $";
+            $detalle[] = "Pagos principales en $: Debito=".round($debitoUSD,4)." (Bs ".round(floatval($req->debito),2)."), Efectivo=".round(floatval($req->efectivo),4).", Transf=".round(floatval($req->transferencia),4).", Biopago=".round(floatval($req->biopago),4).", Credito=".round(floatval($req->credito),4);
+
+            if ($totalAdicUsdBs || $totalAdicUsdCop || $totalAdicUsdDolar) {
+                $detalleAdic = [];
+                if ($totalAdicUsdBs)   $detalleAdic[] = "Bs->".round($totalAdicUsdBs,4)." $";
+                if ($totalAdicUsdCop)  $detalleAdic[] = "COP->".round($totalAdicUsdCop,4)." $";
+                if ($totalAdicUsdDolar)$detalleAdic[] = "USD Adic->".round($totalAdicUsdDolar,4)." $";
+                $detalle[] = "Pagos adicionales en $: ".implode(" | ", $detalleAdic);
+            }
+
+            $detalle[] = "Total pagos: ".round($total_ins,4)." $";
+            $detalle[] = "Diferencia: ".round($res,4)." $ (Pedido - Pagos)";
+
+            $msj = "Error. Montos no coinciden. ".implode(" || ", $detalle);
+
+            return Response::json(["msj"=>$msj,"estado"=>false]);
         }
         } catch (\Exception $e) {
             \DB::rollback();
@@ -1148,6 +1270,12 @@ class PagoPedidosController extends Controller
      */
     private function validarDescuentosPorMetodoPago($id_pedido, $monto_pago, $metodos_pago, $cuenta, $tipo_pago = 3)
     {
+        // Si es una devolución (monto negativo), no aplicar validación de descuentos
+        if (floatval($monto_pago) < 0) {
+            pago_pedidos::updateOrCreate(["id_pedido"=>$id_pedido,"tipo"=>$tipo_pago],["cuenta"=>$cuenta,"monto"=>floatval($monto_pago)]);
+            return true;
+        }
+        
         // Verificar si hay descuentos aplicados en los items del pedido
         $items_pedido = items_pedidos::with('producto')->where('id_pedido', $id_pedido)->get();
         $items_con_descuento = $items_pedido->where('descuento', '>', 0);

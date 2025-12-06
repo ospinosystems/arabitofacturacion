@@ -156,12 +156,19 @@ export default function Facturar({
     const [orderbyorderpedidos, setorderbyorderpedidos] = useState("desc");
 
     const [debito, setDebito] = useState("");
+    const [debitoRef, setDebitoRef] = useState(""); // Referencia obligatoria del débito
+    const [debitoRefError, setDebitoRefError] = useState(false); // Error de referencia faltante
     const [efectivo, setEfectivo] = useState("");
     const [transferencia, setTransferencia] = useState("");
     const [credito, setCredito] = useState("");
     const [vuelto, setVuelto] = useState("");
     const [biopago, setBiopago] = useState("");
     const [lastPaymentMethodCalled, setLastPaymentMethodCalled] = useState(null);
+    
+    // Estados para efectivo dividido por moneda
+    const [efectivo_bs, setEfectivo_bs] = useState("");
+    const [efectivo_dolar, setEfectivo_dolar] = useState("");
+    const [efectivo_peso, setEfectivo_peso] = useState("");
     const [tipo_referenciapago, settipo_referenciapago] = useState("1");
     const [descripcion_referenciapago, setdescripcion_referenciapago] =
         useState("");
@@ -1874,39 +1881,57 @@ export default function Facturar({
         
     };
     const getDebito = () => {
-        // Calcular la suma de los otros métodos de pago
+        // Usar tasas del pedido
+        const tasaBsPedido = pedidoData?.items?.[0]?.tasa || dolar;
+        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+        
+        // Calcular la suma de los otros métodos de pago en USD
         const otrosTotal =
             parseFloat(efectivo || 0) +
+            parseFloat(efectivo_dolar || 0) +
+            (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
+            (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
             parseFloat(transferencia || 0) +
             parseFloat(credito || 0) +
             parseFloat(biopago || 0);
 
-        // Si los demás están en blanco, setear el total completo
-        // Si hay otros montos, setear la diferencia
-        const montoDebito =
-            otrosTotal === 0
-                ? parseFloat(pedidoData.clean_total).toFixed(2)
-                : Math.max(0, pedidoData.clean_total - otrosTotal).toFixed(2);
+        // Calcular restante en USD y convertir a Bs
+        const restanteUSD = otrosTotal === 0
+            ? parseFloat(pedidoData.clean_total)
+            : Math.max(0, pedidoData.clean_total - otrosTotal);
+        
+        // Convertir a Bs usando tasa del pedido
+        const montoDebitoBs = (restanteUSD * tasaBsPedido).toFixed(2);
 
         // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
-        if (lastPaymentMethodCalled === 'debito' && parseFloat(debito || 0).toFixed(2) === montoDebito) {
-            setDebito(parseFloat(pedidoData.clean_total).toFixed(2));
+        if (lastPaymentMethodCalled === 'debito' && parseFloat(debito || 0).toFixed(2) === montoDebitoBs) {
+            setDebito((parseFloat(pedidoData.clean_total) * tasaBsPedido).toFixed(2));
             setEfectivo("");
+            setEfectivo_bs("");
+            setEfectivo_dolar("");
+            setEfectivo_peso("");
             setTransferencia("");
             setCredito("");
             setBiopago("");
         } else {
-            setDebito(montoDebito);
+            setDebito(montoDebitoBs);
         }
         
         setLastPaymentMethodCalled('debito');
     };
     const getCredito = () => {
-        // Calcular la suma de los otros métodos de pago
+        // Usar tasas del pedido
+        const tasaBsPedido = pedidoData?.items?.[0]?.tasa || dolar;
+        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+        
+        // Calcular la suma de los otros métodos de pago en USD
         const otrosTotal =
             parseFloat(efectivo || 0) +
+            parseFloat(efectivo_dolar || 0) +
+            (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
+            (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
             parseFloat(transferencia || 0) +
-            parseFloat(debito || 0) +
+            (parseFloat(debito || 0) / tasaBsPedido) +
             parseFloat(biopago || 0);
 
         // Si los demás están en blanco, setear el total completo
@@ -1920,6 +1945,9 @@ export default function Facturar({
         if (lastPaymentMethodCalled === 'credito' && parseFloat(credito || 0).toFixed(2) === montoCredito) {
             setCredito(parseFloat(pedidoData.clean_total).toFixed(2));
             setEfectivo("");
+            setEfectivo_bs("");
+            setEfectivo_dolar("");
+            setEfectivo_peso("");
             setTransferencia("");
             setDebito("");
             setBiopago("");
@@ -1930,10 +1958,17 @@ export default function Facturar({
         setLastPaymentMethodCalled('credito');
     };
     const getTransferencia = () => {
-        // Calcular la suma de los otros métodos de pago
+        // Usar tasas del pedido
+        const tasaBsPedido = pedidoData?.items?.[0]?.tasa || dolar;
+        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+        
+        // Calcular la suma de los otros métodos de pago en USD
         const otrosTotal =
             parseFloat(efectivo || 0) +
-            parseFloat(debito || 0) +
+            parseFloat(efectivo_dolar || 0) +
+            (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
+            (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
+            (parseFloat(debito || 0) / tasaBsPedido) +
             parseFloat(credito || 0) +
             parseFloat(biopago || 0);
 
@@ -1948,6 +1983,9 @@ export default function Facturar({
         if (lastPaymentMethodCalled === 'transferencia' && parseFloat(transferencia || 0).toFixed(2) === montoTransferencia) {
             setTransferencia(parseFloat(pedidoData.clean_total).toFixed(2));
             setEfectivo("");
+            setEfectivo_bs("");
+            setEfectivo_dolar("");
+            setEfectivo_peso("");
             setDebito("");
             setCredito("");
             setBiopago("");
@@ -1958,11 +1996,18 @@ export default function Facturar({
         setLastPaymentMethodCalled('transferencia');
     };
     const getBio = () => {
-        // Calcular la suma de los otros métodos de pago
+        // Usar tasas del pedido
+        const tasaBsPedido = pedidoData?.items?.[0]?.tasa || dolar;
+        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+        
+        // Calcular la suma de los otros métodos de pago en USD
         const otrosTotal =
             parseFloat(efectivo || 0) +
+            parseFloat(efectivo_dolar || 0) +
+            (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
+            (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
             parseFloat(transferencia || 0) +
-            parseFloat(debito || 0) +
+            (parseFloat(debito || 0) / tasaBsPedido) +
             parseFloat(credito || 0);
 
         // Si los demás están en blanco, setear el total completo
@@ -1976,6 +2021,9 @@ export default function Facturar({
         if (lastPaymentMethodCalled === 'biopago' && parseFloat(biopago || 0).toFixed(2) === montoBiopago) {
             setBiopago(parseFloat(pedidoData.clean_total).toFixed(2));
             setEfectivo("");
+            setEfectivo_bs("");
+            setEfectivo_dolar("");
+            setEfectivo_peso("");
             setTransferencia("");
             setDebito("");
             setCredito("");
@@ -1986,9 +2034,12 @@ export default function Facturar({
         setLastPaymentMethodCalled('biopago');
     };
     const getEfectivo = () => {
-        // Calcular la suma de los otros métodos de pago
+        // Usar tasas del pedido
+        const tasaBsPedido = pedidoData?.items?.[0]?.tasa || dolar;
+        
+        // Calcular la suma de los otros métodos de pago en USD
         const otrosTotal =
-            parseFloat(debito || 0) +
+            (parseFloat(debito || 0) / tasaBsPedido) +
             parseFloat(transferencia || 0) +
             parseFloat(credito || 0) +
             parseFloat(biopago || 0);
@@ -2003,6 +2054,9 @@ export default function Facturar({
         // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
         if (lastPaymentMethodCalled === 'efectivo' && parseFloat(efectivo || 0).toFixed(2) === montoEfectivo) {
             setEfectivo(parseFloat(pedidoData.clean_total).toFixed(2));
+            setEfectivo_bs("");
+            setEfectivo_dolar("");
+            setEfectivo_peso("");
             setDebito("");
             setTransferencia("");
             setCredito("");
@@ -2107,14 +2161,37 @@ export default function Facturar({
         }
     };
 
-    const setMoneda = (e) => {
+    const setMoneda = async (e) => {
         const tipo = e.currentTarget.attributes["data-type"].value;
-        let valor = window.prompt("Nuevo valor");
+        const tipoNombre = tipo === "1" ? "Dólar" : "Peso Colombiano";
+        let valor = window.prompt(`Nuevo valor del ${tipoNombre}`);
         if (valor) {
-            db.setMoneda({ tipo, valor }).then((res) => {
-                getMoneda();
-                
-            });
+            try {
+                const res = await db.setMoneda({ tipo, valor });
+                if (res.data.estado) {
+                    notificar(
+                        `✅ ${tipoNombre} actualizado: ${valor}. Recargando sistema...`
+                    );
+                    
+                    // Esperar 2 segundos para que el usuario vea la notificación
+                    setTimeout(async () => {
+                        try {
+                            // Cerrar sesión
+                            await axios.get('/logout');
+                        } catch (error) {
+                            console.log('Logout error:', error);
+                        } finally {
+                            // Recargar la página para forzar nuevo login
+                            window.location.reload(true);
+                        }
+                    }, 2000);
+                } else {
+                    notificar(`❌ Error: ${res.data.msj}`);
+                }
+            } catch (error) {
+                notificar(`❌ Error al actualizar ${tipoNombre}`);
+                console.error('Error updating currency:', error);
+            }
         }
     };
 
@@ -2127,9 +2204,21 @@ export default function Facturar({
                 const response = await db.updateDollarRate();
                 if (response.data.estado) {
                     notificar(
-                        `✅ Dólar actualizado: $${response.data.valor} Bs`
+                        `✅ Dólar actualizado: $${response.data.valor} Bs. Recargando sistema...`
                     );
-                    getMoneda(); // Actualizar valores en pantalla
+                    
+                    // Esperar 2 segundos para que el usuario vea la notificación
+                    setTimeout(async () => {
+                        try {
+                            // Cerrar sesión
+                            await axios.get('/logout');
+                        } catch (error) {
+                            console.log('Logout error:', error);
+                        } finally {
+                            // Recargar la página para forzar nuevo login
+                            window.location.reload(true);
+                        }
+                    }, 2000);
                 } else {
                     notificar(`❌ Error: ${response.data.msj}`);
 
@@ -2154,9 +2243,21 @@ export default function Facturar({
                                 });
                                 if (manualResponse.data.estado) {
                                     notificar(
-                                        `✅ Dólar actualizado manualmente: $${newValue} Bs`
+                                        `✅ Dólar actualizado manualmente: $${newValue} Bs. Recargando sistema...`
                                     );
-                                    getMoneda(); // Actualizar valores en pantalla
+                                    
+                                    // Esperar 2 segundos para que el usuario vea la notificación
+                                    setTimeout(async () => {
+                                        try {
+                                            // Cerrar sesión
+                                            await axios.get('/logout');
+                                        } catch (error) {
+                                            console.log('Logout error:', error);
+                                        } finally {
+                                            // Recargar la página para forzar nuevo login
+                                            window.location.reload(true);
+                                        }
+                                    }, 2000);
                                 } else {
                                     notificar(
                                         `❌ Error al actualizar manualmente: ${manualResponse.data.msj}`
@@ -2936,7 +3037,11 @@ export default function Facturar({
                 if (clearPagosPedido) {
                     setTransferencia("");
                     setDebito("");
+                    setDebitoRef(""); // Limpiar referencia de débito
                     setEfectivo("");
+                    setEfectivo_bs("");
+                    setEfectivo_dolar("");
+                    setEfectivo_peso("");
                     setCredito("");
                     setVuelto("");
                     setBiopago("");
@@ -2955,75 +3060,63 @@ export default function Facturar({
 
                 if (res.data.pagos) {
                     let d = res.data.pagos;
-                    if (d.filter((e) => e.tipo == 1)[0]) {
-                        let var_setTransferencia = d.filter(
-                            (e) => e.tipo == 1
-                        )[0].monto;
-                        if (var_setTransferencia == "0.00") {
-                            if (clearPagosPedido) {
-                                setTransferencia("");
-                            }
-                        } else {
-                            setTransferencia(
-                                d.filter((e) => e.tipo == 1)[0].monto
-                            );
+                    
+                    // Transferencia (tipo 1)
+                    const pagoTransf = d.find((e) => e.tipo == 1);
+                    if (pagoTransf && pagoTransf.monto != "0.00") {
+                        setTransferencia(pagoTransf.monto);
+                    }
+                    
+                    // Débito (tipo 2) - Usar monto_original (Bs) si existe
+                    const pagoDebito = d.find((e) => e.tipo == 2);
+                    if (pagoDebito && pagoDebito.monto != "0.00") {
+                        // monto_original tiene el valor en Bs que escribió la cajera
+                        const valorDebito = pagoDebito.monto_original || pagoDebito.monto;
+                        setDebito(valorDebito);
+                        // También setear la referencia si existe
+                        if (pagoDebito.referencia) {
+                            setDebitoRef(pagoDebito.referencia);
                         }
                     }
-                    if (d.filter((e) => e.tipo == 2)[0]) {
-                        let var_setDebito = d.filter((e) => e.tipo == 2)[0]
-                            .monto;
-                        if (var_setDebito == "0.00") {
-                            if (clearPagosPedido) {
-                                setDebito("");
-                            }
-                        } else {
-                            setDebito(d.filter((e) => e.tipo == 2)[0].monto);
+                    
+                    // Efectivo (tipo 3) - Procesar según moneda
+                    const pagosEfectivo = d.filter((e) => e.tipo == 3);
+                    pagosEfectivo.forEach((pago) => {
+                        if (pago.monto == "0.00") return;
+                        
+                        // Usar monto_original si existe (valor en moneda original)
+                        const valor = pago.monto_original || pago.monto;
+                        
+                        if (pago.moneda === 'dolar' || !pago.moneda) {
+                            // Efectivo USD
+                            setEfectivo_dolar(valor);
+                        } else if (pago.moneda === 'bs') {
+                            // Efectivo Bs
+                            setEfectivo_bs(valor);
+                        } else if (pago.moneda === 'peso') {
+                            // Efectivo Pesos
+                            setEfectivo_peso(valor);
+                            setShowEfectivoPeso(true); // Mostrar el input de pesos
                         }
-                    }
-                    if (d.filter((e) => e.tipo == 3)[0]) {
-                        let var_setEfectivo = d.filter((e) => e.tipo == 3)[0]
-                            .monto;
-                        if (var_setEfectivo == "0.00") {
-                            if (clearPagosPedido) {
-                                setEfectivo("");
-                            }
-                        } else {
-                            setEfectivo(d.filter((e) => e.tipo == 3)[0].monto);
-                        }
-                    }
-                    if (d.filter((e) => e.tipo == 4)[0]) {
-                        let var_setCredito = d.filter((e) => e.tipo == 4)[0]
-                            .monto;
-                        if (var_setCredito == "0.00") {
-                            if (clearPagosPedido) {
-                                setCredito("");
-                            }
-                        } else {
-                            setCredito(d.filter((e) => e.tipo == 4)[0].monto);
-                        }
+                    });
+                    
+                    // Crédito (tipo 4)
+                    const pagoCredito = d.find((e) => e.tipo == 4);
+                    if (pagoCredito && pagoCredito.monto != "0.00") {
+                        setCredito(pagoCredito.monto);
+                        setShowCredito(true); // Mostrar el input de crédito
                     }
 
-                    if (d.filter((e) => e.tipo == 5)[0]) {
-                        let var_setBiopago = d.filter((e) => e.tipo == 5)[0]
-                            .monto;
-                        if (var_setBiopago == "0.00") {
-                            if (clearPagosPedido) {
-                                setBiopago("");
-                            }
-                        } else {
-                            setBiopago(d.filter((e) => e.tipo == 5)[0].monto);
-                        }
+                    // Biopago (tipo 5)
+                    const pagoBio = d.find((e) => e.tipo == 5);
+                    if (pagoBio && pagoBio.monto != "0.00") {
+                        setBiopago(pagoBio.monto);
                     }
-                    if (d.filter((e) => e.tipo == 6)[0]) {
-                        let var_setVuelto = d.filter((e) => e.tipo == 6)[0]
-                            .monto;
-                        if (var_setVuelto == "0.00") {
-                            if (clearPagosPedido) {
-                                setVuelto("");
-                            }
-                        } else {
-                            setVuelto(d.filter((e) => e.tipo == 6)[0].monto);
-                        }
+                    
+                    // Vuelto (tipo 6)
+                    const pagoVuelto = d.find((e) => e.tipo == 6);
+                    if (pagoVuelto && pagoVuelto.monto != "0.00") {
+                        setVuelto(pagoVuelto.monto);
                     }
                 }
                 if (callback) {
@@ -3547,6 +3640,19 @@ export default function Facturar({
     const [puedeFacturarTransfeTime, setpuedeFacturarTransfeTime] =
         useState(null);
     const setPagoPedido = (callback = null) => {
+        // Validar referencia de débito obligatoria (solo para pagos positivos, no devoluciones)
+        if (debito && parseFloat(debito) > 0 && !debitoRef) {
+            // Mostrar error visual y hacer foco en el campo de referencia
+            setDebitoRefError(true);
+            setTimeout(() => {
+                const debitoRefInput = document.querySelector('[data-ref-input="true"]');
+                if (debitoRefInput) {
+                    debitoRefInput.focus();
+                    debitoRefInput.select();
+                }
+            }, 100);
+            return;
+        }
         if (
             confirm(
                 "¿Realmente desea guardar e imprimir pedido (" +
@@ -3554,6 +3660,8 @@ export default function Facturar({
                     ")?"
             )
         ) {
+            // Limpiar error si la referencia está cargada
+            setDebitoRefError(false);
             if (transferencia && !refPago.filter((e) => e.tipo == 1).length) {
                 alert(
                     "Error: Debe cargar referencia de transferencia electrónica."
@@ -3561,14 +3669,38 @@ export default function Facturar({
             } else {
                 if (puedeFacturarTransfe) {
                     setLoading(true);
+                    // Construir pagos adicionales de efectivo (Bs y COP)
+                    // Enviar valores en moneda original, el backend hace la conversión
+                    let pagosAdicionales = [];
+                    if (efectivo_bs && parseFloat(efectivo_bs) > 0) {
+                        pagosAdicionales.push({ 
+                            moneda: 'bs', 
+                            monto_original: parseFloat(efectivo_bs)
+                        });
+                    }
+                    if (efectivo_peso && parseFloat(efectivo_peso) > 0) {
+                        pagosAdicionales.push({ 
+                            moneda: 'peso', 
+                            monto_original: parseFloat(efectivo_peso)
+                        });
+                    }
+                    
+                    // Débito viene en Bs, enviar valor original (backend convierte)
+                    const debitoBs = parseFloat(debito) || 0;
+                    
+                    // Efectivo dolar: solo enviar si tiene valor válido (no 0, no vacío)
+                    const efectivoDolarVal = parseFloat(efectivo_dolar) || 0;
+                    
                     let params = {
                         id: pedidoData.id,
-                        debito,
-                        efectivo,
+                        debito: debitoBs > 0 ? debitoBs : null, // Monto original en Bs (backend convierte)
+                        debitoRef, // Referencia del débito
+                        efectivo: efectivoDolarVal > 0 ? efectivoDolarVal : null, // Efectivo USD
                         transferencia,
                         biopago,
                         credito,
                         vuelto,
+                        pagosAdicionales: pagosAdicionales.length > 0 ? pagosAdicionales : null,
                     };
                     db.setPagoPedido(params).then((res) => {
                         notificar(res);
@@ -7353,8 +7485,18 @@ export default function Facturar({
                                     getPedido={getPedido}
                                     debito={debito}
                                     setDebito={setDebito}
+                                    debitoRef={debitoRef}
+                                    setDebitoRef={setDebitoRef}
+                                    debitoRefError={debitoRefError}
+                                    setDebitoRefError={setDebitoRefError}
                                     efectivo={efectivo}
                                     setEfectivo={setEfectivo}
+                                    efectivo_bs={efectivo_bs}
+                                    setEfectivo_bs={setEfectivo_bs}
+                                    efectivo_dolar={efectivo_dolar}
+                                    setEfectivo_dolar={setEfectivo_dolar}
+                                    efectivo_peso={efectivo_peso}
+                                    setEfectivo_peso={setEfectivo_peso}
                                     transferencia={transferencia}
                                     setTransferencia={setTransferencia}
                                     credito={credito}

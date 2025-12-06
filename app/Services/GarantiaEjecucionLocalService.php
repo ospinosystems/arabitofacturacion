@@ -956,7 +956,7 @@ class GarantiaEjecucionLocalService
     /**
      * Crear items_pedidos para trazabilidad de garantías con productos reales
      */
-    private function crearItemsPedidoParaGarantia($pedidoId, $solicitudId, $productosResultados, $tipo, $productosOriginales = [])
+    private function crearItemsPedidoParaGarantia($pedidoId, $solicitudId, $productosResultados, $tipo, $productosOriginales = [], $solicitudData = [])
     {
        
         try {
@@ -967,6 +967,29 @@ class GarantiaEjecucionLocalService
             
             $itemsCreados = [];
             $errores = [];
+            
+            // Obtener items de la factura original para usar precios y descuentos originales
+            $itemsFacturaOriginal = [];
+            $idFacturaOriginal = $solicitudData['factura_venta_id'] ?? null;
+            
+            if ($idFacturaOriginal) {
+                $itemsOriginales = \App\Models\items_pedidos::where('id_pedido', $idFacturaOriginal)->get();
+                foreach ($itemsOriginales as $itemOrig) {
+                    $itemsFacturaOriginal[$itemOrig->id_producto] = [
+                        'precio' => abs($itemOrig->monto / max(abs($itemOrig->cantidad), 1)),
+                        'precio_unitario' => $itemOrig->precio_unitario ?? abs($itemOrig->monto / max(abs($itemOrig->cantidad), 1)),
+                        'descuento' => $itemOrig->descuento ?? 0,
+                        'tasa' => $itemOrig->tasa ?? null
+                    ];
+                }
+                Log::info('Items factura original cargados para precios', [
+                    'factura_venta_id' => $idFacturaOriginal,
+                    'total_items' => count($itemsFacturaOriginal),
+                    'items' => $itemsFacturaOriginal
+                ]);
+            } else {
+                Log::warning('No se encontró factura_venta_id en solicitudData, usando precios actuales');
+            }
             
             // 2. Procesar resultados de inventario (entradas y salidas)
             $todosLosProductos = [];
@@ -1061,7 +1084,37 @@ class GarantiaEjecucionLocalService
                     $cantidadConSigno = -abs($producto['cantidad']); // Negativa para garantías entrantes (dañados)
                 }
 
-                $montoUnitario = $inventarioProducto->precio ?? 0;
+                // Usar precio y descuento de la factura original si está disponible, sino del inventario
+                $descuento = 0;
+                $precioUnitario = 0;
+                $tasa = null;
+                if (isset($itemsFacturaOriginal[$idProducto])) {
+                    $montoUnitario = $itemsFacturaOriginal[$idProducto]['precio'];
+                    $precioUnitario = $itemsFacturaOriginal[$idProducto]['precio_unitario'];
+                    // Descuento solo aplica a items negativos (entradas/devoluciones)
+                    $descuento = ($cantidadConSigno < 0) ? $itemsFacturaOriginal[$idProducto]['descuento'] : 0;
+                    $tasa = $itemsFacturaOriginal[$idProducto]['tasa'];
+                    Log::info('Usando precio y descuento de factura original', [
+                        'producto_id' => $idProducto,
+                        'precio_original' => $montoUnitario,
+                        'precio_unitario' => $precioUnitario,
+                        'descuento_aplicado' => $descuento,
+                        'es_item_negativo' => $cantidadConSigno < 0,
+                        'tasa' => $tasa
+                    ]);
+                } else {
+                    // Producto no está en factura original, usar precio actual y tasa actual
+                    $montoUnitario = $inventarioProducto->precio ?? 0;
+                    $precioUnitario = $montoUnitario;
+                    // Obtener tasa actual del sistema
+                    $tasaActual = \App\Models\moneda::where("tipo", 1)->orderBy("id", "desc")->first();
+                    $tasa = $tasaActual ? $tasaActual->valor : null;
+                    Log::info('Producto no en factura original, usando precio y tasa actual', [
+                        'producto_id' => $idProducto,
+                        'precio_actual' => $montoUnitario,
+                        'tasa_actual' => $tasa
+                    ]);
+                }
                 $montoTotal = $montoUnitario * $cantidadConSigno;
                 
                 // Crear item pedido
@@ -1070,7 +1123,9 @@ class GarantiaEjecucionLocalService
                     'id_producto' => $idProducto,
                     'cantidad' => $cantidadConSigno,
                     'monto' => $montoTotal,
-                    'descuento' => 0,
+                    'precio_unitario' => $precioUnitario,
+                    'descuento' => $descuento,
+                    'tasa' => $tasa,
                     'abono' => 0,
                     'lote' => null,
                     'condicion' => $producto['condicion'],
@@ -1089,7 +1144,10 @@ class GarantiaEjecucionLocalService
                     'producto_id' => $idProducto,
                     'cantidad' => $cantidadConSigno,
                     'monto_unitario' => $montoUnitario,
+                    'precio_unitario' => $precioUnitario,
                     'monto_total' => $montoTotal,
+                    'descuento' => $descuento,
+                    'tasa' => $tasa,
                     'tipo_movimiento' => $producto['tipo_movimiento'],
                     'condicion' => $producto['condicion']
                 ];
@@ -1103,6 +1161,9 @@ class GarantiaEjecucionLocalService
                     'tipo_movimiento' => $producto['tipo_movimiento'],
                     'condicion' => $producto['condicion'] . ' (' . ($producto['condicion'] == 1 ? 'malo' : 'bueno') . ')',
                     'monto_unitario' => $montoUnitario,
+                    'precio_unitario' => $precioUnitario,
+                    'descuento' => $descuento,
+                    'tasa' => $tasa,
                     'solicitud_id' => $solicitudId,
                     'tipo' => $tipo
                 ]);
@@ -1456,7 +1517,8 @@ class GarantiaEjecucionLocalService
                 $solicitudId, 
                 $resultados, 
                 $tipoGarantia,
-                $productosOriginales
+                $productosOriginales,
+                $solicitudData
             );
             /* \Log::info('productosOriginales', ['productosOriginales' => $productosOriginales]);
             \Log::info('resultados', ['resultados' => $resultados]); */

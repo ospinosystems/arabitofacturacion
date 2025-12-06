@@ -132,7 +132,7 @@ class PedidosController extends Controller
             $vendedor = [];
         }
 
-        $ret = pedidos::whereBetween("created_at", ["$fecha 00:00:00", "$fecha 23:59:59"]);
+        $ret = pedidos::whereBetween("fecha_factura", ["$fecha 00:00:00", "$fecha 23:59:59"]);
 
         if (count($vendedor)) {
             $ret->whereIn("id_vendedor", $vendedor);
@@ -537,7 +537,7 @@ class PedidosController extends Controller
                   ->whereIn("id_pedido", function ($q) use ($vendedor, $fecha1pedido, $fecha2pedido, $tipoestadopedido) {
                       $q->select("id")
                         ->from("pedidos")
-                        ->whereBetween("created_at", ["$fecha1pedido 00:00:00", "$fecha2pedido 23:59:59"])
+                        ->whereBetween("fecha_factura", ["$fecha1pedido 00:00:00", "$fecha2pedido 23:59:59"])
                         ->when($tipoestadopedido != "todos", function($q) use ($tipoestadopedido) {
                             $q->where("estado", $tipoestadopedido);
                         })
@@ -576,12 +576,12 @@ class PedidosController extends Controller
         } else if ($tipobusquedapedido == "fact" || $tipobusquedapedido == "cliente") {
             // Optimización para búsqueda de facturas y clientes - Sin cache
             $fact = pedidos::with([
-                "pagos:id,id_pedido,tipo,monto",
+                "pagos:id,id_pedido,tipo,monto,monto_original,moneda,referencia",
                 "items:id,id_pedido,monto,descuento",
                 "vendedor:id,nombre",
                 "cliente:id,nombre,identificacion"
             ])
-            ->whereBetween("created_at", ["$fecha1pedido 00:00:00", "$fecha2pedido 23:59:59"])
+            ->whereBetween("fecha_factura", ["$fecha1pedido 00:00:00", "$fecha2pedido 23:59:59"])
             ->when($tipoestadopedido != "todos", function($q) use ($tipoestadopedido) {
                 $q->where("estado", $tipoestadopedido);
             })
@@ -1004,13 +1004,14 @@ class PedidosController extends Controller
             'vendedor:id,usuario,tipo_usuario,nombre',
             'cliente:id,identificacion,nombre,direccion,telefono',
             'pagos' => function ($q) {
-                $q->select('id', 'tipo', 'monto', 'cuenta', 'id_pedido')
+                $q->select('id', 'tipo', 'monto', 'monto_original', 'moneda', 'referencia', 'cuenta', 'id_pedido')
                   ->orderBy('tipo', 'desc');
             },
             'items' => function ($q) {
                 $q->select([
                     'id', 'lote', 'id_producto', 'id_pedido', 'abono',
-                    'cantidad', 'descuento', 'monto', 'entregado', 'condicion'
+                    'cantidad', 'descuento', 'monto', 'entregado', 'condicion',
+                    'tasa', 'precio_unitario'
                 ])
                 ->with([
                     'producto' => function ($q) {
@@ -1038,41 +1039,59 @@ class PedidosController extends Controller
             'total_ped' => 0,
             'exento' => 0,
             'gravable' => 0,
-            'monto_iva' => 0
+            'monto_iva' => 0,
+            
         ];
         
         $ivas = [];
         $retencion = $pedido->retencion;
 
+        // REGLA: Redondear cada línea a 2 decimales PRIMERO, luego sumar
+        // Así el total siempre coincide con la suma de las líneas mostradas al cliente
+        // NOTA: Precios pueden tener hasta 3 decimales, descuentos pueden tener decimales
+
         // Process items and calculate totals
-        $pedido->items->transform(function ($item) use (&$totals, $factor, $retencion, &$ivas) {
+        $pedido->items->transform(function ($item) use (&$totals, $factor, $retencion, &$ivas, $bs) {
             if (!$item->producto) {
                 // Handle non-product items (like payments)
-                $item->monto *= $factor;
-                $subtotal = $item->monto * $item->cantidad;
+                $item->monto = round($item->monto * $factor, 4);
+                $subtotal = round($item->monto * $item->cantidad, 2);
                 $iva_val = "0";
                 $iva_m = 0;
             } else {
-                // Handle product items
+                // Usar precio_unitario del item si existe, sino usar precio actual del producto
+                // Mantener precisión original del precio (hasta 4 decimales)
+                $precioUnitario = round($item->precio_unitario ?? $item->producto->precio, 4);
+                $precioBase = round($item->producto->precio_base ?? 0, 4);
+                
+                // Handle product items - descuento unitario (mantener precisión para mostrar)
                 $des_unitario = $item->descuento < 0 ? 
-                    (($item->descuento / 100) * $item->producto->precio) : 0;
+                    round(($item->descuento / 100) * $precioUnitario, 4) : 0;
                 
                 $item->des_unitario = $des_unitario;
-                $item->producto->precio *= $factor;
-                $item->producto->precio_base *= $factor;
                 
-                $subtotal = $item->producto->precio * $item->cantidad;
-                $totals['base'] += $item->producto->precio_base * $item->cantidad;
+                // Precio para mostrar al cliente (4 decimales para precios de 3 decimales)
+                $item->producto->precio = round($precioUnitario * $factor, 4);
+                $item->producto->precio_base = round($precioBase * $factor, 4);
+                
+                // Guardar la tasa del momento de la venta en el item
+                $item->tasa_venta = $item->tasa ?? $bs;
+                
+                // Calcular subtotal de línea: precio exacto * cantidad, resultado a 2 decimales
+                // Esto es el monto que el cliente paga por esta línea
+                $subtotal = round($precioUnitario * $factor * $item->cantidad, 2);
+                $totals['base'] += round($item->producto->precio_base * $item->cantidad, 2);
                 
                 $iva_val = $item->producto->iva;
                 $iva_m = $iva_val / 100;
             }
 
-            // Calculate discounts and totals
-            $total_des = ($item->descuento / 100) * $subtotal;
-            $subtotal_c_desc = $subtotal - $total_des;
+            // Calcular descuento: porcentaje exacto (puede tener decimales) sobre subtotal
+            // El resultado en dinero se redondea a 2 decimales
+            $total_des = round(($item->descuento / 100) * $subtotal, 2);
+            $subtotal_c_desc = round($subtotal - $total_des, 2);
 
-            // Update totals
+            // Sumar a totales (ya están redondeados a 2 decimales)
             $totals['des_ped'] += $total_des;
             $totals['subtotal_ped'] += $subtotal;
 
@@ -1086,49 +1105,62 @@ class PedidosController extends Controller
                 $ivas[] = $iva_val;
             }
 
-            $totals['total_ped'] += $subtotal_c_desc * ($retencion ? 1.16 : 1);
-
-            // Format numbers
-            $item->total_des = number_format($total_des, 2, ".", ",");
-            $item->subtotal = number_format($subtotal, 2, ".", ",");
-            $item->total = number_format($subtotal_c_desc, 2, ".", ",");
+            // Total de línea con IVA (si aplica retención)
+            $totalLineaConIva = round($subtotal_c_desc * ($retencion ? 1.16 : 1), 2);
+            $totals['total_ped'] += $totalLineaConIva;
+            
+            // Calcular total en BS con tasa histórica del item (2 decimales)
+            $tasaItem = $item->tasa ?? $bs;
+            $totalBsItem = round($totalLineaConIva * $tasaItem, 2);
+           
+            $item->total_des = $total_des;
+            $item->subtotal = $subtotal;
+            $item->total = $subtotal_c_desc;
 
             return $item;
         });
 
-        // Set order totals and metadata
+        // Los totales ya son la suma exacta de líneas redondeadas a 2 decimales
+        // Solo redondear a 2 decimales por seguridad (evitar 0.0000001 por float)
         $pedido->tot_items = $pedido->items->count();
-        $pedido->total_des = number_format(max(0, $totals['des_ped']), 2, ".", ",");
-        $pedido->subtotal = number_format($totals['subtotal_ped'], 2, ".", ",");
-        $pedido->total = number_format(round($totals['total_ped'], 3), 2, ".", ",");
+        $pedido->total_des = round($totals['des_ped'], 2);
+        $pedido->subtotal = round($totals['subtotal_ped'], 2);
+        $pedido->total = round($totals['total_ped'], 2);
 
         // Set tax information
-        $pedido->exento = number_format($totals['exento'], 2);
-        $pedido->gravable = number_format($totals['gravable'], 2);
+        $pedido->exento = round($totals['exento'], 2);
+        $pedido->gravable = round($totals['gravable'], 2);
         $pedido->ivas = implode(',', $ivas);
-        $pedido->monto_iva = number_format($totals['monto_iva'], 2);
+        $pedido->monto_iva = round($totals['monto_iva'], 2);
 
-        // Set clean totals for calculations
-        $pedido->clean_total_des = $totals['des_ped'];
-        $pedido->clean_subtotal = $totals['subtotal_ped'];
-        $pedido->clean_total = round($totals['total_ped'], 3);
-        $pedido->total_base = number_format($totals['base'], 2, ".", ",");
+        // Clean totals = mismo valor (ya está en 2 decimales exactos)
+        $pedido->clean_total_des = round($totals['des_ped'], 2);
+        $pedido->clean_subtotal = round($totals['subtotal_ped'], 2);
+        $pedido->clean_total = round($totals['total_ped'], 2);
+        $pedido->total_base = round($totals['base'], 2);
 
         // Set order status and metadata
         $pedido->editable = $this->pedidoAuth($id_pedido);
         $pedido->vuelto_entregado = [];
 
-        // Calculate discount percentage
+        // Calculate discount percentage (hasta 4 decimales para porcentajes precisos)
         $pedido->total_porciento = $totals['subtotal_ped'] == 0 ? 0 : 
-            number_format(($totals['des_ped'] * 100) / $totals['subtotal_ped'], 2, ".", ",");
+            round(($totals['des_ped'] * 100) / $totals['subtotal_ped'], 4);
         $pedido->clean_total_porciento = $totals['subtotal_ped'] == 0 ? 0 : 
-            ($totals['des_ped'] * 100) / $totals['subtotal_ped'];
+            round(($totals['des_ped'] * 100) / $totals['subtotal_ped'], 4);
 
-        // Set currency conversions
-        $pedido->cop = number_format($totals['total_ped'] * $cop, 2, ".", ",");
-        $pedido->bs = number_format($totals['total_ped'] * $bs, 2, ".", ",");
-        $pedido->cop_clean = $totals['total_ped'] * $cop;
-        $pedido->bs_clean = $totals['total_ped'] * $bs;
+        // Obtener tasas de los items (tasa histórica del momento de la venta)
+        $primerItem = $pedido->items->first();
+        $tasaBsItems = $primerItem && $primerItem->tasa ? floatval($primerItem->tasa) : $bs;
+        $tasaCopItems = $primerItem && $primerItem->tasa_cop ? floatval($primerItem->tasa_cop) : $cop;
+
+        // Conversión a otras monedas usando tasas de los items
+        $pedido->cop = round($totals['total_ped'] * $tasaCopItems, 2);
+        $pedido->bs = round($totals['total_ped'] * $tasaBsItems, 2);
+        $pedido->cop_clean = round($totals['total_ped'] * $tasaCopItems, 2);
+        $pedido->bs_clean = round($totals['total_ped'] * $tasaBsItems, 2);
+        
+       
 
         return $clean ? $pedido->makeHidden('items') : $pedido;
     }
@@ -1285,7 +1317,7 @@ class PedidosController extends Controller
             $caja_inicialpeso = $ultimo_cierre->sum("dejar_peso");
             $caja_inicialbs = $ultimo_cierre->sum("dejar_bss");
         }
-        $pedido = pedidos::where("created_at", "LIKE", $fecha . "%")->where("estado",1)->whereIn("id_vendedor", $id_vendedor);
+        $pedido = pedidos::where("fecha_factura", "LIKE", $fecha . "%")->where("estado",1)->whereIn("id_vendedor", $id_vendedor);
         
 
         /////Montos de ganancias
@@ -1296,7 +1328,7 @@ class PedidosController extends Controller
         //Var ganancia
         //Var porcentaje
         $vueltos_des = pago_pedidos::where("tipo", 6)->where("monto", "<>", 0)
-            ->whereIn("id_pedido", pedidos::where("created_at", "LIKE", $fecha . "%")->whereIn("id_vendedor", $id_vendedor)->select("id"))
+            ->whereIn("id_pedido", pedidos::where("fecha_factura", "LIKE", $fecha . "%")->whereIn("id_vendedor", $id_vendedor)->select("id"))
             ->get()
             ->map(function ($q) {
                 $q->cliente = pedidos::with("cliente")->find($q->id_pedido);
@@ -1314,7 +1346,7 @@ class PedidosController extends Controller
         ])
             ->whereIn(
                 "id_pedido",
-                pedidos::where("created_at", "LIKE", $fecha . "%")
+                pedidos::where("fecha_factura", "LIKE", $fecha . "%")
                     ->whereIn("id_vendedor", $id_vendedor)
                     ->where("estado", 1)
                     ->select("id")
@@ -1341,8 +1373,8 @@ class PedidosController extends Controller
                 return $q;
             });
             
-        $total_export = items_pedidos::whereIn("id_pedido",pedidos::where("created_at", "LIKE", $fecha . "%")->where("export",1)->select("id") )->sum("monto");
-        $total_credito = pago_pedidos::whereIn("id_pedido", pedidos::where("created_at", "LIKE", $fecha . "%")->whereIn("id_vendedor", $id_vendedor)->where("tipo", 4)->select("id"))
+        $total_export = items_pedidos::whereIn("id_pedido",pedidos::where("fecha_factura", "LIKE", $fecha . "%")->where("export",1)->select("id") )->sum("monto");
+        $total_credito = pago_pedidos::whereIn("id_pedido", pedidos::where("fecha_factura", "LIKE", $fecha . "%")->whereIn("id_vendedor", $id_vendedor)->where("tipo", 4)->select("id"))
             ->get()
             ->sum("monto")+$total_export;
 
@@ -2009,6 +2041,7 @@ class PedidosController extends Controller
         $new_pedido->estado = 0;
         $new_pedido->id_cliente = 1;
         $new_pedido->id_vendedor = $usuario;
+        $new_pedido->fecha_factura = now();
         $new_pedido->save();
         return $new_pedido->id;
     }
@@ -2422,6 +2455,238 @@ class PedidosController extends Controller
             return Response::json(["msj" => "Error: " . $e->getMessage(), "estado" => false]);
 
         }
+    }
+
+    /**
+     * Asignar pedido original a una devolución
+     * Valida que el pedido original exista y tenga monto positivo
+     */
+    public function asignarPedidoOriginalDevolucion(Request $req)
+    {
+        $id_pedido_devolucion = $req->id_pedido_devolucion;
+        $id_pedido_original = $req->id_pedido_original;
+
+        // Validar que el pedido de devolución exista
+        $pedidoDevolucion = pedidos::find($id_pedido_devolucion);
+        if (!$pedidoDevolucion) {
+            return Response::json(["msj" => "El pedido de devolución no existe", "estado" => false]);
+        }
+
+        // Validar que el pedido original exista
+        $pedidoOriginal = pedidos::with(['items.producto'])->find($id_pedido_original);
+        if (!$pedidoOriginal) {
+            return Response::json(["msj" => "El pedido original #$id_pedido_original no existe", "estado" => false]);
+        }
+
+        // Validar que el pedido original no sea una devolución (debe tener monto positivo)
+        $montoTotal = items_pedidos::where('id_pedido', $id_pedido_original)->sum('monto');
+        if ($montoTotal <= 0) {
+            return Response::json(["msj" => "El pedido #$id_pedido_original no es válido como factura original (monto no positivo)", "estado" => false]);
+        }
+
+        // Validar que el pedido original esté facturado (estado > 0)
+        if ($pedidoOriginal->estado == 0) {
+            return Response::json(["msj" => "El pedido #$id_pedido_original no ha sido facturado aún", "estado" => false]);
+        }
+
+        // Asignar el pedido original
+        $pedidoDevolucion->isdevolucionOriginalid = $id_pedido_original;
+        $pedidoDevolucion->save();
+
+        // Obtener cantidades disponibles para devolución (restando devoluciones previas)
+        $itemsDisponibles = $this->getItemsDisponiblesDevolucion($id_pedido_original);
+
+        return Response::json([
+            "msj" => "Pedido original #$id_pedido_original asignado correctamente",
+            "estado" => true,
+            "pedido_original" => $pedidoOriginal,
+            "items_disponibles" => $itemsDisponibles
+        ]);
+    }
+
+    /**
+     * Endpoint para obtener items disponibles para devolución
+     */
+    public function getItemsDisponiblesDevolucionEndpoint(Request $req)
+    {
+        $id_pedido_original = $req->id_pedido_original;
+        $itemsDisponibles = $this->getItemsDisponiblesDevolucion($id_pedido_original);
+        return Response::json([
+            "estado" => true,
+            "items_disponibles" => $itemsDisponibles
+        ]);
+    }
+
+    /**
+     * Obtener items disponibles para devolución de un pedido original
+     * Considera devoluciones previas
+     */
+    public function getItemsDisponiblesDevolucion($id_pedido_original)
+    {
+        // Obtener items del pedido original
+        $itemsOriginal = items_pedidos::where('id_pedido', $id_pedido_original)
+            ->with('producto:id,codigo_barras,descripcion,precio')
+            ->get();
+
+        // Obtener todas las devoluciones de este pedido original
+        $devolucionesIds = pedidos::where('isdevolucionOriginalid', $id_pedido_original)->pluck('id');
+
+        // Calcular cantidades ya devueltas por producto
+        $cantidadesDevueltas = [];
+        if ($devolucionesIds->count() > 0) {
+            $itemsDevueltos = items_pedidos::whereIn('id_pedido', $devolucionesIds)
+                ->where('cantidad', '<', 0)
+                ->get();
+            
+            foreach ($itemsDevueltos as $item) {
+                $idProducto = $item->id_producto;
+                if (!isset($cantidadesDevueltas[$idProducto])) {
+                    $cantidadesDevueltas[$idProducto] = 0;
+                }
+                // Las cantidades devueltas son negativas, las sumamos como positivas
+                $cantidadesDevueltas[$idProducto] += abs($item->cantidad);
+            }
+        }
+
+        // Calcular cantidades disponibles
+        $itemsDisponibles = [];
+        foreach ($itemsOriginal as $item) {
+            $cantidadOriginal = $item->cantidad;
+            $cantidadDevuelta = $cantidadesDevueltas[$item->id_producto] ?? 0;
+            $cantidadDisponible = $cantidadOriginal - $cantidadDevuelta;
+
+            if ($cantidadDisponible > 0) {
+                $itemsDisponibles[] = [
+                    'id_producto' => $item->id_producto,
+                    'codigo_barras' => $item->producto->codigo_barras ?? '',
+                    'descripcion' => $item->producto->descripcion ?? '',
+                    'cantidad_original' => $cantidadOriginal,
+                    'cantidad_devuelta' => $cantidadDevuelta,
+                    'cantidad_disponible' => $cantidadDisponible,
+                    'precio_unitario' => $item->precio_unitario ?? $item->producto->precio,
+                    'tasa' => $item->tasa,
+                    'descuento' => $item->descuento ?? 0,
+                ];
+            }
+        }
+
+        return $itemsDisponibles;
+    }
+
+    /**
+     * Validar si un producto puede ser agregado como devolución
+     */
+    public function validarProductoDevolucion($id_pedido, $id_producto, $cantidad)
+    {
+        $pedido = pedidos::find($id_pedido);
+        
+        // Si no tiene pedido original asignado, no hay restricción
+        if (!$pedido || !$pedido->isdevolucionOriginalid) {
+            return ['valido' => true];
+        }
+
+        $itemsDisponibles = $this->getItemsDisponiblesDevolucion($pedido->isdevolucionOriginalid);
+        
+        // Buscar el producto en los items disponibles
+        $itemEncontrado = null;
+        foreach ($itemsDisponibles as $item) {
+            if ($item['id_producto'] == $id_producto) {
+                $itemEncontrado = $item;
+                break;
+            }
+        }
+
+        if (!$itemEncontrado) {
+            // Verificar si el producto existía en la factura original pero ya fue devuelto
+            $itemOriginal = items_pedidos::where('id_pedido', $pedido->isdevolucionOriginalid)
+                ->where('id_producto', $id_producto)
+                ->where('cantidad', '>', 0)
+                ->first();
+
+            if ($itemOriginal) {
+                // El producto existía, buscar en qué factura de devolución fue devuelto
+                $devolucionPrevia = pedidos::whereHas('items', function($q) use ($id_producto) {
+                        $q->where('id_producto', $id_producto)
+                          ->where('cantidad', '<', 0);
+                    })
+                    ->where('isdevolucionOriginalid', $pedido->isdevolucionOriginalid)
+                    ->where('id', '!=', $id_pedido)
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+
+                if ($devolucionPrevia) {
+                    $fechaDevolucion = $devolucionPrevia->created_at 
+                        ? $devolucionPrevia->created_at->format('d/m/Y H:i') 
+                        : 'fecha desconocida';
+                    
+                    return [
+                        'valido' => false,
+                        'mensaje' => "Este producto ya fue devuelto completamente en la factura #{$devolucionPrevia->id} el {$fechaDevolucion}"
+                    ];
+                }
+
+                return [
+                    'valido' => false,
+                    'mensaje' => "Este producto ya fue devuelto completamente de la factura original #{$pedido->isdevolucionOriginalid}"
+                ];
+            }
+
+            return [
+                'valido' => false,
+                'mensaje' => 'Este producto no existe en la factura original #' . $pedido->isdevolucionOriginalid
+            ];
+        }
+
+        // La cantidad de devolución es negativa, convertir a positiva para comparar
+        $cantidadSolicitada = abs($cantidad);
+        
+        if ($cantidadSolicitada > $itemEncontrado['cantidad_disponible']) {
+            return [
+                'valido' => false,
+                'mensaje' => "Cantidad máxima disponible para devolución: {$itemEncontrado['cantidad_disponible']} (Original: {$itemEncontrado['cantidad_original']}, Ya devuelto: {$itemEncontrado['cantidad_devuelta']})"
+            ];
+        }
+
+        return [
+            'valido' => true,
+            'item_original' => $itemEncontrado
+        ];
+    }
+
+    /**
+     * Eliminar la asignación de pedido original de una devolución
+     */
+    public function eliminarPedidoOriginalDevolucion(Request $req)
+    {
+        $id_pedido = $req->id_pedido;
+
+        $pedido = pedidos::find($id_pedido);
+        if (!$pedido) {
+            return Response::json([
+                "msj" => "Pedido no encontrado",
+                "estado" => false
+            ]);
+        }
+
+        // Verificar que no tenga items con cantidad negativa ya agregados
+        $itemsNegativos = items_pedidos::where('id_pedido', $id_pedido)
+            ->where('cantidad', '<', 0)
+            ->count();
+
+        if ($itemsNegativos > 0) {
+            return Response::json([
+                "msj" => "No se puede eliminar la asignación porque ya hay productos devueltos en este pedido",
+                "estado" => false
+            ]);
+        }
+
+        $pedido->isdevolucionOriginalid = null;
+        $pedido->save();
+
+        return Response::json([
+            "msj" => "Asignación de factura original eliminada",
+            "estado" => true
+        ]);
     }
 
 

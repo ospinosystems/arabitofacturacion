@@ -19,6 +19,8 @@ class pedidos extends Model
         "id_cliente",
         "id_vendedor",
         "fiscal",
+        "isdevolucionOriginalid",
+        "fecha_factura",
     ];
     // use HasFactory;
 
@@ -51,6 +53,14 @@ class pedidos extends Model
     public function retenciones() { 
         return $this->hasMany('App\Models\retenciones',"id_pedido","id"); 
     }
-
-  
+    
+    // Relación con el pedido original (cuando este es una devolución)
+    public function pedidoOriginal() { 
+        return $this->belongsTo('App\Models\pedidos', 'isdevolucionOriginalid', 'id'); 
+    }
+    
+    // Relación con las devoluciones que se han hecho de este pedido
+    public function devoluciones() { 
+        return $this->hasMany('App\Models\pedidos', 'isdevolucionOriginalid', 'id'); 
+    }
 }

@@ -57,8 +57,8 @@ class sendCentral extends Controller
 
     public function path()
     {
-       //return "http://127.0.0.1:8001";
-       return "https://phplaravel-1009655-3565285.cloudwaysapps.com";
+       return "http://127.0.0.1:8001";
+       //return "https://phplaravel-1009655-3565285.cloudwaysapps.com";
     }
 
     /**\
@@ -162,6 +162,15 @@ class sendCentral extends Controller
 
     public function getAllInventarioFromCentral() {
         try {
+            // Verificar si hay pedidos pendientes
+            $pedidosPendientes = pedidos::where("estado", 0)->pluck('id');
+            if ($pedidosPendientes->isNotEmpty()) {
+                return Response::json([
+                    "estado" => false,
+                    "msj" => "No se puede sincronizar. Debe completar o eliminar los pedidos pendientes: " . $pedidosPendientes->implode(', ')
+                ]);
+            }
+            
             // Check if there are tasks before proceeding
             $checkTasks = Http::get($this->path() . "/thereAreTasks", [
                 "codigo_origen" => $this->getOrigen()
@@ -2457,6 +2466,8 @@ class sendCentral extends Controller
     function sendestadisticasVenta($id_last) {
         
         ini_set('memory_limit', '4095M');
+        
+        \Log::info("    [Estadísticas] Iniciando con id_last: $id_last");
 
         // Procesar datos en lotes para evitar max_allowed_packet, pero devolver estructura consolidada
         $batchSize = 500; // Ajustar según necesidades
@@ -2465,12 +2476,18 @@ class sendCentral extends Controller
         $allPagos = collect();
         
         // Obtener items en lotes
+        \Log::info("    [Estadísticas] Construyendo query de items_pedidos...");
+        $t1 = microtime(true);
         $itemsQuery = items_pedidos::where("id",">",$id_last)
             ->whereNotNull("id_producto")
             ->whereIn("id_pedido",pedidos::whereIn("id",pago_pedidos::where("tipo","<>",4)->select("id_pedido"))->select("id"))
             ->orderBy("id","desc");
+        \Log::info("    [Estadísticas] Query construido en " . round(microtime(true) - $t1, 2) . "s");
             
+        \Log::info("    [Estadísticas] Contando total de items...");
+        $t2 = microtime(true);
         $totalItems = $itemsQuery->count();
+        \Log::info("    [Estadísticas] Total items encontrados: $totalItems en " . round(microtime(true) - $t2, 2) . "s");
         
         // Si no hay items, devolver estructura vacía
         if ($totalItems == 0) {
@@ -2485,7 +2502,13 @@ class sendCentral extends Controller
         $allPedidoIds = collect();
         
         // Procesar en lotes para evitar sobrecarga de memoria y DB
+        \Log::info("    [Estadísticas] Procesando items en lotes de $batchSize...");
+        $t3 = microtime(true);
+        $totalBatches = ceil($totalItems / $batchSize);
         for ($offset = 0; $offset < $totalItems; $offset += $batchSize) {
+            $batchNum = intval($offset / $batchSize) + 1;
+            \Log::info("    [Estadísticas] Procesando lote $batchNum/$totalBatches de items...");
+            
             $itemsBatch = $itemsQuery->skip($offset)->take($batchSize)
                 ->get(["id","id_pedido","cantidad","id_producto","created_at",
                 "descuento",
@@ -2504,8 +2527,11 @@ class sendCentral extends Controller
             $pedidoIds = $itemsBatch->pluck("id_pedido")->unique();
             $allPedidoIds = $allPedidoIds->merge($pedidoIds)->unique();
         }
+        \Log::info("    [Estadísticas] Items procesados en " . round(microtime(true) - $t3, 2) . "s. Total pedidos únicos: " . $allPedidoIds->count());
         
         // Obtener todos los pedidos únicos (en lotes si es necesario)
+        \Log::info("    [Estadísticas] Obteniendo pedidos...");
+        $t4 = microtime(true);
         $pedidosBatchSize = 1000;
         $pedidoIdsArray = $allPedidoIds->toArray();
         
@@ -2514,13 +2540,17 @@ class sendCentral extends Controller
             $pedidosBatch = pedidos::whereIn("id", $pedidoIdsBatch)->get();
             $allPedidos = $allPedidos->merge($pedidosBatch);
         }
+        \Log::info("    [Estadísticas] Pedidos obtenidos en " . round(microtime(true) - $t4, 2) . "s. Total: " . $allPedidos->count());
         
         // Obtener todos los pagos únicos (en lotes si es necesario)
+        \Log::info("    [Estadísticas] Obteniendo pagos...");
+        $t5 = microtime(true);
         for ($i = 0; $i < count($pedidoIdsArray); $i += $pedidosBatchSize) {
             $pedidoIdsBatch = array_slice($pedidoIdsArray, $i, $pedidosBatchSize);
             $pagosBatch = pago_pedidos::whereIn("id_pedido", $pedidoIdsBatch)->get();
             $allPagos = $allPagos->merge($pagosBatch);
         }
+        \Log::info("    [Estadísticas] Pagos obtenidos en " . round(microtime(true) - $t5, 2) . "s. Total: " . $allPagos->count());
         
         // Devolver estructura consolidada como se esperaba originalmente
         $data = [
@@ -2682,80 +2712,7 @@ class sendCentral extends Controller
     
 
     function sendAllTest() {
-        ini_set('memory_limit', '4095M');
-
-        try {
-            $codigo_origen = $this->getOrigen();
-                
-            $getLast = Http::get($this->path() . "/getLast", [
-                "codigo_origen" => $codigo_origen,
-            ]);
-    
-            if ($getLast->ok()) {
-                $getLast = $getLast->json();
-                if ($getLast==null) {
-                    
-                    $date_last_cierres = "2024-01-01";
-                    $id_last_garantias = 0;
-                    $id_last_fallas = 0;
-                    $id_last_efec = 0;
-                    $id_last_estadisticas = 0;
-                    $id_last_movs = 0;
-                }else{
-                    $date_last_cierres = $getLast["date_last_cierres"]?$getLast["date_last_cierres"]:"2024-01-01";
-                    $id_last_garantias = $getLast["id_last_garantias"]?$getLast["id_last_garantias"]:0;
-                    $id_last_fallas = $getLast["id_last_fallas"]?$getLast["id_last_fallas"]:0;
-                    $id_last_efec = $getLast["id_last_efec"]?$getLast["id_last_efec"]:0;
-                    $id_last_estadisticas = $getLast["id_last_estadisticas"]?$getLast["id_last_estadisticas"]:0;
-                    $id_last_movs = $getLast["id_last_movs"]?$getLast["id_last_movs"]:0;
-                }
-                //dd($this->sendestadisticasVenta($id_last_estadisticas),$id_last_estadisticas);
-    
-                $data = [
-
-                    "numitemspedidos" => items_pedidos::whereNotNull("id_producto")->whereIn("id_pedido",pedidos::whereIn("id",pago_pedidos::where("tipo","<>",4)->select("id_pedido"))->select("id"))->get()->count(),
-                    "sendInventarioCt" => $this->sendInventario(false,$date_last_cierres),
-                    "sendGarantias" => $this->sendGarantias($id_last_garantias),
-                    "sendFallas" => $this->sendFallas($id_last_fallas),
-                    "setCierreFromSucursalToCentral" => $this->sendCierres($date_last_cierres),
-                    "setEfecFromSucursalToCentral" => $this->sendEfec($id_last_efec),
-                    "sendCreditos" => /* [],// */$this->sendCreditos(),
-                    "sendestadisticasVenta" => /* [],// */$this->sendestadisticasVenta($id_last_estadisticas),
-                    "movsinventario" => [],
-                    "codigo_origen" => $codigo_origen,
-                ];
-                $setAll = Http::post($this->path() . "/setAll", $data);
-                //return $setAll;
-                
-                if (!$setAll->json()) {
-                    return $setAll;
-                }
-                
-                if ($setAll->ok()) {
-
-                    \DB::statement("UPDATE `inventarios` SET iva=1");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MACHETE%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'PEINILLA%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOBOMBA%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'ELECTROBOMBA%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'DESMALEZADORA%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOSIERRA%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'CUCHILLA%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'FUMIGADORA%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MANGUERA%'");
-                    
-                    //$this->sendAllMovs();
-                    return $setAll->json();
-                }else{
-                    return "ERROR: ".$setAll;
-                }
-                return $setAll;
-                
-            }
-            return $getLast;
-        } catch (\Exception $e) {
-            return $e->getMessage()." - ".$e->getFile()." - ".$e->getLine();
-        }
+        return $this->sendAllDirect(null, true);
     }
 
     function sendAllTestOnlyInventario($idsSuccess) {
@@ -2795,96 +2752,8 @@ class sendCentral extends Controller
     }
 
     function sendAll($correo) {
-
-        try {
-            $codigo_origen = $this->getOrigen();
-            
-            $getLast = Http::get($this->path() . "/getLast", [
-                "codigo_origen" => $codigo_origen,
-            ]);
-
-            if ($getLast->ok()) {
-                $getLast = $getLast->json();
-                if (!$getLast) {
-                    
-                    $date_last_cierres = "2000-01-01";
-                    $id_last_garantias = 0;
-                    $id_last_fallas = 0;
-                    $id_last_efec = 0;
-                    $id_last_estadisticas = 0;
-                    $id_last_movs = 0;
-                }else{
-                    $id_last_garantias = $getLast["id_last_garantias"];
-                    $id_last_fallas = $getLast["id_last_fallas"];
-                    $date_last_cierres = $getLast["date_last_cierres"];
-                    $id_last_efec = $getLast["id_last_efec"];
-                    $id_last_estadisticas = $getLast["id_last_estadisticas"];
-                    $id_last_movs = $getLast["id_last_movs"]?$getLast["id_last_movs"]:0;
-                }
-
-                $data = [
-                    "numitemspedidos" => items_pedidos::whereNotNull("id_producto")->whereIn("id_pedido",pedidos::whereIn("id",pago_pedidos::where("tipo","<>",4)->select("id_pedido"))->select("id"))->get()->count(),
-                    "sendInventarioCt" => $this->sendInventario(false,$date_last_cierres),
-                    "sendGarantias" => $this->sendGarantias($id_last_garantias),
-                    "sendFallas" => $this->sendFallas($id_last_fallas),
-                    "setCierreFromSucursalToCentral" => $this->sendCierres($date_last_cierres),
-                    "setEfecFromSucursalToCentral" => $this->sendEfec($id_last_efec),
-                    "sendCreditos" => $this->sendCreditos(),
-                    "sendestadisticasVenta" => $this->sendestadisticasVenta($id_last_estadisticas),
-                    "movsinventario" => [],
-                    "codigo_origen" => $codigo_origen,
-                ];
-
-                //return $this->sendEfec($id_last_efec);
-
-
-                $setAll = Http::post($this->path() . "/setAll", $data);
-
-                if (!$setAll->json()) {
-                    
-                    return $setAll;
-                }
-
-                if ($setAll->ok()) {
-                    
-                    $arr_send = $correo[0];
-                    $from1 = $correo[1];
-                    $from = $correo[2];
-                    $subject = $correo[3];
-                    
-                    Mail::to($this->sends())->send(new enviarCierre($arr_send, $from1, $from, $subject));
-                    
-                    \Artisan::call('database:backup'); //Hacer respaldo Local
-                    \Artisan::call('backup:run'); //Enviar Respaldo al correo
-                    //$this->sendAllMovs();
-
-                    \DB::statement("UPDATE `inventarios` SET iva=1");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MACHETE%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'PEINILLA%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOBOMBA%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'ELECTROBOMBA%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'DESMALEZADORA%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOSIERRA%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'CUCHILLA%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'FUMIGADORA%'");
-                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MANGUERA%'");
-                    
-                    return $setAll->json();
-                    
-                }else{
-                    return "ERROR: ".$setAll;
-                }
-            }
-
-        } catch (\Exception $e) {
-            return $e->getMessage();
-        }
-
-        
-        
+        return $this->sendAllDirect($correo, false);
     }
-
-
 
     ////////////////////
 
@@ -4357,5 +4226,270 @@ class sendCentral extends Controller
     }
 
     // =================== FIN MÉTODOS SOLICITUDES DE REVERSO ===================
+
+    // =================== MÉTODOS SINCRONIZACIÓN DIRECTA ===================
+
+    /**
+     * Obtiene los últimos IDs sincronizados directamente desde arabitocentral
+     */
+    function getLastIdsDirect() 
+    {
+        try {
+            $codigo_origen = $this->getOrigen();
+            $response = Http::timeout(30)->get($this->path() . "/getLastDirect", [
+                "codigo_origen" => $codigo_origen,
+            ]);
+            
+            if ($response->ok()) {
+                return $response->json();
+            }
+            return $response->json();
+            
+            return [
+                'date_last_cierres' => '2000-01-01',
+                'id_last_garantias' => 0,
+                'id_last_efec' => 0,
+                'id_last_estadisticas' => 0,
+                'id_last_fallas' => 0,
+                'id_last_movs' => 0,
+            ];
+        } catch (\Exception $e) {
+            return [
+                'date_last_cierres' => '2000-01-01',
+                'id_last_garantias' => 0,
+                'id_last_efec' => 0,
+                'id_last_estadisticas' => 0,
+                'id_last_fallas' => 0,
+                'id_last_movs' => 0,
+            ];
+        }
+    }
+
+    /**
+     * Recopila datos pendientes de sincronización con logs de tiempo
+     */
+    function collectPendingDataDirect($lastIds, &$tiempos = []) 
+    {
+        $date_last_cierres = $lastIds['date_last_cierres'] ?? '2000-01-01';
+        $id_last_garantias = $lastIds['id_last_garantias'] ?? 0;
+        $id_last_efec = $lastIds['id_last_efec'] ?? 0;
+        $id_last_estadisticas = $lastIds['id_last_estadisticas'] ?? 0;
+        $codigo_origen = $this->getOrigen();
+        
+        $inicio = microtime(true);
+        \Log::info('=== INICIO RECOPILACIÓN DE DATOS ===');
+        
+        // 1. Contar items pedidos
+        \Log::info('>>> Iniciando: Contar items pedidos...');
+        $t1 = microtime(true);
+        $numitemspedidos = items_pedidos::whereNotNull("id_producto")
+            ->whereIn("id_pedido", pedidos::whereIn("id", pago_pedidos::where("tipo", "<>", 4)->select("id_pedido"))->select("id"))
+            ->count();
+        $tiempos['numitemspedidos'] = round(microtime(true) - $t1, 2) . 's';
+        \Log::info('<<< Completado: Contar items pedidos - ' . $tiempos['numitemspedidos'] . ' - Total: ' . $numitemspedidos);
+        
+        // 2. Inventario
+        \Log::info('>>> Iniciando: Inventario...');
+        $t2 = microtime(true);
+        $sendInventarioCt = $this->sendInventario(false, $date_last_cierres);
+        $tiempos['sendInventarioCt'] = round(microtime(true) - $t2, 2) . 's';
+        \Log::info('<<< Completado: Inventario - ' . $tiempos['sendInventarioCt']);
+        
+        // 3. Garantías
+        \Log::info('>>> Iniciando: Garantías...');
+        $t3 = microtime(true);
+        $sendGarantias = $this->sendGarantias($id_last_garantias);
+        $tiempos['sendGarantias'] = round(microtime(true) - $t3, 2) . 's';
+        \Log::info('<<< Completado: Garantías - ' . $tiempos['sendGarantias']);
+        
+        // 4. Fallas
+        \Log::info('>>> Iniciando: Fallas...');
+        $t4 = microtime(true);
+        $sendFallas = $this->sendFallas(0);
+        $tiempos['sendFallas'] = round(microtime(true) - $t4, 2) . 's';
+        \Log::info('<<< Completado: Fallas - ' . $tiempos['sendFallas']);
+        
+        // 5. Cierres
+        \Log::info('>>> Iniciando: Cierres...');
+        $t5 = microtime(true);
+        $setCierreFromSucursalToCentral = $this->sendCierres($date_last_cierres);
+        $tiempos['sendCierres'] = round(microtime(true) - $t5, 2) . 's';
+        \Log::info('<<< Completado: Cierres - ' . $tiempos['sendCierres']);
+        
+        // 6. Efectivo
+        \Log::info('>>> Iniciando: Efectivo...');
+        $t6 = microtime(true);
+        $setEfecFromSucursalToCentral = $this->sendEfec($id_last_efec);
+        $tiempos['sendEfec'] = round(microtime(true) - $t6, 2) . 's';
+        \Log::info('<<< Completado: Efectivo - ' . $tiempos['sendEfec']);
+        
+        // 7. Créditos
+        \Log::info('>>> Iniciando: Créditos...');
+        $t7 = microtime(true);
+        $sendCreditos = $this->sendCreditos();
+        $tiempos['sendCreditos'] = round(microtime(true) - $t7, 2) . 's';
+        \Log::info('<<< Completado: Créditos - ' . $tiempos['sendCreditos']);
+        
+        // 8. Estadísticas de venta
+        \Log::info('>>> Iniciando: Estadísticas de venta...');
+        $t8 = microtime(true);
+        $sendestadisticasVenta = $this->sendestadisticasVenta($id_last_estadisticas);
+        $tiempos['sendestadisticasVenta'] = round(microtime(true) - $t8, 2) . 's';
+        \Log::info('<<< Completado: Estadísticas de venta - ' . $tiempos['sendestadisticasVenta']);
+        
+        $tiempos['total_recopilacion'] = round(microtime(true) - $inicio, 2) . 's';
+        
+        \Log::info('=== FIN RECOPILACIÓN - RESUMEN DE TIEMPOS ===', $tiempos);
+        
+        return [
+            "numitemspedidos" => $numitemspedidos,
+            "sendInventarioCt" => $sendInventarioCt,
+            "sendGarantias" => $sendGarantias,
+            "sendFallas" => $sendFallas,
+            "setCierreFromSucursalToCentral" => $setCierreFromSucursalToCentral,
+            "setEfecFromSucursalToCentral" => $setEfecFromSucursalToCentral,
+            "sendCreditos" => $sendCreditos,
+            "sendestadisticasVenta" => $sendestadisticasVenta,
+            "movsinventario" => [],
+            "codigo_origen" => $codigo_origen,
+        ];
+    }
+
+    /**
+     * Envía datos con reintentos para intermitencia de red
+     */
+    function sendBatchWithRetry($endpoint, $data, $maxRetries = 3, $timeout = 120) 
+    {
+        $retryCount = 0;
+        $lastError = null;
+        
+        while ($retryCount < $maxRetries) {
+            try {
+                $response = Http::timeout($timeout)->post($this->path() . $endpoint, $data);
+                if ($response->ok()) {
+                    return ['success' => true, 'data' => $response->json(), 'attempts' => $retryCount + 1];
+                }
+                $lastError = "HTTP " . $response->status() . ": " . $response->body();
+            } catch (\Exception $e) {
+                $lastError = $e->getMessage();
+            }
+            $retryCount++;
+            if ($retryCount < $maxRetries) {
+                sleep(pow(2, $retryCount - 1));
+            }
+        }
+        return ['success' => false, 'error' => $lastError, 'attempts' => $retryCount];
+    }
+
+    /**
+     * Sincronización directa unificada - Usa setAllDirect en central
+     * @param mixed $correo - Array con datos de correo o null para modo test
+     * @param bool $returnTiming - Si true, retorna tiempos detallados (modo test)
+     */
+    function sendAllDirect($correo = null, $returnTiming = false) 
+    {
+        ini_set('memory_limit', '4095M');
+        $tiemposTotal = [];
+        $inicioTotal = microtime(true);
+        
+        \Log::info('========================================');
+        \Log::info('=== INICIO SINCRONIZACIÓN DIRECTA ===');
+        \Log::info('Modo: ' . ($correo ? 'Producción con correo' : 'Test con tiempos'));
+        \Log::info('========================================');
+        
+        try {
+            // 1. Obtener últimos IDs
+            \Log::info('>>> PASO 1: Obteniendo últimos IDs desde central...');
+            $t1 = microtime(true);
+            $lastIds = $this->getLastIdsDirect();
+            return $lastIds;
+            $tiemposTotal['1_getLastIds'] = round(microtime(true) - $t1, 2) . 's';
+            \Log::info('<<< PASO 1 completado - ' . $tiemposTotal['1_getLastIds']);
+            
+            // 2. Recopilar datos (con tiempos detallados internos)
+            \Log::info('>>> PASO 2: Recopilando datos locales...');
+            $tiemposRecopilacion = [];
+            $t2 = microtime(true);
+            $data = $this->collectPendingDataDirect($lastIds, $tiemposRecopilacion);
+            $tiemposTotal['2_collectData'] = round(microtime(true) - $t2, 2) . 's';
+            $tiemposTotal['2_detalle'] = $tiemposRecopilacion;
+            \Log::info('<<< PASO 2 completado - ' . $tiemposTotal['2_collectData']);
+            
+            // 3. Enviar a central
+            \Log::info('>>> PASO 3: Enviando datos a central (timeout 180s)...');
+            $t3 = microtime(true);
+            $result = $this->sendBatchWithRetry("/setAllDirect", $data, 3, 180);
+            $tiemposTotal['3_envioACentral'] = round(microtime(true) - $t3, 2) . 's';
+            \Log::info('<<< PASO 3 completado - ' . $tiemposTotal['3_envioACentral']);
+            
+            if (!$result['success']) {
+                $tiemposTotal['total'] = round(microtime(true) - $inicioTotal, 2) . 's';
+                $errorMsg = "ERROR después de " . $result['attempts'] . " intentos: " . $result['error'];
+                
+                if ($returnTiming) {
+                    return ['error' => $errorMsg, 'tiempos' => $tiemposTotal];
+                }
+                return $errorMsg;
+            }
+            
+            $setAllResponse = $result['data'];
+            
+            // 4. Post-procesamiento
+            \Log::info('>>> PASO 4: Post-procesamiento...');
+            $t4 = microtime(true);
+            if (isset($setAllResponse['success']) && $setAllResponse['success']) {
+                // Enviar correo solo en modo producción
+                if ($correo) {
+                    Mail::to($this->sends())->send(new enviarCierre($correo[0], $correo[1], $correo[2], $correo[3]));
+                    \Artisan::call('database:backup');
+                    \Artisan::call('backup:run');
+                }
+                
+                // Actualizar IVA en inventarios
+                \DB::statement("UPDATE `inventarios` SET iva=1");
+                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MACHETE%'");
+                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'PEINILLA%'");
+                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOBOMBA%'");
+                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'ELECTROBOMBA%'");
+                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'DESMALEZADORA%'");
+                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOSIERRA%'");
+                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'CUCHILLA%'");
+                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'FUMIGADORA%'");
+                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MANGUERA%'");
+                
+                $tiemposTotal['4_postProceso'] = round(microtime(true) - $t4, 2) . 's';
+                $tiemposTotal['total'] = round(microtime(true) - $inicioTotal, 2) . 's';
+                
+                \Log::info('<<< PASO 4 completado - ' . $tiemposTotal['4_postProceso']);
+                \Log::info('=== SINCRONIZACIÓN COMPLETADA - Tiempo total: ' . $tiemposTotal['total'] . ' ===');
+                
+                // Retornar con tiempos si es modo test
+                if ($returnTiming) {
+                    $setAllResponse['tiempos_sucursal'] = $tiemposTotal;
+                }
+                
+                return $setAllResponse;
+            }
+            
+            $tiemposTotal['total'] = round(microtime(true) - $inicioTotal, 2) . 's';
+            $errorMsg = "ERROR: " . (isset($setAllResponse['errors']) ? implode(", ", $setAllResponse['errors']) : "Error desconocido");
+            
+            if ($returnTiming) {
+                return ['error' => $errorMsg, 'tiempos' => $tiemposTotal];
+            }
+            return $errorMsg;
+            
+        } catch (\Exception $e) {
+            $tiemposTotal['total'] = round(microtime(true) - $inicioTotal, 2) . 's';
+            $errorMsg = $e->getMessage() . " - " . $e->getFile() . " - " . $e->getLine();
+            
+            if ($returnTiming) {
+                return ['error' => $errorMsg, 'tiempos' => $tiemposTotal];
+            }
+            return $errorMsg;
+        }
+    }
+
+    // =================== FIN MÉTODOS SINCRONIZACIÓN DIRECTA ===================
 
 }

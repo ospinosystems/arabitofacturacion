@@ -79,8 +79,18 @@ export default function PagarMain({
     notificar,
     debito,
     setDebito,
+    debitoRef,
+    setDebitoRef,
+    debitoRefError,
+    setDebitoRefError,
     efectivo,
     setEfectivo,
+    efectivo_bs,
+    setEfectivo_bs,
+    efectivo_dolar,
+    setEfectivo_dolar,
+    efectivo_peso,
+    setEfectivo_peso,
     transferencia,
     setTransferencia,
     credito,
@@ -174,14 +184,105 @@ export default function PagarMain({
     const transferenciaInputRef = useRef(null);
     const biopagoInputRef = useRef(null);
     const creditoInputRef = useRef(null);
-    const showTittlePrice = (pu, total) => {
+
+    // Estados para modal de pedido original (devoluciones)
+    const [showModalPedidoOriginal, setShowModalPedidoOriginal] = useState(false);
+    const [pedidoOriginalInput, setPedidoOriginalInput] = useState("");
+    const [itemsDisponiblesDevolucion, setItemsDisponiblesDevolucion] = useState([]);
+    const [pedidoOriginalAsignado, setPedidoOriginalAsignado] = useState(null);
+    const pedidoOriginalInputRef = useRef(null);
+    
+    // Estado para modal de info de factura original
+    const [showModalInfoFacturaOriginal, setShowModalInfoFacturaOriginal] = useState(false);
+    const [itemsFacturaOriginal, setItemsFacturaOriginal] = useState([]);
+    const [loadingFacturaOriginal, setLoadingFacturaOriginal] = useState(false);
+
+    // Estados para mostrar/ocultar efectivo dividido por moneda
+    const [showEfectivoDetalle, setShowEfectivoDetalle] = useState(false);
+    const [showEfectivoPeso, setShowEfectivoPeso] = useState(false);
+    
+    // Ref para input de referencia del débito
+    const debitoRefInputRef = useRef(null);
+    
+    // Configuración de métodos de pago (cambiar aquí para mostrar/ocultar)
+    const SHOW_BIOPAGO = false; // Cambiar a true para mostrar Biopago
+    
+    // Estado para mostrar/ocultar Crédito (toggle desde interfaz)
+    const [showCredito, setShowCredito] = useState(false);
+
+    // Estado para rastrear la última función de pago llamada (para doble clic)
+    const [lastPaymentMethodCalled, setLastPaymentMethodCalled] = useState(null);
+
+    // Funciones para formato de moneda en inputs de pago (tiempo real)
+    const formatMonedaLive = (value) => {
+        if (!value || value === '') return '';
+        let str = String(value);
+
+        // Normalizar: siempre tratar la coma como punto decimal
+        // Ej: "10,5" -> "10.5"
+        str = str.replace(/,/g, '.');
+
+        // Manejar puntos como miles o decimales
+        // Puede ser formato con punto decimal: 1234.56
+        // O puede tener puntos como miles: 1.234.567
+        const puntos = (str.match(/\./g) || []).length;
+        if (puntos > 1) {
+            // Con varios puntos: todos menos el último son miles, el último es decimal
+            // Ej: "70.000,36" -> "70.000.36" -> "70000.36"
+            const lastDotIndex = str.lastIndexOf('.');
+            const intPartRaw = str.substring(0, lastDotIndex);
+            const decPart = str.substring(lastDotIndex + 1); // puede estar vacío mientras escribes
+            const intClean = intPartRaw.replace(/\./g, '');
+            str = intClean + '.' + decPart; // conservamos el punto decimal aunque no haya dígitos aún
+        } else if (puntos === 1) {
+            const lastDotIndex = str.lastIndexOf('.');
+            const afterDot = str.substring(lastDotIndex + 1);
+
+            // Un solo punto: si después hay más de 2 dígitos, asumimos que era miles, no decimal
+            // Ej: "7.000" o "70.000" o "7.0000" -> quitar punto
+            if (afterDot.length > 2) {
+                str = str.replace(/\./g, '');
+            }
+        }
+        
+        // Limpiar todo excepto números, punto y signo negativo
+        let clean = str.replace(/[^0-9.-]/g, '');
+        
+        // Solo permitir un punto decimal
+        const parts = clean.split('.');
+        if (parts.length > 2) {
+            clean = parts[0] + '.' + parts.slice(1).join('');
+        }
+        // Limitar a 2 decimales
+        if (parts.length === 2 && parts[1].length > 2) {
+            clean = parts[0] + '.' + parts[1].substring(0, 2);
+        }
+        return clean;
+    };
+
+    const displayMonedaLive = (value) => {
+        if (!value || value === '') return '';
+        const num = parseFloat(value);
+        if (isNaN(num)) return value;
+        // Separar parte entera y decimal
+        const parts = String(value).split('.');
+        const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        // Si hay decimales, mostrarlos (máximo 2)
+        if (parts.length > 1) {
+            return intPart + ',' + parts[1].substring(0, 2);
+        }
+        return intPart;
+    };
+
+    const showTittlePrice = (pu, total, tasaItem = null) => {
         try {
+            const tasaUsar = tasaItem || dolar;
             return (
                 "P/U. Bs." +
-                moneda(number(pu) * dolar) +
+                moneda(number(pu) * tasaUsar) +
                 "\n" +
                 "Total Bs." +
-                moneda(number(total) * dolar)
+                moneda(number(total) * tasaUsar)
             );
         } catch (err) {
             return "";
@@ -202,10 +303,18 @@ export default function PagarMain({
         }
     };
     const setPagoInBs = (callback) => {
-        let bs = parseFloat(window.prompt("Monto Bs"));
-        if (bs) {
-            callback((bs / dolar).toFixed(4));
-        }
+        const input = window.prompt("Monto en Bs (se usará la tasa del pedido)");
+        if (input === null || input === "") return;
+
+        const bs = parseFloat(formatMonedaLive(input));
+        if (isNaN(bs) || bs === 0) return;
+
+        const tasaBsPedido = getTasaPromedioCarrito();
+        if (!tasaBsPedido || tasaBsPedido <= 0) return;
+
+        // Convertir Bs -> USD usando la tasa histórica del pedido
+        const usd = bs / tasaBsPedido;
+        callback(usd.toFixed(4));
     };
     const sumRecibido = () => {
         let vuel_dolar = parseFloat(recibido_dolar ? recibido_dolar : 0);
@@ -309,32 +418,193 @@ export default function PagarMain({
             parseFloat(cambio_cop ? cambio_cop : 0) / parseFloat(peso);
         return (vuel_dolar + vuel_bs + vuel_cop).toFixed(2);
     };
+    // Calcula la tasa promedio ponderada de los items del carrito
+    const getTasaPromedioCarrito = () => {
+        try {
+            const items = pedidoData?.items || [];
+            if (items.length === 0) return dolar;
+
+            let sumaTasaPonderada = 0;
+            let sumaTotal = 0;
+
+            items.forEach((item) => {
+                // Usar number() para manejar strings formateados
+                const totalItem = number(item.total) || 0;
+                const tasaItem = number(item.tasa) || dolar;
+                sumaTasaPonderada += Math.abs(totalItem) * tasaItem;
+                sumaTotal += Math.abs(totalItem);
+            });
+
+            if (sumaTotal === 0) return dolar;
+            return sumaTasaPonderada / sumaTotal;
+        } catch (err) {
+            return dolar;
+        }
+    };
+
+    // Funciones locales para calcular pagos con tasas del pedido
+    const getDebitoLocal = () => {
+        const tasaBsPedido = getTasaPromedioCarrito();
+        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+        
+        const otrosTotal =
+            parseFloat(efectivo_dolar || 0) +
+            (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
+            (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
+            parseFloat(transferencia || 0) +
+            parseFloat(credito || 0) +
+            parseFloat(biopago || 0);
+
+        const restanteUSD = otrosTotal === 0
+            ? parseFloat(pedidoData.clean_total)
+            : Math.max(0, pedidoData.clean_total - otrosTotal);
+        
+        const montoDebitoBs = (restanteUSD * tasaBsPedido).toFixed(2);
+        
+        // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
+        if (lastPaymentMethodCalled === 'debito' && parseFloat(debito || 0).toFixed(2) === montoDebitoBs) {
+            setDebito((parseFloat(pedidoData.clean_total) * tasaBsPedido).toFixed(2));
+            setEfectivo_dolar("");
+            setEfectivo_bs("");
+            setEfectivo_peso("");
+            setTransferencia("");
+            setCredito("");
+            setBiopago("");
+        } else {
+            setDebito(montoDebitoBs);
+        }
+        
+        setLastPaymentMethodCalled('debito');
+    };
+
+    const getEfectivoLocal = () => {
+        const tasaBsPedido = getTasaPromedioCarrito();
+        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+        
+        // Calcular total de pagos NO efectivo
+        const otrosTotal =
+            (parseFloat(debito || 0) / tasaBsPedido) +
+            parseFloat(transferencia || 0) +
+            parseFloat(credito || 0) +
+            parseFloat(biopago || 0);
+
+        // Calcular total de efectivos actuales (excluyendo USD que vamos a calcular)
+        const efectivosActuales =
+            (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
+            (parseFloat(efectivo_peso || 0) / tasaCopPedido);
+
+        const montoEfectivo = (otrosTotal + efectivosActuales) === 0
+            ? parseFloat(pedidoData.clean_total).toFixed(2)
+            : Math.max(0, pedidoData.clean_total - otrosTotal - efectivosActuales).toFixed(2);
+
+        // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
+        if (lastPaymentMethodCalled === 'efectivo' && parseFloat(efectivo_dolar || 0).toFixed(2) === montoEfectivo) {
+            setEfectivo_dolar(parseFloat(pedidoData.clean_total).toFixed(2));
+            setEfectivo_bs("");
+            setEfectivo_peso("");
+            setDebito("");
+            setTransferencia("");
+            setCredito("");
+            setBiopago("");
+        } else {
+            setEfectivo_dolar(montoEfectivo);
+        }
+        
+        setLastPaymentMethodCalled('efectivo');
+    };
+
+    const getTransferenciaLocal = () => {
+        const tasaBsPedido = getTasaPromedioCarrito();
+        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+        
+        const otrosTotal =
+            parseFloat(efectivo_dolar || 0) +
+            (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
+            (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
+            (parseFloat(debito || 0) / tasaBsPedido) +
+            parseFloat(credito || 0) +
+            parseFloat(biopago || 0);
+
+        const montoTransferencia = otrosTotal === 0
+            ? parseFloat(pedidoData.clean_total).toFixed(2)
+            : Math.max(0, pedidoData.clean_total - otrosTotal).toFixed(2);
+
+        // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
+        if (lastPaymentMethodCalled === 'transferencia' && parseFloat(transferencia || 0).toFixed(2) === montoTransferencia) {
+            setTransferencia(parseFloat(pedidoData.clean_total).toFixed(2));
+            setEfectivo_dolar("");
+            setEfectivo_bs("");
+            setEfectivo_peso("");
+            setDebito("");
+            setCredito("");
+            setBiopago("");
+        } else {
+            setTransferencia(montoTransferencia);
+        }
+        
+        setLastPaymentMethodCalled('transferencia');
+    };
+
+    const getBiopagoLocal = () => {
+        const tasaBsPedido = getTasaPromedioCarrito();
+        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+        
+        const otrosTotal =
+            parseFloat(efectivo_dolar || 0) +
+            (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
+            (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
+            parseFloat(transferencia || 0) +
+            (parseFloat(debito || 0) / tasaBsPedido) +
+            parseFloat(credito || 0);
+
+        const montoBiopago = otrosTotal === 0
+            ? parseFloat(pedidoData.clean_total).toFixed(2)
+            : Math.max(0, pedidoData.clean_total - otrosTotal).toFixed(2);
+
+        // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
+        if (lastPaymentMethodCalled === 'biopago' && parseFloat(biopago || 0).toFixed(2) === montoBiopago) {
+            setBiopago(parseFloat(pedidoData.clean_total).toFixed(2));
+            setEfectivo_dolar("");
+            setEfectivo_bs("");
+            setEfectivo_peso("");
+            setTransferencia("");
+            setDebito("");
+            setCredito("");
+        } else {
+            setBiopago(montoBiopago);
+        }
+        
+        setLastPaymentMethodCalled('biopago');
+    };
+
     const debitoBs = (met) => {
         try {
+            const tasaPromedio = getTasaPromedioCarrito();
+
             if (met == "debito") {
                 if (debito == "") {
                     return "";
                 }
-                return "Bs." + moneda(dolar * debito);
+                return "Bs." + moneda(tasaPromedio * debito);
             }
 
             if (met == "transferencia") {
                 if (transferencia == "") {
                     return "";
                 }
-                return "Bs." + moneda(dolar * transferencia);
+                return "Bs." + moneda(tasaPromedio * transferencia);
             }
             if (met == "biopago") {
                 if (biopago == "") {
                     return "";
                 }
-                return "Bs." + moneda(dolar * biopago);
+                return "Bs." + moneda(tasaPromedio * biopago);
             }
             if (met == "efectivo") {
                 if (efectivo == "") {
                     return "";
                 }
-                return "Bs." + moneda(dolar * efectivo);
+                return "Bs." + moneda(tasaPromedio * efectivo);
             }
         } catch (err) {
             return "";
@@ -343,10 +613,22 @@ export default function PagarMain({
     };
     const syncPago = (val, type) => {
         val = number(val);
+        
+        // Usar la tasa del pedido (de los items), no la tasa actual
+        const tasaBsPedido = getTasaPromedioCarrito();
+        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+        
+        // Setear el valor del campo que se está editando
         if (type == "Debito") {
             setDebito(val);
         } else if (type == "Efectivo") {
             setEfectivo(val);
+        } else if (type == "EfectivoUSD") {
+            setEfectivo_dolar(val);
+        } else if (type == "EfectivoBs") {
+            setEfectivo_bs(val);
+        } else if (type == "EfectivoCOP") {
+            setEfectivo_peso(val);
         } else if (type == "Transferencia") {
             setTransferencia(val);
         } else if (type == "Credito") {
@@ -355,41 +637,136 @@ export default function PagarMain({
             setBiopago(val);
         }
 
-        let divisor = 0;
+        const totalPedido = pedidoData.clean_total;
+        const esDevolucion = totalPedido < 0;
 
-        let inputs = [
-            { key: "Debito", val: debito, set: (val) => setDebito(val) },
-            { key: "Efectivo", val: efectivo, set: (val) => setEfectivo(val) },
-            {
-                key: "Transferencia",
-                val: transferencia,
-                set: (val) => setTransferencia(val),
-            },
-            { key: "Credito", val: credito, set: (val) => setCredito(val) },
-            { key: "Biopago", val: biopago, set: (val) => setBiopago(val) },
+        // Todos los campos de pago con su valor actual en USD y su moneda
+        // IMPORTANTE: Usar el nuevo valor (val) para el campo que se está editando
+        // Débito ahora es en Bs
+        const allInputs = [
+            { key: "Debito", val: type === "Debito" ? val : debito, set: setDebito, moneda: "bs", esEfectivo: false },
+            { key: "EfectivoUSD", val: type === "EfectivoUSD" ? val : efectivo_dolar, set: setEfectivo_dolar, moneda: "usd", esEfectivo: true },
+            { key: "EfectivoBs", val: type === "EfectivoBs" ? val : efectivo_bs, set: setEfectivo_bs, moneda: "bs", esEfectivo: true },
+            { key: "EfectivoCOP", val: type === "EfectivoCOP" ? val : efectivo_peso, set: setEfectivo_peso, moneda: "cop", esEfectivo: true },
+            { key: "Transferencia", val: type === "Transferencia" ? val : transferencia, set: setTransferencia, moneda: "usd", esEfectivo: false },
+            { key: "Credito", val: type === "Credito" ? val : credito, set: setCredito, moneda: "usd", esEfectivo: false },
+            { key: "Biopago", val: type === "Biopago" ? val : biopago, set: setBiopago, moneda: "usd", esEfectivo: false },
         ];
 
-        inputs.map((e) => {
-            if (e.key != type) {
-                if (e.val) {
-                    divisor++;
-                }
+        // Función para convertir valor a USD usando tasas del pedido
+        const toUSD = (valor, moneda) => {
+            const v = parseFloat(valor) || 0;
+            if (moneda === "bs") return tasaBsPedido > 0 ? v / tasaBsPedido : 0;
+            if (moneda === "cop") return tasaCopPedido > 0 ? v / tasaCopPedido : 0;
+            return v;
+        };
+
+        // Calcular el valor en USD del campo que se está editando
+        const monedaActual = allInputs.find(e => e.key === type)?.moneda || "usd";
+        let valUSD = toUSD(val, monedaActual);
+
+        // Calcular total de OTROS pagos (excluyendo el campo actual) - solo si tienen valor
+        const totalOtrosPagosUSD = allInputs
+            .filter(e => e.key !== type && parseFloat(e.val) > 0)
+            .reduce((sum, e) => sum + toUSD(e.val, e.moneda), 0);
+
+        // Calcular máximo permitido para este campo
+        const maxPermitidoUSD = totalPedido - totalOtrosPagosUSD;
+
+        // Si autoCorrector está DESACTIVADO, limitar el valor si excede
+        if (!autoCorrector) {
+            const excede = esDevolucion 
+                ? valUSD < maxPermitidoUSD - 0.01
+                : valUSD > maxPermitidoUSD + 0.01;
+
+            if (excede && maxPermitidoUSD >= 0) {
+                const valLimitadoUSD = esDevolucion ? maxPermitidoUSD : Math.max(0, maxPermitidoUSD);
+                let valLimitado = valLimitadoUSD;
+                if (monedaActual === "bs") valLimitado = valLimitadoUSD * tasaBsPedido;
+                else if (monedaActual === "cop") valLimitado = valLimitadoUSD * tasaCopPedido;
+                
+                if (type === "Debito") setDebito(valLimitado.toFixed(2));
+                else if (type === "EfectivoUSD") setEfectivo_dolar(valLimitado.toFixed(2));
+                else if (type === "EfectivoBs") setEfectivo_bs(valLimitado.toFixed(2));
+                else if (type === "EfectivoCOP") setEfectivo_peso(valLimitado.toFixed(2));
+                else if (type === "Transferencia") setTransferencia(valLimitado.toFixed(2));
+                else if (type === "Credito") setCredito(valLimitado.toFixed(2));
+                else if (type === "Biopago") setBiopago(valLimitado.toFixed(2));
+            }
+            return;
+        }
+
+        // autoCorrector está ACTIVO - continuar con la redistribución
+
+        // Función para verificar si un valor es válido para auto-resta
+        // Debe ser un número diferente de cero (ni vacío, ni null, ni "0", ni "0.00")
+        const esValorValido = (val) => {
+            if (!val && val !== 0) return false; // null, undefined, ""
+            const num = parseFloat(val);
+            return !isNaN(num) && num !== 0;
+        };
+
+        // Si estamos editando un efectivo, verificar si hay OTROS efectivos con valor
+        const esEfectivoActual = ["EfectivoUSD", "EfectivoBs", "EfectivoCOP"].includes(type);
+        const otrosEfectivosConValor = allInputs
+            .filter(e => e.esEfectivo && e.key !== type && esValorValido(e.val))
+            .length;
+
+        // Si es efectivo Y hay otros efectivos → solo redistribuir entre efectivos
+        // Si es efectivo Y NO hay otros efectivos → redistribuir entre TODOS
+        const inputs = (esEfectivoActual && otrosEfectivosConValor > 0)
+            ? allInputs.filter(e => e.esEfectivo) 
+            : allInputs;
+
+        // Si estamos editando efectivo Y hay otros efectivos, calcular el total disponible para efectivos
+        // (total del pedido menos los otros métodos de pago)
+        let totalParaDistribuir = totalPedido;
+        if (esEfectivoActual && otrosEfectivosConValor > 0) {
+            const otrosPagos = allInputs
+                .filter(e => !e.esEfectivo && esValorValido(e.val))
+                .reduce((sum, e) => {
+                    let valEnUSD = parseFloat(e.val) || 0;
+                    if (e.moneda === "bs") valEnUSD = valEnUSD / tasaBsPedido;
+                    else if (e.moneda === "cop") valEnUSD = valEnUSD / tasaCopPedido;
+                    return sum + valEnUSD;
+                }, 0);
+            totalParaDistribuir = totalPedido - otrosPagos;
+        }
+
+        // Contar cuántos campos tienen valor válido (excluyendo el actual)
+        let divisor = 0;
+        inputs.forEach((e) => {
+            if (e.key !== type && esValorValido(e.val)) {
+                divisor++;
             }
         });
 
-        if (autoCorrector) {
-            inputs.map((e) => {
-                if (e.key != type) {
-                    if (e.val) {
-                        e.set(
-                            ((pedidoData.clean_total - val) / divisor).toFixed(
-                                4
-                            )
-                        );
-                    }
-                }
-            });
+        if (divisor === 0) return;
+
+        // Calcular restante y distribuir
+        const restanteUSD = (totalParaDistribuir - valUSD) / divisor;
+
+        // Verificar que el restante tenga el mismo signo que el total (o sea cero)
+        // Para pedidos positivos: restante no debe ser negativo
+        // Para devoluciones: restante no debe ser positivo
+        if (esDevolucion) {
+            if (restanteUSD > 0) return; // En devolución, restante debe ser negativo o cero
+        } else {
+            if (restanteUSD < 0) return; // En pedido normal, restante debe ser positivo o cero
         }
+
+        inputs.forEach((e) => {
+            if (e.key !== type && esValorValido(e.val)) {
+                // Convertir el restante a la moneda del campo usando tasa del pedido
+                let nuevoVal = restanteUSD;
+                if (e.moneda === "bs") {
+                    nuevoVal = restanteUSD * tasaBsPedido;
+                } else if (e.moneda === "cop") {
+                    nuevoVal = restanteUSD * tasaCopPedido;
+                }
+                e.set(nuevoVal.toFixed(e.moneda === "cop" ? 0 : 2));
+            }
+        });
     };
 
     const [validatingRef, setValidatingRef] = useState(null);
@@ -541,10 +918,122 @@ export default function PagarMain({
 
     // Función para generar la clave desde el código mostrado
     
+    // ============= FUNCIONES PARA DEVOLUCIONES =============
+    
+    // Función para asignar pedido original a devolución
+    const asignarPedidoOriginal = () => {
+        if (!pedidoOriginalInput.trim()) {
+            notificar({
+                msj: "Ingrese el número de pedido original",
+                estado: false,
+            });
+            return;
+        }
+
+        db.asignarPedidoOriginalDevolucion({
+            id_pedido_devolucion: id,
+            id_pedido_original: pedidoOriginalInput,
+        })
+            .then((res) => {
+                if (res.data.estado) {
+                    notificar(res.data);
+                    setItemsDisponiblesDevolucion(res.data.items_disponibles || []);
+                    setPedidoOriginalAsignado(pedidoOriginalInput);
+                    setShowModalPedidoOriginal(false);
+                    setPedidoOriginalInput("");
+                    // Refrescar pedido
+                    getPedido(null, null, false);
+                } else {
+                    notificar(res.data);
+                }
+            })
+            .catch((error) => {
+                notificar({
+                    msj: "Error: " + (error.response?.data?.msj || error.message),
+                    estado: false,
+                });
+            });
+    };
+
+    // Función para cerrar modal de pedido original
+    const cerrarModalPedidoOriginal = () => {
+        setShowModalPedidoOriginal(false);
+        setPedidoOriginalInput("");
+    };
+
+    // Verificar si se necesita mostrar modal de pedido original
+    // Se muestra cuando se intenta agregar cantidad negativa por primera vez
+    // y el pedido no tiene isdevolucionOriginalid asignado
+    const verificarNecesitaPedidoOriginal = () => {
+        // Si el pedido ya tiene items con cantidad negativa, ya fue validado
+        const tieneItemsNegativos = items.some(item => item.cantidad < 0);
+        // Si pedidoData tiene isdevolucionOriginalid, ya está asignado
+        const tieneOriginalAsignado = pedidoData?.isdevolucionOriginalid;
+        
+        return !tieneItemsNegativos && !tieneOriginalAsignado;
+    };
+
+    // Función para ver información de la factura original
+    const verFacturaOriginal = () => {
+        const idOriginal = pedidoData?.isdevolucionOriginalid || pedidoOriginalAsignado;
+        if (!idOriginal) return;
+
+        setLoadingFacturaOriginal(true);
+        setShowModalInfoFacturaOriginal(true);
+
+        db.getItemsDisponiblesDevolucion({ id_pedido_original: idOriginal })
+            .then((res) => {
+                if (res.data.estado) {
+                    setItemsFacturaOriginal(res.data.items_disponibles || []);
+                } else {
+                    notificar({ msj: "Error al cargar items", estado: false });
+                }
+            })
+            .catch((error) => {
+                notificar({ msj: "Error: " + error.message, estado: false });
+            })
+            .finally(() => {
+                setLoadingFacturaOriginal(false);
+            });
+    };
+
+    // Función para eliminar la asignación de factura original
+    const eliminarAsignacionFacturaOriginal = () => {
+        if (!confirm("¿Está seguro de eliminar la asignación de la factura original?")) {
+            return;
+        }
+
+        db.eliminarPedidoOriginalDevolucion({ id_pedido: id })
+            .then((res) => {
+                notificar(res);
+                if (res.data.estado) {
+                    setShowModalInfoFacturaOriginal(false);
+                    setPedidoOriginalAsignado(null);
+                    setItemsFacturaOriginal([]);
+                    getPedido(null, null, false);
+                }
+            })
+            .catch((error) => {
+                notificar({ msj: "Error: " + error.message, estado: false });
+            });
+    };
 
     useEffect(() => {
         sumRecibido();
     }, [recibido_bs, recibido_cop, recibido_dolar]);
+
+    // Sincronizar efectivo total con la suma de efectivo_dolar + efectivo_bs + efectivo_peso
+    useEffect(() => {
+        const totalEfectivo = 
+            parseFloat(efectivo_dolar || 0) + 
+            (parseFloat(efectivo_bs || 0) / dolar) + 
+            (parseFloat(efectivo_peso || 0) / peso);
+        if (totalEfectivo > 0) {
+            setEfectivo(totalEfectivo.toFixed(2));
+        } else {
+            setEfectivo("");
+        }
+    }, [efectivo_dolar, efectivo_bs, efectivo_peso, dolar, peso]);
 
     useEffect(() => {
         getPedidosFast();
@@ -590,11 +1079,6 @@ export default function PagarMain({
                 return;
             }
 
-            // No ejecutar si estamos en el input de referencia de pago
-            if (event.target?.getAttribute("data-ref-input") === "true") {
-                return;
-            }
-
             event.preventDefault();
             event.stopPropagation();
 
@@ -626,15 +1110,10 @@ export default function PagarMain({
                 return;
             }
 
-            // No ejecutar si estamos en el input de referencia de pago
-            if (event.target?.getAttribute("data-ref-input") === "true") {
-                return;
-            }
-
             event.preventDefault();
             event.stopPropagation();
 
-            getTransferencia();
+            getTransferenciaLocal();
             // Hacer foco en el input de transferencia
             setTimeout(() => {
                 if (transferenciaInputRef.current) {
@@ -662,15 +1141,10 @@ export default function PagarMain({
                 return;
             }
 
-            // No ejecutar si estamos en el input de referencia de pago
-            if (event.target?.getAttribute("data-ref-input") === "true") {
-                return;
-            }
-
             event.preventDefault();
             event.stopPropagation();
 
-            getBio();
+            getBiopagoLocal();
             // Hacer foco en el input de biopago
             setTimeout(() => {
                 if (biopagoInputRef.current) {
@@ -698,16 +1172,24 @@ export default function PagarMain({
                 return;
             }
 
-            // No ejecutar si estamos en el input de referencia de pago
-            if (event.target?.getAttribute("data-ref-input") === "true") {
-                return;
-            }
-
             event.preventDefault();
             event.stopPropagation();
 
-            getEfectivo();
-            // Hacer foco en el input de efectivo
+            // Si ya estamos en un input de efectivo, avanzar al siguiente
+            const currentEfectivo = document.activeElement?.getAttribute("data-efectivo");
+            if (currentEfectivo) {
+                const efectivoInputs = document.querySelectorAll('[data-efectivo]');
+                const inputsArray = Array.from(efectivoInputs);
+                const currentIndex = inputsArray.findIndex(el => el.getAttribute("data-efectivo") === currentEfectivo);
+                const nextIndex = (currentIndex + 1) % inputsArray.length;
+                inputsArray[nextIndex]?.focus();
+                inputsArray[nextIndex]?.select();
+                return;
+            }
+
+            // Usar función local que usa tasas del pedido
+            getEfectivoLocal();
+            // Hacer foco en el input de efectivo USD
             setTimeout(() => {
                 if (efectivoInputRef.current) {
                     efectivoInputRef.current.focus();
@@ -734,15 +1216,20 @@ export default function PagarMain({
                 return;
             }
 
-            // No ejecutar si estamos en el input de referencia de pago
-            if (event.target?.getAttribute("data-ref-input") === "true") {
-                return;
-            }
-
             event.preventDefault();
             event.stopPropagation();
 
-            getDebito();
+            // Si ya estamos en el input de débito, pasar al input de referencia
+            if (document.activeElement === debitoInputRef.current) {
+                const refInput = document.querySelector('[data-ref-input="true"]');
+                if (refInput) {
+                    refInput.focus();
+                    refInput.select();
+                }
+                return;
+            }
+
+            getDebitoLocal();
             // Hacer foco en el input de débito
             setTimeout(() => {
                 if (debitoInputRef.current) {
@@ -754,7 +1241,7 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast]
+        [refaddfast, debitoInputRef]
     );
     //f5
     useHotkeys(
@@ -986,35 +1473,37 @@ export default function PagarMain({
                         orderBy={orderBy}
                         setOrderBy={setOrderBy}
                         getProductos={getProductos}
+                        devolucionTipo={devolucionTipo}
+                        setShowModalPedidoOriginal={setShowModalPedidoOriginal}
+                        pedidoOriginalAsignado={pedidoOriginalAsignado}
                     />
                 </div>
 
                 <div className="h-100 col-lg-5 pr-2 pl-0 d-flex flex-column">
                     {id ? (
                         <>
-                            <div className="relative mb-2">
-                                <div className="p-3 mb-1 bg-white border border-orange-400 rounded">
+                            <div className="relative">
+                                <div className="p-2 mb-1 bg-white border border-orange-400 rounded">
                                     {/* Precios arriba */}
                                     <div className="flex flex-col items-center justify-between pb-3 mb-3 border-b border-gray-200 gap-y-2 sm:flex-row">
                                         <div className="flex items-center gap-6">
                                             <div className="text-left">
-                                                <div className="text-xs font-semibold text-gray-700 mb-0.5">
-                                                    Total Ref
-                                                </div>
+                                                
                                                 <div className="text-2xl font-bold text-green-500 md:text-4xl">
-                                                    {total}
+                                                    {moneda(total)} <span className="text-xs">Ref</span>
                                                 </div>
                                             </div>
                                             <div className="h-12 border-l border-gray-300"></div>
                                             <div className="text-left">
-                                                <div className="text-xs font-semibold text-gray-700 mb-0.5">
-                                                    Total Bs
+                                                <div className="flex items-center gap-2 text-xs font-semibold text-gray-700 mb-0.5">
+                                                    {pedidoData.estado !== 0 && pedidoData.items?.[0]?.tasa && (
+                                                        <span className="px-1.5 py-0.5 text-[10px] font-medium text-orange-600 bg-orange-100 rounded">
+                                                            @{parseFloat(pedidoData.items[0].tasa).toFixed(4)}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <div className="text-2xl font-bold text-orange-500 md:text-4xl">
-                                                    {moneda(
-                                                        pedidoData.clean_total *
-                                                            dolar
-                                                    )}
+                                                    {moneda(pedidoData.bs)} <span className="text-xs">Bs</span>
                                                 </div>
                                             </div>
 
@@ -1048,33 +1537,38 @@ export default function PagarMain({
                                     </div>
 
                                     {/* Info del pedido abajo */}
-                                    <div className="flex flex-col items-start justify-between gap-y-2 sm:flex-row">
+                                    <div className="flex items-center justify-between gap-2">
                                         <div className="flex items-center gap-2">
-                                            <div className="flex flex-col">
-                                                <span className="text-xs font-semibold text-gray-700">
-                                                    #{id}
-                                                </span>
-                                                <span className="text-xs text-gray-500">
-                                                    {created_at}
-                                                </span>
-                                            </div>
+                                            <span className="text-xs font-semibold text-gray-700">#{id}</span>
+                                            <span className="text-xs text-gray-400">•</span>
+                                            <span className="text-xs text-gray-500">{created_at}</span>
+                                            
+                                            {/* Botón para ver factura original */}
+                                            {(pedidoData?.isdevolucionOriginalid || pedidoOriginalAsignado) && (
+                                                <>
+                                                    <span className="text-xs text-gray-400">•</span>
+                                                    <button
+                                                        onClick={verFacturaOriginal}
+                                                        className="px-2 py-0.5 text-xs font-medium text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200 transition-colors"
+                                                        title="Ver factura original"
+                                                    >
+                                                        <i className="mr-1 fa fa-file-invoice"></i>
+                                                        #{pedidoData?.isdevolucionOriginalid || pedidoOriginalAsignado}
+                                                    </button>
+                                                </>
+                                            )}
+                                            
                                             {cliente && (
                                                 <>
-                                                    <span className="text-gray-400 h-full w-[1px] bg-gray-300"></span>
-                                                    <div className="flex flex-col max-w-[200px]">
-                                                        <span className="text-xs font-medium text-gray-700">
-                                                            {cliente.nombre ===
-                                                            "CF"
-                                                                ? "Sin cliente"
-                                                                : cliente.nombre}
-                                                        </span>
+                                                    <span className="text-xs text-gray-400">•</span>
+                                                    <span className="text-xs font-medium text-gray-700 truncate max-w-[150px]" title={cliente.nombre === "CF" ? "Sin cliente" : cliente.nombre}>
+                                                        {cliente.nombre === "CF" ? "Sin cliente" : cliente.nombre}
+                                                    </span>
+                                                    {cliente.identificacion !== "CF" && (
                                                         <span className="text-xs text-gray-500">
-                                                            {cliente.identificacion ===
-                                                            "CF"
-                                                                ? ""
-                                                                : cliente.identificacion}
+                                                            ({cliente.identificacion})
                                                         </span>
-                                                    </div>
+                                                    )}
                                                 </>
                                             )}
                                         </div>
@@ -1087,7 +1581,7 @@ export default function PagarMain({
                                                     : estado == 2
                                                     ? "bg-red-100 text-red-700 !border-red-200"
                                                     : "bg-orange-100 text-orange-700 !border-orange-200"
-                                            } inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold border rounded-full`}
+                                            } inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold border rounded-full whitespace-nowrap`}
                                         >
                                             {estado == 1 ? (
                                                 <>
@@ -1201,10 +1695,10 @@ export default function PagarMain({
                                                                 {e.descuento}
                                                             </td>
                                                             <td className="px-2 py-1 text-xs text-right">
-                                                                {e.total_des}
+                                                                {moneda(e.total_des)}
                                                             </td>
                                                             <td className="px-2 py-1 text-xs font-bold text-right">
-                                                                {e.total}
+                                                                {moneda(e.total)}
                                                             </td>
                                                         </tr>
                                                     ) : (
@@ -1213,7 +1707,8 @@ export default function PagarMain({
                                                             title={showTittlePrice(
                                                                 e.producto
                                                                     .precio,
-                                                                e.total
+                                                                e.total,
+                                                                e.tasa
                                                             )}
                                                             className="hover:bg-gray-50"
                                                         >
@@ -1325,18 +1820,31 @@ export default function PagarMain({
                                                                         setPrecioAlternoCarrito
                                                                     }
                                                                 >
-                                                                    {
-                                                                        e
-                                                                            .producto
-                                                                            .precio
-                                                                    }
+                                                                    <div>
+                                                                        {moneda(e.producto.precio, 4)}
+                                                                    </div>
+                                                                    {/* Mostrar tasa original en devoluciones */}
+                                                                    {e.cantidad < 0 && e.tasa && (
+                                                                        <div className="text-[10px] text-orange-600 font-normal">
+                                                                            Tasa: {moneda(e.tasa, 4)}
+                                                                        </div>
+                                                                    )}
                                                                 </td>
                                                             ) : (
                                                                 <td className="px-2 py-1 text-xs text-right cursor-pointer">
-                                                                    {moneda(
-                                                                        e
-                                                                            .producto
-                                                                            .precio
+                                                                    <div>
+                                                                        {moneda(
+                                                                            e
+                                                                                .producto
+                                                                                .precio,
+                                                                            4
+                                                                        )}
+                                                                    </div>
+                                                                    {/* Mostrar tasa original en devoluciones */}
+                                                                    {e.cantidad < 0 && e.tasa && (
+                                                                        <div className="text-[10px] text-orange-600">
+                                                                            Tasa: {moneda(e.tasa, 4)}
+                                                                        </div>
                                                                     )}
                                                                 </td>
                                                             )}
@@ -1350,7 +1858,7 @@ export default function PagarMain({
                                                                 {e.subtotal}
                                                             </td> */}
                                                             <td className="px-2 py-1 text-xs font-bold text-right">
-                                                                {e.total}
+                                                                {moneda(e.total)}
                                                             </td>
                                                             {editable ? (
                                                                 <td className="px-2 py-1 text-center">
@@ -1387,379 +1895,440 @@ export default function PagarMain({
                                         </div>
                                     </div>
                                 )}
-                                <div className="mb-3">
-                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                                        <>
-                                            <div
-                                                className={`border rounded ${
-                                                    debito != ""
-                                                        ? "bg-green-50 border-green-200"
-                                                        : "bg-gray-50 border-gray-200"
-                                                }`}
-                                            >
-                                                <div className="flex items-stretch">
-                                                    <label
-                                                        className="flex items-center justify-center w-8 text-orange-500 border-r border-gray-200 rounded-l cursor-pointer bg-orange-50"
-                                                        onClick={getDebito}
-                                                        title="Débito"
-                                                    >
-                                                        <i className="text-sm fa fa-credit-card"></i>
-                                                    </label>
+
+                                {/* ══════════ VISTA DE PAGOS PROCESADOS ══════════ */}
+                                {pedidoData?.estado === 1 && pedidoData?.pagos && pedidoData.pagos.length > 0 ? (
+                                    <div className="mb-3 overflow-hidden bg-white border border-gray-200 rounded">
+                                        <div className="px-3 py-2 border-b border-gray-200 bg-gray-50">
+                                            <h6 className="flex items-center text-sm font-semibold text-gray-800">
+                                                <i className="mr-2 text-green-500 fa fa-check-circle"></i>
+                                                Pagos Procesados
+                                            </h6>
+                                        </div>
+                                        <div className="p-3 space-y-2">
+                                            {pedidoData.pagos.map((pago) => {
+                                                if (parseFloat(pago.monto) === 0) return null;
+                                                
+                                                const getTipoPago = (tipo) => {
+                                                    // Convertir a string para comparar con el enum de la BD
+                                                    const tipoStr = String(tipo);
+                                                    switch(tipoStr) {
+                                                        case '1': return { nombre: "Transferencia", icon: "fa-exchange", color: "blue" };
+                                                        case '2': return { nombre: "Débito", icon: "fa-credit-card", color: "orange" };
+                                                        case '3': return { nombre: "Efectivo", icon: "fa-money", color: "green" };
+                                                        case '4': return { nombre: "Crédito", icon: "fa-calendar", color: "yellow" };
+                                                        case '5': return { nombre: "Biopago", icon: "fa-mobile", color: "purple" };
+                                                        case '6': return { nombre: "Vuelto", icon: "fa-undo", color: "red" };
+                                                        default: return { nombre: "Otro", icon: "fa-ban", color: "gray" };
+                                                    }
+                                                };
+
+                                                const tipoPago = getTipoPago(pago.tipo);
+                                                
+                                                return (
+                                                    <div key={pago.id} className={`flex items-center justify-between p-2 border rounded bg-${tipoPago.color}-50 border-${tipoPago.color}-200`}>
+                                                        <div className="flex items-center gap-2">
+                                                            <i className={`fa ${tipoPago.icon} text-${tipoPago.color}-600`}></i>
+                                                            <div>
+                                                                <div className={`text-sm font-semibold text-${tipoPago.color}-800`}>
+                                                                    {tipoPago.nombre}
+                                                                </div>
+                                                                {pago.referencia && (
+                                                                    <div className="text-xs text-gray-600">
+                                                                        Ref: #{pago.referencia}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            {pago.monto_original && pago.moneda ? (
+                                                                <>
+                                                                    <div className={`text-sm font-bold text-${tipoPago.color}-700`}>
+                                                                        {pago.moneda === 'bs' ? `Bs ${moneda(pago.monto_original)}` : 
+                                                                         pago.moneda === 'cop' ? `COP ${parseFloat(pago.monto_original).toFixed(0)}` : 
+                                                                         `$${moneda(pago.monto)}`}
+                                                                    </div>
+                                                                    {pago.moneda !== 'usd' && (
+                                                                        <div className="text-[10px] text-gray-600">
+                                                                            ≈${moneda(pago.monto)}
+                                                                        </div>
+                                                                    )}
+                                                                </>
+                                                            ) : (
+                                                                <div className={`text-sm font-bold text-${tipoPago.color}-700`}>
+                                                                    ${moneda(pago.monto)}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ) : pedidoData?.estado !== 1 ? (
+                                <div className="mb-3 space-y-2">
+                                    {/* ══════════ GRUPO DÉBITO ══════════ */}
+                                    <div className="flex items-stretch gap-1">
+                                        <div className="flex flex-1 gap-2">
+                                            {/* Monto Débito (en Bs) */}
+                                            <div className={`flex-1 flex border rounded ${debito != "" ? "bg-white border-orange-300" : "bg-white border-gray-200"}`}>
+                                                <label
+                                                    className="flex items-center justify-center w-8 text-orange-500 border-r border-gray-200 rounded-l cursor-pointer bg-orange-100"
+                                                    onClick={getDebitoLocal}
+                                                    title="Débito - Calcular restante en Bs"
+                                                >
+                                                    <span className="text-[10px] font-bold">Bs</span>
+                                                </label>
+                                                <div className="flex-1 flex flex-col h-full">
+                                                    <div className="flex items-center h-full">
+                                                        <div className="relative flex items-center w-full h-full">
+                                                            {debito && (
+                                                                <span className="absolute left-2 text-xs font-semibold text-orange-500">
+                                                                    ≈${moneda(parseFloat(debito || 0) / getTasaPromedioCarrito())}
+                                                                </span>
+                                                            )}
+                                                            <input
+                                                                ref={debitoInputRef}
+                                                                type="text"
+                                                                className="flex-1 min-w-0 h-full px-2 py-1 text-lg font-bold text-orange-700 bg-transparent border-0 focus:ring-0 focus:outline-none text-right pl-10"
+                                                                value={displayMonedaLive(debito)}
+                                                                onChange={(e) => syncPago(formatMonedaLive(e.target.value), "Debito")}
+                                                                onBlur={(e) => {
+                                                                    if (debito && parseFloat(debito) > 0) {
+                                                                        setTimeout(() => {
+                                                                            const activeEl = document.activeElement;
+                                                                            const isPaymentInput = activeEl?.getAttribute("data-efectivo") || 
+                                                                                          activeEl === debitoRefInputRef.current;
+                                                                            if (!isPaymentInput && debitoRefInputRef.current) {
+                                                                                debitoRefInputRef.current.focus();
+                                                                            }
+                                                                        }, 100);
+                                                                    }
+                                                                }}
+                                                                placeholder="0"
+                                                            />
+                                                        </div>
+                                                        <span className="px-1 text-sm font-bold text-orange-700">Bs</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {/* Referencia Débito (obligatoria) */}
+                                            <div className="relative w-28">
+                                                <div className={`h-full border rounded ${debitoRefError ? "bg-red-50 border-red-500 ring-2 ring-red-300" : debitoRef != "" ? "bg-white border-orange-300" : "bg-white border-red-200"}`}>
                                                     <input
-                                                        ref={debitoInputRef}
+                                                        ref={debitoRefInputRef}
                                                         type="text"
-                                                        className="flex-1 min-w-0 px-2 py-2 text-xs bg-transparent border-0 focus:ring-0 focus:outline-none placeholder:truncate"
-                                                        value={debito}
-                                                        onChange={(e) =>
-                                                            syncPago(
-                                                                e.target.value,
-                                                                "Debito"
-                                                            )
-                                                        }
-                                                        placeholder="Débito (D)"
-                                                    />
-                                                    <span
-                                                        className="flex items-center px-2 text-orange-500 cursor-pointer hover:text-orange-600"
-                                                        data-type="toggle"
-                                                        onClick={() => {
-                                                            let montoActivo =
-                                                                transferencia;
-                                                            let tipoActivo =
-                                                                "1";
-                                                            if (
-                                                                debito &&
-                                                                debito > 0
-                                                            ) {
-                                                                montoActivo =
-                                                                    debito;
-                                                                tipoActivo =
-                                                                    "2";
-                                                            } else if (
-                                                                efectivo &&
-                                                                efectivo > 0
-                                                            ) {
-                                                                montoActivo =
-                                                                    efectivo;
-                                                                tipoActivo =
-                                                                    "3";
-                                                            } else if (
-                                                                credito &&
-                                                                credito > 0
-                                                            ) {
-                                                                montoActivo =
-                                                                    credito;
-                                                                tipoActivo =
-                                                                    "4";
-                                                            } else if (
-                                                                biopago &&
-                                                                biopago > 0
-                                                            ) {
-                                                                montoActivo =
-                                                                    biopago;
-                                                                tipoActivo =
-                                                                    "5";
-                                                            }
-                                                            addRefPago(
-                                                                "toggle",
-                                                                montoActivo,
-                                                                tipoActivo
-                                                            );
+                                                        className={`w-full h-full px-2 text-lg font-bold text-center bg-transparent border-0 focus:ring-0 focus:outline-none ${debitoRefError ? "placeholder-red-400" : "placeholder-gray-400"}`}
+                                                        value={debitoRef}
+                                                        onChange={(e) => {
+                                                            setDebitoRef(e.target.value.replace(/[^0-9]/g, ''));
+                                                            if (debitoRefError) setDebitoRefError(false); // Limpiar error al escribir
                                                         }}
-                                                        title="Agregar referencia"
-                                                    >
-                                                        <i className="text-xs fa fa-plus-circle"></i>
-                                                    </span>
-                                                    <span
-                                                        className="flex items-center px-2 py-2 text-xs font-medium text-white bg-orange-500 border-l border-orange-600 rounded-r cursor-pointer hover:bg-orange-600"
-                                                        onClick={() =>
-                                                            setPagoInBs(
-                                                                (val) => {
-                                                                    syncPago(
-                                                                        val,
-                                                                        "Debito"
-                                                                    );
-                                                                }
-                                                            )
-                                                        }
-                                                        title="Convertir de Bs a $"
-                                                    >
-                                                        Bs
-                                                    </span>
-                                                </div>
-                                                {debito != "" && (
-                                                    <div className="px-2 pb-1 text-xs font-bold text-orange-600">
-                                                        {debitoBs("debito")}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div
-                                                className={`border rounded ${
-                                                    efectivo != ""
-                                                        ? "bg-green-50 border-green-200"
-                                                        : "bg-gray-50 border-gray-200"
-                                                }`}
-                                            >
-                                                <div className="flex items-stretch">
-                                                    <label
-                                                        className="flex items-center justify-center w-8 text-green-500 border-r border-gray-200 rounded-l cursor-pointer bg-green-50"
-                                                        onClick={getEfectivo}
-                                                        title="Efectivo"
-                                                    >
-                                                        <i className="text-sm fa fa-dollar"></i>
-                                                    </label>
-                                                    <input
-                                                        ref={efectivoInputRef}
-                                                        type="text"
-                                                        className="flex-1 min-w-0 px-2 py-2 text-xs bg-transparent border-0 focus:ring-0 focus:outline-none placeholder:truncate"
-                                                        value={efectivo}
-                                                        onChange={(e) =>
-                                                            syncPago(
-                                                                e.target.value,
-                                                                "Efectivo"
-                                                            )
-                                                        }
-                                                        placeholder="Efectivo (E)"
+                                                        placeholder={debitoRefError ? "Falta Ref." : "Ref.*"}
+                                                        maxLength={7}
+                                                        data-ref-input="true"
                                                     />
-                                                    <span
-                                                        className="flex items-center px-2 py-2 text-xs font-medium text-white bg-green-500 border-l border-green-600 rounded-r cursor-pointer hover:bg-green-600"
-                                                        onClick={() =>
-                                                            setPagoInBs(
-                                                                (val) => {
-                                                                    syncPago(
-                                                                        val,
-                                                                        "Efectivo"
-                                                                    );
-                                                                }
-                                                            )
-                                                        }
-                                                        title="Convertir de Bs a $"
-                                                    >
-                                                        Bs
-                                                    </span>
                                                 </div>
-                                                {efectivo != "" && (
-                                                    <div className="px-2 pb-1 text-xs font-bold text-green-600">
-                                                        {debitoBs("efectivo")}
-                                                    </div>
-                                                )}
                                             </div>
-                                            <div
-                                                className={`border rounded ${
-                                                    transferencia != ""
-                                                        ? "bg-green-50 border-green-200"
-                                                        : "bg-gray-50 border-gray-200"
-                                                }`}
-                                            >
-                                                <div className="flex items-stretch">
-                                                    <label
-                                                        className="flex items-center justify-center w-8 text-blue-500 border-r border-gray-200 rounded-l cursor-pointer bg-blue-50"
-                                                        onClick={
-                                                            getTransferencia
-                                                        }
-                                                        title="Transferencia"
-                                                    >
-                                                        <i className="text-sm fa fa-exchange"></i>
-                                                    </label>
-                                                    <input
-                                                        ref={
-                                                            transferenciaInputRef
-                                                        }
-                                                        type="text"
-                                                        className="flex-1 min-w-0 px-2 py-2 text-xs bg-transparent border-0 focus:ring-0 focus:outline-none placeholder:truncate"
-                                                        value={transferencia}
-                                                        onChange={(e) =>
-                                                            syncPago(
-                                                                e.target.value,
-                                                                "Transferencia"
-                                                            )
-                                                        }
-                                                        placeholder="Transferencia (T)"
-                                                    />
-                                                    <span
-                                                        className="flex items-center px-2 text-blue-500 cursor-pointer hover:text-blue-600"
-                                                        data-type="toggle"
-                                                        onClick={() =>
-                                                            addRefPago(
-                                                                "toggle",
-                                                                transferencia,
-                                                                "1"
-                                                            )
-                                                        }
-                                                        title="Agregar referencia"
-                                                    >
-                                                        <i className="text-xs fa fa-plus-circle"></i>
-                                                    </span>
-                                                    <span
-                                                        className="flex items-center px-2 py-2 text-xs font-medium text-white bg-blue-500 border-l border-blue-600 rounded-r cursor-pointer hover:bg-blue-600"
-                                                        onClick={() =>
-                                                            setPagoInBs(
-                                                                (val) => {
-                                                                    syncPago(
-                                                                        val,
-                                                                        "Transferencia"
-                                                                    );
-                                                                }
-                                                            )
-                                                        }
-                                                        title="Convertir de Bs a $"
-                                                    >
-                                                        Bs
-                                                    </span>
+                                        </div>
+                                        <div className="flex items-center justify-center w-8 text-orange-500 bg-orange-100 border border-orange-200 rounded cursor-pointer hover:bg-orange-200" title="DÉBITO (D)" onClick={getDebitoLocal}>
+                                            <i className="fa fa-credit-card"></i>
+                                        </div>
+                                    </div>
+
+                                    {/* ══════════ GRUPO EFECTIVO ══════════ */}
+                                    <div className="flex items-stretch gap-1">
+                                        <div className={`flex-1 grid gap-2 ${showEfectivoPeso ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                                            {/* Efectivo USD */}
+                                            <div className={`flex border rounded ${efectivo_dolar != "" ? "bg-white border-green-300" : "bg-white border-gray-200"}`}>
+                                                <label
+                                                    className="flex items-center justify-center w-8 text-green-600 border-r border-gray-200 rounded-l cursor-pointer bg-green-100"
+                                                    onClick={() => {
+                                                        const tasaBs = getTasaPromedioCarrito();
+                                                        const tasaCop = pedidoData?.items?.[0]?.tasa_cop || peso;
+                                                        const totalPagos = (parseFloat(debito || 0) / tasaBs) + parseFloat(efectivo_dolar || 0) + (parseFloat(efectivo_bs || 0) / tasaBs) + (parseFloat(efectivo_peso || 0) / tasaCop) + parseFloat(transferencia || 0);
+                                                        const restante = parseFloat(pedidoData?.clean_total || 0) - totalPagos;
+                                                        if (restante > 0) setEfectivo_dolar(restante.toFixed(2));
+                                                    }}
+                                                    title="Efectivo USD"
+                                                >
+                                                    <span className="text-xs font-bold">$</span>
+                                                </label>
+                                                <input
+                                                    ref={efectivoInputRef}
+                                                    data-efectivo="usd"
+                                                    type="text"
+                                                    className="flex-1 min-w-0 px-2 py-1.5 text-lg font-bold text-green-700 bg-transparent border-0 focus:ring-0 focus:outline-none text-right"
+                                                    value={displayMonedaLive(efectivo_dolar)}
+                                                    onChange={(e) => syncPago(formatMonedaLive(e.target.value), "EfectivoUSD")}
+                                                    placeholder="0"
+                                                />
+                                                <span className="flex items-center px-1 text-sm font-bold text-green-700">$</span>
+                                            </div>
+                                            {/* Efectivo Bs */}
+                                            <div className={`flex border rounded ${efectivo_bs != "" ? "bg-white border-yellow-300" : "bg-white border-gray-200"}`}>
+                                                <label
+                                                    className="flex items-center justify-center w-8 text-yellow-600 border-r border-gray-200 rounded-l cursor-pointer bg-yellow-100"
+                                                    onClick={() => {
+                                                        const tasaBs = getTasaPromedioCarrito();
+                                                        const tasaCop = pedidoData?.items?.[0]?.tasa_cop || peso;
+                                                        const totalPagos = (parseFloat(debito || 0) / tasaBs) + parseFloat(efectivo_dolar || 0) + (parseFloat(efectivo_bs || 0) / tasaBs) + (parseFloat(efectivo_peso || 0) / tasaCop) + parseFloat(transferencia || 0);
+                                                        const restanteUSD = parseFloat(pedidoData?.clean_total || 0) - totalPagos;
+                                                        if (restanteUSD > 0) setEfectivo_bs((restanteUSD * tasaBs).toFixed(2));
+                                                    }}
+                                                    title="Efectivo Bs"
+                                                >
+                                                    <span className="text-[10px] font-bold">Bs</span>
+                                                </label>
+                                                <div className="flex-1 flex h-full">
+                                                    <div className="relative flex items-center w-full h-full">
+                                                        {efectivo_bs && (
+                                                            <span className="absolute left-2 text-[10px] font-medium text-yellow-600">
+                                                                ≈${moneda(parseFloat(efectivo_bs || 0) / getTasaPromedioCarrito())}
+                                                            </span>
+                                                        )}
+                                                        <input
+                                                            data-efectivo="bs"
+                                                            type="text"
+                                                            className="flex-1 min-w-0 h-full px-2 py-1 text-lg font-bold text-yellow-700 bg-transparent border-0 focus:ring-0 focus:outline-none text-right pl-10"
+                                                            value={displayMonedaLive(efectivo_bs)}
+                                                            onChange={(e) => syncPago(formatMonedaLive(e.target.value), "EfectivoBs")}
+                                                            placeholder="0"
+                                                        />
+                                                        <span className="px-1 text-[10px] font-bold text-yellow-700">Bs</span>
+                                                    </div>
                                                 </div>
-                                                {transferencia != "" && (
-                                                    <div className="px-2 pb-1 text-xs font-bold text-blue-600">
-                                                        {debitoBs(
-                                                            "transferencia"
+                                            </div>
+                                            {/* Efectivo Pesos (oculto por defecto) */}
+                                            {showEfectivoPeso && (
+                                                <div className={`flex border rounded ${efectivo_peso != "" ? "bg-white border-amber-300" : "bg-white border-gray-200"}`}>
+                                                    <label
+                                                        className="flex items-center justify-center w-8 text-amber-600 border-r border-gray-200 rounded-l cursor-pointer bg-amber-100"
+                                                        onClick={() => {
+                                                            const tasaBs = getTasaPromedioCarrito();
+                                                            const tasaCop = pedidoData?.items?.[0]?.tasa_cop || peso;
+                                                            const totalPagos = (parseFloat(debito || 0) / tasaBs) + parseFloat(efectivo_dolar || 0) + (parseFloat(efectivo_bs || 0) / tasaBs) + (parseFloat(efectivo_peso || 0) / tasaCop) + parseFloat(transferencia || 0);
+                                                            const restanteUSD = parseFloat(pedidoData?.clean_total || 0) - totalPagos;
+                                                            if (restanteUSD > 0) setEfectivo_peso((restanteUSD * tasaCop).toFixed(0));
+                                                        }}
+                                                        title="Efectivo Pesos COP"
+                                                    >
+                                                        <span className="text-[10px] font-bold">COP</span>
+                                                    </label>
+                                                    <div className="flex-1 flex flex-col">
+                                                        <div className="flex items-center">
+                                                            <input
+                                                                data-efectivo="cop"
+                                                                type="text"
+                                                                className="flex-1 min-w-0 px-2 py-1 text-lg font-bold text-amber-700 bg-transparent border-0 focus:ring-0 focus:outline-none text-right"
+                                                                value={displayMonedaLive(efectivo_peso)}
+                                                                onChange={(e) => syncPago(formatMonedaLive(e.target.value), "EfectivoCOP")}
+                                                                placeholder="0"
+                                                            />
+                                                            <span className="px-1 text-[10px] font-bold text-amber-700">COP</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => { setShowEfectivoPeso(false); setEfectivo_peso(""); }}
+                                                                className="px-1 text-gray-400 hover:text-red-500"
+                                                                title="Quitar COP"
+                                                            >
+                                                                <i className="text-xs fa fa-times"></i>
+                                                            </button>
+                                                        </div>
+                                                        {efectivo_peso && (
+                                                            <div className="px-2 pb-0.5 text-[10px] text-amber-600 text-right">≈${moneda(parseFloat(efectivo_peso || 0) / (pedidoData?.items?.[0]?.tasa_cop || peso))}</div>
                                                         )}
                                                     </div>
-                                                )}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center justify-center w-8 text-green-500 bg-green-100 border border-green-200 rounded cursor-pointer hover:bg-green-200" title="EFECTIVO (E)" onClick={() => efectivoInputRef.current?.focus()}>
+                                            <i className="fa fa-dollar-sign"></i>
+                                        </div>
+                                    </div>
+
+                                    {/* ══════════ GRUPO TRANSFERENCIA ══════════ */}
+                                    <div className="flex items-stretch gap-1">
+                                        <div className={`flex-1 border rounded ${transferencia != "" ? "bg-white border-blue-300" : "bg-white border-gray-200"}`}>
+                                            <div className="flex items-stretch">
+                                                <label
+                                                    className="flex items-center justify-center w-8 text-blue-500 border-r border-gray-200 rounded-l cursor-pointer bg-blue-100"
+                                                    onClick={getTransferenciaLocal}
+                                                    title="Transferencia"
+                                                >
+                                                    <i className="text-xs fa fa-dollar"></i>
+                                                </label>
+                                                <input
+                                                    ref={transferenciaInputRef}
+                                                    type="text"
+                                                    className="flex-1 min-w-0 px-2 py-1.5 text-lg font-bold text-blue-700 bg-transparent border-0 focus:ring-0 focus:outline-none text-right"
+                                                    value={displayMonedaLive(transferencia)}
+                                                    onChange={(e) => syncPago(formatMonedaLive(e.target.value), "Transferencia")}
+                                                    placeholder="0"
+                                                />
+                                                <span className="flex items-center px-1 text-lg font-bold text-blue-700">$</span>
+                                                <span
+                                                    className="flex items-center px-2 text-blue-500 cursor-pointer hover:text-blue-600"
+                                                    onClick={() => addRefPago("toggle", transferencia, "1")}
+                                                    title="Agregar referencia"
+                                                >
+                                                    <i className="text-xs fa fa-plus-circle"></i>
+                                                </span>
+                                                <span
+                                                    className="flex items-center px-2 py-1.5 text-xs font-medium text-white bg-blue-500 rounded-r cursor-pointer hover:bg-blue-600"
+                                                    onClick={() => setPagoInBs((val) => syncPago(val, "Transferencia"))}
+                                                    title="Convertir de Bs a $"
+                                                >
+                                                    Bs
+                                                </span>
                                             </div>
-                                            <div
-                                                className={`border rounded ${
-                                                    biopago != ""
-                                                        ? "bg-green-50 border-green-200"
-                                                        : "bg-gray-50 border-gray-200"
-                                                }`}
-                                            >
+                                        </div>
+                                        <div className="flex items-center justify-center w-8 text-blue-500 bg-blue-100 border border-blue-200 rounded cursor-pointer hover:bg-blue-200" title="TRANSFERENCIA (T)" onClick={getTransferenciaLocal}>
+                                            <i className="fa fa-exchange"></i>
+                                        </div>
+                                    </div>
+
+                                    {/* ══════════ BIOPAGO (CONTROLADO POR CÓDIGO) ══════════ */}
+                                    {SHOW_BIOPAGO && (
+                                        <div className="flex items-stretch gap-1">
+                                            <div className={`flex-1 border rounded ${biopago != "" ? "bg-white border-purple-300" : "bg-white border-gray-200"}`}>
                                                 <div className="flex items-stretch">
                                                     <label
-                                                        className="flex items-center justify-center w-8 text-purple-500 border-r border-gray-200 rounded-l cursor-pointer bg-purple-50"
-                                                        onClick={getBio}
+                                                        className="flex items-center justify-center w-8 text-purple-500 border-r border-gray-200 rounded-l cursor-pointer bg-purple-100"
+                                                        onClick={getBiopagoLocal}
                                                         title="Biopago"
                                                     >
-                                                        <i className="text-sm fa fa-mobile"></i>
+                                                        <i className="text-xs fa fa-dollar"></i>
                                                     </label>
                                                     <input
                                                         ref={biopagoInputRef}
                                                         type="text"
-                                                        className="flex-1 min-w-0 px-2 py-2 text-xs bg-transparent border-0 focus:ring-0 focus:outline-none placeholder:truncate"
-                                                        value={biopago}
-                                                        onChange={(e) =>
-                                                            syncPago(
-                                                                e.target.value,
-                                                                "Biopago"
-                                                            )
-                                                        }
-                                                        placeholder="Biopago (B)"
+                                                        className="flex-1 min-w-0 px-2 py-1.5 text-lg font-bold text-purple-700 bg-transparent border-0 focus:ring-0 focus:outline-none text-right"
+                                                        value={displayMonedaLive(biopago)}
+                                                        onChange={(e) => syncPago(formatMonedaLive(e.target.value), "Biopago")}
+                                                        placeholder="0"
                                                     />
+                                                    <span className="flex items-center px-1 text-lg font-bold text-purple-700">$</span>
                                                     <span
                                                         className="flex items-center px-2 text-purple-500 cursor-pointer hover:text-purple-600"
-                                                        data-type="toggle"
-                                                        onClick={() =>
-                                                            addRefPago(
-                                                                "toggle",
-                                                                biopago,
-                                                                "5"
-                                                            )
-                                                        }
+                                                        onClick={() => addRefPago("toggle", biopago, "5")}
                                                         title="Agregar referencia"
                                                     >
                                                         <i className="text-xs fa fa-plus-circle"></i>
                                                     </span>
                                                     <span
-                                                        className="flex items-center px-2 py-2 text-xs font-medium text-white bg-purple-500 border-l border-purple-600 rounded-r cursor-pointer hover:bg-purple-600"
-                                                        onClick={() =>
-                                                            setPagoInBs(
-                                                                (val) => {
-                                                                    syncPago(
-                                                                        val,
-                                                                        "Biopago"
-                                                                    );
-                                                                }
-                                                            )
-                                                        }
+                                                        className="flex items-center px-2 py-1.5 text-xs font-medium text-white bg-purple-500 rounded-r cursor-pointer hover:bg-purple-600"
+                                                        onClick={() => setPagoInBs((val) => syncPago(val, "Biopago"))}
                                                         title="Convertir de Bs a $"
                                                     >
                                                         Bs
                                                     </span>
                                                 </div>
-                                                {biopago != "" && (
-                                                    <div className="px-2 pb-1 text-xs font-bold text-purple-600">
-                                                        {debitoBs("biopago")}
-                                                    </div>
-                                                )}
                                             </div>
-                                            <div
-                                                className={`border rounded ${
-                                                    credito != ""
-                                                        ? "bg-green-50 border-green-200"
-                                                        : "bg-gray-50 border-gray-200"
-                                                }`}
-                                            >
+                                            <div className="flex items-center justify-center w-8 text-purple-500 bg-purple-100 border border-purple-200 rounded cursor-pointer hover:bg-purple-200" title="BIOPAGO (B)" onClick={getBiopagoLocal}>
+                                                <i className="fa fa-mobile"></i>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* ══════════ CRÉDITO (OCULTO POR DEFECTO) ══════════ */}
+                                    {showCredito && (
+                                        <div className="flex items-stretch gap-1">
+                                            <div className={`flex-1 border rounded ${credito != "" ? "bg-white border-yellow-300" : "bg-white border-gray-200"}`}>
                                                 <div className="flex items-stretch">
                                                     <label
-                                                        className="flex items-center justify-center w-8 text-yellow-500 border-r border-gray-200 rounded-l cursor-pointer bg-yellow-50"
+                                                        className="flex items-center justify-center w-8 text-yellow-500 border-r border-gray-200 rounded-l cursor-pointer bg-yellow-100"
                                                         onClick={getCredito}
                                                         title="Crédito"
                                                     >
-                                                        <i className="text-sm fa fa-calendar"></i>
+                                                        <i className="text-xs fa fa-dollar"></i>
                                                     </label>
                                                     <input
                                                         ref={creditoInputRef}
                                                         type="text"
-                                                        className="flex-1 min-w-0 px-2 py-2 text-xs bg-transparent border-0 rounded-r focus:ring-0 focus:outline-none placeholder:truncate"
-                                                        value={credito}
-                                                        onChange={(e) =>
-                                                            syncPago(
-                                                                e.target.value,
-                                                                "Credito"
-                                                            )
-                                                        }
-                                                        placeholder="Crédito (C)"
+                                                        className="flex-1 min-w-0 px-2 py-1.5 text-lg font-bold text-yellow-700 bg-transparent border-0 focus:ring-0 focus:outline-none text-right"
+                                                        value={displayMonedaLive(credito)}
+                                                        onChange={(e) => syncPago(formatMonedaLive(e.target.value), "Credito")}
+                                                        placeholder="0"
                                                     />
-                                                </div>
-                                                {credito != "" && (
-                                                    <div className="px-2 pb-1 text-xs font-bold text-yellow-600">
-                                                        {credito}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div
-                                                className={`border rounded ${
-                                                    autoCorrector
-                                                        ? "bg-green-50 border-green-200"
-                                                        : "bg-gray-50 border-gray-200"
-                                                }`}
-                                            >
-                                                <div
-                                                    className="flex items-stretch cursor-pointer"
-                                                    onClick={() =>
-                                                        setautoCorrector(
-                                                            !autoCorrector
-                                                        )
-                                                    }
-                                                >
-                                                    <label
-                                                        className={`flex items-center justify-center w-8 border-r border-gray-200 rounded-l ${
-                                                            autoCorrector
-                                                                ? "text-green-500 bg-green-50"
-                                                                : "text-gray-400 bg-gray-50"
-                                                        }`}
-                                                        title="Auto resta"
+                                                    <span className="flex items-center px-2 text-lg font-bold text-yellow-700">$</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setShowCredito(false); setCredito(""); }}
+                                                        className="flex items-center px-2 text-gray-400 hover:text-red-500"
+                                                        title="Quitar crédito"
                                                     >
-                                                        <i className="text-sm fa fa-calculator"></i>
-                                                    </label>
-                                                    <div className="flex items-center justify-between flex-1 px-2 py-2">
-                                                        <span className="text-xs">
-                                                            Auto resta
-                                                        </span>
-                                                        <span
-                                                            className={`text-xs font-medium ${
-                                                                autoCorrector
-                                                                    ? "text-green-600"
-                                                                    : "text-gray-500"
-                                                            }`}
-                                                        >
-                                                            {autoCorrector
-                                                                ? "On"
-                                                                : "Off"}
-                                                        </span>
-                                                    </div>
+                                                        <i className="fa fa-times"></i>
+                                                    </button>
                                                 </div>
                                             </div>
-                                        </>
+                                            <div className="flex items-center justify-center w-8 text-yellow-500 bg-yellow-100 border border-yellow-200 rounded cursor-pointer hover:bg-yellow-200" title="CRÉDITO (C)" onClick={getCredito}>
+                                                <i className="fa fa-calendar"></i>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Barra de opciones: Auto resta, + Crédito, Vueltos, Impresora */}
+                                    <div className="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 rounded border border-gray-200">
+                                        {/* Auto resta */}
+                                        <div 
+                                            className="flex items-center gap-1 cursor-pointer hover:opacity-80"
+                                            onClick={() => setautoCorrector(!autoCorrector)}
+                                            title="Auto resta de pagos"
+                                        >
+                                            <span className="text-[10px] text-gray-500">Auto</span>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${autoCorrector ? "bg-green-100 text-green-600" : "bg-gray-200 text-gray-400"}`}>
+                                                {autoCorrector ? "ON" : "OFF"}
+                                            </span>
+                                        </div>
+
+                                        {/* + Crédito */}
+                                        {!showCredito && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowCredito(true)}
+                                                className="flex items-center gap-1 text-[10px] text-yellow-600 hover:text-yellow-700"
+                                            >
+                                                <i className="fa fa-plus"></i> Crédito
+                                            </button>
+                                        )}
+
+                                        {/* + COP */}
+                                        {!showEfectivoPeso && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowEfectivoPeso(true)}
+                                                className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700"
+                                            >
+                                                <i className="fa fa-plus"></i> COP
+                                            </button>
+                                        )}
+
+                                        {/* Vueltos */}
+                                        <button
+                                            onClick={() => setShowVueltosSection(!showVueltosSection)}
+                                            className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-orange-600"
+                                        >
+                                            <i className={`fa fa-chevron-${showVueltosSection ? "down" : "right"}`}></i>
+                                            Vueltos
+                                        </button>
+
+                                        {/* Impresora */}
+                                        <div className="flex items-center gap-1">
+                                            <i className="text-[10px] text-orange-500 fa fa-print"></i>
+                                            <select
+                                                className="text-[10px] text-gray-600 bg-transparent border-none focus:outline-none cursor-pointer"
+                                                value={selectprinter}
+                                                onChange={(e) => setselectprinter(e.target.value)}
+                                            >
+                                                {[...Array(10)].map((_, i) => (
+                                                    <option key={i + 1} value={i + 1}>C{i + 1}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
+                                ) : null}
 
                                 {refPago && refPago.length > 0 && (
                                     <div className="mb-3 bg-white border border-gray-200 rounded-lg !overflow-visible">
@@ -2006,57 +2575,16 @@ export default function PagarMain({
                                     </div>
                                 )}
 
-                                <div className="mb-3 bg-white">
-                                    <div className="px-3 py-2 bg-white border border-gray-200 rounded">
-                                        <div className="flex items-center justify-between">
-                                            <button
-                                                onClick={() =>
-                                                    setShowVueltosSection(
-                                                        !showVueltosSection
-                                                    )
-                                                }
-                                                className="flex items-center text-xs font-medium text-gray-700 transition-colors hover:text-orange-600"
-                                            >
-                                                <i
-                                                    className={`mr-2 text-xs fa fa-chevron-${
-                                                        showVueltosSection
-                                                            ? "down"
-                                                            : "right"
-                                                    } transition-transform`}
-                                                ></i>
-                                                Cálculo de Vueltos
-                                            </button>
-                                            {showVueltosSection && (
-                                                <div className="flex space-x-1">
-                                                    <button
-                                                        className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
-                                                        onClick={() =>
-                                                            setVueltodolar()
-                                                        }
-                                                    >
-                                                        $
-                                                    </button>
-                                                    <button
-                                                        className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
-                                                        onClick={() =>
-                                                            setVueltobs()
-                                                        }
-                                                    >
-                                                        BS
-                                                    </button>
-                                                    <button
-                                                        className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
-                                                        onClick={() =>
-                                                            setVueltocop()
-                                                        }
-                                                    >
-                                                        COP
-                                                    </button>
-                                                </div>
-                                            )}
+                                {showVueltosSection && (
+                                    <div className="mb-3 bg-white border border-gray-200 rounded-lg">
+                                        <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-100 bg-gray-50 rounded-t-lg">
+                                            <span className="text-[10px] font-medium text-gray-600">Cálculo de Vueltos</span>
+                                            <div className="flex space-x-1">
+                                                <button className="px-1.5 py-0.5 text-[10px] text-gray-500 border border-gray-300 rounded hover:bg-gray-100" onClick={setVueltodolar}>$</button>
+                                                <button className="px-1.5 py-0.5 text-[10px] text-gray-500 border border-gray-300 rounded hover:bg-gray-100" onClick={setVueltobs}>BS</button>
+                                                <button className="px-1.5 py-0.5 text-[10px] text-gray-500 border border-gray-300 rounded hover:bg-gray-100" onClick={setVueltocop}>COP</button>
+                                            </div>
                                         </div>
-                                    </div>
-                                    {showVueltosSection && (
                                         <div className="p-3">
                                             <div className="space-y-2">
                                                 <div className="grid grid-cols-3 gap-2">
@@ -2208,8 +2736,8 @@ export default function PagarMain({
                                                 </div>
                                             </div>
                                         </div>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
 
                                 {auth(1) && (
                                     <div className="mb-3 bg-white ">
@@ -2280,79 +2808,6 @@ export default function PagarMain({
                                         )}
                                     </div>
                                 )}
-                                <div className="flex gap-2 mb-2">
-                                    <div className="flex items-center flex-1 px-2 bg-white border border-gray-200 rounded">
-                                        <i className="mr-1 text-xs text-orange-500 fa fa-coins"></i>
-                                        <select
-                                            className="flex-1 text-xs text-gray-700 bg-transparent border-none focus:!outline-none focus:!ring-0 focus:!shadow-none"
-                                            value={monedaToPrint}
-                                            onChange={(e) =>
-                                                setmonedaToPrint(e.target.value)
-                                            }
-                                        >
-                                            <option value="bs">BS</option>
-                                        </select>
-                                    </div>
-                                    <div className="flex items-center flex-1 px-2 bg-white border border-gray-200 rounded">
-                                        <i className="mr-1 text-xs text-orange-500 fa fa-print"></i>
-                                        <select
-                                            className="flex-1 text-xs text-gray-700 bg-transparent border-none focus:!outline-none focus:!ring-0 focus:!shadow-none"
-                                            value={selectprinter}
-                                            onChange={(e) =>
-                                                setselectprinter(e.target.value)
-                                            }
-                                            onKeyDown={(e) => {
-                                                // Bloquear todas las teclas que puedan cambiar el valor
-                                                if (
-                                                    e.key === "ArrowUp" ||
-                                                    e.key === "ArrowDown" ||
-                                                    e.key === "ArrowLeft" ||
-                                                    e.key === "ArrowRight" ||
-                                                    e.key === "Home" ||
-                                                    e.key === "End" ||
-                                                    e.key === "PageUp" ||
-                                                    e.key === "PageDown" ||
-                                                    e.key === "Enter" ||
-                                                    e.key === " " ||
-                                                    e.key === "Tab"
-                                                ) {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    return false;
-                                                }
-                                            }}
-                                            onKeyUp={(e) => {
-                                                // Bloquear también en keyup para mayor seguridad
-                                                if (
-                                                    e.key === "ArrowUp" ||
-                                                    e.key === "ArrowDown" ||
-                                                    e.key === "ArrowLeft" ||
-                                                    e.key === "ArrowRight" ||
-                                                    e.key === "Home" ||
-                                                    e.key === "End" ||
-                                                    e.key === "PageUp" ||
-                                                    e.key === "PageDown" ||
-                                                    e.key === "Enter" ||
-                                                    e.key === " " ||
-                                                    e.key === "Tab"
-                                                ) {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    return false;
-                                                }
-                                            }}
-                                        >
-                                            {[...Array(10)].map((_, i) => (
-                                                <option
-                                                    key={i + 1}
-                                                    value={i + 1}
-                                                >
-                                                    C{i + 1}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
                             </div>
 
                             <div className="mb-3">
@@ -2772,6 +3227,163 @@ export default function PagarMain({
                                     Validar
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Pedido Original para Devoluciones */}
+            {showModalPedidoOriginal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+                    <div className="w-full max-w-md mx-4 bg-white rounded-lg shadow-xl">
+                        <div className="p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                    <i className="mr-2 text-orange-500 fa fa-exchange-alt"></i>
+                                    Devolución - Factura Original
+                                </h3>
+                                <button
+                                    onClick={cerrarModalPedidoOriginal}
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
+                                    <i className="fa fa-times"></i>
+                                </button>
+                            </div>
+
+                            <div className="mb-6">
+                                <div className="p-4 mb-4 text-sm border-l-4 border-orange-400 rounded bg-orange-50">
+                                    <p className="font-medium text-orange-800">
+                                        Para procesar una devolución, debe indicar el número de la factura original.
+                                    </p>
+                                    <p className="mt-1 text-orange-700">
+                                        Solo podrá devolver productos que existan en esa factura y en las cantidades disponibles.
+                                    </p>
+                                </div>
+
+                                <div className="mb-4">
+                                    <label className="block mb-2 text-sm font-medium text-gray-700">
+                                        Número de Pedido/Factura Original:
+                                    </label>
+                                    <input
+                                        ref={pedidoOriginalInputRef}
+                                        type="number"
+                                        value={pedidoOriginalInput}
+                                        onChange={(e) =>
+                                            setPedidoOriginalInput(e.target.value)
+                                        }
+                                        className="w-full px-3 py-2 text-lg font-bold text-center border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                        placeholder="Ej: 12345"
+                                        onKeyPress={(e) => {
+                                            if (e.key === "Enter") {
+                                                asignarPedidoOriginal();
+                                            }
+                                        }}
+                                        autoFocus
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end space-x-3">
+                                <button
+                                    onClick={cerrarModalPedidoOriginal}
+                                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={asignarPedidoOriginal}
+                                    className="px-4 py-2 text-white bg-orange-600 rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                    disabled={!pedidoOriginalInput.trim()}
+                                >
+                                    <i className="mr-2 fa fa-check"></i>
+                                    Confirmar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Información de Factura Original */}
+            {showModalInfoFacturaOriginal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+                    <div className="w-full max-w-5xl mx-4 bg-white rounded-lg shadow-xl max-h-[80vh] flex flex-col">
+                        <div className="p-4 border-b border-gray-200">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                    <i className="mr-2 text-orange-500 fa fa-file-invoice"></i>
+                                    Factura Original #{pedidoData?.isdevolucionOriginalid || pedidoOriginalAsignado}
+                                </h3>
+                                <button
+                                    onClick={() => setShowModalInfoFacturaOriginal(false)}
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
+                                    <i className="fa fa-times"></i>
+                                </button>
+                            </div>
+                            <p className="mt-1 text-xs text-gray-500">
+                                Productos y precios al momento de la venta original
+                            </p>
+                        </div>
+
+                        <div className="flex-1 p-4 overflow-y-auto">
+                            {loadingFacturaOriginal ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <i className="mr-2 text-2xl text-orange-500 fa fa-spinner fa-spin"></i>
+                                    <span className="text-gray-600">Cargando...</span>
+                                </div>
+                            ) : itemsFacturaOriginal.length > 0 ? (
+                                <table className="w-full text-sm">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-3 py-2 text-xs font-medium text-left text-gray-500 uppercase">Producto</th>
+                                            <th className="px-3 py-2 text-xs font-medium text-right text-gray-500 uppercase">Cant. Original</th>
+                                            <th className="px-3 py-2 text-xs font-medium text-right text-gray-500 uppercase">Devuelto</th>
+                                            <th className="px-3 py-2 text-xs font-medium text-right text-gray-500 uppercase">Disponible</th>
+                                            <th className="px-3 py-2 text-xs font-medium text-right text-gray-500 uppercase">Precio Unit.</th>
+                                            <th className="px-3 py-2 text-xs font-medium text-right text-gray-500 uppercase">Desc.</th>
+                                            <th className="px-3 py-2 text-xs font-medium text-right text-gray-500 uppercase">Tasa</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {itemsFacturaOriginal.map((item, index) => (
+                                            <tr key={index} className={item.cantidad_disponible > 0 ? "" : "bg-gray-100 text-gray-400"}>
+                                                <td className="px-3 py-2">
+                                                    <div className="font-medium text-gray-900">{item.descripcion}</div>
+                                                    <div className="text-xs text-gray-500">{item.codigo_barras}</div>
+                                                </td>
+                                                <td className="px-3 py-2 text-right font-medium">{item.cantidad_original}</td>
+                                                <td className="px-3 py-2 text-right text-red-600">{item.cantidad_devuelta > 0 ? `-${item.cantidad_devuelta}` : "0"}</td>
+                                                <td className="px-3 py-2 text-right font-bold text-green-600">{item.cantidad_disponible}</td>
+                                                <td className="px-3 py-2 text-right font-medium">${moneda(item.precio_unitario)}</td>
+                                                <td className="px-3 py-2 text-right text-purple-600">{item.descuento > 0 ? `${item.descuento}%` : "-"}</td>
+                                                <td className="px-3 py-2 text-right text-gray-600">{item.tasa ? moneda(item.tasa) : "-"}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div className="py-8 text-center text-gray-500">
+                                    <i className="mb-2 text-3xl text-gray-300 fa fa-box-open"></i>
+                                    <p>No hay items disponibles para devolución</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-between gap-3 p-4 border-t border-gray-200">
+                            <button
+                                onClick={eliminarAsignacionFacturaOriginal}
+                                className="px-4 py-2 text-red-700 bg-red-100 border border-red-300 rounded-md hover:bg-red-200"
+                            >
+                                <i className="mr-2 fa fa-unlink"></i>
+                                Eliminar asignación
+                            </button>
+                            <button
+                                onClick={() => setShowModalInfoFacturaOriginal(false)}
+                                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                            >
+                                Cerrar
+                            </button>
                         </div>
                     </div>
                 </div>
