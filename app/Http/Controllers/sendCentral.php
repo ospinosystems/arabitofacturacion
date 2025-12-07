@@ -42,7 +42,7 @@ use App\Models\transferencias_inventario;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Cache;
 
-
+use App\Http\Controllers\SyncProgressController;
 use App\Mail\enviarCierre;
 
 use Http;
@@ -151,11 +151,11 @@ class sendCentral extends Controller
     {
         return [
             /*  */ 
-            "admon.arabito@gmail.com",   
+            /* "admon.arabito@gmail.com",   
             "omarelhenaoui@hotmail.com",           
             "yeisersalah2@gmail.com",           
             "amerelhenaoui@outlook.com",           
-            "yesers982@hotmail.com",  
+            "yesers982@hotmail.com",   */
             "alvaroospino79@gmail.com" 
         ];
     }
@@ -2378,6 +2378,28 @@ class sendCentral extends Controller
         }
     }
 
+    function deleteTranferenciaAprobacion($idinsucursal, $id_pedido) {
+        try {
+            $codigo_origen = $this->getOrigen();
+            $response = Http::post(
+                $this->path() . "/deleteTranferenciaAprobacion",
+                [
+                    "codigo_origen" => $codigo_origen,
+                    "idinsucursal" => $idinsucursal,
+                    "id_pedido" => $id_pedido,
+                ]
+            );
+
+            if ($response->ok()) {
+                return $response->json();
+            } else {
+                return ["estado" => false, "msj" => "Error de comunicación con central"];
+            }
+        } catch (\Exception $e) {
+            return ["estado" => false, "msj" => "Error: " . $e->getMessage()];
+        }
+    }
+
     function createAnulacionPedidoAprobacion($data) {
         $codigo_origen = $this->getOrigen();
         $response = Http::post(
@@ -2479,9 +2501,25 @@ class sendCentral extends Controller
         \Log::info("    [Estadísticas] Construyendo query de items_pedidos...");
         $t1 = microtime(true);
         $itemsQuery = items_pedidos::where("id",">",$id_last)
-            ->whereNotNull("id_producto")
-            ->whereIn("id_pedido",pedidos::whereIn("id",pago_pedidos::where("tipo","<>",4)->select("id_pedido"))->select("id"))
-            ->orderBy("id","desc");
+        ->whereNotNull("id_producto")
+        ->whereIn("id_pedido", function($query) {
+            $query->select("id")
+                ->from("pedidos")
+                ->where(function($q) {
+                    // Pedidos con pagos tipo <> 4
+                    $q->whereIn("id", function($subQuery) {
+                        $subQuery->select("id_pedido")
+                            ->from("pago_pedidos")
+                            ->where("tipo", "<>", 4);
+                    })
+                    // O pedidos sin ningún pago
+                    ->orWhereNotIn("id", function($subQuery) {
+                        $subQuery->select("id_pedido")
+                            ->from("pago_pedidos");
+                    });
+                });
+        })
+        ->orderBy("id","desc");
         \Log::info("    [Estadísticas] Query construido en " . round(microtime(true) - $t1, 2) . "s");
             
         \Log::info("    [Estadísticas] Contando total de items...");
@@ -2712,7 +2750,7 @@ class sendCentral extends Controller
     
 
     function sendAllTest() {
-        return $this->sendAllDirect(null, true);
+        return view('sync.dashboard');
     }
 
     function sendAllTestOnlyInventario($idsSuccess) {
@@ -4382,7 +4420,9 @@ class sendCentral extends Controller
     }
 
     /**
-     * Sincronización directa unificada - Usa setAllDirect en central
+     * Sincronización directa unificada - Usa el nuevo SyncProgressController
+     * Solo sincroniza registros desde 2025-12-01 en adelante
+     * 
      * @param mixed $correo - Array con datos de correo o null para modo test
      * @param bool $returnTiming - Si true, retorna tiempos detallados (modo test)
      */
@@ -4393,38 +4433,34 @@ class sendCentral extends Controller
         $inicioTotal = microtime(true);
         
         \Log::info('========================================');
-        \Log::info('=== INICIO SINCRONIZACIÓN DIRECTA ===');
+        \Log::info('=== INICIO SINCRONIZACIÓN (Nuevo Sistema) ===');
         \Log::info('Modo: ' . ($correo ? 'Producción con correo' : 'Test con tiempos'));
+        \Log::info('Fecha de corte: 2025-12-01 (registros anteriores NO se sincronizan)');
         \Log::info('========================================');
         
         try {
-            // 1. Obtener últimos IDs
-            \Log::info('>>> PASO 1: Obteniendo últimos IDs desde central...');
+            // 1. Ejecutar sincronización usando el nuevo controlador
+            \Log::info('>>> PASO 1: Ejecutando sincronización con SyncProgressController...');
             $t1 = microtime(true);
-            $lastIds = $this->getLastIdsDirect();
-            return $lastIds;
-            $tiemposTotal['1_getLastIds'] = round(microtime(true) - $t1, 2) . 's';
-            \Log::info('<<< PASO 1 completado - ' . $tiemposTotal['1_getLastIds']);
             
-            // 2. Recopilar datos (con tiempos detallados internos)
-            \Log::info('>>> PASO 2: Recopilando datos locales...');
-            $tiemposRecopilacion = [];
-            $t2 = microtime(true);
-            $data = $this->collectPendingDataDirect($lastIds, $tiemposRecopilacion);
-            $tiemposTotal['2_collectData'] = round(microtime(true) - $t2, 2) . 's';
-            $tiemposTotal['2_detalle'] = $tiemposRecopilacion;
-            \Log::info('<<< PASO 2 completado - ' . $tiemposTotal['2_collectData']);
+            $syncController = app(SyncProgressController::class);
+            $request = new \Illuminate\Http\Request();
+            $request->merge([
+                'tablas' => ['all'],
+                'solo_nuevos' => true,
+            ]);
             
-            // 3. Enviar a central
-            \Log::info('>>> PASO 3: Enviando datos a central (timeout 180s)...');
-            $t3 = microtime(true);
-            $result = $this->sendBatchWithRetry("/setAllDirect", $data, 3, 180);
-            $tiemposTotal['3_envioACentral'] = round(microtime(true) - $t3, 2) . 's';
-            \Log::info('<<< PASO 3 completado - ' . $tiemposTotal['3_envioACentral']);
+            $syncResponse = $syncController->sincronizarTodo($request);
+            $syncResult = json_decode($syncResponse->getContent(), true);
             
-            if (!$result['success']) {
+            $tiemposTotal['1_sincronizacion'] = round(microtime(true) - $t1, 2) . 's';
+            \Log::info('<<< PASO 1 completado - ' . $tiemposTotal['1_sincronizacion']);
+            
+            if (!$syncResult['estado']) {
                 $tiemposTotal['total'] = round(microtime(true) - $inicioTotal, 2) . 's';
-                $errorMsg = "ERROR después de " . $result['attempts'] . " intentos: " . $result['error'];
+                $errorMsg = "ERROR en sincronización: " . ($syncResult['mensaje'] ?? 'Error desconocido');
+                
+                \Log::error($errorMsg);
                 
                 if ($returnTiming) {
                     return ['error' => $errorMsg, 'tiempos' => $tiemposTotal];
@@ -4432,56 +4468,62 @@ class sendCentral extends Controller
                 return $errorMsg;
             }
             
-            $setAllResponse = $result['data'];
+            // 2. Post-procesamiento
+            \Log::info('>>> PASO 2: Post-procesamiento...');
+            $t2 = microtime(true);
             
-            // 4. Post-procesamiento
-            \Log::info('>>> PASO 4: Post-procesamiento...');
-            $t4 = microtime(true);
-            if (isset($setAllResponse['success']) && $setAllResponse['success']) {
-                // Enviar correo solo en modo producción
-                if ($correo) {
-                    Mail::to($this->sends())->send(new enviarCierre($correo[0], $correo[1], $correo[2], $correo[3]));
-                    \Artisan::call('database:backup');
-                    \Artisan::call('backup:run');
-                }
+            // Enviar correo y backup solo en modo producción
+            if ($correo) {
+                \Log::info('    Enviando correo de cierre...');
+                Mail::to($this->sends())->send(new enviarCierre($correo[0], $correo[1], $correo[2], $correo[3]));
                 
-                // Actualizar IVA en inventarios
-                \DB::statement("UPDATE `inventarios` SET iva=1");
-                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MACHETE%'");
-                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'PEINILLA%'");
-                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOBOMBA%'");
-                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'ELECTROBOMBA%'");
-                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'DESMALEZADORA%'");
-                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOSIERRA%'");
-                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'CUCHILLA%'");
-                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'FUMIGADORA%'");
-                \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MANGUERA%'");
-                
-                $tiemposTotal['4_postProceso'] = round(microtime(true) - $t4, 2) . 's';
-                $tiemposTotal['total'] = round(microtime(true) - $inicioTotal, 2) . 's';
-                
-                \Log::info('<<< PASO 4 completado - ' . $tiemposTotal['4_postProceso']);
-                \Log::info('=== SINCRONIZACIÓN COMPLETADA - Tiempo total: ' . $tiemposTotal['total'] . ' ===');
-                
-                // Retornar con tiempos si es modo test
-                if ($returnTiming) {
-                    $setAllResponse['tiempos_sucursal'] = $tiemposTotal;
-                }
-                
-                return $setAllResponse;
+                \Log::info('    Ejecutando backup de base de datos...');
+                \Artisan::call('database:backup');
+                \Artisan::call('backup:run');
             }
             
+            // Actualizar IVA en inventarios
+            \Log::info('    Actualizando IVA en inventarios...');
+            \DB::statement("UPDATE `inventarios` SET iva=1");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MACHETE%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'PEINILLA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOBOMBA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'ELECTROBOMBA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'DESMALEZADORA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOSIERRA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'CUCHILLA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'FUMIGADORA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MANGUERA%'");
+            
+            $tiemposTotal['2_postProceso'] = round(microtime(true) - $t2, 2) . 's';
             $tiemposTotal['total'] = round(microtime(true) - $inicioTotal, 2) . 's';
-            $errorMsg = "ERROR: " . (isset($setAllResponse['errors']) ? implode(", ", $setAllResponse['errors']) : "Error desconocido");
+            
+            \Log::info('<<< PASO 2 completado - ' . $tiemposTotal['2_postProceso']);
+            \Log::info('=== SINCRONIZACIÓN COMPLETADA ===');
+            \Log::info('Tiempo total: ' . $tiemposTotal['total']);
+            \Log::info('Registros procesados: ' . ($syncResult['resultado']['registros_totales'] ?? 0));
+            
+            // Preparar respuesta
+            $response = [
+                'success' => true,
+                'mensaje' => 'Sincronización completada exitosamente',
+                'registros_totales' => $syncResult['resultado']['registros_totales'] ?? 0,
+                'tiempo_sync' => $syncResult['resultado']['tiempo_total'] ?? '0s',
+                'tablas' => $syncResult['resultado']['tablas'] ?? [],
+            ];
             
             if ($returnTiming) {
-                return ['error' => $errorMsg, 'tiempos' => $tiemposTotal];
+                $response['tiempos_sucursal'] = $tiemposTotal;
             }
-            return $errorMsg;
+            
+            return $response;
             
         } catch (\Exception $e) {
             $tiemposTotal['total'] = round(microtime(true) - $inicioTotal, 2) . 's';
-            $errorMsg = $e->getMessage() . " - " . $e->getFile() . " - " . $e->getLine();
+            $errorMsg = $e->getMessage() . " - " . $e->getFile() . ":" . $e->getLine();
+            
+            \Log::error('=== ERROR EN SINCRONIZACIÓN ===');
+            \Log::error($errorMsg);
             
             if ($returnTiming) {
                 return ['error' => $errorMsg, 'tiempos' => $tiemposTotal];

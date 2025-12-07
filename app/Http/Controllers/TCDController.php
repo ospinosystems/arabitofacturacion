@@ -1293,5 +1293,41 @@ class TCDController extends Controller
             ], 500);
         }
     }
+    
+    /**
+     * Generar Nota de Entrega / Reporte de la orden TCD
+     */
+    public function notaEntrega(Request $request)
+    {
+        $ordenId = $request->orden_id;
+        
+        if (!$ordenId) {
+            abort(404, 'ID de orden requerido');
+        }
+        
+        $orden = TCDOrden::with(['chequeador', 'items.inventario', 'asignaciones', 'ticketDespacho'])
+            ->findOrFail($ordenId);
+        
+        // Obtener items con sus productos
+        $items = $orden->items()->with('inventario')->get();
+        
+        // Obtener asignaciones
+        $asignaciones = $orden->asignaciones()->get();
+        
+        // Obtener pasilleros únicos asignados
+        $pasilleroIds = $asignaciones->pluck('pasillero_id')->unique()->filter();
+        $pasilleros = \App\Models\usuarios::whereIn('id', $pasilleroIds)->get();
+        
+        // Ticket de despacho si existe
+        $ticket = $orden->ticketDespacho;
+        
+        return view('warehouse-inventory.tcd.nota-entrega', compact(
+            'orden',
+            'items',
+            'asignaciones',
+            'pasilleros',
+            'ticket'
+        ));
+    }
 }
 

@@ -15,6 +15,7 @@ class pagos_referencias extends Model
     }
 
     protected $fillable = [
+        'push',
         'categoria',
         'tipo',
         'descripcion',

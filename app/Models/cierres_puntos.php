@@ -15,6 +15,7 @@ class cierres_puntos extends Model
     }
 
     protected $fillable = [
+        "push",
         "fecha",
         "categoria",
         "descripcion",

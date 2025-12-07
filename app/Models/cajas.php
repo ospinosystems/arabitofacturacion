@@ -16,6 +16,7 @@ class cajas extends Model
     }
 
     protected $fillable = [
+        "push",
         "concepto",
         "categoria",
         

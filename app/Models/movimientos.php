@@ -20,4 +20,12 @@ class movimientos extends Model
     public function usuario() { 
         return $this->hasOne(\App\Models\usuarios::class,"id","id_usuario"); 
     }
+    
+    protected $fillable = [
+        "push",
+        "tipo",
+        "descripcion",
+        "fecha",
+        "id_usuario",
+    ];
 }

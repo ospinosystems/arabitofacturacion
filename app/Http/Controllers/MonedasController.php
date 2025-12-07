@@ -195,14 +195,22 @@ class MonedasController extends Controller
 
 
     /**
-     * Actualizar valor del dólar desde API
+     * URL de Arabito Central para obtener tasas
+     * Usa el mismo método que sendCentral
+     */
+    private function getCentralUrl()
+    {
+        return (new sendCentral)->path();
+    }
+    
+    /**
+     * Actualizar valor del dólar desde Arabito Central
+     * Central maneja la lógica de feriados y consulta a API externa si es necesario
      */
     public function updateDollarRate()
     {
         try {
-            
             // Verificar si es necesario actualizar (máximo cada 30 minutos)
-            // Solo para rutas protegidas, no para actualización forzada desde login
             $lastUpdate = DB::table('monedas')
                 ->where('tipo', 1) // Dólar
                 ->whereNotNull('fecha_ultima_actualizacion')
@@ -210,222 +218,125 @@ class MonedasController extends Controller
                 ->first();
 
             // Solo verificar límite si no es una actualización forzada desde login
-            if (request()->is('forceUpdateDollar')) {
-                // Para actualización forzada, no hay límite de tiempo
-            } else {
-                // Si no hay fecha de actualización, permitir actualizar
+            if (!request()->is('forceUpdateDollar')) {
                 if ($lastUpdate && Carbon::parse($lastUpdate->fecha_ultima_actualizacion)->diffInMinutes(now()) < 30) {
                     return Response::json([
                         "estado" => false,
-                        "msj" => "La última actualización fue hace menos de 30 minutos"
+                        "msj" => "La última actualización fue hace menos de 30 minutos",
+                        "valor" => $lastUpdate->valor ?? null
                     ]);
                 }
             }
 
-            // Obtener datos de la API
-            $response = Http::timeout(30)->get('https://pydolarve.org/api/v1/dollar?page=bcv&rounded_price=false');
-
-    /*         
-    Dias Feriados:
-    Enero:
-
-                Miércoles 1: Año Nuevo
-                Lunes 6: Día de Reyes
-                Lunes 13: Día de la Divina Pastora (se ejecuta el lunes 13 en lugar del martes 14)
-
-            Marzo:
-
-                Lunes 3 y Martes 4: Carnaval
-
-                Miércoles 19: Día de San José
-
-            Abril:
-
-                Jueves 17 y Viernes 18: Semana Santa
-
-                Sábado 19: Movimiento Precursor de la Independencia
-
-            Mayo:
-
-                Jueves 1: Día del Trabajador
-
-            Junio:
-
-                Lunes 2: Ascensión del Señor (se ejecuta el lunes 2 en lugar del jueves 29 de mayo)
-
-                Lunes 16: Día de San Antonio (se ejecuta el lunes 16 en lugar del viernes 13)
-
-                Lunes 23: Corpus Christi (se ejecuta el lunes 23 en lugar del jueves 19)
-
-                Martes 24: Batalla de Carabobo
-
-            Julio:
-
-                Sábado 5: Día de la Independencia
-
-                Jueves 24: Natalicio del Libertador
-
-            Agosto:
-
-                Lunes 18: Asunción de Nuestra Señora (se ejecuta el lunes 18 en lugar del viernes 15)
-
-            Septiembre:
-
-                Lunes 15: Día de la Virgen de Coromoto (se ejecuta el lunes 15 en lugar del jueves 11)
-
-            Octubre:
-
-                Domingo 12: Día de la Resistencia Indígena
-
-            Noviembre:
-
-                Lunes 24: Día de la Virgen del Rosario de Chiquinquirá (se ejecuta el lunes 24 en lugar del martes 18)
-
-            Diciembre:
-
-                Lunes 8: Día de la Inmaculada Concepción
-
-                Miércoles 24: Nochebuena
-
-                Jueves 25: Natividad de Nuestro Señor
-
-                Miércoles 31: Fin de Año */
+            // Obtener ID de sucursal actual
+            $idSucursal = session('id_sucursal') ?? env('SUCURSAL_ID');
             
-            if (!$response->successful()) {
-                throw new \Exception('Error al conectar con la API: ' . $response->status());
-            }
+            // Consultar a Arabito Central
+            $centralUrl = $this->getCentralUrl();
+            $response = Http::timeout(15)->get("{$centralUrl}/api/tasas/hoy", [
+                'fecha' => now()->toDateString(),
+                'id_sucursal' => $idSucursal,
+            ]);
+
+           
 
             $data = $response->json();
             
-            // Verificar estructura de la respuesta
-            if (!isset($data['monitors'])) {
-                throw new \Exception('Formato de respuesta inesperado de la API');
+            if (!$data['estado']) {
+                throw new \Exception($data['mensaje'] ?? 'Error desconocido de Central');
             }
 
-            // Buscar específicamente el monitor "usd"
-            $usdRate = null;
-            if (isset($data['monitors']['usd'])) {
-                $usdRate = $data['monitors']['usd'];
-            }
-
-            if (!$usdRate) {
-                throw new \Exception('No se pudo obtener el valor del dólar desde el monitor USD');
-            }
-
-            // Determinar si es fin de semana o día feriado
-            $now = now();
-            $isWeekend = $now->isWeekend();
-            $isHoliday = $this->isHoliday($now);
+            $dollarValue = (float) $data['tasa_bcv'];
+            $source = "Central - " . ($data['api_source'] ?? $data['origen'] ?? 'API');
             
-            // Elegir el campo de precio apropiado
-            $priceField = 'price';
-            $priceSource = 'price';
-            
-            if ($isWeekend || $isHoliday) {
-                $priceField = 'price_old';
-                $priceSource = 'price_old (fin de semana/feriado)';
-            }
-            
-            // Verificar que el campo de precio existe
-            if (!isset($usdRate[$priceField])) {
-                // Si no existe price_old en fin de semana/feriado, usar price como fallback
-                if ($isWeekend || $isHoliday) {
-                    $priceField = 'price';
-                    $priceSource = 'price (fallback)';
-                } else {
-                    throw new \Exception("No se pudo obtener el valor del dólar desde el monitor USD (campo {$priceField} no disponible)");
-                }
-            }
+            // Información adicional de Central
+            $esFeriado = $data['es_feriado'] ?? false;
+            $esFinSemana = $data['es_fin_semana'] ?? false;
+            $desdeCacheCentral = $data['desde_cache'] ?? false;
 
-            $dollarValue = (float) $usdRate[$priceField];
-            $lastUpdate = $usdRate['last_update'] ?? $data['datetime']['date'] ?? now()->toDateString();
-            $source = "USD Monitor - API pydolarvenezuela ({$priceSource})";
-
-            // Actualizar en la base de datos
+            // Actualizar en la base de datos local
             $updated = DB::table('monedas')
                 ->where('tipo', 1) // Dólar
                 ->update([
                     'valor' => $dollarValue,
                     'fecha_ultima_actualizacion' => now(),
                     'origen' => $source,
-                    'notas' => "Actualizado automáticamente. Última actualización: {$lastUpdate}. Datetime: {$data['datetime']['date']} {$data['datetime']['time']}",
+                    'notas' => "Desde Central. " . 
+                              ($esFeriado ? "Día feriado. " : "") . 
+                              ($esFinSemana ? "Fin de semana. " : "") .
+                              ($desdeCacheCentral ? "Cache Central." : "API actualizada."),
                     'estatus' => 'activo'
                 ]);
 
-            if ($updated) {
-                // Obtener tasa COP actual
-                $copRate = DB::table('monedas')->where('tipo', 2)->value('valor') ?? 0;
-                
-                // Actualizar tasas de pedidos pendientes
-                $resultadoActualizacion = $this->actualizarTasasPedidosPendientes($dollarValue, $copRate);
-                
-                // Clear all related caches
-                Cache::forget('bs');
-                Cache::forget('cop');
-                Cache::forget('moneda_rates_' . md5($dollarValue));
-                
-                // Log de la actualización
-                Log::info('Dollar rate updated via web', [
-                    'value' => $dollarValue,
-                    'source' => $source,
-                    'last_update' => $lastUpdate,
-                    'datetime' => $data['datetime'] ?? null,
-                    'pedidos_actualizados' => $resultadoActualizacion
-                ]);
-
-                $mensaje = "Valor del dólar actualizado exitosamente";
-                if ($resultadoActualizacion['actualizados'] > 0) {
-                    $mensaje .= ". Se actualizaron las tasas de {$resultadoActualizacion['actualizados']} items en los pedidos pendientes: " . implode(', ', $resultadoActualizacion['pedidos']);
-                }
-
-                return Response::json([
-                    "estado" => true,
-                    "msj" => $mensaje,
-                    "valor" => $dollarValue,
-                    "fecha_actualizacion" => now()->toDateTimeString(),
-                    "origen" => $source,
-                    "items_actualizados" => $resultadoActualizacion['actualizados'],
-                    "pedidos_afectados" => $resultadoActualizacion['pedidos']
-                ]);
-            } else {
+            if (!$updated) {
                 // Si no hay registros, crear uno nuevo
                 DB::table('monedas')->insert([
-                    'tipo' => 1, // Dólar
+                    'tipo' => 1,
                     'valor' => $dollarValue,
                     'fecha_ultima_actualizacion' => now(),
                     'origen' => $source,
-                    'notas' => "Creado automáticamente. Última actualización: {$lastUpdate}. Datetime: {$data['datetime']['date']} {$data['datetime']['time']}",
+                    'notas' => "Creado desde Central",
                     'estatus' => 'activo',
                     'created_at' => now(),
                     'updated_at' => now()
                 ]);
-
-                // Clear all related caches
-                Cache::forget('bs');
-                Cache::forget('cop');
-                Cache::forget('moneda_rates_' . md5($dollarValue));
-
-                return Response::json([
-                    "estado" => true,
-                    "msj" => "Registro de dólar creado exitosamente",
-                    "valor" => $dollarValue,
-                    "fecha_actualizacion" => now()->toDateTimeString(),
-                    "origen" => $source
-                ]);
             }
 
+            // Obtener tasa COP actual
+            $copRate = DB::table('monedas')->where('tipo', 2)->value('valor') ?? 0;
+            
+            // Actualizar tasas de pedidos pendientes
+            $resultadoActualizacion = $this->actualizarTasasPedidosPendientes($dollarValue, $copRate);
+            
+            // Limpiar caches
+            Cache::forget('bs');
+            Cache::forget('cop');
+            Cache::forget('moneda_rates_' . md5($dollarValue));
+            
+            Log::info('Dollar rate updated from Central', [
+                'value' => $dollarValue,
+                'source' => $source,
+                'es_feriado' => $esFeriado,
+                'es_fin_semana' => $esFinSemana,
+                'desde_cache_central' => $desdeCacheCentral,
+                'pedidos_actualizados' => $resultadoActualizacion
+            ]);
+
+            $mensaje = "Valor del dólar actualizado desde Central";
+            if ($esFeriado) $mensaje .= " (día feriado)";
+            if ($esFinSemana) $mensaje .= " (fin de semana)";
+            if ($resultadoActualizacion['actualizados'] > 0) {
+                $mensaje .= ". Se actualizaron {$resultadoActualizacion['actualizados']} items";
+            }
+
+            return Response::json([
+                "estado" => true,
+                "msj" => $mensaje,
+                "valor" => $dollarValue,
+                "fecha_actualizacion" => now()->toDateTimeString(),
+                "origen" => $source,
+                "es_feriado" => $esFeriado,
+                "es_fin_semana" => $esFinSemana,
+                "desde_cache_central" => $desdeCacheCentral,
+                "items_actualizados" => $resultadoActualizacion['actualizados'],
+                "pedidos_afectados" => $resultadoActualizacion['pedidos']
+            ]);
+
         } catch (\Exception $e) {
-            Log::error('Dollar rate update failed via web', [
+            Log::error('Dollar rate update failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
 
-            return Response::json([
-                "estado" => false,
-                "msj" => "Error al actualizar el valor del dólar: " . $e->getMessage()
-            ]);
+          
+                return Response::json([
+                    "estado" => false,
+                    "msj" => "Error al actualizar: " . $e->getMessage() . ". Fallback también falló: " . $fallbackError->getMessage()
+                ]);
         }
     }
+    
+   
 
   
 

@@ -23,5 +23,8 @@
     
     @yield('content')
     
+    {{-- Modal de Sincronización Global --}}
+    @include('sync.status-modal-v2')
+    
 </body>
 </html>

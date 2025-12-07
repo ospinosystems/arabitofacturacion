@@ -150,8 +150,8 @@ class tickera extends Controller
                     throw new \Exception("¡El pedido no tiene items, no se puede imprimir!", 1);
                 }
 
-                if (isset($pedido->created_at)) {
-                    $pedido_date = \Carbon\Carbon::parse($pedido->created_at)->toDateString();
+                if (isset($pedido->fecha_factura) || isset($pedido->created_at)) {
+                    $pedido_date = \Carbon\Carbon::parse($pedido->fecha_factura ?? $pedido->created_at)->toDateString();
                     $today_date = \Carbon\Carbon::now()->toDateString();
                     if ($pedido_date !== $today_date) {
                         throw new \Exception("¡El pedido no es de hoy, no se puede imprimir!", 1);
@@ -176,15 +176,18 @@ class tickera extends Controller
                 
                 if (isset($pedido->items)) {
                     foreach ($pedido->items as $item) {
+                        // Usar precio_unitario del item (precio al momento de la venta)
+                        $precioItem = $item->precio_unitario ?? $item->producto->precio;
+                        
                         if (floatval($item->cantidad) < 0) {
                             $hasNegativeItems = true;
                             $negativeItems[] = $item;
                             // Calcular total de devolución
-                            $totalDevolucion += abs(floatval($item->cantidad)) * $item->producto->precio;
+                            $totalDevolucion += abs(floatval($item->cantidad)) * $precioItem;
                         } elseif (floatval($item->cantidad) > 0) {
                             $positiveItems[] = $item;
                             // Calcular total de entrada
-                            $totalEntrada += floatval($item->cantidad) * $item->producto->precio;
+                            $totalEntrada += floatval($item->cantidad) * $precioItem;
                         }
                     }
                 }
@@ -289,7 +292,7 @@ class tickera extends Controller
                     if (!(new PedidosController)->checksipedidoprocesado($req->id)) {
                         throw new \Exception("¡Debe procesar el pedido para imprimir!", 1);
                     }
-                    $fecha_creada = date("Y-m-d",strtotime($pedido->created_at));
+                    $fecha_creada = date("Y-m-d",strtotime($pedido->fecha_factura ?? $pedido->created_at));
                     $today = (new PedidosController)->today();
     
                     if ($fecha_creada != $today || ($fecha_creada == $today && $pedido->ticked)) {
@@ -459,9 +462,9 @@ class tickera extends Controller
                     $printer->text($item->producto->codigo_barras);
                     $printer->text("\n");
 
-                    // Precio unitario y total
+                    // Precio unitario y total (usar precio del item, no del producto actual)
                     $printer->setTextSize(1, 1);
-                    $precio = $item->producto->precio;
+                    $precio = $item->precio_unitario ?? $item->producto->precio;
                     $cantidad = abs(floatval($item->cantidad)); // Convertir a positivo
                     $total = $precio * $cantidad;
                     $printer->text("P/U:" . number_format($precio, 2) . "  TOT:" . number_format($total, 2));
@@ -501,9 +504,9 @@ class tickera extends Controller
                     $printer->text($item->producto->codigo_barras);
                     $printer->text("\n");
 
-                    // Precio unitario y total
+                    // Precio unitario y total (usar precio del item, no del producto actual)
                     $printer->setTextSize(1, 1);
-                    $precio = $item->producto->precio;
+                    $precio = $item->precio_unitario ?? $item->producto->precio;
                     $cantidad = floatval($item->cantidad);
                     $total = $precio * $cantidad;
                     $printer->text("P/U:" . number_format($precio, 2) . "  TOT:" . number_format($total, 2));
@@ -585,9 +588,9 @@ class tickera extends Controller
                     $printer->text($item->producto->codigo_barras);
                     $printer->text("\n");
 
-                    // Precio unitario y total
+                    // Precio unitario y total (usar precio del item, no del producto actual)
                     $printer->setTextSize(1, 1);
-                    $precio = $item->producto->precio;
+                    $precio = $item->precio_unitario ?? $item->producto->precio;
                     $cantidad = abs(floatval($item->cantidad)); // Convertir a positivo
                     $total = $precio * $cantidad;
                     $printer->text("P/U:" . number_format($precio, 2) . "  TOT:" . number_format($total, 2));
@@ -628,7 +631,7 @@ class tickera extends Controller
         // Información adicional
         $printer->text("\n");
         $printer->setJustification(Printer::JUSTIFY_CENTER);
-        $printer->text("Creado: ".$pedido->created_at);
+        $printer->text("Fecha: ".($pedido->fecha_factura ?? $pedido->created_at));
         $printer->text("\n");
         $printer->text("Por: ".session("usuario") ?? $pedido->vendedor->usuario);
         $printer->text("\n");
@@ -830,10 +833,12 @@ class tickera extends Controller
                         'totalprecio' => $val->total,
                     ];
                 }else{
+                    // Usar precio_unitario del item (precio al momento de la venta)
+                    $precioItem = $val->precio_unitario ?? $val->producto->precio;
                     $items[] = [
                         'descripcion' => $val->producto->descripcion,
                         'codigo_barras' => $val->producto->codigo_barras,
-                        'pu' => ($val->descuento<0)?$val->producto->precio-$val->des_unitario:$val->producto->precio,
+                        'pu' => ($val->descuento<0)?$precioItem-$val->des_unitario:$precioItem,
                         'cantidad' => $val->cantidad,
                         'totalprecio' => $val->total,
                     ];
@@ -903,7 +908,7 @@ class tickera extends Controller
         }
         $printer->setJustification(Printer::JUSTIFY_CENTER);
         
-        $printer->text("Creado: ".$pedido->created_at);
+        $printer->text("Fecha: ".($pedido->fecha_factura ?? $pedido->created_at));
         $printer->text("\n");
         $printer->text("Por: ".session("usuario") ?? $pedido->vendedor->usuario);
 
@@ -1125,7 +1130,7 @@ class tickera extends Controller
                 $identificacion = $pedido->cliente->identificacion;
                 $direccion = $pedido->cliente->direccion;
                 $telefono = $pedido->cliente->telefono;
-                $fecha = date("d-m-Y", strtotime(substr($pedido->created_at,0,10)));
+                $fecha = date("d-m-Y", strtotime(substr($pedido->fecha_factura ?? $pedido->created_at,0,10)));
 
                 
                 	

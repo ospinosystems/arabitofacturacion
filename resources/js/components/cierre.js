@@ -250,7 +250,7 @@ function Cierre({
 											
 
 
-											{totalizarcierre?<button className="btn btn-warning" onClick={veryenviarcierrefun} type="button" data-type="enviar">Enviar Cierre</button>:null}
+											{totalizarcierre?<button className="btn btn-warning" onClick={veryenviarcierrefun} type="button" data-type="enviar">Enviar y Sincronizar</button>:null}
 											{/*<button className="btn btn-warning" onClick={sendCuentasporCobrar} type="button" data-type="enviar">Enviar Cuentas por Cobrar</button>*/}
 										</div>
 										<span>

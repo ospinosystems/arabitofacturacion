@@ -17,8 +17,10 @@ class Login extends Component{
 			dollarStatus: null,
 			showDollarUpdate: false,
 			updatingDollar: false,
-			updateMessage: ""
+			updateMessage: "",
+			allowManualDollar: false
 		}
+
 		this.passwordTimeout = null;
 		this.loc = window.location.origin
 		this.getApiData = this.getApiData.bind(this)
@@ -197,7 +199,8 @@ class Login extends Component{
 			activeLoading:true,
 			dollarStatus: null,
 			showDollarUpdate: false,
-			updateMessage: ""
+			updateMessage: "",
+			allowManualDollar: false
 		});
 		axios
 		.post("/login",{
@@ -235,7 +238,8 @@ class Login extends Component{
 	forceUpdateDollar = () => {
 		this.setState({
 			updatingDollar: true,
-			updateMessage: "🔄 Conectando con el BCV para obtener el valor oficial..."
+			updateMessage: "🔄 Conectando con el BCV para obtener el valor oficial...",
+			allowManualDollar: false
 		});
 
 		axios.post("/forceUpdateDollar")
@@ -243,8 +247,9 @@ class Login extends Component{
 			if (response.data.estado) {
 				// Mostrar datos actualizados por 5 segundos
 				this.setState({
-					updateMessage: `✅ ${response.data.msj}\n\n💱 Valor: $${response.data.valor}\n📅 Fecha: ${response.data.fecha_actualizacion}\n🌐 Origen: BCV (Automático)`,
-					updatingDollar: false
+					updateMessage: `✅ ${response.data.msj}\n\n💱 Valor: $${response.data.valor}\n📅 Fecha: ${response.data.fecha_actualizacion}\n🌐 Origen: BCV (Automático)` ,
+					updatingDollar: false,
+					allowManualDollar: false
 				});
 				
 				// Cerrar modal después de 5 segundos
@@ -258,7 +263,8 @@ class Login extends Component{
 			} else {
 				this.setState({
 					updateMessage: `❌ ${response.data.msj}\n\n💡 Intente la actualización manual como alternativa.`,
-					updatingDollar: false
+					updatingDollar: false,
+					allowManualDollar: true
 				});
 			}
 		})
@@ -277,7 +283,8 @@ class Login extends Component{
 			
 			this.setState({
 				updateMessage: errorMessage,
-				updatingDollar: false
+				updatingDollar: false,
+				allowManualDollar: true
 			});
 		});
 	}
@@ -538,7 +545,7 @@ class Login extends Component{
 									</button>
 									
 									{/* Botón secundario - Actualización Manual (solo si automática falla) */}
-									{this.state.updateMessage && this.state.updateMessage.includes('') && (
+									{this.state.allowManualDollar && (
 										<>
 											<div className="text-center">
 												<span className="text-xs text-gray-500">o</span>

@@ -23,6 +23,7 @@ class items_pedidos extends Model
     }
     
     protected $fillable = [
+        "push",
         "id_producto",
         "id_pedido",
         "abono",

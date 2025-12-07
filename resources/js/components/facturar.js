@@ -1223,7 +1223,7 @@ export default function Facturar({
         }
     };
 
-    const addRefPago = (tipo, montoTraido = "", tipoTraido = "") => {
+    const addRefPago = (tipo, montoTraido = "", tipoTraido = "", categoria = "central", datosAdicionales = {}) => {
         if (tipo == "toggle") {
             settogglereferenciapago(!togglereferenciapago);
 
@@ -1242,6 +1242,8 @@ export default function Facturar({
                     cedula: cedula_referenciapago,
                     telefono: telefono_referenciapago,
                     id_pedido: pedidoData.id,
+                    categoria: categoria,
+                    ...datosAdicionales,
                 }).then((res) => {
                     getPedido(null, null, false);
                     notificar(res);
@@ -1253,6 +1255,19 @@ export default function Facturar({
                     setbanco_referenciapago("");
                     setcedula_referenciapago("");
                     settelefono_referenciapago("");
+
+                    // Para módulos automáticos, enviar a merchant inmediatamente
+                    if (res.data && res.data.estado && res.data.id_referencia && 
+                        (categoria === "pagomovil" || categoria === "banesco" || categoria === "interbancaria")) {
+                        db.sendRefToMerchant({
+                            id_ref: res.data.id_referencia,
+                        }).then((resMerchant) => {
+                            console.log("Referencia enviada a merchant:", resMerchant);
+                            notificar(resMerchant);
+                        }).catch((err) => {
+                            console.error("Error al enviar a merchant:", err);
+                        });
+                    }
                 });
             }
         }
@@ -3667,7 +3682,7 @@ export default function Facturar({
                     "Error: Debe cargar referencia de transferencia electrónica."
                 );
             } else {
-                if (puedeFacturarTransfe) {
+                
                     setLoading(true);
                     // Construir pagos adicionales de efectivo (Bs y COP)
                     // Enviar valores en moneda original, el backend hace la conversión
@@ -3722,21 +3737,9 @@ export default function Facturar({
                             openValidationTarea(res.data.id_tarea);
                         }
                     });
-                } else {
-                    alert(
-                        "Debe esperar 10 SEGUNDOS PARA VOLVER A ENVIAR UNA TRANSFERENCIA!"
-                    );
-                }
+                
 
-                if (transferencia) {
-                    setpuedeFacturarTransfe(false);
-
-                    clearTimeout(puedeFacturarTransfeTime);
-                    let time = window.setTimeout(() => {
-                        setpuedeFacturarTransfe(true);
-                    }, 10000);
-                    setpuedeFacturarTransfeTime(time);
-                }
+              
 
                 /////
             }
@@ -3989,21 +3992,96 @@ export default function Facturar({
 
             if (type == "ver") {
                 verCierreReq(fechaCierre, type);
-            } else {
+            } else if (type == "enviar" || type == "sync") {
+                // Primero obtener estado de pendientes, luego abrir modal y sincronizar
                 setLoading(true);
-
-                db.sendCierre({
-                    type,
-                    fecha: fechaCierre,
-                    totalizarcierre,
-                }).then((res) => {
-                    if (typeof res.data === "string") {
-                        notificar(res.data, false);
-                    } else {
-                        notificar(res.data.join("\n"), false);
-                    }
-                    setLoading(false);
-                });
+                
+                // Obtener estado actual de sincronización
+                axios.get(db.getHost() + "sync/status")
+                    .then((statusRes) => {
+                        // Preparar datos de pendientes para el modal
+                        const pendientesData = {};
+                        if (statusRes.data) {
+                            Object.keys(statusRes.data).forEach(key => {
+                                const tabla = statusRes.data[key];
+                                pendientesData[key] = {
+                                    pendientes: tabla.pendientes || 0,
+                                    total: tabla.total || 0,
+                                    sincronizados: tabla.sincronizados || 0
+                                };
+                            });
+                        }
+                        
+                        // Abrir modal con datos de pendientes
+                        if (window.SyncModal) {
+                            window.SyncModal.open(pendientesData);
+                            window.SyncModal.addLog('Obtenido estado de sincronización');
+                            window.SyncModal.addLog('Iniciando envío de cierre...');
+                        }
+                        
+                        // Ejecutar sincronización
+                        return db.sendCierre({
+                            type: "enviar",
+                            fecha: fechaCierre,
+                            totalizarcierre,
+                        });
+                    })
+                    .then((res) => {
+                        setLoading(false);
+                        
+                        // Procesar respuesta del nuevo sistema de sincronización
+                        if (res.data && res.data.success) {
+                            const registros = res.data.registros_totales || 0;
+                            const tiempo = res.data.tiempo_sync || '0s';
+                            const tablas = res.data.tablas || {};
+                            
+                            // Actualizar modal con resultados
+                            if (window.SyncModal) {
+                                window.SyncModal.addLog(`Registros procesados: ${registros}`);
+                                window.SyncModal.addLog(`Tiempo total: ${tiempo}`);
+                                window.SyncModal.complete(true, `Sincronización completada: ${registros} registros en ${tiempo}`, res.data);
+                            }
+                            
+                            notificar(`✓ Sincronización completada: ${registros} registros`, false);
+                        } else {
+                            // Manejar otros formatos de respuesta
+                            let mensaje = "Proceso completado";
+                            
+                            if (typeof res.data === "string") {
+                                mensaje = res.data;
+                            } else if (res.data && res.data.mensaje) {
+                                mensaje = res.data.mensaje;
+                            } else if (Array.isArray(res.data)) {
+                                mensaje = res.data.join("\n");
+                            }
+                            
+                            if (window.SyncModal) {
+                                if (res.data && res.data.error) {
+                                    window.SyncModal.complete(false, mensaje);
+                                } else {
+                                    window.SyncModal.complete(true, mensaje, res.data);
+                                }
+                            }
+                            
+                            notificar(mensaje, false);
+                        }
+                    })
+                    .catch((error) => {
+                        setLoading(false);
+                        const errorMsg = "Error: " + (error.message || "Error desconocido");
+                        
+                        // Si el modal no se abrió aún (error en obtener status), abrirlo ahora
+                        if (window.SyncModal && !window.SyncModal.state.isOpen) {
+                            window.SyncModal.open();
+                        }
+                        
+                        if (window.SyncModal) {
+                            window.SyncModal.addLog(errorMsg, 'error');
+                            window.SyncModal.complete(false, errorMsg);
+                        }
+                        
+                        notificar(errorMsg, false);
+                    });
             }
         } else {
             alert("Debe esperar 20 SEGUNDOS PARA VOLVER A ENVIAR!");
@@ -7889,6 +7967,7 @@ export default function Facturar({
                             number={number}
                             montoTraido={monto_referenciapago}
                             tipoTraido={tipo_referenciapago}
+                            pedidoData={pedidoData}
                         />
                     )}
                 </>

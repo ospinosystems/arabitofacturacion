@@ -49,12 +49,12 @@ class PagosReferenciasController extends Controller
                 ]);
             case 'central':
                 // Validar que la referencia tenga descripción y banco para modo central
-                if (empty($ref->descripcion) || empty($ref->banco)) {
+                /* if (empty($ref->descripcion) || empty($ref->banco)) {
                     return Response::json([
                         "estado" => false, 
                         "msj" => "Error: Para el modo central se requiere que la referencia tenga descripción y banco cargados"
                     ]);
-                }
+                } */
                 return $this->createTranferenciaAprobacion($req);
             case 'codigo':
                 return Response::json([
@@ -488,11 +488,13 @@ class PagosReferenciasController extends Controller
                     return $checkPedidoPago;
                 }
             }
-            
-            $check_exist = pagos_referencias::where("descripcion",$req->descripcion)->where("banco",$req->banco)->first();
-            if($req->descripcion!="") {
-                if ($check_exist) {
-                    return Response::json(["msj"=>"Error: Ya existe Referencia en Banco. ".$req->descripcion." ".$req->banco." PEDIDO ".$req->id_pedido,"estado"=>false]);
+            if($req->banco){
+                $check_exist = pagos_referencias::where("descripcion",$req->descripcion)
+                ->where("banco",$req->banco)->first();
+                if($req->descripcion!="") {
+                    if ($check_exist) {
+                        return Response::json(["msj"=>"Error: Ya existe Referencia en Banco. ".$req->descripcion." ".$req->banco." PEDIDO ".$req->id_pedido,"estado"=>false]);
+                    }
                 }
             }
             
@@ -514,7 +516,7 @@ class PagosReferenciasController extends Controller
              // Validar descripción y banco para modo central
              $sucursal = sucursal::first();
              if ($sucursal && $sucursal->modo_transferencia === 'central') {
-                 if (empty($req->descripcion)) {
+                /*  if (empty($req->descripcion)) {
                      return Response::json([
                          "msj" => "Error: En modo central es obligatorio ingresar la descripción/referencia de la transferencia",
                          "estado" => false
@@ -526,22 +528,69 @@ class PagosReferenciasController extends Controller
                          "msj" => "Error: En modo central es obligatorio seleccionar el banco de la transferencia",
                          "estado" => false
                      ]);
-                 }
+                 } */
              }
 
              $item = new pagos_referencias;
+             $categoria = $req->categoria ?? 'central';
           
+            // Campos comunes a todos
             $item->tipo = $req->tipo;
             $item->monto = $req->monto;
             $item->id_pedido = $req->id_pedido;
             $item->cedula = $req->cedula;
-            $item->telefono = $req->telefono;
-            $item->descripcion = $req->descripcion ?? null;
-            $item->banco = $req->banco ?? null;
-            $item->estatus = 'pendiente'; // Estado inicial
+            $item->estatus = "pendiente"; // No aprobada por defecto
+            $item->categoria = $categoria;
+            
+            // Campos según categoría
+            switch ($categoria) {
+                case 'central':
+                    // Central: banco, descripcion, telefono
+                    $item->banco = $req->banco ?? null;
+                    $item->descripcion = $req->descripcion ?? null;
+                    $item->telefono = $req->telefono ?? null;
+                    break;
+                    
+                case 'pagomovil':
+                    // PagoMovil: descripcion (6 dígitos), fecha_pago, telefono_pago, banco_origen, monto_real
+                    $item->descripcion = $req->descripcion ?? null;
+                    $item->fecha_pago = $req->fecha_pago ?? null;
+                    $item->telefono = $req->telefono_pago ?? null;
+                    $item->banco_origen = $req->codigo_banco_origen ?? null;
+                    break;
+                    
+                case 'banesco':
+                    // Banesco-Banesco: descripcion (12 dígitos), monto_real
+                    $item->descripcion = $req->descripcion ?? null;
+                    break;
+                    
+                case 'interbancaria':
+                    // Interbancaria: descripcion (6 dígitos), fecha_pago, banco_origen, monto_real
+                    $item->descripcion = $req->descripcion ?? null;
+                    $item->fecha_pago = $req->fecha_pago ?? null;
+                    $item->banco_origen = $req->codigo_banco_origen ?? null;
+                    break;
+            }
+            
+            // Monto real (solo para módulos automáticos, si el cliente transfirió más)
+            if ($categoria !== 'central' && $req->monto_real) {
+                $montoReal = floatval($req->monto_real);
+                $monto = floatval($req->monto);
+                $limiteMaximo = $monto * 1.05; // 5% más del monto
+                
+                if ($montoReal > $monto && $montoReal <= $limiteMaximo) {
+                    $item->monto_real = number_format($montoReal, 2, '.', '');
+                } else if ($montoReal > $limiteMaximo) {
+                    return Response::json([
+                        "msj" => "Error: El monto real no puede exceder el 5% del monto del pedido (máx: Bs " . number_format($limiteMaximo, 2) . ")",
+                        "estado" => false
+                    ]);
+                }
+            }
+            
             $item->save();
 
-            return Response::json(["msj"=>"¡Éxito!","estado"=>true]);
+            return Response::json(["msj"=>"¡Éxito!","estado"=>true,"id_referencia"=>$item->id]);
             
         } catch (\Exception $e) {
             return Response::json(["msj"=>"Error: ".$e->getMessage(),"estado"=>false]);
@@ -553,19 +602,34 @@ class PagosReferenciasController extends Controller
             $id = $req->id;
             $pagos_referencias = pagos_referencias::find($id);
 
+            if (!$pagos_referencias) {
+                return Response::json(["msj"=>"Referencia no encontrada","estado"=>false]);
+            }
+
             (new PedidosController)->checkPedidoAuth($pagos_referencias->id_pedido);
             $checkPedidoPago = (new PedidosController)->checkPedidoPago($pagos_referencias->id_pedido);
             if ($checkPedidoPago!==true) {
                 return $checkPedidoPago;
             }
 
-            if ($pagos_referencias) {
+            // Eliminar en central primero (si aplica)
+            $sucursal = sucursal::first();
+            if ($sucursal && $sucursal->modo_transferencia === 'central') {
+                $resultCentral = (new sendCentral)->deleteTranferenciaAprobacion($id, $pagos_referencias->id_pedido);
+                \Log::info("Resultado eliminar en central:", ['result' => $resultCentral]);
                 
-                $pagos_referencias->delete();
-                return Response::json(["msj"=>"Éxito al eliminar","estado"=>true]);
+                // Solo eliminar localmente si central confirmó la eliminación
+                if (!isset($resultCentral['estado']) || $resultCentral['estado'] !== true) {
+                    $errorMsg = $resultCentral['msj'] ?? 'Error desconocido al eliminar en central';
+                    return Response::json([
+                        "msj" => "No se pudo eliminar: " . $errorMsg,
+                        "estado" => false
+                    ]);
+                }
             }
 
-
+            $pagos_referencias->delete();
+            return Response::json(["msj"=>"Éxito al eliminar","estado"=>true]);
             
         } catch (\Exception $e) {
             return Response::json(["msj"=>"Error: ".$e->getMessage(),"estado"=>false]);

@@ -21,6 +21,7 @@ class cierres extends Model
 
 
     protected $fillable = [
+        "push",
         "debito",
         "efectivo",
         "transferencia",

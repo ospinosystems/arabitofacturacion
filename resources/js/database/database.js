@@ -10,6 +10,7 @@ const host = ""
 // const host = "http://localhost/sinapsisapp"
 
 const db = {
+  getHost: () => host,
   // setCentralData: data=>axios.get(host+"setCentralData",{params:data}),
   getMoneda: ()=>axios.post(host+"getMoneda"),
   getinventario: data=>axios.post(host+"getinventario",data),
@@ -163,8 +164,61 @@ const db = {
   resolverTareaLocal: data=>axios.get(host+"resolverTareaLocal",{params:data}),
   
   sendCierre: data=>axios.get(host+"verCierre",{params:data}),
+  
+  // Abrir dashboard de sincronización en nueva ventana
+  openSyncDashboard: () => window.open(host + "sendAllTest", "_blank", "width=1200,height=800"),
+  
+  // API de sincronización con progreso
+  getSyncStatus: () => axios.get(host + "sync/status"),
+  startSync: (data) => axios.post(host + "sync/all", data),
+  esPrimeraSincronizacion: () => axios.get(host + "sync/es-primera"),
+  marcarPrimeraEjecutada: () => axios.post(host + "sync/marcar-primera"),
+  
+  // Iniciar sincronización con modal embebido
+  // SIEMPRE sincroniza solo registros desde 2025-12-01
+  iniciarSyncConModal: async function() {
+    // Verificar si existe el modal (debe estar incluido en la vista)
+    if (typeof window.SyncModal === 'undefined') {
+      console.warn('Modal de sincronización no disponible, abriendo dashboard');
+      this.openSyncDashboard();
+      return;
+    }
+    
+    // Abrir modal
+    window.SyncModal.open();
+    
+    try {
+      window.SyncModal.addLog('Sincronizando pendientes (desde 2025-12-01)...');
+      
+      // Iniciar sincronización (siempre con filtro de fecha)
+      const response = await axios.post(host + "sync/all", {
+        tablas: ['all'],
+        solo_nuevos: true
+      });
+      
+      if (response.data.estado) {
+        // Actualizar progreso del modal
+        const resultado = response.data.resultado;
+        window.SyncModal.updateProgress(100, 'Completado');
+        
+        // Actualizar estado de cada tabla
+        if (resultado && resultado.tablas) {
+          Object.entries(resultado.tablas).forEach(([key, tabla]) => {
+            window.SyncModal.updateTable(key, tabla.estado === 'completado' ? 'done' : 'error', tabla.registros);
+          });
+        }
+        
+        window.SyncModal.complete(true, `Sincronización completada: ${resultado?.registros_totales || 0} registros en ${resultado?.tiempo_total || '0s'}`);
+      } else {
+        window.SyncModal.complete(false, response.data.mensaje || 'Error desconocido');
+      }
+    } catch (error) {
+      console.error('Error en sincronización:', error);
+      window.SyncModal.complete(false, 'Error de conexión: ' + error.message);
+    }
+  },
+  
   printTickedPrecio: ({ id }) => window.open(host + "/printTickedPrecio?id=" + id, "targed=blank"),
-
   
 
   saveMontoFactura: data=>axios.post(host+"saveMontoFactura",data),

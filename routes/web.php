@@ -347,6 +347,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('warehouse-inventory/tcd/escanear-ticket-despacho', [TCDController::class, 'escanearTicketDespacho'])->name('warehouse-inventory.tcd.escanear-ticket-despacho');
 		Route::get('warehouse-inventory/tcd/get-sucursales-disponibles', [TCDController::class, 'getSucursalesDisponibles'])->name('warehouse-inventory.tcd.get-sucursales-disponibles');
 		Route::post('warehouse-inventory/tcd/transferir-orden-sucursal', [TCDController::class, 'transferirOrdenASucursal'])->name('warehouse-inventory.tcd.transferir-orden-sucursal');
+		Route::get('warehouse-inventory/tcd/nota-entrega', [TCDController::class, 'notaEntrega'])->name('warehouse-inventory.tcd.nota-entrega');
 		
 		// ================ RUTAS PARA INVENTARIAR PRODUCTOS ================
 		Route::get('inventario/inventariar', [InventarioController::class, 'inventariar'])->name('inventario.inventariar');
@@ -613,4 +614,27 @@ Route::group(['middleware' => ['auth.user:admin']], function () {
     Route::get('getDollarRate', [MonedasController::class, 'getDollarRate']);
     Route::post('updateDollarRate', [MonedasController::class, 'updateDollarRate']);
 });
+
+// ================ RUTAS PARA SINCRONIZACIÓN CON PROGRESO ================
+use App\Http\Controllers\SyncProgressController;
+
+// Vista principal del dashboard de sincronización
+Route::get('sync', [SyncProgressController::class, 'index'])->name('sync.dashboard');
+
+// API de estado y sincronización
+Route::get('sync/status', [SyncProgressController::class, 'getStatus'])->name('sync.status');
+Route::get('sync/checkpoint', [SyncProgressController::class, 'getCheckpoint'])->name('sync.checkpoint');
+Route::post('sync/clear-checkpoint', [SyncProgressController::class, 'clearCheckpoint'])->name('sync.clear-checkpoint');
+Route::get('sync/es-primera', [SyncProgressController::class, 'esPrimeraSincronizacion'])->name('sync.es-primera');
+Route::post('sync/marcar-primera', [SyncProgressController::class, 'marcarPrimeraEjecutada'])->name('sync.marcar-primera');
+Route::get('sync/verificar-antiguos', [SyncProgressController::class, 'verificarAntiguosMarcados'])->name('sync.verificar-antiguos');
+Route::post('sync/marcar-antiguos', [SyncProgressController::class, 'marcarAntiguosComoSincronizados'])->name('sync.marcar-antiguos');
+Route::post('sync/all', [SyncProgressController::class, 'sincronizarTodo'])->name('sync.all');
+Route::post('sync/tabla', [SyncProgressController::class, 'sincronizarTablaIndividual'])->name('sync.tabla');
+Route::post('sync/reset', [SyncProgressController::class, 'resetearSincronizacion'])->name('sync.reset');
+Route::post('sync/marcar', [SyncProgressController::class, 'marcarSincronizados'])->name('sync.marcar');
+
+// SSE para progreso en tiempo real
+Route::get('sync/stream', [SyncProgressController::class, 'streamProgress'])->name('sync.stream');
+// ================ FIN RUTAS SINCRONIZACIÓN ================
 

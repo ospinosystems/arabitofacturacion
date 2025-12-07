@@ -10,6 +10,7 @@ class pedidos extends Model
 {
     protected $fillable= [
         "id",
+        "push",
         "estado",
         "export",
         "fecha_inicio",
@@ -21,6 +22,7 @@ class pedidos extends Model
         "fiscal",
         "isdevolucionOriginalid",
         "fecha_factura",
+        "retencion",
     ];
     // use HasFactory;
 

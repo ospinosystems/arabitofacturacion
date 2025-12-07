@@ -28,6 +28,7 @@ export default function ModalRefPago({
     bancos,
     montoTraido,
     tipoTraido,
+    pedidoData,
 }) {
     const [isrefbanbs, setisrefbanbs] = useState(true);
     const [errors, setErrors] = useState({});
@@ -49,6 +50,34 @@ export default function ModalRefPago({
     const [fechaPago, setFechaPago] = useState(getTodayDate());
     const [telefonoPago, setTelefonoPago] = useState('');
     const [codigoBancoOrigen, setCodigoBancoOrigen] = useState('');
+    const [montoReal, setMontoReal] = useState(''); // Monto real transferido (si es mayor al del pedido)
+
+    // Monto total del pedido en Bs
+    const montoTotalPedido = parseFloat(pedidoData?.bs || 0);
+    
+    // Calcular suma de referencias ya cargadas
+    const sumaReferencias = (pedidoData?.referencias || []).reduce((sum, ref) => {
+        return sum + parseFloat(ref.monto || 0);
+    }, 0);
+    
+    // Monto restante (total - referencias previas)
+    const montoRestante = Math.max(0, montoTotalPedido - sumaReferencias);
+    
+    // Monto máximo permitido es el total del pedido en Bs
+    const montoMaximoPedido = montoTotalPedido;
+
+    // Validar formato de teléfono: 58 + código (sin 0) + 7 dígitos = 12 dígitos
+    const validarTelefono = (telefono) => {
+        // Códigos válidos: 412, 414, 416, 424, 426, 422
+        const regex = /^58(412|414|416|424|426|422)\d{7}$/;
+        return regex.test(telefono);
+    };
+
+    // Validar formato de monto: xxxxx.xx
+    const validarFormatoMonto = (monto) => {
+        const regex = /^\d+(\.\d{1,2})?$/;
+        return regex.test(monto);
+    };
 
     // Obtener configuración de campos según módulo
     const getModuloConfig = () => {
@@ -139,8 +168,12 @@ export default function ModalRefPago({
                 newErrors.fechaPago = 'La fecha de pago es obligatoria';
             }
 
-            if (moduloConfig.showTelefonoPago && !telefonoPago) {
-                newErrors.telefonoPago = 'El teléfono es obligatorio';
+            if (moduloConfig.showTelefonoPago) {
+                if (!telefonoPago) {
+                    newErrors.telefonoPago = 'El teléfono es obligatorio';
+                } else if (!validarTelefono(telefonoPago)) {
+                    newErrors.telefonoPago = 'Formato inválido. Debe ser: 58 + código (416,426,414,424,412,422) + 7 dígitos. Ej: 584142440203';
+                }
             }
 
             if (moduloConfig.showCodigoBancoOrigen && !codigoBancoOrigen) {
@@ -150,10 +183,42 @@ export default function ModalRefPago({
 
         if (!monto_referenciapago || monto_referenciapago == 0) {
             newErrors.monto = 'El monto debe ser mayor a 0';
+        } else if (!validarFormatoMonto(monto_referenciapago)) {
+            newErrors.monto = 'El monto debe tener formato válido (ej: 1234.56)';
+        } else if (parseFloat(monto_referenciapago) > montoMaximoPedido) {
+            newErrors.monto = `El monto no puede ser mayor a Bs ${montoMaximoPedido.toFixed(2)} (monto del pedido)`;
+        }
+
+        // Validar monto real si se proporciona
+        if (montoReal) {
+            if (!validarFormatoMonto(montoReal)) {
+                newErrors.montoReal = 'El monto real debe tener formato válido (ej: 1234.56)';
+            } else {
+                const montoRealNum = parseFloat(montoReal);
+                const montoNum = parseFloat(monto_referenciapago);
+                const limiteMaximo = montoNum * 1.05; // 5% más del monto
+
+                if (montoRealNum <= montoNum) {
+                    newErrors.montoReal = 'El monto real debe ser mayor al monto del pedido';
+                } else if (montoRealNum > limiteMaximo) {
+                    newErrors.montoReal = `El monto real no puede exceder el 5% del monto (máx: Bs ${limiteMaximo.toFixed(2)})`;
+                }
+            }
         }
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
+    };
+
+    // Mapeo de módulo a categoría
+    const getCategoriaFromModulo = () => {
+        switch (moduloSeleccionado) {
+            case 'Central': return 'central';
+            case 'AutoPagoMovil': return 'pagomovil';
+            case 'AutoBanescoBanesco': return 'banesco';
+            case 'AutoInterbancaria': return 'interbancaria';
+            default: return 'central';
+        }
     };
 
     // Manejar envío del formulario
@@ -165,7 +230,28 @@ export default function ModalRefPago({
 
         setIsSubmitting(true);
         try {
-            await addRefPago("enviar");
+            const categoria = getCategoriaFromModulo();
+            const datosAdicionales = {};
+
+            // Agregar datos adicionales para módulos automáticos
+            if (moduloSeleccionado !== 'Central') {
+                if (moduloConfig.showFechaPago) {
+                    datosAdicionales.fecha_pago = fechaPago;
+                }
+                if (moduloConfig.showTelefonoPago) {
+                    datosAdicionales.telefono_pago = telefonoPago;
+                }
+                if (moduloConfig.showCodigoBancoOrigen) {
+                    datosAdicionales.codigo_banco_origen = codigoBancoOrigen;
+                }
+            }
+
+            // Si hay monto real (cliente transfirió más), enviarlo
+            if (montoReal && parseFloat(montoReal) > parseFloat(monto_referenciapago)) {
+                datosAdicionales.monto_real = montoReal;
+            }
+
+            await addRefPago("enviar", "", "", categoria, datosAdicionales);
         } catch (error) {
             console.error('Error al guardar:', error);
         } finally {
@@ -186,9 +272,14 @@ export default function ModalRefPago({
         }
     };
 
-    // Efecto para calcular monto según banco
+    // Efecto para calcular monto según banco o módulo
     useEffect(() => {
-        if (
+        // Para módulos automáticos, siempre es en Bs
+        if (moduloSeleccionado !== 'Central') {
+            let monto = (transferencia * dolar).toFixed(2);
+            setmonto_referenciapago(monto);
+            setisrefbanbs(true);
+        } else if (
             banco_referenciapago == "ZELLE" ||
             banco_referenciapago == "BINANCE" ||
             banco_referenciapago == "AirTM"
@@ -200,7 +291,7 @@ export default function ModalRefPago({
             setmonto_referenciapago(monto);
             setisrefbanbs(true);
         }
-    }, [banco_referenciapago, transferencia, dolar]);
+    }, [banco_referenciapago, transferencia, dolar, moduloSeleccionado]);
 
     // Limpiar errores cuando cambian los valores
     useEffect(() => {
@@ -439,15 +530,19 @@ export default function ModalRefPago({
                                     </label>
                                     <input
                                         type="text"
-                                        placeholder="Ej: 04121234567"
+                                        placeholder="Ej: 584142440203"
                                         value={telefonoPago}
                                         onChange={e => setTelefonoPago(number(e.target.value))}
                                         onKeyPress={handleKeyPress}
-                                        maxLength={11}
+                                        maxLength={12}
                                         className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
                                             errors.telefonoPago ? 'border-red-300' : 'border-gray-200'
                                         }`}
                                     />
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        <i className="mr-1 fa fa-info-circle"></i>
+                                        Formato: 58 + código sin 0 (416,426,414,424,412,422) + 7 dígitos
+                                    </p>
                                     {errors.telefonoPago && (
                                         <p className="mt-1 text-xs text-red-600">{errors.telefonoPago}</p>
                                     )}
@@ -481,19 +576,42 @@ export default function ModalRefPago({
 
                     {/* Monto */}
                     <div>
-                        <label className="block mb-1 text-xs font-medium text-gray-700">
-                            Monto{" "}
-                            {isrefbanbs ? (
-                                <span className="px-2 py-0.5 text-xs font-medium text-blue-700 bg-blue-100 rounded">
-                                    Bs
-                                </span>
-                            ) : (
-                                <span className="px-2 py-0.5 text-xs font-medium text-green-700 bg-green-100 rounded">
-                                    $
-                                </span>
-                            )}
-                            <span className="text-red-500">*</span>
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                            <label className="text-xs font-medium text-gray-700">
+                                Monto{" "}
+                                {isrefbanbs ? (
+                                    <span className="px-2 py-0.5 text-xs font-medium text-blue-700 bg-blue-100 rounded">
+                                        Bs
+                                    </span>
+                                ) : (
+                                    <span className="px-2 py-0.5 text-xs font-medium text-green-700 bg-green-100 rounded">
+                                        $
+                                    </span>
+                                )}
+                                <span className="text-red-500">*</span>
+                            </label>
+                            {/* Botones para seleccionar monto */}
+                            <div className="flex gap-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setmonto_referenciapago(montoTotalPedido.toFixed(2))}
+                                    className="px-2 py-0.5 text-[10px] font-medium text-green-700 bg-green-100 rounded hover:bg-green-200 transition-colors"
+                                    title="Usar monto total del pedido"
+                                >
+                                    Total: {montoTotalPedido.toFixed(2)}
+                                </button>
+                                {sumaReferencias > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setmonto_referenciapago(montoRestante.toFixed(2))}
+                                        className="px-2 py-0.5 text-[10px] font-medium text-orange-700 bg-orange-100 rounded hover:bg-orange-200 transition-colors"
+                                        title="Usar monto restante (descontando transferencias previas)"
+                                    >
+                                        Restante: {montoRestante.toFixed(2)}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                         <input
                             type="text"
                             value={monto_referenciapago}
@@ -512,7 +630,40 @@ export default function ModalRefPago({
                                 {errors.monto}
                             </p>
                         )}
+                        <p className="mt-1 text-xs text-gray-500">
+                            <i className="mr-1 fa fa-info-circle"></i>
+                            Máx: Bs {montoMaximoPedido.toFixed(2)} | Ya cargado: Bs {sumaReferencias.toFixed(2)}
+                        </p>
                     </div>
+
+                    {/* Monto Real - Solo si el cliente transfirió más */}
+                    {moduloSeleccionado !== 'Central' && (
+                        <div>
+                            <label className="block mb-1 text-xs font-medium text-gray-700">
+                                Monto Real Transferido{" "}
+                                <span className="px-2 py-0.5 text-xs font-medium text-yellow-700 bg-yellow-100 rounded">
+                                    Opcional
+                                </span>
+                            </label>
+                            <input
+                                type="text"
+                                placeholder="Solo si el cliente transfirió más de lo debido"
+                                value={montoReal}
+                                onChange={(e) => setMontoReal(e.target.value.replace(/[^0-9.]/g, ''))}
+                                onKeyPress={handleKeyPress}
+                                className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
+                                    errors.montoReal ? 'border-red-300' : 'border-gray-200'
+                                }`}
+                            />
+                            <p className="mt-1 text-xs text-gray-500">
+                                <i className="mr-1 fa fa-exclamation-triangle text-yellow-500"></i>
+                                <strong>Si el cliente transfirió más, ingrese aquí el monto total que cayó al banco.</strong> El sistema registrará el monto correcto y el sobrante. Máx. permitido: 5% adicional (Bs {(parseFloat(monto_referenciapago || 0) * 1.05).toFixed(2)})
+                            </p>
+                            {errors.montoReal && (
+                                <p className="mt-1 text-xs text-red-600">{errors.montoReal}</p>
+                            )}
+                        </div>
+                    )}
 
                     {/* Footer compacto */}
                     <div className="flex items-center justify-end pt-3 space-x-2 border-t border-gray-100">

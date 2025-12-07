@@ -16,6 +16,7 @@ class pago_pedidos extends Model
     }
 
     protected $fillable = [
+        "push",
         "tipo",
         "monto",
         "monto_original",

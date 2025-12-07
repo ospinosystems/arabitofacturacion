@@ -119,6 +119,7 @@ class AuthenticateUser
         "warehouse-inventory/tcd/escanear-ticket-despacho",
         "warehouse-inventory/tcd/get-sucursales-disponibles",
         "warehouse-inventory/tcd/transferir-orden-sucursal",
+        "warehouse-inventory/tcd/nota-entrega",
         
         // Inventariar productos (tres pasos: producto, ubicación, cantidad)
         "inventario/inventariar",

@@ -783,6 +783,10 @@ function cargarOrdenes() {
         });
 }
 
+function imprimirNotaEntrega(ordenId) {
+    window.open(`/warehouse-inventory/tcd/nota-entrega?orden_id=${ordenId}`, '_blank');
+}
+
 function mostrarOrdenes(ordenes) {
     const contenedor = document.getElementById('listaOrdenes');
     
@@ -835,6 +839,11 @@ function mostrarOrdenes(ordenes) {
                     <button onclick="verEstadoAsignaciones(${orden.id})" class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg">
                         <i class="fas fa-eye mr-2"></i>Ver Estado
                     </button>
+                    ${['completada', 'despachada'].includes(orden.estado) ? `
+                        <button onclick="imprimirNotaEntrega(${orden.id})" class="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg" title="Imprimir Nota de Entrega">
+                            <i class="fas fa-print mr-2"></i>Nota
+                        </button>
+                    ` : ''}
                 </div>
             </div>
         `;
