@@ -217,10 +217,22 @@ export default function PagarMain({
     const [showCalculadora, setShowCalculadora] = useState(false);
     const [calcInput, setCalcInput] = useState("");
     const [calcMoneda, setCalcMoneda] = useState("usd"); // usd, bs, cop
-    const [calcRecibidoUsd, setCalcRecibidoUsd] = useState("");
-    const [calcRecibidoBs, setCalcRecibidoBs] = useState("");
-    const [calcRecibidoCop, setCalcRecibidoCop] = useState("");
+    // Sección 1: Lo que pagó el cliente (por método)
+    const [calcPagoEfectivoUsd, setCalcPagoEfectivoUsd] = useState("");
+    const [calcPagoEfectivoBs, setCalcPagoEfectivoBs] = useState("");
+    const [calcPagoEfectivoCop, setCalcPagoEfectivoCop] = useState("");
+    const [calcPagoDebito, setCalcPagoDebito] = useState("");
+    const [calcPagoTransferencia, setCalcPagoTransferencia] = useState("");
+    // Campo activo para agregar desde calculadora
+    const [calcCampoActivo, setCalcCampoActivo] = useState(null);
+    // Mostrar mini calculadora flotante
+    const [showMiniCalc, setShowMiniCalc] = useState(false);
+    // Vuelto combinado (cuánto dar en cada moneda)
+    const [calcVueltoUsd, setCalcVueltoUsd] = useState("");
+    const [calcVueltoBs, setCalcVueltoBs] = useState("");
+    const [calcVueltoCop, setCalcVueltoCop] = useState("");
     const calculadoraRef = useRef(null);
+    const miniCalcRef = useRef(null);
     const calculadoraBtnRef = useRef(null);
 
     // Handler para ejecutar setPagoPedido al presionar ENTER en inputs de pago
@@ -246,18 +258,127 @@ export default function PagarMain({
         return { usd: 0, bs: 0, cop: 0 };
     };
 
-    const calcTotalRecibido = () => {
+    // Calcular total pagado por el cliente (en USD)
+    const calcTotalPagado = () => {
         const tasaBs = getTasaBsCalc();
         const tasaCop = getTasaCopCalc();
-        const usd = parseFloat(calcRecibidoUsd) || 0;
-        const bs = parseFloat(calcRecibidoBs) || 0;
-        const cop = parseFloat(calcRecibidoCop) || 0;
-        return usd + (bs / tasaBs) + (cop / tasaCop);
+        const efectivoUsd = parseFloat(calcPagoEfectivoUsd) || 0;
+        const efectivoBs = parseFloat(calcPagoEfectivoBs) || 0;
+        const efectivoCop = parseFloat(calcPagoEfectivoCop) || 0;
+        const debitoBs = parseFloat(calcPagoDebito) || 0;
+        const transferenciaUsd = parseFloat(calcPagoTransferencia) || 0;
+        return efectivoUsd + (efectivoBs / tasaBs) + (efectivoCop / tasaCop) + (debitoBs / tasaBs) + transferenciaUsd;
     };
 
-    const calcVuelto = () => {
+    // Calcular diferencia (positivo = vuelto a dar, negativo = falta por pagar)
+    const calcDiferencia = () => {
         const totalPedido = parseFloat(pedidoData?.clean_total) || 0;
-        return calcTotalRecibido() - totalPedido;
+        return calcTotalPagado() - totalPedido;
+    };
+
+    // Calcular cuánto del vuelto ya está asignado (en USD)
+    const calcVueltoAsignado = () => {
+        const tasaBs = getTasaBsCalc();
+        const tasaCop = getTasaCopCalc();
+        const vueltoUsd = parseFloat(calcVueltoUsd) || 0;
+        const vueltoBs = parseFloat(calcVueltoBs) || 0;
+        const vueltoCop = parseFloat(calcVueltoCop) || 0;
+        return vueltoUsd + (vueltoBs / tasaBs) + (vueltoCop / tasaCop);
+    };
+
+    // Calcular cuánto falta por asignar del vuelto (en USD)
+    const calcVueltoPendiente = () => {
+        const diferencia = calcDiferencia();
+        if (diferencia <= 0) return 0;
+        return Math.max(0, diferencia - calcVueltoAsignado());
+    };
+
+    // Limpiar vuelto asignado cuando cambia el total pagado
+    useEffect(() => {
+        setCalcVueltoUsd("");
+        setCalcVueltoBs("");
+        setCalcVueltoCop("");
+    }, [calcPagoEfectivoUsd, calcPagoEfectivoBs, calcPagoEfectivoCop, calcPagoDebito, calcPagoTransferencia]);
+
+    // Auto-calcular el resto en una moneda específica (pone todo en esa moneda)
+    const calcAutoVuelto = (moneda) => {
+        const diferencia = calcDiferencia();
+        if (diferencia <= 0) return;
+        
+        const tasaBs = getTasaBsCalc();
+        const tasaCop = getTasaCopCalc();
+        
+        // Poner todo en la moneda seleccionada y limpiar las demás
+        if (moneda === "usd") {
+            setCalcVueltoUsd(diferencia.toFixed(2));
+            setCalcVueltoBs("");
+            setCalcVueltoCop("");
+        } else if (moneda === "bs") {
+            setCalcVueltoUsd("");
+            setCalcVueltoBs((diferencia * tasaBs).toFixed(2));
+            setCalcVueltoCop("");
+        } else if (moneda === "cop") {
+            setCalcVueltoUsd("");
+            setCalcVueltoBs("");
+            setCalcVueltoCop((diferencia * tasaCop).toFixed(0));
+        }
+    };
+
+    // Manejar cambio en input de vuelto (resta de los otros campos)
+    const handleVueltoChange = (moneda, valor) => {
+        const tasaBs = getTasaBsCalc();
+        const tasaCop = getTasaCopCalc();
+        const diferencia = calcDiferencia();
+        if (diferencia <= 0) return;
+        
+        // Convertir el nuevo valor a USD
+        let nuevoValorUsd = 0;
+        if (moneda === "usd") {
+            nuevoValorUsd = parseFloat(valor) || 0;
+            setCalcVueltoUsd(valor);
+        } else if (moneda === "bs") {
+            nuevoValorUsd = (parseFloat(valor) || 0) / tasaBs;
+            setCalcVueltoBs(valor);
+        } else if (moneda === "cop") {
+            nuevoValorUsd = (parseFloat(valor) || 0) / tasaCop;
+            setCalcVueltoCop(valor);
+        }
+        
+        // Calcular cuánto queda disponible después de este cambio
+        const otrosUsd = moneda === "usd" ? 0 : (parseFloat(calcVueltoUsd) || 0);
+        const otrosBsUsd = moneda === "bs" ? 0 : ((parseFloat(calcVueltoBs) || 0) / tasaBs);
+        const otrosCopUsd = moneda === "cop" ? 0 : ((parseFloat(calcVueltoCop) || 0) / tasaCop);
+        
+        const totalOtros = otrosUsd + otrosBsUsd + otrosCopUsd;
+        const disponible = diferencia - nuevoValorUsd;
+        
+        // Si el nuevo valor excede lo disponible, ajustar los otros campos
+        if (nuevoValorUsd > diferencia) {
+            // Limitar al máximo disponible
+            if (moneda === "usd") {
+                setCalcVueltoUsd(diferencia.toFixed(2));
+            } else if (moneda === "bs") {
+                setCalcVueltoBs((diferencia * tasaBs).toFixed(2));
+            } else if (moneda === "cop") {
+                setCalcVueltoCop((diferencia * tasaCop).toFixed(0));
+            }
+            // Limpiar los otros
+            if (moneda !== "usd") setCalcVueltoUsd("");
+            if (moneda !== "bs") setCalcVueltoBs("");
+            if (moneda !== "cop") setCalcVueltoCop("");
+        } else if (totalOtros > disponible && disponible >= 0) {
+            // Hay que reducir los otros campos proporcionalmente
+            const factor = disponible / totalOtros;
+            if (moneda !== "usd" && otrosUsd > 0) {
+                setCalcVueltoUsd((otrosUsd * factor).toFixed(2));
+            }
+            if (moneda !== "bs" && otrosBsUsd > 0) {
+                setCalcVueltoBs((otrosBsUsd * factor * tasaBs).toFixed(2));
+            }
+            if (moneda !== "cop" && otrosCopUsd > 0) {
+                setCalcVueltoCop((otrosCopUsd * factor * tasaCop).toFixed(0));
+            }
+        }
     };
 
     const calcEvaluar = () => {
@@ -272,20 +393,158 @@ export default function PagarMain({
 
     const calcAgregarDigito = (d) => setCalcInput(prev => prev + d);
     const calcBorrar = () => setCalcInput(prev => prev.slice(0, -1));
-    const calcLimpiar = () => { setCalcInput(""); setCalcRecibidoUsd(""); setCalcRecibidoBs(""); setCalcRecibidoCop(""); };
+    const calcLimpiarTodo = () => { 
+        setCalcInput(""); 
+        setCalcPagoEfectivoUsd(""); 
+        setCalcPagoEfectivoBs(""); 
+        setCalcPagoEfectivoCop(""); 
+        setCalcPagoDebito(""); 
+        setCalcPagoTransferencia(""); 
+    };
     
-    const calcAplicarRecibido = () => {
+    // Obtener valor del campo activo
+    const getCalcCampoValor = () => {
+        const valores = {
+            efectivo_usd: calcPagoEfectivoUsd,
+            efectivo_bs: calcPagoEfectivoBs,
+            efectivo_cop: calcPagoEfectivoCop,
+            debito: calcPagoDebito,
+            transferencia: calcPagoTransferencia,
+        };
+        return parseFloat(valores[calcCampoActivo]) || 0;
+    };
+
+    // Obtener moneda del campo activo
+    const getCalcCampoMoneda = () => {
+        const monedas = {
+            efectivo_usd: "usd",
+            efectivo_bs: "bs",
+            efectivo_cop: "cop",
+            debito: "bs",
+            transferencia: "usd",
+        };
+        return monedas[calcCampoActivo] || "usd";
+    };
+
+    // Agregar monto al campo activo
+    const calcAplicarAlCampo = () => {
         const resultado = calcEvaluar();
-        if (!resultado) return;
-        // Agregar el monto directamente al campo de la moneda seleccionada
-        if (calcMoneda === "usd") {
-            setCalcRecibidoUsd(prev => ((parseFloat(prev) || 0) + resultado).toFixed(2));
-        } else if (calcMoneda === "bs") {
-            setCalcRecibidoBs(prev => ((parseFloat(prev) || 0) + resultado).toFixed(2));
-        } else if (calcMoneda === "cop") {
-            setCalcRecibidoCop(prev => ((parseFloat(prev) || 0) + resultado).toFixed(0));
+        if (!resultado || !calcCampoActivo) return;
+        
+        const setters = {
+            efectivo_usd: setCalcPagoEfectivoUsd,
+            efectivo_bs: setCalcPagoEfectivoBs,
+            efectivo_cop: setCalcPagoEfectivoCop,
+            debito: setCalcPagoDebito,
+            transferencia: setCalcPagoTransferencia,
+        };
+        
+        const decimales = calcCampoActivo === "efectivo_cop" ? 0 : 2;
+        const setter = setters[calcCampoActivo];
+        if (setter) {
+            setter(prev => ((parseFloat(prev) || 0) + resultado).toFixed(decimales));
         }
         setCalcInput("");
+    };
+
+    // Manejar foco en input de calculadora
+    const handleCalcInputFocus = (campo) => {
+        setCalcCampoActivo(campo);
+        setShowMiniCalc(true);
+        setCalcInput("");
+    };
+
+    // Manejar blur en input de calculadora
+    const handleCalcInputBlur = (e) => {
+        // No cerrar si el clic fue en la mini calculadora
+        setTimeout(() => {
+            if (miniCalcRef.current && !miniCalcRef.current.contains(document.activeElement)) {
+                setShowMiniCalc(false);
+            }
+        }, 150);
+    };
+
+    // Función para importar todos los montos de la calculadora a los campos de pago del sistema
+    const calcImportarTodoAPago = () => {
+        const tasaBs = getTasaBsCalc();
+        const tasaCop = getTasaCopCalc();
+        const totalPedidoUsd = parseFloat(pedidoData?.clean_total) || 0;
+        
+        // Calcular lo que ya está cargado en pagos (en USD)
+        const yaDebitoUsd = (parseFloat(debito || 0) / tasaBs);
+        const yaEfectivoUsd = parseFloat(efectivo_dolar || 0);
+        const yaEfectivoBsUsd = (parseFloat(efectivo_bs || 0) / tasaBs);
+        const yaEfectivoCopUsd = (parseFloat(efectivo_peso || 0) / tasaCop);
+        const yaTransferenciaUsd = parseFloat(transferencia || 0);
+        const yaCreditoUsd = parseFloat(credito || 0);
+        
+        let totalYaCargado = yaDebitoUsd + yaEfectivoUsd + yaEfectivoBsUsd + yaEfectivoCopUsd + yaTransferenciaUsd + yaCreditoUsd;
+        let disponibleUsd = Math.max(0, totalPedidoUsd - totalYaCargado);
+        
+        // Importar Efectivo USD
+        const pagoEfectivoUsd = parseFloat(calcPagoEfectivoUsd) || 0;
+        if (pagoEfectivoUsd > 0 && disponibleUsd > 0) {
+            const montoAImportar = Math.min(pagoEfectivoUsd, disponibleUsd);
+            setEfectivo_dolar(prev => ((parseFloat(prev) || 0) + montoAImportar).toFixed(2));
+            setCalcPagoEfectivoUsd(prev => {
+                const resto = (parseFloat(prev) || 0) - montoAImportar;
+                return resto > 0 ? resto.toFixed(2) : "";
+            });
+            disponibleUsd -= montoAImportar;
+        }
+        
+        // Importar Efectivo Bs
+        const pagoEfectivoBs = parseFloat(calcPagoEfectivoBs) || 0;
+        const pagoEfectivoBsUsd = pagoEfectivoBs / tasaBs;
+        if (pagoEfectivoBs > 0 && disponibleUsd > 0) {
+            const montoAImportarUsd = Math.min(pagoEfectivoBsUsd, disponibleUsd);
+            const montoAImportarBs = montoAImportarUsd * tasaBs;
+            setEfectivo_bs(prev => ((parseFloat(prev) || 0) + montoAImportarBs).toFixed(2));
+            setCalcPagoEfectivoBs(prev => {
+                const resto = (parseFloat(prev) || 0) - montoAImportarBs;
+                return resto > 0 ? resto.toFixed(2) : "";
+            });
+            disponibleUsd -= montoAImportarUsd;
+        }
+        
+        // Importar Débito (Bs)
+        const pagoDebito = parseFloat(calcPagoDebito) || 0;
+        const pagoDebitoUsd = pagoDebito / tasaBs;
+        if (pagoDebito > 0 && disponibleUsd > 0) {
+            const montoAImportarUsd = Math.min(pagoDebitoUsd, disponibleUsd);
+            const montoAImportarBs = montoAImportarUsd * tasaBs;
+            setDebito(prev => ((parseFloat(prev) || 0) + montoAImportarBs).toFixed(2));
+            setCalcPagoDebito(prev => {
+                const resto = (parseFloat(prev) || 0) - montoAImportarBs;
+                return resto > 0 ? resto.toFixed(2) : "";
+            });
+            disponibleUsd -= montoAImportarUsd;
+        }
+        
+        // Importar Transferencia (USD)
+        const pagoTransferencia = parseFloat(calcPagoTransferencia) || 0;
+        if (pagoTransferencia > 0 && disponibleUsd > 0) {
+            const montoAImportar = Math.min(pagoTransferencia, disponibleUsd);
+            setTransferencia(prev => ((parseFloat(prev) || 0) + montoAImportar).toFixed(2));
+            setCalcPagoTransferencia(prev => {
+                const resto = (parseFloat(prev) || 0) - montoAImportar;
+                return resto > 0 ? resto.toFixed(2) : "";
+            });
+            disponibleUsd -= montoAImportar;
+        }
+        
+        // Importar Efectivo COP
+        const pagoEfectivoCop = parseFloat(calcPagoEfectivoCop) || 0;
+        const pagoEfectivoCopUsd = pagoEfectivoCop / tasaCop;
+        if (pagoEfectivoCop > 0 && disponibleUsd > 0) {
+            const montoAImportarUsd = Math.min(pagoEfectivoCopUsd, disponibleUsd);
+            const montoAImportarCop = montoAImportarUsd * tasaCop;
+            setEfectivo_peso(prev => ((parseFloat(prev) || 0) + montoAImportarCop).toFixed(0));
+            setCalcPagoEfectivoCop(prev => {
+                const resto = (parseFloat(prev) || 0) - montoAImportarCop;
+                return resto > 0 ? resto.toFixed(0) : "";
+            });
+        }
     };
 
     // Capturar teclado cuando calculadora está abierta
@@ -296,38 +555,39 @@ export default function PagarMain({
             // Prevenir que los eventos lleguen a pagarMain
             e.stopPropagation();
             
-            // Escape cierra la calculadora
+            // Escape cierra la calculadora o la mini calculadora
             if (e.key === 'Escape') {
-                setShowCalculadora(false);
+                if (showMiniCalc) {
+                    setShowMiniCalc(false);
+                } else {
+                    setShowCalculadora(false);
+                }
                 return;
             }
             
-            // Si está en un input de recibido, dejar que funcione normal
-            if (e.target.tagName === 'INPUT') return;
-            
-            // Números y operadores
-            if (/^[0-9]$/.test(e.key)) {
-                e.preventDefault();
-                calcAgregarDigito(e.key);
-            } else if (['+', '-', '*', '/', '.'].includes(e.key)) {
-                e.preventDefault();
-                calcAgregarDigito(e.key);
-            } else if (e.key === 'Backspace') {
-                e.preventDefault();
-                calcBorrar();
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                calcAplicarRecibido();
-            } else if (e.key === 'c' || e.key === 'C') {
-                e.preventDefault();
-                calcLimpiar();
+            // Si la mini calculadora está abierta y estamos en un input de la calculadora
+            if (showMiniCalc && e.target.tagName === 'INPUT') {
+                // Números y operadores van a calcInput
+                if (/^[0-9]$/.test(e.key)) {
+                    e.preventDefault();
+                    calcAgregarDigito(e.key);
+                } else if (['+', '-', '*', '/', '.'].includes(e.key)) {
+                    e.preventDefault();
+                    calcAgregarDigito(e.key);
+                } else if (e.key === 'Backspace' && calcInput) {
+                    e.preventDefault();
+                    calcBorrar();
+                } else if (e.key === 'Enter' && calcInput) {
+                    e.preventDefault();
+                    calcAplicarAlCampo();
+                }
             }
         };
         
         // Capturar en fase de captura para interceptar antes que otros handlers
         document.addEventListener('keydown', handleKeyDown, true);
         return () => document.removeEventListener('keydown', handleKeyDown, true);
-    }, [showCalculadora, calcInput]);
+    }, [showCalculadora, showMiniCalc, calcInput, calcCampoActivo]);
 
     // Funciones para formato de moneda en inputs de pago (tiempo real)
     const formatMonedaLive = (value) => {
@@ -1200,10 +1460,17 @@ export default function PagarMain({
         setPedidoOriginalInput("");
         // Limpiar calculadora/vueltos
         setShowCalculadora(false);
+        setShowMiniCalc(false);
         setCalcInput("");
-        setCalcRecibidoUsd("");
-        setCalcRecibidoBs("");
-        setCalcRecibidoCop("");
+        setCalcCampoActivo(null);
+        setCalcPagoEfectivoUsd("");
+        setCalcPagoEfectivoBs("");
+        setCalcPagoEfectivoCop("");
+        setCalcPagoDebito("");
+        setCalcPagoTransferencia("");
+        setCalcVueltoUsd("");
+        setCalcVueltoBs("");
+        setCalcVueltoCop("");
     }, [pedidoData?.id]);
 
     // useEffect para detectar scroll y mostrar/ocultar menú
@@ -3620,210 +3887,321 @@ export default function PagarMain({
                             </div>
                         </div>
                         
-                        <div className="flex-1 flex flex-col p-3 gap-2 overflow-y-auto">
-                            {/* Tasas */}
+                        <div className="flex-1 flex flex-col p-3 gap-3 overflow-y-auto">
+                            {/* Tasas de referencia */}
                             <div className="flex justify-between text-[10px] text-gray-500 bg-gray-100 rounded px-2 py-1">
-                                <span>Bs: <b className="text-orange-600">{moneda(getTasaBsCalc(), 2)}</b></span>
-                                <span>COP: <b className="text-blue-600">{moneda(getTasaCopCalc(), 0)}</b></span>
+                                <span>Tasa Bs: <b className="text-orange-600">{moneda(getTasaBsCalc(), 2)}</b></span>
+                                <span>Tasa COP: <b className="text-blue-600">{moneda(getTasaCopCalc(), 0)}</b></span>
                             </div>
 
-                            {/* Display calculadora compacto */}
-                            <div className="bg-gray-900 rounded-lg p-3">
-                                <div className="text-right text-xs text-gray-400 font-mono">{calcInput || "0"}</div>
-                                <div className="text-right text-3xl font-bold text-white font-mono">{moneda(calcEvaluar(), 2)}</div>
-                                <div className="flex justify-between items-end mt-2 pt-2 border-t border-gray-700">
-                                    <div className="text-center flex-1">
-                                        <div className="text-[9px] text-gray-500">USD</div>
-                                        <div className="text-lg font-bold text-green-400">${moneda(calcConvertir(calcEvaluar(), calcMoneda).usd, 2)}</div>
-                                    </div>
-                                    <div className="text-center flex-1">
-                                        <div className="text-[9px] text-gray-500">Bs</div>
-                                        <div className="text-xl font-bold text-orange-400">{moneda(calcConvertir(calcEvaluar(), calcMoneda).bs, 2)}</div>
-                                    </div>
-                                    <div className="text-center flex-1">
-                                        <div className="text-[9px] text-gray-500">COP</div>
-                                        <div className="text-base font-bold text-blue-400">{moneda(calcConvertir(calcEvaluar(), calcMoneda).cop, 0)}</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Selector de moneda compacto */}
-                            <div className="flex gap-1">
-                                {[{k:"usd",l:"$",c:"green"},{k:"bs",l:"Bs",c:"orange"},{k:"cop",l:"COP",c:"blue"}].map(m => (
-                                    <button 
-                                        key={m.k}
-                                        onClick={() => setCalcMoneda(m.k)}
-                                        className={`flex-1 py-1 text-xs font-bold rounded transition-colors ${calcMoneda === m.k ? `bg-${m.c}-500 text-white` : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
-                                    >
-                                        {m.l}
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* Teclado numérico compacto */}
-                            <div className="grid grid-cols-4 gap-0.5">
-                                {["7","8","9","+","4","5","6","-","1","2","3","*","C",".","0","⌫"].map(d => (
-                                    <button
-                                        key={d}
-                                        onClick={() => d === "⌫" ? calcBorrar() : d === "C" ? calcLimpiar() : calcAgregarDigito(d)}
-                                        className={`py-1.5 text-xs font-bold rounded transition-colors ${
-                                            d === "C" ? "bg-red-100 text-red-600 hover:bg-red-200" :
-                                            d === "⌫" ? "bg-gray-200 text-gray-600 hover:bg-gray-300" : 
-                                            ["+","-","*","/"].includes(d) ? "bg-orange-100 text-orange-600 hover:bg-orange-200" : 
-                                            "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                                        }`}
-                                    >
-                                        {d}
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* Botón agregar */}
-                            <button 
-                                onClick={calcAplicarRecibido} 
-                                className="py-2 text-xs font-bold text-white bg-green-500 rounded hover:bg-green-600 transition-colors"
-                            >
-                                <i className="mr-1 fa fa-plus"></i> Agregar a Recibido
-                            </button>
-
-                            {/* Sección Recibido */}
-                            <div className="pt-2 border-t border-gray-200">
+                            {/* ========== SECCIÓN 1: LO QUE PAGÓ EL CLIENTE ========== */}
+                            <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 relative">
                                 <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-bold text-gray-500">RECIBIDO DEL CLIENTE</span>
+                                    <span className="text-xs font-bold text-blue-700">
+                                        <i className="fa fa-hand-holding-usd mr-1"></i>LO QUE PAGÓ EL CLIENTE
+                                    </span>
                                     <button 
-                                        onClick={calcLimpiar}
-                                        className="text-[10px] text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 bg-red-50 rounded"
-                                        title="Limpiar todo"
+                                        onClick={calcLimpiarTodo}
+                                        className="text-[9px] text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 bg-white rounded"
                                     >
                                         <i className="fa fa-trash mr-0.5"></i>Limpiar
                                     </button>
                                 </div>
-                                {/* USD y Bs en fila principal */}
-                                <div className="grid grid-cols-2 gap-2 mb-2">
-                                    <div className="relative">
-                                        <label className="text-[10px] font-bold text-green-600 block mb-0.5">DÓLARES $</label>
-                                        <div className="relative">
-                                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-green-500 font-bold">$</span>
-                                            <input
-                                                type="text"
-                                                value={calcRecibidoUsd}
-                                                onChange={(e) => setCalcRecibidoUsd(e.target.value.replace(/[^0-9.]/g, ''))}
-                                                className="w-full pl-6 pr-6 py-2 text-lg font-bold text-green-700 border-2 border-green-300 rounded-lg bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400"
-                                                placeholder="0.00"
-                                            />
-                                            {calcRecibidoUsd && (
-                                                <button 
-                                                    onClick={() => setCalcRecibidoUsd("")}
-                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-green-400 hover:text-red-500"
-                                                >
-                                                    <i className="fa fa-times"></i>
-                                                </button>
+                                
+                                {/* Campos de pago del cliente */}
+                                <div className="space-y-2">
+                                    {/* Fila 1: Efectivo USD y Efectivo Bs */}
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {/* Efectivo USD */}
+                                        <div>
+                                            <label className="text-[9px] font-bold text-green-600 block mb-0.5">
+                                                <i className="fa fa-dollar-sign mr-0.5"></i>EFECTIVO $
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-green-500 font-bold text-sm">$</span>
+                                                <input
+                                                    type="text"
+                                                    value={calcPagoEfectivoUsd}
+                                                    onChange={(e) => setCalcPagoEfectivoUsd(e.target.value.replace(/[^0-9.]/g, ''))}
+                                                    className="w-full pl-6 pr-6 py-1.5 font-bold text-gray-900 border border-green-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-green-400"
+                                                    placeholder="0.00"
+                                                />
+                                                {calcPagoEfectivoUsd && (
+                                                    <button onClick={() => setCalcPagoEfectivoUsd("")} className="absolute right-1 top-1/2 -translate-y-1/2 text-green-400 hover:text-red-500 text-xs">
+                                                        <i className="fa fa-times"></i>
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {/* Referencia en Bs */}
+                                            {parseFloat(calcPagoEfectivoUsd) > 0 && (
+                                                <div className="text-sm font-bold text-orange-600 mt-1 text-right bg-orange-50 px-2 py-0.5 rounded">
+                                                    = Bs {moneda((parseFloat(calcPagoEfectivoUsd) || 0) * getTasaBsCalc(), 2)}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {/* Efectivo Bs */}
+                                        <div>
+                                            <label className="text-[9px] font-bold text-orange-600 block mb-0.5">
+                                                <i className="fa fa-money-bill mr-0.5"></i>EFECTIVO Bs
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-orange-500 font-bold text-xs">Bs</span>
+                                                <input
+                                                    type="text"
+                                                    value={calcPagoEfectivoBs}
+                                                    onChange={(e) => setCalcPagoEfectivoBs(e.target.value.replace(/[^0-9.]/g, ''))}
+                                                    className="w-full pl-7 pr-6 py-1.5 font-bold text-gray-900 border border-orange-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-orange-400"
+                                                    placeholder="0.00"
+                                                />
+                                                {calcPagoEfectivoBs && (
+                                                    <button onClick={() => setCalcPagoEfectivoBs("")} className="absolute right-1 top-1/2 -translate-y-1/2 text-orange-400 hover:text-red-500 text-xs">
+                                                        <i className="fa fa-times"></i>
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {/* Referencia en USD */}
+                                            {parseFloat(calcPagoEfectivoBs) > 0 && (
+                                                <div className="text-sm font-bold text-green-600 mt-1 text-right bg-green-50 px-2 py-0.5 rounded">
+                                                    = ${moneda((parseFloat(calcPagoEfectivoBs) || 0) / getTasaBsCalc(), 2)}
+                                                </div>
                                             )}
                                         </div>
                                     </div>
-                                    <div className="relative">
-                                        <label className="text-[10px] font-bold text-orange-600 block mb-0.5">BOLÍVARES Bs</label>
-                                        <div className="relative">
-                                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-orange-500 font-bold text-sm">Bs</span>
-                                            <input
-                                                type="text"
-                                                value={calcRecibidoBs}
-                                                onChange={(e) => setCalcRecibidoBs(e.target.value.replace(/[^0-9.]/g, ''))}
-                                                className="w-full pl-7 pr-6 py-2 text-lg font-bold text-orange-700 border-2 border-orange-300 rounded-lg bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400"
-                                                placeholder="0.00"
-                                            />
-                                            {calcRecibidoBs && (
-                                                <button 
-                                                    onClick={() => setCalcRecibidoBs("")}
-                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-orange-400 hover:text-red-500"
-                                                >
-                                                    <i className="fa fa-times"></i>
-                                                </button>
+                                    
+                                    {/* Fila 2: Débito y Transferencia */}
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {/* Débito (Bs) */}
+                                        <div>
+                                            <label className="text-[9px] font-bold text-purple-600 block mb-0.5">
+                                                <i className="fa fa-credit-card mr-0.5"></i>DÉBITO (Bs)
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-purple-500 font-bold text-xs">Bs</span>
+                                                <input
+                                                    type="text"
+                                                    value={calcPagoDebito}
+                                                    onChange={(e) => setCalcPagoDebito(e.target.value.replace(/[^0-9.]/g, ''))}
+                                                    className="w-full pl-7 pr-6 py-1.5 font-bold text-gray-900 border border-purple-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-purple-400"
+                                                    placeholder="0.00"
+                                                />
+                                                {calcPagoDebito && (
+                                                    <button onClick={() => setCalcPagoDebito("")} className="absolute right-1 top-1/2 -translate-y-1/2 text-purple-400 hover:text-red-500 text-xs">
+                                                        <i className="fa fa-times"></i>
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {/* Referencia en USD */}
+                                            {parseFloat(calcPagoDebito) > 0 && (
+                                                <div className="text-sm font-bold text-green-600 mt-1 text-right bg-green-50 px-2 py-0.5 rounded">
+                                                    = ${moneda((parseFloat(calcPagoDebito) || 0) / getTasaBsCalc(), 2)}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {/* Transferencia (USD) */}
+                                        <div>
+                                            <label className="text-[9px] font-bold text-cyan-600 block mb-0.5">
+                                                <i className="fa fa-exchange-alt mr-0.5"></i>TRANSF. $
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-cyan-500 font-bold text-sm">$</span>
+                                                <input
+                                                    type="text"
+                                                    value={calcPagoTransferencia}
+                                                    onChange={(e) => setCalcPagoTransferencia(e.target.value.replace(/[^0-9.]/g, ''))}
+                                                    className="w-full pl-6 pr-6 py-1.5 font-bold text-gray-900 border border-cyan-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                                                    placeholder="0.00"
+                                                />
+                                                {calcPagoTransferencia && (
+                                                    <button onClick={() => setCalcPagoTransferencia("")} className="absolute right-1 top-1/2 -translate-y-1/2 text-cyan-400 hover:text-red-500 text-xs">
+                                                        <i className="fa fa-times"></i>
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {/* Referencia en Bs */}
+                                            {parseFloat(calcPagoTransferencia) > 0 && (
+                                                <div className="text-sm font-bold text-orange-600 mt-1 text-right bg-orange-50 px-2 py-0.5 rounded">
+                                                    = Bs {moneda((parseFloat(calcPagoTransferencia) || 0) * getTasaBsCalc(), 2)}
+                                                </div>
                                             )}
                                         </div>
                                     </div>
+                                    
+                                    {/* Fila 3: Efectivo COP (solo Elorza) */}
+                                    {user?.sucursal === "elorza" && (
+                                        <div>
+                                            <label className="text-[9px] font-bold text-blue-600 block mb-0.5">
+                                                <i className="fa fa-coins mr-0.5"></i>EFECTIVO COP
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-blue-500 font-bold text-xs">COP</span>
+                                                <input
+                                                    type="text"
+                                                    value={calcPagoEfectivoCop}
+                                                    onChange={(e) => setCalcPagoEfectivoCop(e.target.value.replace(/[^0-9.]/g, ''))}
+                                                    className="w-full pl-10 pr-6 py-1.5 font-bold text-gray-900 border border-blue-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                                    placeholder="0"
+                                                />
+                                                {calcPagoEfectivoCop && (
+                                                    <button onClick={() => setCalcPagoEfectivoCop("")} className="absolute right-1 top-1/2 -translate-y-1/2 text-blue-400 hover:text-red-500 text-xs">
+                                                        <i className="fa fa-times"></i>
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {/* Referencia en USD */}
+                                            {parseFloat(calcPagoEfectivoCop) > 0 && (
+                                                <div className="text-sm font-bold text-green-600 mt-1 text-right bg-green-50 px-2 py-0.5 rounded">
+                                                    = ${moneda((parseFloat(calcPagoEfectivoCop) || 0) / getTasaCopCalc(), 2)}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
-                                {/* COP más pequeño */}
-                                <div className="relative">
-                                    <label className="text-[9px] font-bold text-blue-600 block mb-0.5">PESOS COP</label>
-                                    <div className="relative">
-                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-blue-500 font-bold text-xs">COP</span>
-                                        <input
-                                            type="text"
-                                            value={calcRecibidoCop}
-                                            onChange={(e) => setCalcRecibidoCop(e.target.value.replace(/[^0-9.]/g, ''))}
-                                            className="w-full pl-10 pr-6 py-1.5 text-base font-bold text-blue-700 border border-blue-200 rounded bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                            placeholder="0"
-                                        />
-                                        {calcRecibidoCop && (
-                                            <button 
-                                                onClick={() => setCalcRecibidoCop("")}
-                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-400 hover:text-red-500 text-sm"
-                                            >
-                                                <i className="fa fa-times"></i>
-                                            </button>
-                                        )}
-                                    </div>
+                                
+                                {/* Total pagado */}
+                                <div className="mt-2 pt-2 border-t border-blue-200 flex justify-between items-center">
+                                    <span className="text-xs text-blue-600">Total pagado:</span>
+                                    <span className="text-lg font-bold text-blue-700">${moneda(calcTotalPagado(), 2)}</span>
                                 </div>
+
                             </div>
+
+                            {/* Botón importar a pagos */}
+                            <button 
+                                onClick={calcImportarTodoAPago}
+                                className="py-2 text-sm font-bold text-white bg-indigo-500 rounded-lg hover:bg-indigo-600 transition-colors"
+                                title="Importar montos a los campos de pago del sistema"
+                            >
+                                <i className="fa fa-download mr-2"></i>IMPORTAR A PAGOS
+                            </button>
                         </div>
                         
-                        {/* Footer con vuelto en múltiples monedas */}
-                        <div className={`px-3 py-2 border-t-2 ${calcVuelto() >= 0 ? "bg-green-50 border-green-300" : "bg-red-50 border-red-300"}`}>
+                        {/* ========== SECCIÓN 2: VUELTO / FALTA ========== */}
+                        <div className={`px-3 py-3 border-t-2 ${calcDiferencia() >= 0 ? "bg-green-50 border-green-300" : "bg-red-50 border-red-300"}`}>
                             <div className="flex items-center justify-between mb-2">
-                                <div className="text-[10px] text-gray-500">
-                                    Recibido: <b>${moneda(calcTotalRecibido(), 2)}</b>
-                                </div>
-                                <div className={`text-sm font-bold px-2 py-0.5 rounded ${calcVuelto() >= 0 ? "bg-green-200 text-green-700" : "bg-red-200 text-red-700"}`}>
-                                    {calcVuelto() >= 0 ? "VUELTO A DAR" : "FALTA COBRAR"}
-                                </div>
+                                <span className={`text-sm font-bold px-3 py-1 rounded-full ${calcDiferencia() >= 0 ? "bg-green-200 text-green-700" : "bg-red-200 text-red-700"}`}>
+                                    <i className={`fa ${calcDiferencia() >= 0 ? "fa-hand-holding-usd" : "fa-exclamation-triangle"} mr-1`}></i>
+                                    {calcDiferencia() >= 0 ? "VUELTO A DAR" : "FALTA POR COBRAR"}
+                                </span>
+                                <span className="text-lg font-bold text-gray-700">${moneda(Math.abs(calcDiferencia()), 2)}</span>
                             </div>
-                            {/* Vuelto en las 3 monedas */}
-                            <div className="grid grid-cols-3 gap-2">
-                                <div className={`text-center p-2 rounded-lg ${calcVuelto() >= 0 ? "bg-green-100" : "bg-red-100"}`}>
-                                    <div className="text-[9px] text-gray-500 font-medium">DÓLARES</div>
-                                    <div className={`text-xl font-bold ${calcVuelto() >= 0 ? "text-green-600" : "text-red-600"}`}>
-                                        ${moneda(Math.abs(calcVuelto()), 2)}
+                            
+                            {calcDiferencia() > 0 ? (
+                                <>
+                                    {/* Botones grandes para seleccionar moneda del vuelto */}
+                                    <div className="grid grid-cols-3 gap-2 mb-3">
+                                        <button 
+                                            onClick={() => calcAutoVuelto("usd")}
+                                            className={`py-3 text-sm font-bold rounded-lg transition-colors ${
+                                                calcVueltoUsd && !calcVueltoBs && !calcVueltoCop 
+                                                    ? "bg-green-600 text-white" 
+                                                    : "bg-green-100 text-green-800 hover:bg-green-200"
+                                            }`}
+                                        >
+                                            <div className="text-lg">${moneda(calcDiferencia(), 2)}</div>
+                                            <div className="text-[10px] opacity-75">TODO EN $</div>
+                                        </button>
+                                        <button 
+                                            onClick={() => calcAutoVuelto("bs")}
+                                            className={`py-3 text-sm font-bold rounded-lg transition-colors ${
+                                                calcVueltoBs && !calcVueltoUsd && !calcVueltoCop 
+                                                    ? "bg-orange-600 text-white" 
+                                                    : "bg-orange-100 text-orange-800 hover:bg-orange-200"
+                                            }`}
+                                        >
+                                            <div className="text-lg">Bs {moneda(calcDiferencia() * getTasaBsCalc(), 0)}</div>
+                                            <div className="text-[10px] opacity-75">TODO EN Bs</div>
+                                        </button>
+                                        <button 
+                                            onClick={() => { 
+                                                const enteros = Math.floor(calcDiferencia());
+                                                const resto = calcDiferencia() - enteros;
+                                                setCalcVueltoUsd(enteros > 0 ? enteros.toFixed(2) : ""); 
+                                                setCalcVueltoBs(resto > 0 ? (resto * getTasaBsCalc()).toFixed(2) : ""); 
+                                                setCalcVueltoCop(""); 
+                                            }}
+                                            className={`py-3 text-sm font-bold rounded-lg transition-colors ${
+                                                calcVueltoUsd && calcVueltoBs && !calcVueltoCop 
+                                                    ? "bg-purple-600 text-white" 
+                                                    : "bg-purple-100 text-purple-800 hover:bg-purple-200"
+                                            }`}
+                                        >
+                                            <div className="text-lg">${Math.floor(calcDiferencia())} + Bs</div>
+                                            <div className="text-[10px] opacity-75">COMBINADO</div>
+                                        </button>
+                                    </div>
+
+                                    {/* Inputs para ajustar manualmente */}
+                                    <div className="grid grid-cols-3 gap-2 mb-2">
+                                        <div>
+                                            <label className="text-[9px] font-bold text-green-800 block mb-0.5">Dólares $</label>
+                                            <input
+                                                type="text"
+                                                value={calcVueltoUsd}
+                                                onChange={(e) => handleVueltoChange("usd", e.target.value.replace(/[^0-9.]/g, ''))}
+                                                className="w-full px-2 py-1.5 font-bold text-green-800 border-2 border-green-400 rounded bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-500 text-center"
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold text-orange-800 block mb-0.5">Bolívares Bs</label>
+                                            <input
+                                                type="text"
+                                                value={calcVueltoBs}
+                                                onChange={(e) => handleVueltoChange("bs", e.target.value.replace(/[^0-9.]/g, ''))}
+                                                className="w-full px-2 py-1.5 font-bold text-orange-800 border-2 border-orange-400 rounded bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500 text-center"
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold text-blue-800 block mb-0.5">Pesos COP</label>
+                                            <input
+                                                type="text"
+                                                value={calcVueltoCop}
+                                                onChange={(e) => handleVueltoChange("cop", e.target.value.replace(/[^0-9.]/g, ''))}
+                                                className="w-full px-2 py-1.5 font-bold text-blue-800 border-2 border-blue-400 rounded bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                                                placeholder="0"
+                                            />
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Resumen de asignación */}
+                                    {(calcVueltoUsd || calcVueltoBs || calcVueltoCop) && (
+                                        <div className="flex items-center justify-between text-xs bg-white rounded p-2 border border-gray-200">
+                                            <div>
+                                                <span className="text-gray-500">Asignado: </span>
+                                                <span className="font-bold text-gray-700">${moneda(calcVueltoAsignado(), 2)}</span>
+                                            </div>
+                                            <div className={`font-bold ${calcVueltoPendiente() > 0.01 ? "text-red-500" : "text-green-600"}`}>
+                                                {calcVueltoPendiente() > 0.01 ? (
+                                                    <>Falta: ${moneda(calcVueltoPendiente(), 2)}</>
+                                                ) : (
+                                                    <><i className="fa fa-check mr-1"></i>Completo</>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            ) : calcDiferencia() < 0 ? (
+                                /* Falta por cobrar */
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div className="text-center p-2 rounded-lg bg-red-100">
+                                        <div className="text-[9px] text-gray-500 font-medium">DÓLARES</div>
+                                        <div className="text-xl font-bold text-red-600">${moneda(Math.abs(calcDiferencia()), 2)}</div>
+                                    </div>
+                                    <div className="text-center p-2 rounded-lg bg-red-100">
+                                        <div className="text-[9px] text-gray-500 font-medium">BOLÍVARES</div>
+                                        <div className="text-xl font-bold text-red-600">{moneda(Math.abs(calcDiferencia()) * getTasaBsCalc(), 2)}</div>
+                                    </div>
+                                    <div className="text-center p-2 rounded-lg bg-red-100">
+                                        <div className="text-[9px] text-gray-500 font-medium">PESOS</div>
+                                        <div className="text-lg font-bold text-red-600">{moneda(Math.abs(calcDiferencia()) * getTasaCopCalc(), 0)}</div>
                                     </div>
                                 </div>
-                                <div className={`text-center p-2 rounded-lg ${calcVuelto() >= 0 ? "bg-green-100" : "bg-red-100"}`}>
-                                    <div className="text-[9px] text-gray-500 font-medium">BOLÍVARES</div>
-                                    <div className={`text-xl font-bold ${calcVuelto() >= 0 ? "text-orange-600" : "text-red-600"}`}>
-                                        {moneda(Math.abs(calcVuelto()) * getTasaBsCalc(), 2)}
-                                    </div>
-                                </div>
-                                <div className={`text-center p-2 rounded-lg ${calcVuelto() >= 0 ? "bg-green-100" : "bg-red-100"}`}>
-                                    <div className="text-[9px] text-gray-500 font-medium">PESOS</div>
-                                    <div className={`text-lg font-bold ${calcVuelto() >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                                        {moneda(Math.abs(calcVuelto()) * getTasaCopCalc(), 0)}
-                                    </div>
-                                </div>
-                            </div>
-                            {/* Combinaciones sugeridas */}
-                            {calcVuelto() > 0 && calcVuelto() >= 1 && (
-                                <div className="mt-2 pt-2 border-t border-green-200">
-                                    <div className="text-[9px] text-gray-400 mb-1">COMBINACIONES SUGERIDAS:</div>
-                                    <div className="flex flex-wrap gap-1 text-[10px]">
-                                        {/* $X + Bs resto */}
-                                        {Math.floor(calcVuelto()) >= 1 && (
-                                            <span className="px-1.5 py-0.5 bg-white rounded border border-gray-200">
-                                                <b className="text-green-600">${Math.floor(calcVuelto())}</b>
-                                                <span className="text-gray-400"> + </span>
-                                                <b className="text-orange-600">Bs{moneda((calcVuelto() - Math.floor(calcVuelto())) * getTasaBsCalc(), 2)}</b>
-                                            </span>
-                                        )}
-                                        {/* Mitad $ + Mitad Bs */}
-                                        <span className="px-1.5 py-0.5 bg-white rounded border border-gray-200">
-                                            <b className="text-green-600">${moneda(calcVuelto() / 2, 2)}</b>
-                                            <span className="text-gray-400"> + </span>
-                                            <b className="text-orange-600">Bs{moneda((calcVuelto() / 2) * getTasaBsCalc(), 2)}</b>
-                                        </span>
-                                        {/* Todo en Bs redondeado */}
-                                        <span className="px-1.5 py-0.5 bg-white rounded border border-gray-200">
-                                            <b className="text-orange-600">Bs{moneda(Math.ceil(calcVuelto() * getTasaBsCalc()), 0)}</b>
-                                            <span className="text-gray-400 text-[8px]"> (redond.)</span>
-                                        </span>
-                                    </div>
+                            ) : (
+                                /* Exacto */
+                                <div className="text-center py-3">
+                                    <i className="fa fa-check-circle text-3xl text-green-500 mb-1"></i>
+                                    <div className="text-sm font-bold text-green-600">MONTO EXACTO</div>
                                 </div>
                             )}
                         </div>
