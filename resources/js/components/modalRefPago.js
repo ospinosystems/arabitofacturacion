@@ -73,9 +73,9 @@ export default function ModalRefPago({
         return regex.test(telefono);
     };
 
-    // Validar formato de monto: xxxxx.xx
+    // Validar formato de monto: xxxxx.xx (permite negativos)
     const validarFormatoMonto = (monto) => {
-        const regex = /^\d+(\.\d{1,2})?$/;
+        const regex = /^-?\d+(\.\d{1,2})?$/;
         return regex.test(monto);
     };
 
@@ -182,9 +182,9 @@ export default function ModalRefPago({
         }
 
         if (!monto_referenciapago || monto_referenciapago == 0) {
-            newErrors.monto = 'El monto debe ser mayor a 0';
+            newErrors.monto = 'El monto no puede ser 0';
         } else if (!validarFormatoMonto(monto_referenciapago)) {
-            newErrors.monto = 'El monto debe tener formato válido (ej: 1234.56)';
+            newErrors.monto = 'El monto debe tener formato válido (ej: 1234.56 o -1234.56)';
         } else if (parseFloat(monto_referenciapago) > montoMaximoPedido) {
             newErrors.monto = `El monto no puede ser mayor a Bs ${montoMaximoPedido.toFixed(2)} (monto del pedido)`;
         }
