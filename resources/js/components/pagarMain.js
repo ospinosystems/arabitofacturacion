@@ -481,21 +481,20 @@ export default function PagarMain({
         const tasaBsPedido = getTasaPromedioCarrito();
         const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
         
-        // Calcular total de pagos NO efectivo
+        // Calcular total de otros pagos (excluyendo efectivo_dolar)
         const otrosTotal =
             (parseFloat(debito || 0) / tasaBsPedido) +
+            (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
+            (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
             parseFloat(transferencia || 0) +
             parseFloat(credito || 0) +
             parseFloat(biopago || 0);
 
-        // Calcular total de efectivos actuales (excluyendo USD que vamos a calcular)
-        const efectivosActuales =
-            (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
-            (parseFloat(efectivo_peso || 0) / tasaCopPedido);
-
-        const montoEfectivo = (otrosTotal + efectivosActuales) === 0
-            ? parseFloat(pedidoData.clean_total).toFixed(2)
-            : Math.max(0, pedidoData.clean_total - otrosTotal - efectivosActuales).toFixed(2);
+        const restanteUSD = otrosTotal === 0
+            ? parseFloat(pedidoData.clean_total)
+            : Math.max(0, pedidoData.clean_total - otrosTotal);
+        
+        const montoEfectivo = restanteUSD.toFixed(2);
 
         // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
         if (lastPaymentMethodCalled === 'efectivo' && parseFloat(efectivo_dolar || 0).toFixed(2) === montoEfectivo) {
@@ -511,6 +510,41 @@ export default function PagarMain({
         }
         
         setLastPaymentMethodCalled('efectivo');
+    };
+
+    const getEfectivoBsLocal = () => {
+        const tasaBsPedido = getTasaPromedioCarrito();
+        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+        
+        // Calcular total de otros pagos (excluyendo efectivo_bs)
+        const otrosTotal =
+            (parseFloat(debito || 0) / tasaBsPedido) +
+            parseFloat(efectivo_dolar || 0) +
+            (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
+            parseFloat(transferencia || 0) +
+            parseFloat(credito || 0) +
+            parseFloat(biopago || 0);
+
+        const restanteUSD = otrosTotal === 0
+            ? parseFloat(pedidoData.clean_total)
+            : Math.max(0, pedidoData.clean_total - otrosTotal);
+        
+        const montoEfectivoBs = (restanteUSD * tasaBsPedido).toFixed(2);
+        
+        // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
+        if (lastPaymentMethodCalled === 'efectivo_bs' && parseFloat(efectivo_bs || 0).toFixed(2) === montoEfectivoBs) {
+            setEfectivo_bs((parseFloat(pedidoData.clean_total) * tasaBsPedido).toFixed(2));
+            setEfectivo_dolar("");
+            setEfectivo_peso("");
+            setDebito("");
+            setTransferencia("");
+            setCredito("");
+            setBiopago("");
+        } else {
+            setEfectivo_bs(montoEfectivoBs);
+        }
+        
+        setLastPaymentMethodCalled('efectivo_bs');
     };
 
     const getTransferenciaLocal = () => {
@@ -1127,9 +1161,9 @@ export default function PagarMain({
         },
         [refaddfast]
     );
-    //b
+    //p - Biopago (Pago móvil)
     useHotkeys(
-        "b",
+        "p",
         (event) => {
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
@@ -1158,7 +1192,44 @@ export default function PagarMain({
         },
         [refaddfast]
     );
-    //e
+    //b - Efectivo Bolívares
+    useHotkeys(
+        "b",
+        (event) => {
+            // No ejecutar si estamos en el input de búsqueda de productos
+            if (event.target === refaddfast?.current) {
+                return;
+            }
+
+            // No ejecutar si estamos en el modal de carnet
+            if (event.target?.getAttribute("data-carnet-input") === "true") {
+                return;
+            }
+
+            // No ejecutar si estamos en el input de referencia de débito
+            if (event.target?.getAttribute("data-ref-input") === "true") {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            getEfectivoBsLocal();
+            // Hacer foco en el input de efectivo Bs
+            setTimeout(() => {
+                const efectivoBsInput = document.querySelector('[data-efectivo="bs"]');
+                if (efectivoBsInput) {
+                    efectivoBsInput.focus();
+                    efectivoBsInput.select();
+                }
+            }, 50);
+        },
+        {
+            enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
+        },
+        [refaddfast]
+    );
+    //e - Efectivo USD
     useHotkeys(
         "e",
         (event) => {
@@ -1174,18 +1245,6 @@ export default function PagarMain({
 
             event.preventDefault();
             event.stopPropagation();
-
-            // Si ya estamos en un input de efectivo, avanzar al siguiente
-            const currentEfectivo = document.activeElement?.getAttribute("data-efectivo");
-            if (currentEfectivo) {
-                const efectivoInputs = document.querySelectorAll('[data-efectivo]');
-                const inputsArray = Array.from(efectivoInputs);
-                const currentIndex = inputsArray.findIndex(el => el.getAttribute("data-efectivo") === currentEfectivo);
-                const nextIndex = (currentIndex + 1) % inputsArray.length;
-                inputsArray[nextIndex]?.focus();
-                inputsArray[nextIndex]?.select();
-                return;
-            }
 
             // Usar función local que usa tasas del pedido
             getEfectivoLocal();
@@ -1626,7 +1685,7 @@ export default function PagarMain({
                                 </div>
                             </div>
 
-                            <div className="flex-1 overflow-auto">
+                            <div className="flex-1 overflow-auto pr-2">
                                 {items && items.length > 0 ? (
                                     <div className="mb-3 bg-white border border-gray-200 rounded ">
                                         <table className="w-full text-xs ">
@@ -1968,7 +2027,8 @@ export default function PagarMain({
                                 ) : pedidoData?.estado !== 1 ? (
                                 <div className="mb-3 space-y-2">
                                     {/* ══════════ GRUPO DÉBITO ══════════ */}
-                                    <div className="flex items-stretch gap-1">
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-[10px] font-medium text-orange-600">Débito (D)</span>
                                         <div className="flex flex-1 gap-2">
                                             {/* Monto Débito (en Bs) */}
                                             <div className={`flex-1 flex border rounded ${debito != "" ? "bg-white border-orange-300" : "bg-white border-gray-200"}`}>
@@ -2025,32 +2085,24 @@ export default function PagarMain({
                                                             if (debitoRefError) setDebitoRefError(false); // Limpiar error al escribir
                                                         }}
                                                         placeholder={debitoRefError ? "Falta Ref." : "Ref.*"}
-                                                        maxLength={7}
+                                                        maxLength={4}
                                                         data-ref-input="true"
                                                     />
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="flex items-center justify-center w-8 text-orange-500 bg-orange-100 border border-orange-200 rounded cursor-pointer hover:bg-orange-200" title="DÉBITO (D)" onClick={getDebitoLocal}>
-                                            <i className="fa fa-credit-card"></i>
-                                        </div>
                                     </div>
 
                                     {/* ══════════ GRUPO EFECTIVO ══════════ */}
-                                    <div className="flex items-stretch gap-1">
-                                        <div className={`flex-1 grid gap-2 ${showEfectivoPeso ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                                            {/* Efectivo USD */}
+                                    <div className="flex-1 flex flex-wrap gap-2">
+                                        {/* Efectivo USD */}
+                                        <div className="flex-1 min-w-[120px] flex flex-col gap-1">
+                                            <span className="text-[10px] font-medium text-green-600">Efectivo USD (E)</span>
                                             <div className={`flex border rounded ${efectivo_dolar != "" ? "bg-white border-green-300" : "bg-white border-gray-200"}`}>
                                                 <label
                                                     className="flex items-center justify-center w-8 text-green-600 border-r border-gray-200 rounded-l cursor-pointer bg-green-100"
-                                                    onClick={() => {
-                                                        const tasaBs = getTasaPromedioCarrito();
-                                                        const tasaCop = pedidoData?.items?.[0]?.tasa_cop || peso;
-                                                        const totalPagos = (parseFloat(debito || 0) / tasaBs) + parseFloat(efectivo_dolar || 0) + (parseFloat(efectivo_bs || 0) / tasaBs) + (parseFloat(efectivo_peso || 0) / tasaCop) + parseFloat(transferencia || 0);
-                                                        const restante = parseFloat(pedidoData?.clean_total || 0) - totalPagos;
-                                                        if (restante > 0) setEfectivo_dolar(restante.toFixed(2));
-                                                    }}
-                                                    title="Efectivo USD"
+                                                    onClick={getEfectivoLocal}
+                                                    title="Efectivo USD - Calcular restante en $"
                                                 >
                                                     <span className="text-xs font-bold">$</span>
                                                 </label>
@@ -2065,43 +2117,32 @@ export default function PagarMain({
                                                 />
                                                 <span className="flex items-center px-1 text-sm font-bold text-green-700">$</span>
                                             </div>
-                                            {/* Efectivo Bs */}
+                                        </div>
+                                        {/* Efectivo Bs */}
+                                        <div className="flex-1 min-w-[120px] flex flex-col gap-1">
+                                            <span className="text-[10px] font-medium text-yellow-600">Efectivo Bolívares (B)</span>
                                             <div className={`flex border rounded ${efectivo_bs != "" ? "bg-white border-yellow-300" : "bg-white border-gray-200"}`}>
                                                 <label
                                                     className="flex items-center justify-center w-8 text-yellow-600 border-r border-gray-200 rounded-l cursor-pointer bg-yellow-100"
-                                                    onClick={() => {
-                                                        const tasaBs = getTasaPromedioCarrito();
-                                                        const tasaCop = pedidoData?.items?.[0]?.tasa_cop || peso;
-                                                        const totalPagos = (parseFloat(debito || 0) / tasaBs) + parseFloat(efectivo_dolar || 0) + (parseFloat(efectivo_bs || 0) / tasaBs) + (parseFloat(efectivo_peso || 0) / tasaCop) + parseFloat(transferencia || 0);
-                                                        const restanteUSD = parseFloat(pedidoData?.clean_total || 0) - totalPagos;
-                                                        if (restanteUSD > 0) setEfectivo_bs((restanteUSD * tasaBs).toFixed(2));
-                                                    }}
-                                                    title="Efectivo Bs"
+                                                    onClick={getEfectivoBsLocal}
+                                                    title={efectivo_bs ? `Efectivo Bs ≈$${moneda(parseFloat(efectivo_bs || 0) / getTasaPromedioCarrito())}` : "Efectivo Bs - Calcular restante en Bs"}
                                                 >
                                                     <span className="text-[10px] font-bold">Bs</span>
                                                 </label>
-                                                <div className="flex-1 flex h-full">
-                                                    <div className="relative flex items-center w-full h-full">
-                                                        {efectivo_bs && (
-                                                            <span className="absolute left-2 text-[10px] font-medium text-yellow-600">
-                                                                ≈${moneda(parseFloat(efectivo_bs || 0) / getTasaPromedioCarrito())}
-                                                            </span>
-                                                        )}
-                                                        <input
-                                                            data-efectivo="bs"
-                                                            type="text"
-                                                            className="flex-1 min-w-0 h-full px-2 py-1 text-lg font-bold text-yellow-700 bg-transparent border-0 focus:ring-0 focus:outline-none text-right pl-10"
-                                                            value={displayMonedaLive(efectivo_bs)}
-                                                            onChange={(e) => syncPago(formatMonedaLive(e.target.value), "EfectivoBs")}
-                                                            placeholder="0"
-                                                        />
-                                                        <span className="px-1 text-[10px] font-bold text-yellow-700">Bs</span>
-                                                    </div>
-                                                </div>
+                                                <input
+                                                    data-efectivo="bs"
+                                                    type="text"
+                                                    className="flex-1 min-w-0 px-2 py-1.5 text-lg font-bold text-yellow-700 bg-transparent border-0 focus:ring-0 focus:outline-none text-right"
+                                                    value={displayMonedaLive(efectivo_bs)}
+                                                    onChange={(e) => syncPago(formatMonedaLive(e.target.value), "EfectivoBs")}
+                                                    placeholder="0"
+                                                />
+                                                <span className="flex items-center px-1 text-sm font-bold text-yellow-700">Bs</span>
                                             </div>
+                                        </div>
                                             {/* Efectivo Pesos (oculto por defecto) */}
                                             {showEfectivoPeso && (
-                                                <div className={`flex border rounded ${efectivo_peso != "" ? "bg-white border-amber-300" : "bg-white border-gray-200"}`}>
+                                                <div className={`flex-1 min-w-[120px] flex border rounded ${efectivo_peso != "" ? "bg-white border-amber-300" : "bg-white border-gray-200"}`}>
                                                     <label
                                                         className="flex items-center justify-center w-8 text-amber-600 border-r border-gray-200 rounded-l cursor-pointer bg-amber-100"
                                                         onClick={() => {
@@ -2141,14 +2182,11 @@ export default function PagarMain({
                                                     </div>
                                                 </div>
                                             )}
-                                        </div>
-                                        <div className="flex items-center justify-center w-8 text-green-500 bg-green-100 border border-green-200 rounded cursor-pointer hover:bg-green-200" title="EFECTIVO (E)" onClick={() => efectivoInputRef.current?.focus()}>
-                                            <i className="fa fa-dollar-sign"></i>
-                                        </div>
                                     </div>
 
                                     {/* ══════════ GRUPO TRANSFERENCIA ══════════ */}
-                                    <div className="flex items-stretch gap-1">
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-[10px] font-medium text-blue-600">Transferencia (T)</span>
                                         <div className={`flex-1 border rounded ${transferencia != "" ? "bg-white border-blue-300" : "bg-white border-gray-200"}`}>
                                             <div className="flex items-stretch">
                                                 <label
@@ -2183,14 +2221,12 @@ export default function PagarMain({
                                                 </span>
                                             </div>
                                         </div>
-                                        <div className="flex items-center justify-center w-8 text-blue-500 bg-blue-100 border border-blue-200 rounded cursor-pointer hover:bg-blue-200" title="TRANSFERENCIA (T)" onClick={getTransferenciaLocal}>
-                                            <i className="fa fa-exchange"></i>
-                                        </div>
                                     </div>
 
                                     {/* ══════════ BIOPAGO (CONTROLADO POR CÓDIGO) ══════════ */}
                                     {SHOW_BIOPAGO && (
-                                        <div className="flex items-stretch gap-1">
+                                        <div className="flex flex-col gap-1">
+                                            <span className="text-[10px] font-medium text-gray-500">Biopago</span>
                                             <div className={`flex-1 border rounded ${biopago != "" ? "bg-white border-purple-300" : "bg-white border-gray-200"}`}>
                                                 <div className="flex items-stretch">
                                                     <label
@@ -2225,15 +2261,13 @@ export default function PagarMain({
                                                     </span>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center justify-center w-8 text-purple-500 bg-purple-100 border border-purple-200 rounded cursor-pointer hover:bg-purple-200" title="BIOPAGO (B)" onClick={getBiopagoLocal}>
-                                                <i className="fa fa-mobile"></i>
-                                            </div>
                                         </div>
                                     )}
 
                                     {/* ══════════ CRÉDITO (OCULTO POR DEFECTO) ══════════ */}
                                     {showCredito && (
-                                        <div className="flex items-stretch gap-1">
+                                        <div className="flex flex-col gap-1">
+                                            <span className="text-[10px] font-medium text-gray-500">Crédito</span>
                                             <div className={`flex-1 border rounded ${credito != "" ? "bg-white border-yellow-300" : "bg-white border-gray-200"}`}>
                                                 <div className="flex items-stretch">
                                                     <label
@@ -2261,9 +2295,6 @@ export default function PagarMain({
                                                         <i className="fa fa-times"></i>
                                                     </button>
                                                 </div>
-                                            </div>
-                                            <div className="flex items-center justify-center w-8 text-yellow-500 bg-yellow-100 border border-yellow-200 rounded cursor-pointer hover:bg-yellow-200" title="CRÉDITO (C)" onClick={getCredito}>
-                                                <i className="fa fa-calendar"></i>
                                             </div>
                                         </div>
                                     )}

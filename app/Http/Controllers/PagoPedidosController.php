@@ -564,6 +564,38 @@ class PagoPedidosController extends Controller
                         ]);
                     }
                     
+                    // Validar que la referencia sea de exactamente 4 dígitos
+                    if ($req->debitoRef && strlen($req->debitoRef) != 4) {
+                        \DB::rollback();
+                        return Response::json([
+                            "msj" => "Error: La referencia de débito debe ser de exactamente 4 dígitos",
+                            "estado" => false
+                        ]);
+                    }
+                    
+                    // Validar que la referencia sea única para este usuario en el día actual
+                    if ($req->debitoRef) {
+                        $idUsuario = session('id_usuario');
+                        $hoy = now()->toDateString();
+                        
+                        $referenciaExistente = pago_pedidos::where('referencia', $req->debitoRef)
+                            ->where('tipo', 2) // tipo 2 = débito
+                            ->where('id_pedido', '!=', $req->id) // excluir el pedido actual
+                            ->whereDate('created_at', $hoy)
+                            ->whereHas('pedido', function($query) use ($idUsuario) {
+                                $query->where('id_vendedor', $idUsuario);
+                            })
+                            ->exists();
+                        
+                        if ($referenciaExistente) {
+                            \DB::rollback();
+                            return Response::json([
+                                "msj" => "Error: La referencia de débito '{$req->debitoRef}' ya fue utilizada hoy. Por favor ingrese una referencia diferente.",
+                                "estado" => false
+                            ]);
+                        }
+                    }
+                    
                     $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $montoDebito, $metodos_pago, $cuenta, 2);
                     if ($resultadoValidacion !== true) {
                         return $resultadoValidacion;

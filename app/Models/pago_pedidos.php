@@ -26,4 +26,12 @@ class pago_pedidos extends Model
         "referencia"
     ];
 
+    /**
+     * Relación con el pedido
+     */
+    public function pedido()
+    {
+        return $this->belongsTo(\App\Models\pedidos::class, 'id_pedido');
+    }
+
 }
