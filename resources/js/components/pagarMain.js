@@ -1951,7 +1951,7 @@ export default function PagarMain({
                             <div className="relative">
                                 <div className="p-2 mb-1 bg-white border border-orange-400 rounded">
                                     {/* Precios arriba */}
-                                    <div className="flex flex-col items-center justify-between pb-3 mb-3 border-b border-gray-200 gap-y-2 sm:flex-row">
+                                    <div className="flex flex-col items-center justify-between border-b border-gray-200 gap-y-2 sm:flex-row">
                                         <div className="flex items-center gap-6">
                                             <div className="text-left">
                                                 
@@ -2014,7 +2014,7 @@ export default function PagarMain({
                                     </div>
 
                                     {/* Info del pedido abajo */}
-                                    <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center justify-between mt-2">
                                         <div className="flex items-center gap-2">
                                             <span className="text-xs font-semibold text-gray-700">#{id}</span>
                                             <span className="text-xs text-gray-400">•</span>
@@ -2729,83 +2729,24 @@ export default function PagarMain({
                                     )}
 
                                     {/* Barra de opciones: Auto resta, + Crédito, Vueltos, Impresora */}
-                                    <div className="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 rounded border border-gray-200">
-                                        {/* Auto resta */}
-                                        <div 
-                                            className="flex items-center gap-1 cursor-pointer hover:opacity-80"
-                                            onClick={() => setautoCorrector(!autoCorrector)}
-                                            title="Auto resta de pagos"
-                                        >
-                                            <span className="text-[10px] text-gray-500">Auto</span>
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${autoCorrector ? "bg-green-100 text-green-600" : "bg-gray-200 text-gray-400"}`}>
-                                                {autoCorrector ? "ON" : "OFF"}
-                                            </span>
-                                        </div>
-
-                                        {/* + Crédito */}
-                                        {!showCredito && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowCredito(true)}
-                                                className="flex items-center gap-1 text-[10px] text-yellow-600 hover:text-yellow-700"
-                                            >
-                                                <i className="fa fa-plus"></i> Crédito
-                                            </button>
-                                        )}
-
-                                        {/* + COP */}
-                                        {!showEfectivoPeso && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowEfectivoPeso(true)}
-                                                className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700"
-                                            >
-                                                <i className="fa fa-plus"></i> COP
-                                            </button>
-                                        )}
-
-                                        {/* Vueltos */}
-                                        {/* <button
-                                            onClick={() => setShowVueltosSection(!showVueltosSection)}
-                                            className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-orange-600"
-                                        >
-                                            <i className={`fa fa-chevron-${showVueltosSection ? "down" : "right"}`}></i>
-                                            Vueltos
-                                        </button> */}
-
-                                        {/* Impresora */}
-                                        <div className="flex items-center gap-1">
-                                            <i className="text-[10px] text-orange-500 fa fa-print"></i>
-                                            <select
-                                                className="text-[10px] text-gray-600 bg-transparent border-none focus:outline-none cursor-pointer"
-                                                value={selectprinter}
-                                                onChange={(e) => setselectprinter(e.target.value)}
-                                            >
-                                                {[...Array(10)].map((_, i) => (
-                                                    <option key={i + 1} value={i + 1}>C{i + 1}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </div>
+                                    
                                 </div>
                                 ) : null}
 
                                 {refPago && refPago.length > 0 && (
                                     <div className="mb-3 bg-white border border-gray-200 rounded-lg !overflow-visible">
-                                        <div className="px-3 py-2 overflow-hidden border-b border-orange-100 rounded-t-lg bg-orange-50">
-                                            <div className="flex items-center justify-between">
-                                                <h6 className="flex items-center text-sm font-medium text-gray-800">
-                                                    <i className="mr-2 text-xs text-orange-500 fa fa-credit-card"></i>
-                                                    Referencias Bancarias
-                                                </h6>
-                                                <button
-                                                    className="px-2 py-1 text-xs font-medium text-orange-600 transition-colors bg-white border border-orange-200 rounded hover:bg-orange-50"
-                                                    onClick={addRetencionesPago}
-                                                >
-                                                    <i className="mr-1 fa fa-plus"></i>
-                                                    Retención
-                                                </button>
-                                            </div>
+                                        <div className="flex items-center justify-between px-2 py-1 border-b border-orange-100 rounded-t-lg bg-orange-50">
+                                            <span className="flex items-center text-xs font-medium text-gray-700">
+                                                <i className="mr-1.5 text-[10px] text-orange-500 fa fa-credit-card"></i>
+                                                Ref. Bancarias
+                                            </span>
+                                            <button
+                                                className="px-1.5 py-0.5 text-[10px] font-medium text-orange-600 bg-white border border-orange-200 rounded hover:bg-orange-50"
+                                                onClick={addRetencionesPago}
+                                            >
+                                                <i className="mr-0.5 fa fa-plus"></i>
+                                                Retención
+                                            </button>
                                         </div>
                                         <div className="p-2 space-y-2">
                                             {refPago.map((e) => (
@@ -3268,6 +3209,65 @@ export default function PagarMain({
                                         )}
                                     </div>
                                 )}
+
+                                <div className="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 rounded border border-gray-200">
+                                    {/* Auto resta */}
+                                    <div 
+                                        className="flex items-center gap-1 cursor-pointer hover:opacity-80"
+                                        onClick={() => setautoCorrector(!autoCorrector)}
+                                        title="Auto resta de pagos"
+                                    >
+                                        <span className="text-[10px] text-gray-500">Auto</span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${autoCorrector ? "bg-green-100 text-green-600" : "bg-gray-200 text-gray-400"}`}>
+                                            {autoCorrector ? "ON" : "OFF"}
+                                        </span>
+                                    </div>
+
+                                    {/* + Crédito */}
+                                    {!showCredito && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowCredito(true)}
+                                            className="flex items-center gap-1 text-[10px] text-yellow-600 hover:text-yellow-700"
+                                        >
+                                            <i className="fa fa-plus"></i> Crédito
+                                        </button>
+                                    )}
+
+                                    {/* + COP */}
+                                    {!showEfectivoPeso && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowEfectivoPeso(true)}
+                                            className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700"
+                                        >
+                                            <i className="fa fa-plus"></i> COP
+                                        </button>
+                                    )}
+
+                                    {/* Vueltos */}
+                                    {/* <button
+                                        onClick={() => setShowVueltosSection(!showVueltosSection)}
+                                        className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-orange-600"
+                                    >
+                                        <i className={`fa fa-chevron-${showVueltosSection ? "down" : "right"}`}></i>
+                                        Vueltos
+                                    </button> */}
+
+                                    {/* Impresora */}
+                                    <div className="flex items-center gap-1">
+                                        <i className="text-[10px] text-orange-500 fa fa-print"></i>
+                                        <select
+                                            className="text-[10px] text-gray-600 bg-transparent border-none focus:outline-none cursor-pointer"
+                                            value={selectprinter}
+                                            onChange={(e) => setselectprinter(e.target.value)}
+                                        >
+                                            {[...Array(10)].map((_, i) => (
+                                                <option key={i + 1} value={i + 1}>C{i + 1}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="mb-3">
@@ -3868,6 +3868,10 @@ export default function PagarMain({
                         <div className="px-4 py-3 bg-white border-b-2 border-gray-200">
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-xs font-bold text-gray-500">TOTAL PEDIDO</span>
+                                <span>Tasa Bs: <b className="text-orange-600">{moneda(getTasaBsCalc(), 2)}</b></span>
+                                {user?.sucursal === "elorza" && (
+                                    <span>Tasa COP: <b className="text-blue-600">{moneda(getTasaCopCalc(), 0)}</b></span>
+                                )}
                                 <button 
                                     onClick={() => setShowCalculadora(false)} 
                                     className="w-8 h-8 flex items-center justify-center text-gray-500 bg-gray-100 rounded-full hover:bg-red-100 hover:text-red-500 transition-colors"
@@ -3896,10 +3900,7 @@ export default function PagarMain({
                         
                         <div className="flex-1 flex flex-col p-3 gap-3 overflow-y-auto">
                             {/* Tasas de referencia */}
-                            <div className="flex justify-between text-[10px] text-gray-500 bg-gray-100 rounded px-2 py-1">
-                                <span>Tasa Bs: <b className="text-orange-600">{moneda(getTasaBsCalc(), 2)}</b></span>
-                                <span>Tasa COP: <b className="text-blue-600">{moneda(getTasaCopCalc(), 0)}</b></span>
-                            </div>
+                            
 
                             {/* ========== SECCIÓN 1: LO QUE PAGÓ EL CLIENTE ========== */}
                             <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 relative">
