@@ -293,11 +293,18 @@ export default function PagarMain({
         return Math.max(0, diferencia - calcVueltoAsignado());
     };
 
-    // Limpiar vuelto asignado cuando cambia el total pagado
+    // Cuando cambia el total pagado, poner el vuelto por defecto en dólares
     useEffect(() => {
-        setCalcVueltoUsd("");
-        setCalcVueltoBs("");
-        setCalcVueltoCop("");
+        const diferencia = calcTotalPagado() - (parseFloat(pedidoData?.clean_total) || 0);
+        if (diferencia > 0) {
+            setCalcVueltoUsd(diferencia.toFixed(2));
+            setCalcVueltoBs("");
+            setCalcVueltoCop("");
+        } else {
+            setCalcVueltoUsd("");
+            setCalcVueltoBs("");
+            setCalcVueltoCop("");
+        }
     }, [calcPagoEfectivoUsd, calcPagoEfectivoBs, calcPagoEfectivoCop, calcPagoDebito, calcPagoTransferencia]);
 
     // Auto-calcular el resto en una moneda específica (pone todo en esa moneda)
@@ -4087,99 +4094,63 @@ export default function PagarMain({
                             
                             {calcDiferencia() > 0 ? (
                                 <>
-                                    {/* Botones grandes para seleccionar moneda del vuelto */}
-                                    <div className="grid grid-cols-3 gap-2 mb-3">
-                                        <button 
-                                            onClick={() => calcAutoVuelto("usd")}
-                                            className={`py-3 text-sm font-bold rounded-lg transition-colors ${
-                                                calcVueltoUsd && !calcVueltoBs && !calcVueltoCop 
-                                                    ? "bg-green-600 text-white" 
-                                                    : "bg-green-100 text-green-800 hover:bg-green-200"
-                                            }`}
-                                        >
-                                            <div className="text-lg">${moneda(calcDiferencia(), 2)}</div>
-                                            <div className="text-[10px] opacity-75">TODO EN $</div>
-                                        </button>
-                                        <button 
-                                            onClick={() => calcAutoVuelto("bs")}
-                                            className={`py-3 text-sm font-bold rounded-lg transition-colors ${
-                                                calcVueltoBs && !calcVueltoUsd && !calcVueltoCop 
-                                                    ? "bg-orange-600 text-white" 
-                                                    : "bg-orange-100 text-orange-800 hover:bg-orange-200"
-                                            }`}
-                                        >
-                                            <div className="text-lg">Bs {moneda(calcDiferencia() * getTasaBsCalc(), 0)}</div>
-                                            <div className="text-[10px] opacity-75">TODO EN Bs</div>
-                                        </button>
-                                        <button 
-                                            onClick={() => { 
-                                                const enteros = Math.floor(calcDiferencia());
-                                                const resto = calcDiferencia() - enteros;
-                                                setCalcVueltoUsd(enteros > 0 ? enteros.toFixed(2) : ""); 
-                                                setCalcVueltoBs(resto > 0 ? (resto * getTasaBsCalc()).toFixed(2) : ""); 
-                                                setCalcVueltoCop(""); 
-                                            }}
-                                            className={`py-3 text-sm font-bold rounded-lg transition-colors ${
-                                                calcVueltoUsd && calcVueltoBs && !calcVueltoCop 
-                                                    ? "bg-purple-600 text-white" 
-                                                    : "bg-purple-100 text-purple-800 hover:bg-purple-200"
-                                            }`}
-                                        >
-                                            <div className="text-lg">${Math.floor(calcDiferencia())} + Bs</div>
-                                            <div className="text-[10px] opacity-75">COMBINADO</div>
-                                        </button>
-                                    </div>
-
-                                    {/* Inputs para ajustar manualmente */}
+                                    {/* Inputs con labels clickeables */}
                                     <div className="grid grid-cols-3 gap-2 mb-2">
                                         <div>
-                                            <label className="text-[9px] font-bold text-green-800 block mb-0.5">Dólares $</label>
+                                            <button 
+                                                onClick={() => calcAutoVuelto("usd")}
+                                                className="w-full text-sm font-bold text-green-700 bg-green-100 hover:bg-green-200 rounded-t px-2 py-1.5 transition-colors border-2 border-b-0 border-green-400"
+                                            >
+                                                <i className="fa fa-dollar-sign mr-1"></i>DÓLARES
+                                            </button>
                                             <input
                                                 type="text"
                                                 value={calcVueltoUsd}
                                                 onChange={(e) => handleVueltoChange("usd", e.target.value.replace(/[^0-9.]/g, ''))}
-                                                className="w-full px-2 py-1.5 font-bold text-green-800 border-2 border-green-400 rounded bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-500 text-center"
+                                                className="w-full px-2 py-2 text-lg font-bold text-gray-900 border-2 border-green-400 rounded-b bg-white focus:outline-none focus:ring-2 focus:ring-green-500 text-center"
                                                 placeholder="0.00"
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-[9px] font-bold text-orange-800 block mb-0.5">Bolívares Bs</label>
+                                            <button 
+                                                onClick={() => calcAutoVuelto("bs")}
+                                                className="w-full text-sm font-bold text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-t px-2 py-1.5 transition-colors border-2 border-b-0 border-orange-400"
+                                            >
+                                                <i className="fa fa-money-bill mr-1"></i>BOLÍVARES
+                                            </button>
                                             <input
                                                 type="text"
                                                 value={calcVueltoBs}
                                                 onChange={(e) => handleVueltoChange("bs", e.target.value.replace(/[^0-9.]/g, ''))}
-                                                className="w-full px-2 py-1.5 font-bold text-orange-800 border-2 border-orange-400 rounded bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500 text-center"
+                                                className="w-full px-2 py-2 text-lg font-bold text-gray-900 border-2 border-orange-400 rounded-b bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-center"
                                                 placeholder="0.00"
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-[9px] font-bold text-blue-800 block mb-0.5">Pesos COP</label>
+                                            <button 
+                                                onClick={() => calcAutoVuelto("cop")}
+                                                className="w-full text-sm font-bold text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-t px-2 py-1.5 transition-colors border-2 border-b-0 border-blue-400"
+                                            >
+                                                <i className="fa fa-coins mr-1"></i>PESOS
+                                            </button>
                                             <input
                                                 type="text"
                                                 value={calcVueltoCop}
                                                 onChange={(e) => handleVueltoChange("cop", e.target.value.replace(/[^0-9.]/g, ''))}
-                                                className="w-full px-2 py-1.5 font-bold text-blue-800 border-2 border-blue-400 rounded bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                                                className="w-full px-2 py-2 text-lg font-bold text-gray-900 border-2 border-blue-400 rounded-b bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
                                                 placeholder="0"
                                             />
                                         </div>
                                     </div>
                                     
-                                    {/* Resumen de asignación */}
-                                    {(calcVueltoUsd || calcVueltoBs || calcVueltoCop) && (
-                                        <div className="flex items-center justify-between text-xs bg-white rounded p-2 border border-gray-200">
-                                            <div>
-                                                <span className="text-gray-500">Asignado: </span>
-                                                <span className="font-bold text-gray-700">${moneda(calcVueltoAsignado(), 2)}</span>
-                                            </div>
-                                            <div className={`font-bold ${calcVueltoPendiente() > 0.01 ? "text-red-500" : "text-green-600"}`}>
-                                                {calcVueltoPendiente() > 0.01 ? (
-                                                    <>Falta: ${moneda(calcVueltoPendiente(), 2)}</>
-                                                ) : (
-                                                    <><i className="fa fa-check mr-1"></i>Completo</>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
+                                    {/* Indicador de estado */}
+                                    <div className={`text-center text-xs font-bold py-1 rounded ${calcVueltoPendiente() > 0.01 ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"}`}>
+                                        {calcVueltoPendiente() > 0.01 ? (
+                                            <>Falta asignar: ${moneda(calcVueltoPendiente(), 2)}</>
+                                        ) : (
+                                            <><i className="fa fa-check mr-1"></i>Vuelto completo</>
+                                        )}
+                                    </div>
                                 </>
                             ) : calcDiferencia() < 0 ? (
                                 /* Falta por cobrar */
