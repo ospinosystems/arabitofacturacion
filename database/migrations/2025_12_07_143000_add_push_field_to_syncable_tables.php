@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -35,6 +36,7 @@ return new class extends Migration
                           ->comment('0=pendiente sync, 1=sincronizado');
                     $table->index('push', 'idx_push');
                 });
+                DB::table($tabla)->update(['push' => 1]);
             }
         }
         
@@ -48,6 +50,7 @@ return new class extends Migration
                     $table->index('push', 'idx_push');
                 }
             });
+            DB::table('inventario')->update(['push' => 1]);
         }
     }
 
