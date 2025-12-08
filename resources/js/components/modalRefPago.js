@@ -615,9 +615,12 @@ export default function ModalRefPago({
                         <input
                             type="text"
                             value={monto_referenciapago}
-                            onChange={(e) =>
-                                setmonto_referenciapago(number(e.target.value))
-                            }
+                            onChange={(e) => {
+                                // Permitir números negativos: solo dígitos, punto decimal y signo negativo al inicio
+                                const value = e.target.value;
+                                const filtered = value.replace(/[^0-9.-]/g, '').replace(/(?!^)-/g, '').replace(/(\..*)\./g, '$1');
+                                setmonto_referenciapago(filtered);
+                            }}
                             onKeyPress={handleKeyPress}
                             className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
                                 errors.monto

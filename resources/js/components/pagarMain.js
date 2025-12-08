@@ -1073,6 +1073,17 @@ export default function PagarMain({
         getPedidosFast();
     }, []);
 
+    // Limpiar estados de factura original cuando cambie el pedido
+    useEffect(() => {
+        // Limpiar estados relacionados con devoluciones al cambiar de pedido
+        setPedidoOriginalAsignado(null);
+        setItemsFacturaOriginal([]);
+        setItemsDisponiblesDevolucion([]);
+        setShowModalInfoFacturaOriginal(false);
+        setShowModalPedidoOriginal(false);
+        setPedidoOriginalInput("");
+    }, [pedidoData?.id]);
+
     // useEffect para detectar scroll y mostrar/ocultar menú
     useEffect(() => {
         const handleScroll = () => {
@@ -1885,7 +1896,7 @@ export default function PagarMain({
                                                                     {/* Mostrar tasa original en devoluciones */}
                                                                     {e.cantidad < 0 && e.tasa && (
                                                                         <div className="text-[10px] text-orange-600 font-normal">
-                                                                            Tasa: {moneda(e.tasa, 4)}
+                                                                            @{moneda(e.tasa, 4)}
                                                                         </div>
                                                                     )}
                                                                 </td>
@@ -1902,7 +1913,7 @@ export default function PagarMain({
                                                                     {/* Mostrar tasa original en devoluciones */}
                                                                     {e.cantidad < 0 && e.tasa && (
                                                                         <div className="text-[10px] text-orange-600">
-                                                                            Tasa: {moneda(e.tasa, 4)}
+                                                                            @{moneda(e.tasa, 4)}
                                                                         </div>
                                                                     )}
                                                                 </td>
@@ -2072,9 +2083,9 @@ export default function PagarMain({
                                                     </div>
                                                 </div>
                                             </div>
-                                            {/* Referencia Débito (obligatoria) */}
+                                            {/* Referencia Débito (obligatoria, exactamente 4 dígitos) */}
                                             <div className="relative w-28">
-                                                <div className={`h-full border rounded ${debitoRefError ? "bg-red-50 border-red-500 ring-2 ring-red-300" : debitoRef != "" ? "bg-white border-orange-300" : "bg-white border-red-200"}`}>
+                                                <div className={`h-full border rounded ${debitoRefError ? "bg-red-50 border-red-500 ring-2 ring-red-300" : debitoRef.length === 4 ? "bg-white border-orange-300" : debito && debitoRef.length > 0 && debitoRef.length < 4 ? "bg-yellow-50 border-yellow-400" : "bg-white border-red-200"}`}>
                                                     <input
                                                         ref={debitoRefInputRef}
                                                         type="text"
@@ -2084,11 +2095,17 @@ export default function PagarMain({
                                                             setDebitoRef(e.target.value.replace(/[^0-9]/g, ''));
                                                             if (debitoRefError) setDebitoRefError(false); // Limpiar error al escribir
                                                         }}
-                                                        placeholder={debitoRefError ? "Falta Ref." : "Ref.*"}
+                                                        placeholder={debitoRefError ? "Falta Ref." : "4 díg.*"}
                                                         maxLength={4}
+                                                        minLength={4}
                                                         data-ref-input="true"
                                                     />
                                                 </div>
+                                                {debito && debitoRef.length > 0 && debitoRef.length < 4 && (
+                                                    <span className="absolute -bottom-3 left-0 right-0 text-[8px] text-yellow-600 text-center">
+                                                        Faltan {4 - debitoRef.length} díg.
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

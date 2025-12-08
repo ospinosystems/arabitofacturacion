@@ -3668,6 +3668,19 @@ export default function Facturar({
             }, 100);
             return;
         }
+        // Validar que la referencia de débito tenga exactamente 4 dígitos
+        if (debito && parseFloat(debito) > 0 && debitoRef && debitoRef.length !== 4) {
+            alert("Error: La referencia de débito debe tener exactamente 4 dígitos.");
+            setDebitoRefError(true);
+            setTimeout(() => {
+                const debitoRefInput = document.querySelector('[data-ref-input="true"]');
+                if (debitoRefInput) {
+                    debitoRefInput.focus();
+                    debitoRefInput.select();
+                }
+            }, 100);
+            return;
+        }
         if (
             confirm(
                 "¿Realmente desea guardar e imprimir pedido (" +
@@ -3687,13 +3700,13 @@ export default function Facturar({
                     // Construir pagos adicionales de efectivo (Bs y COP)
                     // Enviar valores en moneda original, el backend hace la conversión
                     let pagosAdicionales = [];
-                    if (efectivo_bs && parseFloat(efectivo_bs) > 0) {
+                    if (efectivo_bs && parseFloat(efectivo_bs) != 0) {
                         pagosAdicionales.push({ 
                             moneda: 'bs', 
                             monto_original: parseFloat(efectivo_bs)
                         });
                     }
-                    if (efectivo_peso && parseFloat(efectivo_peso) > 0) {
+                    if (efectivo_peso && parseFloat(efectivo_peso) != 0) {
                         pagosAdicionales.push({ 
                             moneda: 'peso', 
                             monto_original: parseFloat(efectivo_peso)
@@ -3708,9 +3721,9 @@ export default function Facturar({
                     
                     let params = {
                         id: pedidoData.id,
-                        debito: debitoBs > 0 ? debitoBs : null, // Monto original en Bs (backend convierte)
+                        debito: debitoBs != 0 ? debitoBs : null, // Monto original en Bs (backend convierte, permite negativos)
                         debitoRef, // Referencia del débito
-                        efectivo: efectivoDolarVal > 0 ? efectivoDolarVal : null, // Efectivo USD
+                        efectivo: efectivoDolarVal != 0 ? efectivoDolarVal : null, // Efectivo USD (permite negativos)
                         transferencia,
                         biopago,
                         credito,
