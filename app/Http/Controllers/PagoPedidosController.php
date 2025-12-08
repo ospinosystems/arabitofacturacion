@@ -567,7 +567,7 @@ class PagoPedidosController extends Controller
                    
                     
                     // Validar que la referencia sea única para este usuario en el día actual
-                    if ($req->debitoRef) {
+                  /*   if ($req->debitoRef) {
                         $idUsuario = session('id_usuario');
                         $hoy = now()->toDateString();
                         
@@ -578,6 +578,7 @@ class PagoPedidosController extends Controller
                             ->whereHas('pedido', function($query) use ($idUsuario) {
                                 $query->where('id_vendedor', $idUsuario);
                             })
+
                             ->exists();
                         
                         if ($referenciaExistente) {
@@ -587,7 +588,7 @@ class PagoPedidosController extends Controller
                                 "estado" => false
                             ]);
                         }
-                    } 
+                    }  */
                     
                     $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $montoDebito, $metodos_pago, $cuenta, 2);
                     if ($resultadoValidacion !== true) {
