@@ -2504,7 +2504,7 @@ export default function PagarMain({
                                                             if (debitoRefError) setDebitoRefError(false); // Limpiar error al escribir
                                                         }}
                                                         onKeyDown={handlePaymentInputKeyDown}
-                                                        placeholder={debitoRefError ? "Falta Ref." : "4 díg.*"}
+                                                        placeholder={debitoRefError ? "Falta Ref." : "Ref. Déb.*"}
                                                         maxLength={4}
                                                         minLength={4}
                                                         data-ref-input="true"
