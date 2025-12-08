@@ -565,7 +565,7 @@ class PagoPedidosController extends Controller
                     }
                     
                     // Validar que la referencia sea de exactamente 4 dígitos
-                    if ($req->debitoRef && strlen($req->debitoRef) != 4) {
+                   /*  if ($req->debitoRef && strlen($req->debitoRef) != 4) {
                         \DB::rollback();
                         return Response::json([
                             "msj" => "Error: La referencia de débito debe ser de exactamente 4 dígitos",
@@ -594,7 +594,7 @@ class PagoPedidosController extends Controller
                                 "estado" => false
                             ]);
                         }
-                    }
+                    } */
                     
                     $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $montoDebito, $metodos_pago, $cuenta, 2);
                     if ($resultadoValidacion !== true) {
