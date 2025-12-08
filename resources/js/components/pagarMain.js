@@ -1520,6 +1520,11 @@ export default function PagarMain({
                 return;
             }
 
+            // No ejecutar si estamos en el input de referencia de pago
+            if (event.target?.getAttribute("data-ref-input") === "true") {
+                return;
+            }
+
             event.preventDefault();
             event.stopPropagation();
 
@@ -1548,6 +1553,11 @@ export default function PagarMain({
 
             // No ejecutar si estamos en el modal de carnet
             if (event.target?.getAttribute("data-carnet-input") === "true") {
+                return;
+            }
+
+            // No ejecutar si estamos en el input de referencia de pago
+            if (event.target?.getAttribute("data-ref-input") === "true") {
                 return;
             }
 
@@ -1650,6 +1660,11 @@ export default function PagarMain({
                 return;
             }
 
+            // No ejecutar si estamos en el input de referencia de pago
+            if (event.target?.getAttribute("data-ref-input") === "true") {
+                return;
+            }
+
             event.preventDefault();
             event.stopPropagation();
 
@@ -1679,6 +1694,11 @@ export default function PagarMain({
 
             // No ejecutar si estamos en el modal de carnet
             if (event.target?.getAttribute("data-carnet-input") === "true") {
+                return;
+            }
+
+            // No ejecutar si estamos en el input de referencia de pago
+            if (event.target?.getAttribute("data-ref-input") === "true") {
                 return;
             }
 

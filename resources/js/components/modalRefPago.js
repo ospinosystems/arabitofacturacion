@@ -452,7 +452,7 @@ export default function ModalRefPago({
                                     placeholder="Referencia completa de la transacción..."
                                     value={descripcion_referenciapago}
                                     onChange={e => setdescripcion_referenciapago(
-                                        banco_referenciapago == "ZELLE" ? e.target.value : number(e.target.value)
+                                        ["ZELLE", "BINANCE", "AirTM"].includes(banco_referenciapago) ? e.target.value : number(e.target.value)
                                     )}
                                     onKeyPress={handleKeyPress}
                                     data-ref-input="true"
