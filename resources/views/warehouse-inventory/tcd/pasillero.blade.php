@@ -158,6 +158,24 @@
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="font-bold text-gray-700">Mis Órdenes</h3>
                 </div>
+                <!-- Filtro por fecha -->
+                <div class="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <label class="block text-xs font-medium text-gray-600 mb-2">
+                        <i class="fas fa-calendar-alt mr-1"></i>Filtrar por fecha
+                    </label>
+                    <input type="date" 
+                           id="filtroFecha" 
+                           class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                           onchange="filtrarOrdenesPorFecha()">
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="setFechaHoy()" class="flex-1 px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition">
+                            Hoy
+                        </button>
+                        <button onclick="limpiarFiltroFecha()" class="flex-1 px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition">
+                            Todas
+                        </button>
+                    </div>
+                </div>
                 <div id="listaOrdenes" class="space-y-3 max-h-[500px] overflow-y-auto">
                     <div class="text-center text-gray-400 py-4">
                         <i class="fas fa-spinner fa-spin"></i>
@@ -298,13 +316,25 @@ function cargarAsignaciones() {
 
 function mostrarOrdenes() {
     const contenedor = document.getElementById('listaOrdenes');
+    const filtroFecha = document.getElementById('filtroFecha').value;
     
-    if (ordenesAgrupadas.length === 0) {
-        contenedor.innerHTML = '<div class="text-center text-gray-400 py-4">No hay órdenes asignadas</div>';
+    // Filtrar órdenes por fecha si hay filtro
+    let ordenesFiltradas = ordenesAgrupadas;
+    if (filtroFecha) {
+        ordenesFiltradas = ordenesAgrupadas.filter(orden => {
+            const fechaOrden = new Date(orden.fecha_creacion).toISOString().split('T')[0];
+            return fechaOrden === filtroFecha;
+        });
+    }
+    
+    if (ordenesFiltradas.length === 0) {
+        contenedor.innerHTML = `<div class="text-center text-gray-400 py-4">
+            ${filtroFecha ? 'No hay órdenes para esta fecha' : 'No hay órdenes asignadas'}
+        </div>`;
         return;
     }
     
-    contenedor.innerHTML = ordenesAgrupadas.map(orden => {
+    contenedor.innerHTML = ordenesFiltradas.map(orden => {
         const estadoColors = {
             'borrador': 'bg-gray-100 text-gray-800',
             'asignada': 'bg-blue-100 text-blue-800',
@@ -326,9 +356,9 @@ function mostrarOrdenes() {
         const esSeleccionada = ordenSeleccionada && ordenSeleccionada.orden_id === orden.orden_id;
         
         return `
-            <div class="border ${esSeleccionada ? 'border-blue-500 border-2' : 'border-gray-200'} rounded-lg p-3 mb-3 ${esSeleccionada ? 'bg-blue-50' : 'hover:bg-gray-50'} cursor-pointer" onclick="seleccionarOrden(${orden.orden_id})">
+            <div class="border ${esSeleccionada ? 'border-blue-500 border-2' : 'border-gray-200'} rounded-lg p-3 mb-3 ${esSeleccionada ? 'bg-blue-50' : 'hover:bg-gray-50'}">
                 <div class="flex justify-between items-start mb-2">
-                    <div class="flex-1">
+                    <div class="flex-1 cursor-pointer" onclick="seleccionarOrden(${orden.orden_id})">
                         <h4 class="font-bold text-gray-800 text-sm">${orden.numero_orden}</h4>
                         <p class="text-xs text-gray-500 mt-1">${fechaCreacion}</p>
                         <p class="text-xs text-gray-600 mt-1">${productosCompletados} / ${totalProductos} productos completados</p>
@@ -337,9 +367,40 @@ function mostrarOrdenes() {
                         ${orden.estado}
                     </span>
                 </div>
+                <div class="flex gap-2 mt-2 pt-2 border-t border-gray-100">
+                    <button onclick="event.stopPropagation(); seleccionarOrden(${orden.orden_id})" 
+                            class="flex-1 px-2 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition flex items-center justify-center gap-1">
+                        <i class="fas fa-box-open"></i> Procesar
+                    </button>
+                    <button onclick="event.stopPropagation(); verNotaEntrega(${orden.orden_id})" 
+                            class="flex-1 px-2 py-1.5 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition flex items-center justify-center gap-1">
+                        <i class="fas fa-file-alt"></i> Nota
+                    </button>
+                </div>
             </div>
         `;
     }).join('');
+}
+
+// Función para ver nota de entrega
+function verNotaEntrega(ordenId) {
+    window.open(`/warehouse-inventory/tcd/nota-entrega?orden_id=${ordenId}`, '_blank');
+}
+
+// Funciones para filtro de fecha
+function filtrarOrdenesPorFecha() {
+    mostrarOrdenes();
+}
+
+function setFechaHoy() {
+    const hoy = new Date().toISOString().split('T')[0];
+    document.getElementById('filtroFecha').value = hoy;
+    filtrarOrdenesPorFecha();
+}
+
+function limpiarFiltroFecha() {
+    document.getElementById('filtroFecha').value = '';
+    filtrarOrdenesPorFecha();
 }
 
 function seleccionarOrden(ordenId) {
