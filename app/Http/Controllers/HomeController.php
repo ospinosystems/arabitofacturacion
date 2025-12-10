@@ -101,7 +101,7 @@ class HomeController extends Controller
                     return redirect('/warehouse-inventory');
                 }
                 
-                // Si no hay sesión, redirigir al login (nunca mostrar vista index)
+                // Si no hay sesión, redirigir a login (nunca mostrar index en galponvalencia1)
                 return redirect('/login');
             }
             return view("facturar.index");
@@ -110,6 +110,11 @@ class HomeController extends Controller
             return view("sucursal.crear",["sucursal"=>$su]);
         }
 
+    }
+    
+    public function showLogin()
+    {
+        return view("facturar.index");
     }
 
     
@@ -175,7 +180,7 @@ class HomeController extends Controller
         }
         
         // Si es petición normal del navegador, redirigir al login
-        return redirect('/')->with('message', 'Sesión cerrada exitosamente');
+        return redirect('/login')->with('message', 'Sesión cerrada exitosamente');
     }
     public function role($tipo)
     {

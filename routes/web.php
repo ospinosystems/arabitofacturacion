@@ -85,6 +85,7 @@ Route::get('', [HomeController::class,"index"]);
 Route::get('senComoVamos', [sendCentral::class,"sendComovamos"]);
 
 Route::get('closeAllSession', [HomeController::class,"closeAllSession"]);
+Route::get('login', [HomeController::class,"showLogin"]);
 Route::post('login', [HomeController::class,"login"]);
 Route::post('forceUpdateDollar', [MonedasController::class,"updateDollarRate"]);
 Route::get('logout', [HomeController::class,"logout"]);
