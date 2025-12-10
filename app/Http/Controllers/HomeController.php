@@ -76,13 +76,33 @@ class HomeController extends Controller
 
 
     }
-    public function index()
+    public function index(Request $request)
     {
         $su = sucursal::all()->first();
         if ($su) {
             // Redirigir a Warehouse Inventory si es Galpón Valencia 1
             if ($su->codigo === 'galponvalencia1') {
-                return redirect('/warehouse-inventory');
+                // Verificar si hay sesión activa
+                $sessionId = $request->header('X-Session-Token') ?? 
+                            $request->cookie('session_token');
+                
+                $sessionData = null;
+                if ($sessionId) {
+                    $sessionData = app(\App\Services\SessionManager::class)->validateSession($sessionId);
+                }
+                
+                // Fallback a sesión legacy
+                if (!$sessionData && session('tipo_usuario')) {
+                    $sessionData = ['legacy_data' => ['tipo_usuario' => session('tipo_usuario')]];
+                }
+                
+                // Si hay sesión activa, redirigir a warehouse-inventory
+                if ($sessionData) {
+                    return redirect('/warehouse-inventory');
+                }
+                
+                // Si no hay sesión, mostrar login
+                return view("facturar.index");
             }
             return view("facturar.index");
         }else{
