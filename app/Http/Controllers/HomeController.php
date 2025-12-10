@@ -101,8 +101,8 @@ class HomeController extends Controller
                     return redirect('/warehouse-inventory');
                 }
                 
-                // Si no hay sesión, mostrar login
-                return view("facturar.index");
+                // Si no hay sesión, redirigir al login (nunca mostrar vista index)
+                return redirect('/login');
             }
             return view("facturar.index");
         }else{
