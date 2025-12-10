@@ -2128,7 +2128,8 @@ export default function PagarMain({
                                     <div className="mb-3 bg-white border border-gray-200 rounded ">
                                         <table className="w-full text-xs ">
                                             <colgroup>
-                                                <col className="!w-[60%]" />
+                                                <col className="!w-[50%]" />
+                                                <col className="!w-[10%]" />
                                                 <col className="!w-[10%]" />
                                                 <col className="!w-[10%]" />
                                                 <col className="!w-[10%]" />
@@ -2150,9 +2151,9 @@ export default function PagarMain({
                                                     <th className="px-2 py-1 text-xs font-medium tracking-wider text-right text-gray-600">
                                                         Precio
                                                     </th>
-                                                    {/*  <th className="px-2 py-1 text-xs font-medium tracking-wider text-right text-gray-600">
-                                                        Subtotal
-                                                    </th> */}
+                                                    <th className="px-2 py-1 text-xs font-medium tracking-wider text-right text-gray-600">
+                                                        Desc.
+                                                    </th>
                                                     <th className="px-2 py-1 text-xs font-medium tracking-wider text-right text-gray-600">
                                                         Total
                                                     </th>
@@ -2345,15 +2346,25 @@ export default function PagarMain({
                                                                     )}
                                                                 </td>
                                                             )}
-                                                            {/*   <td
-                                                                onClick={
-                                                                    setDescuentoUnitario
-                                                                }
+                                                            <td
+                                                                onClick={setDescuentoUnitario}
                                                                 data-index={e.id}
-                                                                className="px-2 py-1 text-xs text-right cursor-pointer hover:bg-orange-50"
+                                                                className={`px-2 py-1 text-xs text-right cursor-pointer hover:bg-orange-50 ${
+                                                                    e.descuento && parseFloat(e.descuento) > 0 
+                                                                        ? 'bg-orange-100 text-orange-700 font-semibold' 
+                                                                        : 'text-gray-400'
+                                                                }`}
+                                                                title="Click para aplicar descuento"
                                                             >
-                                                                {e.subtotal}
-                                                            </td> */}
+                                                                {e.descuento && parseFloat(e.descuento) > 0 ? (
+                                                                    <span className="flex items-center justify-end gap-1">
+                                                                        <i className="fa fa-tag text-[10px]"></i>
+                                                                        {e.descuento}%
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-gray-300">-</span>
+                                                                )}
+                                                            </td>
                                                             <td className="px-2 py-1 text-xs font-bold text-right">
                                                                 {moneda(e.total)}
                                                             </td>

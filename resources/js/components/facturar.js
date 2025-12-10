@@ -3398,14 +3398,75 @@ export default function Facturar({
         }
     };
     const setDescuentoUnitario = (e) => {
+        const index = e.currentTarget.attributes["data-index"].value;
+        
+        // Buscar el item en el pedido para obtener su subtotal
+        const item = pedidoData.items?.find(i => i.id == index);
+        if (!item) {
+            notificar({ data: { msj: "Item no encontrado", estado: false } });
+            return;
+        }
+        
+        // Calcular el subtotal del item (precio * cantidad)
+        const subtotalItem = parseFloat(item.producto?.precio || 0) * Math.abs(parseFloat(item.cantidad || 0));
+        
+        if (subtotalItem <= 0) {
+            notificar({ data: { msj: "El item no tiene subtotal válido", estado: false } });
+            return;
+        }
+        
+        const montoFinal = window.prompt(
+            `Monto total final del ítem (Subtotal actual: $${subtotalItem.toFixed(2)})\n*Ingrese 0 para eliminar descuento*`
+        );
+        
+        if (montoFinal === null || montoFinal === "") return;
+        
         setLoading(true);
-        const descuento = window.prompt("Descuento unitario");
-        if (descuento) {
-            const index = e.currentTarget.attributes["data-index"].value;
-            db.setDescuentoUnitario({ index, descuento }).then((res) => {
+        
+        if (montoFinal == "0") {
+            // Eliminar descuento
+            let params = { index, descuento: 0 };
+            db.setDescuentoUnitario(params).then((res) => {
                 getPedido();
                 setLoading(false);
                 notificar(res);
+                if (res.data.estado === false) {
+                    setLastDbRequest({
+                        dbFunction: db.setDescuentoUnitario,
+                        params,
+                    });
+                    openValidationTarea(res.data.id_tarea);
+                }
+            });
+        } else {
+            const montoFinalNum = parseFloat(montoFinal);
+            if (isNaN(montoFinalNum) || montoFinalNum < 0) {
+                notificar({ data: { msj: "Monto inválido", estado: false } });
+                setLoading(false);
+                return;
+            }
+            
+            if (montoFinalNum >= subtotalItem) {
+                notificar({ data: { msj: "El monto final debe ser menor al subtotal", estado: false } });
+                setLoading(false);
+                return;
+            }
+            
+            // Calcular el porcentaje de descuento: descuento = 100 - ((montoFinal * 100) / subtotal)
+            const descuento = (100 - ((montoFinalNum * 100) / subtotalItem)).toFixed(3);
+            
+            let params = { index, descuento };
+            db.setDescuentoUnitario(params).then((res) => {
+                getPedido();
+                setLoading(false);
+                notificar(res);
+                if (res.data.estado === false) {
+                    setLastDbRequest({
+                        dbFunction: db.setDescuentoUnitario,
+                        params,
+                    });
+                    openValidationTarea(res.data.id_tarea);
+                }
             });
         }
     };

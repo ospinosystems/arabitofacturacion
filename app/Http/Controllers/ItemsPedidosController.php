@@ -222,13 +222,14 @@ class ItemsPedidosController extends Controller
                 return Response::json(["msj"=>"¡Éxito!","estado"=>true]);
                 
             }elseif($isPermiso["permiso"]){
-
-                if ($isPermiso["valoraprobado"]==$descuento) {
+                // Comparar con tolerancia de 0.01 para evitar problemas de decimales
+                $valorAprobado = floatval($isPermiso["valoraprobado"]);
+                if (abs($valorAprobado - $descuento) <= 0.01) {
                     $item->descuento = $descuento;
                     $item->save();
                     return Response::json(["msj"=>"¡Éxito!","estado"=>true]);
                 }else{
-                    return Response::json(["msj"=>"Error: Valor no aprobado","estado"=>false]);
+                    return Response::json(["msj"=>"Error: Valor no aprobado. Aprobado: {$valorAprobado}%, Solicitado: {$descuento}%","estado"=>false]);
 
                 }
             }else{
