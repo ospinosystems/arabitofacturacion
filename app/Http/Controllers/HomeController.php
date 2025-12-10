@@ -114,6 +114,13 @@ class HomeController extends Controller
     
     public function showLogin()
     {
+        $su = sucursal::all()->first();
+        
+        // Para galponvalencia1, usar vista de login que limpia localStorage
+        if ($su && $su->codigo === 'galponvalencia1') {
+            return view("warehouse-inventory.login");
+        }
+        
         return view("facturar.index");
     }
 
