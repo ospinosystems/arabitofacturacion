@@ -163,11 +163,19 @@ class HomeController extends Controller
         
         // Limpiar sesión legacy
         $request->session()->flush();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
         
-        return Response::json([
-            "estado" => true,
-            "msj" => "Sesión cerrada exitosamente"
-        ]);
+        // Si es petición AJAX, retornar JSON
+        if ($request->expectsJson() || $request->ajax()) {
+            return Response::json([
+                "estado" => true,
+                "msj" => "Sesión cerrada exitosamente"
+            ]);
+        }
+        
+        // Si es petición normal del navegador, redirigir al login
+        return redirect('/')->with('message', 'Sesión cerrada exitosamente');
     }
     public function role($tipo)
     {
