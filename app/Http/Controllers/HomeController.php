@@ -80,6 +80,10 @@ class HomeController extends Controller
     {
         $su = sucursal::all()->first();
         if ($su) {
+            // Redirigir a Warehouse Inventory si es Galpón Valencia 1
+            if ($su->codigo === 'galponvalencia1') {
+                return redirect('/warehouse-inventory');
+            }
             return view("facturar.index");
         }else{
 
@@ -228,12 +232,16 @@ class HomeController extends Controller
                 
                 $estado = $this->selectRedirect();
                 
+                // Verificar si debe redirigir a gestión de almacén (Galpón Valencia 1)
+                $redirectToWarehouse = ($sucursal->codigo === 'galponvalencia1');
+                
                 return Response::json([
                     "user" => $arr_session,
                     "estado" => true,
                     "msj" => "¡Inicio exitoso! Bienvenido/a, ".$d->nombre,
                     "session_token" => $sessionData['session_token'],
-                    "dollar_info" => $dollarUpdate
+                    "dollar_info" => $dollarUpdate,
+                    "redirect_to_warehouse" => $redirectToWarehouse
                 ]);
                 
             } else {

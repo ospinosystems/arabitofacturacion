@@ -96,6 +96,12 @@ function Index() {
                     localStorage.setItem('session_token', res.data.session_token);
                 }
                 
+                // Verificar si debe redirigir a gestión de almacén (Galpón Valencia 1)
+                if (res.data.redirect_to_warehouse) {
+                    window.location.href = '/warehouse-inventory';
+                    return;
+                }
+                
                 setUser(res.data.user)
                 setLoginActive(res.data.estado)
             }

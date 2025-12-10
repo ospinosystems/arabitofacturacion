@@ -1085,30 +1085,31 @@ class GarantiaEjecucionLocalService
                 }
 
                 // Usar precio y descuento de la factura original si está disponible, sino del inventario
+                // IMPORTANTE: La tasa SIEMPRE es la actual del día (no la de la factura original)
                 $descuento = 0;
                 $precioUnitario = 0;
-                $tasa = null;
+                
+                // Obtener tasa actual del sistema (SIEMPRE la del día actual)
+                $tasaActual = \App\Models\moneda::where("tipo", 1)->orderBy("id", "desc")->first();
+                $tasa = $tasaActual ? $tasaActual->valor : null;
+                
                 if (isset($itemsFacturaOriginal[$idProducto])) {
                     $montoUnitario = $itemsFacturaOriginal[$idProducto]['precio'];
                     $precioUnitario = $itemsFacturaOriginal[$idProducto]['precio_unitario'];
                     // Descuento solo aplica a items negativos (entradas/devoluciones)
                     $descuento = ($cantidadConSigno < 0) ? $itemsFacturaOriginal[$idProducto]['descuento'] : 0;
-                    $tasa = $itemsFacturaOriginal[$idProducto]['tasa'];
-                    Log::info('Usando precio y descuento de factura original', [
+                    Log::info('Usando precio y descuento de factura original, tasa actual del día', [
                         'producto_id' => $idProducto,
                         'precio_original' => $montoUnitario,
                         'precio_unitario' => $precioUnitario,
                         'descuento_aplicado' => $descuento,
                         'es_item_negativo' => $cantidadConSigno < 0,
-                        'tasa' => $tasa
+                        'tasa_actual' => $tasa
                     ]);
                 } else {
-                    // Producto no está en factura original, usar precio actual y tasa actual
+                    // Producto no está en factura original, usar precio actual
                     $montoUnitario = $inventarioProducto->precio ?? 0;
                     $precioUnitario = $montoUnitario;
-                    // Obtener tasa actual del sistema
-                    $tasaActual = \App\Models\moneda::where("tipo", 1)->orderBy("id", "desc")->first();
-                    $tasa = $tasaActual ? $tasaActual->valor : null;
                     Log::info('Producto no en factura original, usando precio y tasa actual', [
                         'producto_id' => $idProducto,
                         'precio_actual' => $montoUnitario,

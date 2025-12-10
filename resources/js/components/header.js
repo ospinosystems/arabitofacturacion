@@ -111,8 +111,39 @@ function Header({
                 {/* Contenido del Sidebar */}
                 <div className="h-full p-3 overflow-y-auto">
                     <nav className="space-y-1">
-                        {user.tipo_usuario == 7 || user.tipo_usuario == 8 ? (
-                            /* Navegación para DICI */
+                        {user.tipo_usuario == 8 ? (
+                            /* Navegación para Pasillero (tipo 8) - Solo TCD y TCR Pasillero */
+                            <>
+                                <button
+                                    className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
+                                        view === "tcd-pasillero"
+                                            ? "bg-green-100 text-green-800 border-l-4 border-green-800"
+                                            : "text-gray-700 hover:bg-gray-100"
+                                    }`}
+                                    onClick={() => {
+                                        window.open("/warehouse-inventory/tcd/pasillero", "_blank");
+                                    }}
+                                >
+                                    <i className="w-4 mr-2 fa fa-warehouse"></i>
+                                    TCD Pasillero
+                                </button>
+
+                                <button
+                                    className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
+                                        view === "tcr-pasillero"
+                                            ? "bg-green-100 text-green-800 border-l-4 border-green-800"
+                                            : "text-gray-700 hover:bg-gray-100"
+                                    }`}
+                                    onClick={() => {
+                                        window.open("/warehouse-inventory/tcr/pasillero", "_blank");
+                                    }}
+                                >
+                                    <i className="w-4 mr-2 fa fa-warehouse"></i>
+                                    TCR Pasillero
+                                </button>
+                            </>
+                        ) : user.tipo_usuario == 7 ? (
+                            /* Navegación para DICI (tipo 7) */
                             <>
                                 <button
                                     className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
@@ -219,11 +250,6 @@ function Header({
                                         TCR Pasillero
                                     </button>
                                     </>
-
-
-
-
-
                                 )}
                             </>
                         ) : (
@@ -444,6 +470,7 @@ function Header({
                         {/* Configuración y logout */}
                         <div className="space-y-1">
                             {user.tipo_usuario != 7 &&
+                                user.tipo_usuario != 8 &&
                                 (user.usuario == "admin" ||
                                     user.usuario == "ao") && (
                                     <button

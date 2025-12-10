@@ -786,6 +786,180 @@ class WarehouseInventoryController extends Controller
     }
 
     /**
+     * Obtener o crear la ubicación genérica
+     */
+    private function obtenerUbicacionGenerica()
+    {
+        $ubicacionGenerica = Warehouse::where('codigo', 'GENERICA')->first();
+        
+        if (!$ubicacionGenerica) {
+            $ubicacionGenerica = Warehouse::create([
+                'pasillo' => 'GEN',
+                'cara' => 0,
+                'rack' => 0,
+                'nivel' => 0,
+                'codigo' => 'GENERICA',
+                'nombre' => 'Ubicación Genérica',
+                'descripcion' => 'Ubicación genérica para productos sin asignación específica',
+                'tipo' => 'almacenamiento',
+                'estado' => 'activa',
+                'zona' => 'general',
+                'capacidad_peso' => null,
+                'capacidad_volumen' => null,
+                'capacidad_unidades' => null, // Sin límite
+            ]);
+        }
+        
+        return $ubicacionGenerica;
+    }
+
+    /**
+     * Buscar productos con cantidad en inventario pero sin ubicación asignada
+     */
+    public function buscarProductosSinUbicacion(Request $request)
+    {
+        try {
+            // Productos con cantidad > 0 que NO tienen ningún registro en warehouse_inventory
+            // O que tienen menos cantidad en warehouse_inventory que en inventarios
+            $productos = inventario::where('cantidad', '>', 0)
+                ->get()
+                ->filter(function($producto) {
+                    $cantidadEnWarehouses = WarehouseInventory::where('inventario_id', $producto->id)
+                        ->where('cantidad', '>', 0)
+                        ->sum('cantidad');
+                    
+                    // Retornar si hay diferencia (cantidad sin ubicar)
+                    return $producto->cantidad > $cantidadEnWarehouses;
+                })
+                ->map(function($producto) {
+                    $cantidadEnWarehouses = WarehouseInventory::where('inventario_id', $producto->id)
+                        ->where('cantidad', '>', 0)
+                        ->sum('cantidad');
+                    
+                    return [
+                        'id' => $producto->id,
+                        'codigo_barras' => $producto->codigo_barras,
+                        'codigo_proveedor' => $producto->codigo_proveedor,
+                        'descripcion' => $producto->descripcion,
+                        'cantidad_total' => $producto->cantidad,
+                        'cantidad_en_warehouses' => $cantidadEnWarehouses,
+                        'cantidad_sin_ubicar' => $producto->cantidad - $cantidadEnWarehouses,
+                    ];
+                })
+                ->values();
+            
+            return Response::json([
+                'estado' => true,
+                'total_productos' => $productos->count(),
+                'total_unidades_sin_ubicar' => $productos->sum('cantidad_sin_ubicar'),
+                'productos' => $productos
+            ]);
+            
+        } catch (\Exception $e) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Asignar todos los productos sin ubicación a la ubicación genérica
+     */
+    public function asignarProductosAUbicacionGenerica(Request $request)
+    {
+        try {
+            DB::beginTransaction();
+            
+            // Obtener o crear la ubicación genérica
+            $ubicacionGenerica = $this->obtenerUbicacionGenerica();
+            
+            // Buscar productos con cantidad sin ubicar
+            $productos = inventario::where('cantidad', '>', 0)->get();
+            
+            $productosAsignados = 0;
+            $unidadesAsignadas = 0;
+            $errores = [];
+            
+            foreach ($productos as $producto) {
+                $cantidadEnWarehouses = WarehouseInventory::where('inventario_id', $producto->id)
+                    ->where('cantidad', '>', 0)
+                    ->sum('cantidad');
+                
+                $cantidadSinUbicar = $producto->cantidad - $cantidadEnWarehouses;
+                
+                if ($cantidadSinUbicar > 0) {
+                    // Verificar si ya existe registro en ubicación genérica
+                    $existente = WarehouseInventory::where('warehouse_id', $ubicacionGenerica->id)
+                        ->where('inventario_id', $producto->id)
+                        ->first();
+                    
+                    if ($existente) {
+                        // Actualizar cantidad existente
+                        $existente->cantidad += $cantidadSinUbicar;
+                        $existente->save();
+                    } else {
+                        // Crear nuevo registro
+                        WarehouseInventory::create([
+                            'warehouse_id' => $ubicacionGenerica->id,
+                            'inventario_id' => $producto->id,
+                            'cantidad' => $cantidadSinUbicar,
+                            'cantidad_bloqueada' => 0,
+                            'lote' => null,
+                            'fecha_vencimiento' => null,
+                            'fecha_entrada' => now(),
+                            'estado' => 'disponible',
+                            'observaciones' => 'Asignación automática a ubicación genérica',
+                        ]);
+                    }
+                    
+                    // Registrar movimiento
+                    WarehouseMovement::create([
+                        'tipo' => 'entrada',
+                        'inventario_id' => $producto->id,
+                        'warehouse_origen_id' => null,
+                        'warehouse_destino_id' => $ubicacionGenerica->id,
+                        'cantidad' => $cantidadSinUbicar,
+                        'lote' => null,
+                        'fecha_vencimiento' => null,
+                        'usuario_id' => Auth::id(),
+                        'documento_referencia' => 'ASIG-GEN-' . now()->format('YmdHis'),
+                        'observaciones' => 'Asignación automática a ubicación genérica',
+                        'fecha_movimiento' => now(),
+                    ]);
+                    
+                    $productosAsignados++;
+                    $unidadesAsignadas += $cantidadSinUbicar;
+                }
+            }
+            
+            DB::commit();
+            
+            return Response::json([
+                'estado' => true,
+                'msj' => "Proceso completado exitosamente",
+                'ubicacion_generica' => [
+                    'id' => $ubicacionGenerica->id,
+                    'codigo' => $ubicacionGenerica->codigo,
+                    'nombre' => $ubicacionGenerica->nombre,
+                ],
+                'resumen' => [
+                    'productos_asignados' => $productosAsignados,
+                    'unidades_asignadas' => $unidadesAsignadas,
+                ],
+                'errores' => $errores
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Consultar stock disponible en una ubicación específica para un producto
      */
     public function consultarStockUbicacion(Request $request)

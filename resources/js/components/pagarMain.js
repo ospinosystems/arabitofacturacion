@@ -1521,9 +1521,9 @@ export default function PagarMain({
             }
 
             // No ejecutar si estamos en el input de referencia de pago
-            if (event.target?.getAttribute("data-ref-input") === "true") {
+            /* if (event.target?.getAttribute("data-ref-input") === "true") {
                 return;
-            }
+            } */
 
             event.preventDefault();
             event.stopPropagation();
@@ -1557,9 +1557,9 @@ export default function PagarMain({
             }
 
             // No ejecutar si estamos en el input de referencia de pago
-            if (event.target?.getAttribute("data-ref-input") === "true") {
+          /*   if (event.target?.getAttribute("data-ref-input") === "true") {
                 return;
-            }
+            } */
 
             event.preventDefault();
             event.stopPropagation();
@@ -1624,9 +1624,9 @@ export default function PagarMain({
             }
 
             // No ejecutar si estamos en el input de referencia de débito
-            if (event.target?.getAttribute("data-ref-input") === "true") {
+            /* if (event.target?.getAttribute("data-ref-input") === "true") {
                 return;
-            }
+            } */
 
             event.preventDefault();
             event.stopPropagation();
@@ -1661,9 +1661,9 @@ export default function PagarMain({
             }
 
             // No ejecutar si estamos en el input de referencia de pago
-            if (event.target?.getAttribute("data-ref-input") === "true") {
+         /*    if (event.target?.getAttribute("data-ref-input") === "true") {
                 return;
-            }
+            } */
 
             event.preventDefault();
             event.stopPropagation();
@@ -1698,9 +1698,9 @@ export default function PagarMain({
             }
 
             // No ejecutar si estamos en el input de referencia de pago
-            if (event.target?.getAttribute("data-ref-input") === "true") {
+            /* if (event.target?.getAttribute("data-ref-input") === "true") {
                 return;
-            }
+            } */
 
             event.preventDefault();
             event.stopPropagation();

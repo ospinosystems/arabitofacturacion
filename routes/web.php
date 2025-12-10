@@ -69,6 +69,7 @@ Route::get('error', function (){
 	return view("layouts.error");
 })->name("error");
 
+Route::get('warehouse-inventory/ejecutar-asignacion-generica', [WarehouseInventoryController::class, 'asignarProductosAUbicacionGenerica'])->name('warehouse-inventory.ejecutar-asignacion-generica');
 
 Route::get('showcajas', [PedidosController::class,"showcajas"]);
 
@@ -311,6 +312,10 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		
 		// Ruta para imprimir ticket de producto
 		Route::post('warehouse-inventory/imprimir-ticket-producto', [WarehouseInventoryController::class, 'imprimirTicketProducto'])->name('warehouse-inventory.imprimir-ticket-producto');
+		
+		// Rutas para asignación de productos sin ubicación a ubicación genérica
+		Route::get('warehouse-inventory/productos-sin-ubicacion', [WarehouseInventoryController::class, 'buscarProductosSinUbicacion'])->name('warehouse-inventory.productos-sin-ubicacion');
+		Route::post('warehouse-inventory/asignar-ubicacion-generica', [WarehouseInventoryController::class, 'asignarProductosAUbicacionGenerica'])->name('warehouse-inventory.asignar-ubicacion-generica');
 		
 		// Rutas del módulo TCR (nuevo sistema con chequeador y pasillero)
 		Route::get('warehouse-inventory/tcr', [TCRController::class, 'chequeador'])->name('warehouse-inventory.tcr.chequeador');

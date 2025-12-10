@@ -438,28 +438,18 @@ class InventarioController extends Controller
                     $this->checkFalla($id, $ctSeter);
                 }
                 
-                // Obtener tasa: usar la del item original si es devolución, sino la actual
-                $tasaParaGuardar = null;
-                if ($itemOriginalDevolucion && $cantidad < 0 && $itemOriginalDevolucion['tasa']) {
-                    $tasaParaGuardar = $itemOriginalDevolucion['tasa'];
-                } else {
-                    $tasaParaGuardar = Cache::get('bs');
-                    if (!$tasaParaGuardar) {
-                        $tasa_bs = moneda::where("tipo", 1)->orderBy("id", "desc")->first();
-                        $tasaParaGuardar = $tasa_bs ? $tasa_bs->valor : 1;
-                    }
+                // Obtener tasa: SIEMPRE usar la tasa actual del día (incluso para devoluciones)
+                $tasaParaGuardar = Cache::get('bs');
+                if (!$tasaParaGuardar) {
+                    $tasa_bs = moneda::where("tipo", 1)->orderBy("id", "desc")->first();
+                    $tasaParaGuardar = $tasa_bs ? $tasa_bs->valor : 1;
                 }
                 
-                // Obtener tasa COP: usar la del item original si es devolución, sino la actual
-                $tasaCopParaGuardar = null;
-                if ($itemOriginalDevolucion && $cantidad < 0 && isset($itemOriginalDevolucion['tasa_cop'])) {
-                    $tasaCopParaGuardar = $itemOriginalDevolucion['tasa_cop'];
-                } else {
-                    $tasaCopParaGuardar = Cache::get('cop');
-                    if (!$tasaCopParaGuardar) {
-                        $tasa_cop = moneda::where("tipo", 2)->orderBy("id", "desc")->first();
-                        $tasaCopParaGuardar = $tasa_cop ? $tasa_cop->valor : 1;
-                    }
+                // Obtener tasa COP: SIEMPRE usar la tasa actual del día (incluso para devoluciones)
+                $tasaCopParaGuardar = Cache::get('cop');
+                if (!$tasaCopParaGuardar) {
+                    $tasa_cop = moneda::where("tipo", 2)->orderBy("id", "desc")->first();
+                    $tasaCopParaGuardar = $tasa_cop ? $tasa_cop->valor : 1;
                 }
                 
                 // Obtener descuento: usar el del item original si es devolución, sino 0
@@ -2520,6 +2510,14 @@ class InventarioController extends Controller
      */
     public function guardarInventarioConUbicacion(Request $request)
     {
+        // Verificar si el inventario está habilitado
+        if (!$this->enInventario()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'El acceso al inventario está deshabilitado'
+            ], 403);
+        }
+
         try {
             $request->validate([
                 'producto_id' => 'required|exists:inventarios,id',

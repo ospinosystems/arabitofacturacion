@@ -271,6 +271,8 @@ class AuthenticateUser
             $path = $request->path();
             
             $pasilleroRoutes = [
+                // Ruta principal de warehouse-inventory
+                'warehouse-inventory',
                 // Rutas TCR Pasillero
                 'warehouse-inventory/tcr/pasillero',
                 'warehouse-inventory/tcr/mis-asignaciones',
@@ -293,6 +295,7 @@ class AuthenticateUser
             ];
             
             $pasilleroRouteNames = [
+                'warehouse-inventory.index',
                 'warehouse-inventory.tcr.pasillero',
                 'warehouse-inventory.tcr.mis-asignaciones',
                 'warehouse-inventory.tcr.procesar-asignacion',

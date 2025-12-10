@@ -10,6 +10,7 @@ use App\Models\Warehouse;
 use App\Models\WarehouseInventory;
 use App\Models\WarehouseMovement;
 use App\Models\inventario;
+use App\Models\SucursalCentralCache;
 use App\Http\Controllers\InventarioController;
 use App\Http\Controllers\sendCentral;
 use Illuminate\Http\Request;
@@ -1219,6 +1220,21 @@ class TCDController extends Controller
                 }
             }
             
+            // Guardar datos de la sucursal destino en cache local
+            if ($sucursalDestino && $sucursalDestinoCodigo) {
+                SucursalCentralCache::updateOrCreate(
+                    ['codigo' => $sucursalDestinoCodigo],
+                    [
+                        'nombre' => $sucursalDestino['nombre'] ?? null,
+                        'direccion' => $sucursalDestino['direccion'] ?? null,
+                        'zona' => $sucursalDestino['zona'] ?? null,
+                        'rif' => $sucursalDestino['empresa']['rif'] ?? null,
+                        'razon_social' => $sucursalDestino['empresa']['razon_social'] ?? null,
+                        'direccion_fiscal' => $sucursalDestino['empresa']['direccion_registro'] ?? null,
+                    ]
+                );
+            }
+            
             // Convertir orden TCD al formato de pedido
             $pedidoFormato = $this->convertirOrdenTCDAPedido($orden);
             
@@ -1321,12 +1337,19 @@ class TCDController extends Controller
         // Ticket de despacho si existe
         $ticket = $orden->ticketDespacho;
         
+        // Obtener datos de la sucursal destino desde cache
+        $sucursalDestino = null;
+        if ($orden->sucursal_destino_codigo) {
+            $sucursalDestino = SucursalCentralCache::where('codigo', $orden->sucursal_destino_codigo)->first();
+        }
+        
         return view('warehouse-inventory.tcd.nota-entrega', compact(
             'orden',
             'items',
             'asignaciones',
             'pasilleros',
-            'ticket'
+            'ticket',
+            'sucursalDestino'
         ));
     }
 }

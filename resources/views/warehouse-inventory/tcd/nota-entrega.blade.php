@@ -236,12 +236,31 @@
             </div>
             
             <div class="client-section">
-                <h4>DESTINO</h4>
+                <h4>DESTINO / CLIENTE</h4>
                 @if($orden->sucursal_destino_codigo)
-                <div class="client-field">
-                    <span class="client-label">Sucursal Destino:</span><br>
-                    {{ $orden->sucursal_destino_codigo }}
-                </div>
+                    @if($sucursalDestino)
+                    <div class="client-field">
+                        <span class="client-label">Razón Social:</span><br>
+                        {{ $sucursalDestino->razon_social ?? $orden->sucursal_destino_codigo }}
+                    </div>
+                    <div class="client-field">
+                        <span class="client-label">RIF:</span><br>
+                        {{ $sucursalDestino->rif ?? 'N/A' }}
+                    </div>
+                    <div class="client-field">
+                        <span class="client-label">Dirección:</span><br>
+                        {{ $sucursalDestino->direccion_fiscal ?? $sucursalDestino->direccion ?? 'N/A' }}
+                    </div>
+                    <div class="client-field">
+                        <span class="client-label">Sucursal:</span><br>
+                        {{ $sucursalDestino->nombre ?? $orden->sucursal_destino_codigo }} ({{ $orden->sucursal_destino_codigo }})
+                    </div>
+                    @else
+                    <div class="client-field">
+                        <span class="client-label">Sucursal Destino:</span><br>
+                        {{ $orden->sucursal_destino_codigo }}
+                    </div>
+                    @endif
                 @if($orden->pedido_central_numero)
                 <div class="client-field">
                     <span class="client-label">Pedido Central:</span><br>
