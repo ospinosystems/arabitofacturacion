@@ -1222,6 +1222,19 @@ class TCDController extends Controller
             
             // Guardar datos de la sucursal destino en cache local
             if ($sucursalDestino && $sucursalDestinoCodigo) {
+                // Construir dirección de entrega completa
+                $direccionEntrega = null;
+                if (isset($sucursalDestino['direccion_entrega']) && $sucursalDestino['direccion_entrega']) {
+                    $de = $sucursalDestino['direccion_entrega'];
+                    $partes = array_filter([
+                        $de['direccion'] ?? null,
+                        $de['parroquia'] ?? null,
+                        $de['municipio'] ?? null,
+                        $de['estado'] ?? null,
+                    ]);
+                    $direccionEntrega = implode(', ', $partes);
+                }
+                
                 SucursalCentralCache::updateOrCreate(
                     ['codigo' => $sucursalDestinoCodigo],
                     [
@@ -1231,6 +1244,7 @@ class TCDController extends Controller
                         'rif' => $sucursalDestino['empresa']['rif'] ?? null,
                         'razon_social' => $sucursalDestino['empresa']['razon_social'] ?? null,
                         'direccion_fiscal' => $sucursalDestino['empresa']['direccion_registro'] ?? null,
+                        'direccion_entrega' => $direccionEntrega,
                     ]
                 );
             }

@@ -248,9 +248,15 @@
                         {{ $sucursalDestino->rif ?? 'N/A' }}
                     </div>
                     <div class="client-field">
-                        <span class="client-label">Dirección:</span><br>
-                        {{ $sucursalDestino->direccion_fiscal ?? $sucursalDestino->direccion ?? 'N/A' }}
+                        <span class="client-label">Dirección Fiscal:</span><br>
+                        {{ $sucursalDestino->direccion_fiscal ?? 'N/A' }}
                     </div>
+                    @if($sucursalDestino->direccion_entrega)
+                    <div class="client-field">
+                        <span class="client-label">Dirección de Entrega:</span><br>
+                        {{ $sucursalDestino->direccion_entrega }}
+                    </div>
+                    @endif
                     <div class="client-field">
                         <span class="client-label">Sucursal:</span><br>
                         {{ $sucursalDestino->nombre ?? $orden->sucursal_destino_codigo }} ({{ $orden->sucursal_destino_codigo }})

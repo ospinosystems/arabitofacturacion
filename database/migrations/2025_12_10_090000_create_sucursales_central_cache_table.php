@@ -21,6 +21,7 @@ class CreateSucursalesCentralCacheTable extends Migration
             $table->string('rif')->nullable();
             $table->string('razon_social')->nullable();
             $table->string('direccion_fiscal')->nullable();
+            $table->text('direccion_entrega')->nullable();
             $table->string('zona')->nullable();
             $table->timestamps();
         });

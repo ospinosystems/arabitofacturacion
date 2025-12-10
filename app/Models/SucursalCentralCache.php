@@ -24,6 +24,7 @@ class SucursalCentralCache extends Model
         'rif',
         'razon_social',
         'direccion_fiscal',
+        'direccion_entrega',
         'zona',
     ];
 }
