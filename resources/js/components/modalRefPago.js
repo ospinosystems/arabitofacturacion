@@ -66,11 +66,24 @@ export default function ModalRefPago({
     // Monto máximo permitido es el total del pedido en Bs
     const montoMaximoPedido = montoTotalPedido;
 
-    // Validar formato de teléfono: 58 + código (sin 0) + 7 dígitos = 12 dígitos
+    // Validar formato de teléfono: 0 + código + 7 dígitos = 11 dígitos
     const validarTelefono = (telefono) => {
-        // Códigos válidos: 412, 414, 416, 424, 426, 422
-        const regex = /^58(412|414|416|424|426|422)\d{7}$/;
+        // Códigos válidos: 0412, 0414, 0416, 0424, 0426, 0422
+        const regex = /^0(412|414|416|424|426|422)\d{7}$/;
         return regex.test(telefono);
+    };
+
+    // Formatear teléfono de 04XX a 58XX antes de enviar
+    const formatearTelefono = (telefono) => {
+        if (!telefono) return "";
+        let numeros = telefono.replace(/\D/g, '');
+        if (numeros.startsWith('0')) {
+            numeros = '58' + numeros.slice(1);
+        }
+        if (!numeros.startsWith('58')) {
+            numeros = '58' + numeros;
+        }
+        return numeros;
     };
 
     // Validar formato de monto: xxxxx.xx (permite negativos)
@@ -172,7 +185,7 @@ export default function ModalRefPago({
                 if (!telefonoPago) {
                     newErrors.telefonoPago = 'El teléfono es obligatorio';
                 } else if (!validarTelefono(telefonoPago)) {
-                    newErrors.telefonoPago = 'Formato inválido. Debe ser: 58 + código (416,426,414,424,412,422) + 7 dígitos. Ej: 584142440203';
+                    newErrors.telefonoPago = 'Formato inválido. Debe ser: 0 + código (412,414,416,424,426,422) + 7 dígitos. Ej: 04141234567';
                 }
             }
 
@@ -239,7 +252,8 @@ export default function ModalRefPago({
                     datosAdicionales.fecha_pago = fechaPago;
                 }
                 if (moduloConfig.showTelefonoPago) {
-                    datosAdicionales.telefono_pago = telefonoPago;
+                    // Formatear teléfono de 04XX a 58XX antes de enviar
+                    datosAdicionales.telefono_pago = formatearTelefono(telefonoPago);
                 }
                 if (moduloConfig.showCodigoBancoOrigen) {
                     datosAdicionales.codigo_banco_origen = codigoBancoOrigen;
@@ -501,7 +515,86 @@ export default function ModalRefPago({
                                 )}
                             </div>
 
-                            {/* Fecha de Pago - AutoPagoMovil y AutoInterbancaria */}
+                            {/* Teléfono - Solo AutoPagoMovil */}
+                            {moduloConfig.showTelefonoPago && (
+                                <div>
+                                    <label className="block mb-1 text-xs font-medium text-gray-700">
+                                        Número de Teléfono <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="Ej: 04141234567"
+                                        value={telefonoPago}
+                                        onChange={e => {
+                                            const value = e.target.value.replace(/\D/g, '').slice(0, 11);
+                                            setTelefonoPago(value);
+                                        }}
+                                        onKeyPress={handleKeyPress}
+                                        maxLength={11}
+                                        className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
+                                            errors.telefonoPago ? 'border-red-300' : 'border-gray-200'
+                                        }`}
+                                    />
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        <i className="mr-1 fa fa-info-circle"></i>
+                                        Formato: 0414, 0424, 0412, 0416, 0426 + 7 dígitos
+                                    </p>
+                                    {errors.telefonoPago && (
+                                        <p className="mt-1 text-xs text-red-600">{errors.telefonoPago}</p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Banco Origen - AutoPagoMovil y AutoInterbancaria */}
+                            {moduloConfig.showCodigoBancoOrigen && (
+                                <div>
+                                    <label className="block mb-1 text-xs font-medium text-gray-700">
+                                        Banco Origen <span className="text-red-500">*</span>
+                                    </label>
+                                    <select
+                                        value={codigoBancoOrigen}
+                                        onChange={e => setCodigoBancoOrigen(e.target.value)}
+                                        onKeyPress={handleKeyPress}
+                                        className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
+                                            errors.codigoBancoOrigen ? 'border-red-300' : 'border-gray-200'
+                                        }`}
+                                    >
+                                        <option value="">Seleccionar banco...</option>
+                                        <option value="0102">Banco de Venezuela - 0102</option>
+                                        <option value="0104">Venezolano de Crédito - 0104</option>
+                                        <option value="0105">Banco Mercantil - 0105</option>
+                                        <option value="0108">Banco Provincial - 0108</option>
+                                        <option value="0114">Bancaribe - 0114</option>
+                                        <option value="0115">Banco Exterior - 0115</option>
+                                        <option value="0116">Banco Occidental de Descuento - 0116</option>
+                                        <option value="0128">Banco Caroní - 0128</option>
+                                        <option value="0134">Banesco - 0134</option>
+                                        <option value="0137">Sofitasa - 0137</option>
+                                        <option value="0138">Banco Plaza - 0138</option>
+                                        <option value="0146">Bangente - 0146</option>
+                                        <option value="0151">BFC Banco Fondo Común - 0151</option>
+                                        <option value="0156">100% Banco - 0156</option>
+                                        <option value="0157">Del Sur - 0157</option>
+                                        <option value="0163">Banco del Tesoro - 0163</option>
+                                        <option value="0166">Banco Agrícola de Venezuela - 0166</option>
+                                        <option value="0168">Bancrecer - 0168</option>
+                                        <option value="0169">Mi Banco - 0169</option>
+                                        <option value="0171">Banco Activo - 0171</option>
+                                        <option value="0172">Bancamiga - 0172</option>
+                                        <option value="0173">Banco Internacional de Desarrollo - 0173</option>
+                                        <option value="0174">Banplus - 0174</option>
+                                        <option value="0175">Banco Bicentenario - 0175</option>
+                                        <option value="0177">Banco de la Fuerza Armada Nacional - 0177</option>
+                                        <option value="0190">Citibank - 0190</option>
+                                        <option value="0191">Banco Nacional de Crédito - 0191</option>
+                                    </select>
+                                    {errors.codigoBancoOrigen && (
+                                        <p className="mt-1 text-xs text-red-600">{errors.codigoBancoOrigen}</p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Fecha de Pago - Al final */}
                             {moduloConfig.showFechaPago && (
                                 <div>
                                     <label className="block mb-1 text-xs font-medium text-gray-700">
@@ -518,56 +611,6 @@ export default function ModalRefPago({
                                     />
                                     {errors.fechaPago && (
                                         <p className="mt-1 text-xs text-red-600">{errors.fechaPago}</p>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Teléfono - Solo AutoPagoMovil */}
-                            {moduloConfig.showTelefonoPago && (
-                                <div>
-                                    <label className="block mb-1 text-xs font-medium text-gray-700">
-                                        Número de Teléfono <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder="Ej: 584142440203"
-                                        value={telefonoPago}
-                                        onChange={e => setTelefonoPago(number(e.target.value))}
-                                        onKeyPress={handleKeyPress}
-                                        maxLength={12}
-                                        className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
-                                            errors.telefonoPago ? 'border-red-300' : 'border-gray-200'
-                                        }`}
-                                    />
-                                    <p className="mt-1 text-xs text-gray-500">
-                                        <i className="mr-1 fa fa-info-circle"></i>
-                                        Formato: 58 + código sin 0 (416,426,414,424,412,422) + 7 dígitos
-                                    </p>
-                                    {errors.telefonoPago && (
-                                        <p className="mt-1 text-xs text-red-600">{errors.telefonoPago}</p>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Código Banco Origen - AutoPagoMovil y AutoInterbancaria */}
-                            {moduloConfig.showCodigoBancoOrigen && (
-                                <div>
-                                    <label className="block mb-1 text-xs font-medium text-gray-700">
-                                        Código Banco Origen <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder="Ej: 0102"
-                                        value={codigoBancoOrigen}
-                                        onChange={e => setCodigoBancoOrigen(number(e.target.value))}
-                                        onKeyPress={handleKeyPress}
-                                        maxLength={4}
-                                        className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
-                                            errors.codigoBancoOrigen ? 'border-red-300' : 'border-gray-200'
-                                        }`}
-                                    />
-                                    {errors.codigoBancoOrigen && (
-                                        <p className="mt-1 text-xs text-red-600">{errors.codigoBancoOrigen}</p>
                                     )}
                                 </div>
                             )}
