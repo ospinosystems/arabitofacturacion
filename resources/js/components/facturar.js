@@ -3866,11 +3866,15 @@ export default function Facturar({
         const payload = {
             operacion: "COMPRA",
             monto: montoEntero,
-            tipoCuenta: posTipoCuenta,
             cedula: posCedulaTitular,
             numeroOrden: pedidoData.id.toString(),
             mensaje: "PowerBy:Ospino"
         };
+        
+        // Solo incluir tipoCuenta si no es "OMITIR"
+        if (posTipoCuenta !== "OMITIR") {
+            payload.tipoCuenta = posTipoCuenta;
+        }
 
         console.log("Payload POS:", payload);
         
@@ -3967,7 +3971,8 @@ export default function Facturar({
     };
     
     // Función para finalizar múltiples transacciones POS
-    const finalizarTransaccionesPOS = () => {
+    // Si el total no está cubierto, solo aplica el monto al campo débito sin procesar el pago
+    const finalizarTransaccionesPOS = (forzarSinProcesar = false) => {
         if (posTransaccionesAprobadas.length === 0) {
             alert("No hay transacciones aprobadas");
             return;
@@ -3977,9 +3982,11 @@ export default function Facturar({
         const ultimaTransaccion = posTransaccionesAprobadas[posTransaccionesAprobadas.length - 1];
         const refFinal = ultimaTransaccion.refCorta;
         
-        // Calcular total aprobado
+        // Calcular total aprobado y verificar si cubre el total
         const totalAprobado = posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0);
+        const montoOriginal = parseFloat(posMontoTotalOriginal) || 0;
         const numTransacciones = posTransaccionesAprobadas.length;
+        const totalCubierto = totalAprobado >= montoOriginal;
         
         // Limpiar transacciones del mapa para este pedido (ya se procesó)
         if (pedidoData?.id) {
@@ -3999,8 +4006,15 @@ export default function Facturar({
         // Actualizar el monto de débito con el total aprobado
         setDebito(totalAprobado.toFixed(2));
         
-        notificar({ data: { msj: `POS Finalizado - ${numTransacciones} transacción(es) - Total: Bs ${totalAprobado.toFixed(2)}`, estado: true } });
-        procesarPagoInterno(posPendingCallback, refFinal);
+        if (totalCubierto && !forzarSinProcesar) {
+            // Total cubierto: procesar pago y facturar
+            notificar({ data: { msj: `✓ POS Completado - ${numTransacciones} transacción(es) - Total: Bs ${totalAprobado.toFixed(2)}`, estado: true } });
+            procesarPagoInterno(posPendingCallback, refFinal);
+        } else {
+            // Total NO cubierto: solo aplicar monto al campo débito, el usuario completará con otros métodos
+            const restante = montoOriginal - totalAprobado;
+            notificar({ data: { msj: `POS Parcial - Bs ${totalAprobado.toFixed(2)} aplicado. Faltan Bs ${restante.toFixed(2)} por otros métodos.`, estado: true } });
+        }
         setPosPendingCallback(null);
     };
     
@@ -8428,8 +8442,8 @@ export default function Facturar({
                                         </div>
                                     )}
 
-                                    {/* Formulario para nueva transacción (solo si hay monto restante) */}
-                                    {parseFloat(posMontoDebito || 0) > 0 && (
+                                    {/* Formulario para nueva transacción (siempre visible si hay monto original y no se ha cubierto el total) */}
+                                    {(parseFloat(posMontoTotalOriginal || 0) > 0 && posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0) < parseFloat(posMontoTotalOriginal || 0)) && (
                                         <>
                                             <div className="border-t pt-4">
                                                 <p className="text-sm font-medium text-gray-700 mb-3">
@@ -8449,7 +8463,8 @@ export default function Facturar({
                                                         if (e.key === 'Enter') {
                                                             e.preventDefault();
                                                             e.stopPropagation();
-                                                            if (posCedulaTitular && !posLoading && parseFloat(posMontoDebito || 0) > 0) {
+                                                            const montoActual = parseFloat(posMontoDebito) || 0;
+                                                            if (posCedulaTitular && !posLoading && montoActual > 0) {
                                                                 enviarSolicitudPosDebito();
                                                             }
                                                         }
@@ -8472,6 +8487,7 @@ export default function Facturar({
                                                     >
                                                         <option value="CORRIENTE">CORRIENTE</option>
                                                         <option value="AHORROS">AHORROS</option>
+                                                        <option value="OMITIR">Omitir</option>
                                                     </select>
                                                 </div>
                                                 <div>
@@ -8491,13 +8507,13 @@ export default function Facturar({
                                     )}
 
                                     {/* Mensaje cuando el total está cubierto */}
-                                    {parseFloat(posMontoDebito || 0) <= 0 && posTransaccionesAprobadas.length > 0 && (
+                                    {posTransaccionesAprobadas.length > 0 && posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0) >= parseFloat(posMontoTotalOriginal || 0) && (
                                         <div className="bg-green-100 border border-green-300 rounded-lg p-4 text-center">
                                             <svg className="w-12 h-12 text-green-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                             </svg>
                                             <p className="text-green-800 font-semibold">Total cubierto</p>
-                                            <p className="text-green-600 text-sm">Presione "Finalizar" para completar el pago</p>
+                                            <p className="text-green-600 text-sm">El pago se procesará automáticamente</p>
                                         </div>
                                     )}
 
@@ -8552,8 +8568,8 @@ export default function Facturar({
                                     >
                                         Ref. Manual
                                     </button>
-                                    {/* Botón Enviar al POS (solo si hay monto restante) */}
-                                    {parseFloat(posMontoDebito || 0) > 0 && (
+                                    {/* Botón Enviar al POS (solo si no se ha cubierto el total) */}
+                                    {posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0) < parseFloat(posMontoTotalOriginal || 0) && (
                                         <button
                                             type="button"
                                             onClick={enviarSolicitudPosDebito}
@@ -8578,18 +8594,19 @@ export default function Facturar({
                                             )}
                                         </button>
                                     )}
-                                    {/* Botón Finalizar (solo si hay transacciones aprobadas) */}
-                                    {posTransaccionesAprobadas.length > 0 && (
+                                    {/* Botón Finalizar (solo si hay transacciones aprobadas y NO se cubrió el total) */}
+                                    {posTransaccionesAprobadas.length > 0 && posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0) < parseFloat(posMontoTotalOriginal || 0) && (
                                         <button
                                             type="button"
-                                            onClick={finalizarTransaccionesPOS}
+                                            onClick={() => finalizarTransaccionesPOS(true)}
                                             disabled={posLoading}
-                                            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                            className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                            title="Aplicar monto parcial al débito. Deberá completar con otros métodos de pago."
                                         >
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                             </svg>
-                                            Finalizar ({posTransaccionesAprobadas.length})
+                                            Aplicar Parcial (Bs {posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0).toFixed(2)})
                                         </button>
                                     )}
                                 </div>
