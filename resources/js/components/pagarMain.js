@@ -160,6 +160,8 @@ export default function PagarMain({
     setOrderColumn,
     orderBy,
     setOrderBy,
+    // Props para transacciones POS por pedido
+    posTransaccionesPorPedido,
 }) {
     const [recibido_dolar, setrecibido_dolar] = useState("");
     const [recibido_bs, setrecibido_bs] = useState("");
@@ -235,12 +237,13 @@ export default function PagarMain({
     const miniCalcRef = useRef(null);
     const calculadoraBtnRef = useRef(null);
 
-    // Handler para ejecutar setPagoPedido al presionar ENTER en inputs de pago
+    // Handler para ejecutar facturar_e_imprimir al presionar ENTER en inputs de pago
+    // (guarda el pedido e imprime el ticket, igual que Ctrl+Enter)
     const handlePaymentInputKeyDown = (e) => {
         if (e.key === 'Enter' && !e.ctrlKey && !e.shiftKey && !e.altKey) {
             e.preventDefault();
             e.stopPropagation();
-            setPagoPedido();
+            facturar_e_imprimir();
         }
     };
 
@@ -2477,7 +2480,18 @@ export default function PagarMain({
                                 <div className="mb-3 space-y-2">
                                     {/* ══════════ GRUPO DÉBITO ══════════ */}
                                     <div className="flex flex-col gap-1">
-                                        <span className="text-[10px] font-medium text-orange-600">Débito (D)</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] font-medium text-orange-600">Débito (D)</span>
+                                            {/* Indicador de transacciones POS pendientes */}
+                                            {pedidoData?.id && posTransaccionesPorPedido?.[pedidoData.id]?.length > 0 && (
+                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold text-green-700 bg-green-100 border border-green-300 rounded-full animate-pulse">
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    {posTransaccionesPorPedido[pedidoData.id].length} POS aprobado(s)
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="flex flex-1 gap-2">
                                             {/* Monto Débito (en Bs) */}
                                             <div className={`flex-1 flex border rounded ${debito != "" ? "bg-white border-orange-300" : "bg-white border-gray-200"}`}>
