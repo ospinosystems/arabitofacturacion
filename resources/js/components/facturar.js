@@ -3868,13 +3868,9 @@ export default function Facturar({
             monto: montoEntero,
             cedula: posCedulaTitular,
             numeroOrden: pedidoData.id.toString(),
-            mensaje: "PowerBy:Ospino"
+            mensaje: "PowerBy:Ospino",
+            tipoCuenta: posTipoCuenta
         };
-        
-        // Solo incluir tipoCuenta si no es "OMITIR"
-        if (posTipoCuenta !== "OMITIR") {
-            payload.tipoCuenta = posTipoCuenta;
-        }
 
         console.log("Payload POS:", payload);
         
@@ -8487,7 +8483,7 @@ export default function Facturar({
                                                     >
                                                         <option value="CORRIENTE">CORRIENTE</option>
                                                         <option value="AHORROS">AHORROS</option>
-                                                        <option value="OMITIR">Omitir</option>
+                                                        <option value="CREDITO">CREDITO</option>
                                                     </select>
                                                 </div>
                                                 <div>
