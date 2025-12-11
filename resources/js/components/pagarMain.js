@@ -162,6 +162,8 @@ export default function PagarMain({
     setOrderBy,
     // Props para transacciones POS por pedido
     posTransaccionesPorPedido,
+    // Estado del modal POS para bloquear hotkeys
+    showModalPosDebito,
 }) {
     const [recibido_dolar, setrecibido_dolar] = useState("");
     const [recibido_bs, setrecibido_bs] = useState("");
@@ -1513,6 +1515,7 @@ export default function PagarMain({
     useHotkeys(
         "c",
         (event) => {
+            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -1543,12 +1546,13 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast]
+        [refaddfast, showModalPosDebito]
     );
 
     useHotkeys(
         "t",
         (event) => {
+            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -1579,12 +1583,13 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast]
+        [refaddfast, showModalPosDebito]
     );
     //p - Biopago (Pago móvil)
     useHotkeys(
         "p",
         (event) => {
+            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -1610,12 +1615,13 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast]
+        [refaddfast, showModalPosDebito]
     );
     //b - Efectivo Bolívares
     useHotkeys(
         "b",
         (event) => {
+            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -1647,12 +1653,13 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast]
+        [refaddfast, showModalPosDebito]
     );
     //e - Efectivo USD
     useHotkeys(
         "e",
         (event) => {
+            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -1684,12 +1691,13 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast]
+        [refaddfast, showModalPosDebito]
     );
     //d
     useHotkeys(
         "d",
         (event) => {
+            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -1730,46 +1738,50 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast, debitoInputRef]
+        [refaddfast, debitoInputRef, showModalPosDebito]
     );
     //f5
     useHotkeys(
         "f5",
         () => {
+            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
             del_pedido();
         },
         {
             enableOnTags: ["INPUT", "SELECT"],
         },
-        []
+        [showModalPosDebito]
     );
     //f4
     useHotkeys(
         "f4",
         () => {
+            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
             viewReportPedido();
         },
         {
             enableOnTags: ["INPUT", "SELECT"],
         },
-        []
+        [showModalPosDebito]
     );
     //f3
     useHotkeys(
         "f3",
         () => {
+            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
             toggleImprimirTicket();
         },
         {
             enableOnTags: ["INPUT", "SELECT"],
             filter: false,
         },
-        []
+        [showModalPosDebito]
     );
     //f2
     useHotkeys(
         "f2",
         () => {
+            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
             setToggleAddPersonaFun(true, () => {
                 setclienteInpnombre("");
                 setclienteInptelefono("");
@@ -1783,12 +1795,13 @@ export default function PagarMain({
             });
         },
         { enableOnTags: ["INPUT", "SELECT"] },
-        []
+        [showModalPosDebito]
     );
     //ctrl+enter
     useHotkeys(
         "ctrl+enter",
         (event) => {
+            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
             if (!event.repeat) {
                 facturar_e_imprimir();
             }
@@ -1798,12 +1811,13 @@ export default function PagarMain({
             keyup: false,
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        []
+        [showModalPosDebito]
     );
     //f1 - Crear nuevo pedido
     useHotkeys(
         "f1",
         () => {
+            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
             // Validar que existe la función addNewPedido
             if (typeof addNewPedido === "function") {
                 addNewPedido();
@@ -1814,13 +1828,14 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT"],
         },
-        []
+        [showModalPosDebito]
     );
 
     //f10 - Toggle header y menú flotante
     useHotkeys(
         "f10",
         (event) => {
+            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
             event.preventDefault(); // Prevenir comportamiento por defecto del navegador
             setShowHeaderAndMenu(!showHeaderAndMenu);
             // Scroll al top
@@ -1830,7 +1845,7 @@ export default function PagarMain({
             enableOnTags: ["INPUT", "SELECT"],
             filter: false,
         },
-        [showHeaderAndMenu]
+        [showHeaderAndMenu, showModalPosDebito]
     );
 
     //tab - Comportamiento por defecto cuando el modal de referencia está abierto
@@ -1854,6 +1869,7 @@ export default function PagarMain({
     useHotkeys(
         "r",
         (event) => {
+            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
             // Solo ejecutar si NO estamos en ningún input o select
             const isInputOrSelect =
                 event.target.tagName === "INPUT" ||
@@ -1889,7 +1905,7 @@ export default function PagarMain({
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
             filter: false,
         },
-        [transferencia, debito, efectivo, credito, biopago]
+        [transferencia, debito, efectivo, credito, biopago, showModalPosDebito]
     );
 
     const {
@@ -2521,6 +2537,11 @@ export default function PagarMain({
                                                                     if (debito && parseFloat(debito) > 0) {
                                                                         setTimeout(() => {
                                                                             const activeEl = document.activeElement;
+                                                                            // No mover foco si está en el modal POS (input de cédula)
+                                                                            const isInPosModal = activeEl?.id === 'pos-cedula-input' || 
+                                                                                                 activeEl?.closest?.('.fixed.inset-0');
+                                                                            if (isInPosModal) return;
+                                                                            
                                                                             const isPaymentInput = activeEl?.getAttribute("data-efectivo") || 
                                                                                           activeEl === debitoRefInputRef.current;
                                                                             if (!isPaymentInput && debitoRefInputRef.current) {
