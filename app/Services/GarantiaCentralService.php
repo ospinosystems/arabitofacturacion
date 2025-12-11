@@ -634,6 +634,7 @@ class GarantiaCentralService
             'monto' => $garantia->monto_devolucion_dinero,
             'descripcion' => "Devolución de dinero por garantía #{$garantia->id}",
             'fecha' => now(),
+            'fecha_factura' => now(),
             'tipo' => 'DEVOLUCION_GARANTIA'
         ]);
 
@@ -738,6 +739,7 @@ class GarantiaCentralService
             'monto' => $garantia->monto_devolucion_dinero,
             'descripcion' => "Devolución de dinero por producto #{$garantia->id}",
             'fecha' => now(),
+            'fecha_factura' => now(),
             'tipo' => 'DEVOLUCION_DINERO'
         ]);
 

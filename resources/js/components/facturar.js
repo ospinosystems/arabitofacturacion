@@ -158,6 +158,15 @@ export default function Facturar({
     const [debito, setDebito] = useState("");
     const [debitoRef, setDebitoRef] = useState(""); // Referencia obligatoria del débito
     const [debitoRefError, setDebitoRefError] = useState(false); // Error de referencia faltante
+    
+    // Estados para modal POS débito físico
+    const [showModalPosDebito, setShowModalPosDebito] = useState(false);
+    const [posCedulaTitular, setPosCedulaTitular] = useState("");
+    const [posTipoCuenta, setPosTipoCuenta] = useState("CORRIENTE");
+    const [posMontoDebito, setPosMontoDebito] = useState("");
+    const [posLoading, setPosLoading] = useState(false);
+    const [posPendingCallback, setPosPendingCallback] = useState(null);
+    
     const [efectivo, setEfectivo] = useState("");
     const [transferencia, setTransferencia] = useState("");
     const [credito, setCredito] = useState("");
@@ -3716,7 +3725,14 @@ export default function Facturar({
     const [puedeFacturarTransfeTime, setpuedeFacturarTransfeTime] =
         useState(null);
     const setPagoPedido = (callback = null) => {
-        // Validar referencia de débito obligatoria (solo para pagos positivos, no devoluciones)
+        // Si hay débito positivo y la sucursal tiene PINPAD activo, abrir modal del POS físico
+        // No se requiere validar debitoRef porque el POS lo setea automáticamente
+        if (debito && parseFloat(debito) > 0 && sucursaldata?.pinpad) {
+            abrirModalPosDebito(callback);
+            return;
+        }
+        
+        // Validar referencia de débito obligatoria (solo si NO hay PINPAD activo)
         if (debito && parseFloat(debito) > 0 && !debitoRef) {
             // Mostrar error visual y hacer foco en el campo de referencia
             setDebitoRefError(true);
@@ -3729,7 +3745,7 @@ export default function Facturar({
             }, 100);
             return;
         }
-        // Validar que la referencia de débito tenga exactamente 4 dígitos
+        // Validar que la referencia de débito tenga exactamente 4 dígitos (solo si NO hay PINPAD)
         if (debito && parseFloat(debito) > 0 && debitoRef && debitoRef.length !== 4) {
             alert("Error: La referencia de débito debe tener exactamente 4 dígitos.");
             setDebitoRefError(true);
@@ -3742,6 +3758,7 @@ export default function Facturar({
             }, 100);
             return;
         }
+        
         if (
             confirm(
                 "¿Realmente desea guardar e imprimir pedido (" +
@@ -3756,69 +3773,138 @@ export default function Facturar({
                     "Error: Debe cargar referencia de transferencia electrónica."
                 );
             } else {
-                
-                    setLoading(true);
-                    // Construir pagos adicionales de efectivo (Bs y COP)
-                    // Enviar valores en moneda original, el backend hace la conversión
-                    let pagosAdicionales = [];
-                    if (efectivo_bs && parseFloat(efectivo_bs) != 0) {
-                        pagosAdicionales.push({ 
-                            moneda: 'bs', 
-                            monto_original: parseFloat(efectivo_bs)
-                        });
-                    }
-                    if (efectivo_peso && parseFloat(efectivo_peso) != 0) {
-                        pagosAdicionales.push({ 
-                            moneda: 'peso', 
-                            monto_original: parseFloat(efectivo_peso)
-                        });
-                    }
-                    
-                    // Débito viene en Bs, enviar valor original (backend convierte)
-                    const debitoBs = parseFloat(debito) || 0;
-                    
-                    // Efectivo dolar: solo enviar si tiene valor válido (no 0, no vacío)
-                    const efectivoDolarVal = parseFloat(efectivo_dolar) || 0;
-                    
-                    let params = {
-                        id: pedidoData.id,
-                        debito: debitoBs != 0 ? debitoBs : null, // Monto original en Bs (backend convierte, permite negativos)
-                        debitoRef, // Referencia del débito
-                        efectivo: efectivoDolarVal != 0 ? efectivoDolarVal : null, // Efectivo USD (permite negativos)
-                        transferencia,
-                        biopago,
-                        credito,
-                        vuelto,
-                        pagosAdicionales: pagosAdicionales.length > 0 ? pagosAdicionales : null,
-                    };
-                    db.setPagoPedido(params).then((res) => {
-                        notificar(res);
-                        setLoading(false);
-                        if (res.data.estado) {
-                            getPedidosFast();
-                            setPedidoData({});
-                            setSelectItem(null);
-                            setviewconfigcredito(false);
-                            if (callback) {
-                                callback();
-                            }
-                        }
-                        if (res.data.estado === false) {
-                            setLastDbRequest({
-                                dbFunction: db.setPagoPedido,
-                                params,
-                            });
-                            openValidationTarea(res.data.id_tarea);
-                        }
-                    });
-                
-
-              
-
-                /////
+                procesarPagoInterno(callback);
             }
         }
     };
+    
+    // Función interna para procesar el pago (llamada después de POS exitoso o sin débito)
+    // refOverride: permite pasar la referencia directamente (para cuando viene del POS)
+    const procesarPagoInterno = (callback = null, refOverride = null) => {
+        setLoading(true);
+        // Construir pagos adicionales de efectivo (Bs y COP)
+        let pagosAdicionales = [];
+        if (efectivo_bs && parseFloat(efectivo_bs) != 0) {
+            pagosAdicionales.push({ 
+                moneda: 'bs', 
+                monto_original: parseFloat(efectivo_bs)
+            });
+        }
+        if (efectivo_peso && parseFloat(efectivo_peso) != 0) {
+            pagosAdicionales.push({ 
+                moneda: 'peso', 
+                monto_original: parseFloat(efectivo_peso)
+            });
+        }
+        
+        const debitoBs = parseFloat(debito) || 0;
+        const efectivoDolarVal = parseFloat(efectivo_dolar) || 0;
+        
+        // Usar refOverride si viene del POS, sino usar el estado debitoRef
+        const refFinal = refOverride !== null ? refOverride : debitoRef;
+        
+        let params = {
+            id: pedidoData.id,
+            debito: debitoBs != 0 ? debitoBs : null,
+            debitoRef: refFinal,
+            efectivo: efectivoDolarVal != 0 ? efectivoDolarVal : null,
+            transferencia,
+            biopago,
+            credito,
+            vuelto,
+            pagosAdicionales: pagosAdicionales.length > 0 ? pagosAdicionales : null,
+        };
+        
+        db.setPagoPedido(params).then((res) => {
+            notificar(res);
+            setLoading(false);
+            if (res.data.estado) {
+                getPedidosFast();
+                setPedidoData({});
+                setSelectItem(null);
+                setviewconfigcredito(false);
+                if (callback) {
+                    callback();
+                }
+            }
+            if (res.data.estado === false) {
+                setLastDbRequest({
+                    dbFunction: db.setPagoPedido,
+                    params,
+                });
+                openValidationTarea(res.data.id_tarea);
+            }
+        });
+    };
+    
+    // Función para enviar solicitud al POS físico de débito
+    const enviarSolicitudPosDebito = async () => {
+        if (!posCedulaTitular) {
+            alert("Debe ingresar la cédula del titular");
+            return;
+        }
+        
+        setPosLoading(true);
+        
+        // Convertir monto: 12.36 -> 1236 (sin decimales, multiplicado por 100)
+        const montoEntero = Math.round(parseFloat(posMontoDebito) * 100);
+        
+        const payload = {
+            operacion: "COMPRA",
+            monto: montoEntero,
+            tipoCuenta: posTipoCuenta,
+            cedula: posCedulaTitular,
+            numeroOrden: pedidoData.id.toString(),
+            mensaje: "PowerBy:Ospino"
+        };
+
+        console.log("Payload POS:", payload);
+        
+        try {
+            // Enviar a través del backend para evitar CORS
+            const response = await db.enviarTransaccionPOS(payload);
+            console.log("Respuesta POS:", response.data);
+            
+            const posData = response.data.data || {};
+            
+            if (response.data.success && posData.success) {
+                // Éxito: cerrar modal y continuar con el pago
+                setShowModalPosDebito(false);
+                setPosCedulaTitular("");
+                setPosTipoCuenta("CORRIENTE");
+                setPosMontoDebito("");
+                
+                // Obtener la referencia del POS (últimos 4 dígitos de reference o approval)
+                const posReference = posData.reference || posData.approval || "";
+                const refUltimos4 = posReference.slice(-4).padStart(4, '0');
+                setDebitoRef(refUltimos4); // Actualizar estado para UI
+                
+                notificar({ data: { msj: `POS APROBADO - Ref: ${posReference}`, estado: true } });
+                
+                // Procesar el pago pasando la referencia directamente (no esperar al setState)
+                procesarPagoInterno(posPendingCallback, refUltimos4);
+                setPosPendingCallback(null);
+            } else {
+                // Error del POS - mostrar mensaje específico
+                const errorMsg = posData.message || response.data.error || "Error en transacción POS";
+                notificar({ data: { msj: `POS: ${errorMsg}`, estado: false } });
+            }
+        } catch (error) {
+            console.error("Error POS:", error);
+            notificar({ data: { msj: "Error de conexión: " + (error.response?.data?.error || error.message), estado: false } });
+        } finally {
+            setPosLoading(false);
+        }
+    };
+    
+    // Función para abrir modal de POS débito
+    const abrirModalPosDebito = (callback = null) => {
+        // Precarga el monto del débito en Bs
+        setPosMontoDebito(debito || "0");
+        setPosPendingCallback(() => callback);
+        setShowModalPosDebito(true);
+    };
+    
     const [inventariadoEstadistica, setinventariadoEstadistica] = useState([]);
     const getPorcentajeInventario = () => {
         db.getPorcentajeInventario({}).then((res) => {
@@ -4062,6 +4148,14 @@ export default function Facturar({
 
     const veryenviarcierrefun = (e, callback = null) => {
         if (puedeSendCierre) {
+            // Bloquear inmediatamente para evitar clics duplicados
+            setpuedeSendCierre(false);
+            clearTimeout(puedeSendCierreTime);
+            let time = window.setTimeout(() => {
+                setpuedeSendCierre(true);
+            }, 20000);
+            setpuedeSendCierreTime(time);
+            
             let type = e.currentTarget.attributes["data-type"].value;
 
             if (type == "ver") {
@@ -4104,7 +4198,7 @@ export default function Facturar({
                         setLoading(false);
                         
                         // Procesar respuesta del nuevo sistema de sincronización
-                        if (res.data && res.data.success) {
+                        if (res.data && res.data.estado) {
                             const registros = res.data.registros_totales || 0;
                             const tiempo = res.data.tiempo_sync || '0s';
                             const tablas = res.data.tablas || {};
@@ -4117,6 +4211,12 @@ export default function Facturar({
                             }
                             
                             notificar(`✓ Sincronización completada: ${registros} registros`, false);
+                            
+                            // Ejecutar post-procesamiento (correo, backup) en segundo plano
+                            // No bloquea al usuario, se ejecuta silenciosamente
+                            db.ejecutarPostSync({ fecha: fechaCierre }).catch(err => {
+                                console.log('Post-sync en background:', err?.message || 'completado');
+                            });
                         } else {
                             // Manejar otros formatos de respuesta
                             let mensaje = "Proceso completado";
@@ -4160,14 +4260,6 @@ export default function Facturar({
         } else {
             alert("Debe esperar 20 SEGUNDOS PARA VOLVER A ENVIAR!");
         }
-
-        setpuedeSendCierre(false);
-
-        clearTimeout(puedeSendCierreTime);
-        let time = window.setTimeout(() => {
-            setpuedeSendCierre(true);
-        }, 20000);
-        setpuedeSendCierreTime(time);
     };
     const verCierreReq = (fechaCierre, type = "ver", usuario = "") => {
         // console.log(fecha)
@@ -8043,6 +8135,103 @@ export default function Facturar({
                             tipoTraido={tipo_referenciapago}
                             pedidoData={pedidoData}
                         />
+                    )}
+                    
+                    {/* Modal POS Débito Físico */}
+                    {showModalPosDebito && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                            <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+                                <div className="bg-blue-600 text-white px-6 py-4 rounded-t-lg">
+                                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                        </svg>
+                                        Punto de Venta - Débito
+                                    </h3>
+                                </div>
+                                <div className="p-6 space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Cédula del Titular
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={posCedulaTitular}
+                                            onChange={(e) => setPosCedulaTitular(e.target.value.replace(/\D/g, ''))}
+                                            placeholder="Ej: 12345678"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Tipo de Cuenta
+                                        </label>
+                                        <select
+                                            value={posTipoCuenta}
+                                            onChange={(e) => setPosTipoCuenta(e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        >
+                                            <option value="CORRIENTE">CORRIENTE</option>
+                                            <option value="AHORRO">AHORRO</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Monto (Bs)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={posMontoDebito}
+                                            onChange={(e) => setPosMontoDebito(e.target.value.replace(/[^0-9.,]/g, ''))}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 font-semibold text-lg"
+                                        />
+                                    </div>
+                                    <div className="bg-gray-50 p-3 rounded-lg text-sm text-gray-600">
+                                        <p><strong>Pedido:</strong> #{pedidoData.id}</p>
+                                        <p><strong>Monto a enviar:</strong> {Math.round(parseFloat(posMontoDebito || 0) * 100)} (centavos)</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-3 px-6 py-4 bg-gray-50 rounded-b-lg">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowModalPosDebito(false);
+                                            setPosCedulaTitular("");
+                                            setPosTipoCuenta("CORRIENTE");
+                                            setPosPendingCallback(null);
+                                        }}
+                                        disabled={posLoading}
+                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={enviarSolicitudPosDebito}
+                                        disabled={posLoading || !posCedulaTitular}
+                                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {posLoading ? (
+                                            <>
+                                                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                                                </svg>
+                                                Procesando...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                Enviar al POS
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     )}
                 </>
             )}

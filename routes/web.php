@@ -161,6 +161,8 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('getpersona', [ClientesController::class,"getpersona"]);
 		
 		Route::post('setPagoPedido', [PagoPedidosController::class,"setPagoPedido"]);
+		Route::post('enviarTransaccionPOS', [sendCentral::class,"enviarTransaccionPOS"]);
+		Route::post('ejecutarPostSync', [sendCentral::class,"ejecutarPostSync"]);
 		Route::get('printBultos', [PedidosController::class,"printBultos"]);
 		
 		Route::post('setconfigcredito', [PagoPedidosController::class,"setconfigcredito"]);

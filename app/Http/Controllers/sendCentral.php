@@ -44,6 +44,7 @@ use Illuminate\Support\Facades\Cache;
 
 use App\Http\Controllers\SyncProgressController;
 use App\Mail\enviarCierre;
+use App\Jobs\PostSyncJob;
 
 use Http;
 use Response;
@@ -57,8 +58,20 @@ class sendCentral extends Controller
 
     public function path()
     {
-       //return "http://127.0.0.1:8001";
-       return "https://phplaravel-1009655-3565285.cloudwaysapps.com";
+       return "http://127.0.0.1:8001";
+       //return "https://phplaravel-1009655-3565285.cloudwaysapps.com";
+    }
+
+    public function sends()
+    {
+        return [
+            /* "admon.arabito@gmail.com",   
+            "omarelhenaoui@hotmail.com",           
+            "yeisersalah2@gmail.com",           
+            "amerelhenaoui@outlook.com",           
+            "yesers982@hotmail.com",  */ 
+            "alvaroospino79@gmail.com" 
+        ];
     }
 
     /**\
@@ -147,17 +160,7 @@ class sendCentral extends Controller
                 }
     }
 
-    public function sends()
-    {
-        return [
-            "admon.arabito@gmail.com",   
-            "omarelhenaoui@hotmail.com",           
-            "yeisersalah2@gmail.com",           
-            "amerelhenaoui@outlook.com",           
-            "yesers982@hotmail.com",  
-            "alvaroospino79@gmail.com" 
-        ];
-    }
+  
 
     public function getAllInventarioFromCentral() {
         try {
@@ -4467,45 +4470,20 @@ class sendCentral extends Controller
                 return $errorMsg;
             }
             
-            // 2. Post-procesamiento
-            \Log::info('>>> PASO 2: Post-procesamiento...');
-            $t2 = microtime(true);
-            
-            // Enviar correo y backup solo en modo producción
-            if ($correo) {
-                \Log::info('    Enviando correo de cierre...');
-                Mail::to($this->sends())->send(new enviarCierre($correo[0], $correo[1], $correo[2], $correo[3]));
-                
-                \Log::info('    Ejecutando backup de base de datos...');
-                \Artisan::call('database:backup');
-                \Artisan::call('backup:run');
-            }
-            
-            // Actualizar IVA en inventarios
-            \Log::info('    Actualizando IVA en inventarios...');
-            \DB::statement("UPDATE `inventarios` SET iva=1");
-            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MACHETE%'");
-            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'PEINILLA%'");
-            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOBOMBA%'");
-            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'ELECTROBOMBA%'");
-            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'DESMALEZADORA%'");
-            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOSIERRA%'");
-            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'CUCHILLA%'");
-            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'FUMIGADORA%'");
-            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MANGUERA%'");
-            
-            $tiemposTotal['2_postProceso'] = round(microtime(true) - $t2, 2) . 's';
             $tiemposTotal['total'] = round(microtime(true) - $inicioTotal, 2) . 's';
             
-            \Log::info('<<< PASO 2 completado - ' . $tiemposTotal['2_postProceso']);
             \Log::info('=== SINCRONIZACIÓN COMPLETADA ===');
             \Log::info('Tiempo total: ' . $tiemposTotal['total']);
             \Log::info('Registros procesados: ' . ($syncResult['resultado']['registros_totales'] ?? 0));
+            \Log::info('>>> Post-procesamiento programado en segundo plano...');
             
-            // Preparar respuesta
+            // El post-procesamiento (correo, backup) se ejecutará en una petición separada
+            // desde el frontend después de mostrar éxito al usuario
+            
+            // Preparar respuesta (usar 'estado' y 'msj' para compatibilidad con frontend)
             $response = [
-                'success' => true,
-                'mensaje' => 'Sincronización completada exitosamente',
+                'estado' => true,
+                'msj' => 'Sincronización completada exitosamente',
                 'registros_totales' => $syncResult['resultado']['registros_totales'] ?? 0,
                 'tiempo_sync' => $syncResult['resultado']['tiempo_total'] ?? '0s',
                 'tablas' => $syncResult['resultado']['tablas'] ?? [],
@@ -4532,5 +4510,122 @@ class sendCentral extends Controller
     }
 
     // =================== FIN MÉTODOS SINCRONIZACIÓN DIRECTA ===================
+
+    /**
+     * Ejecutar post-procesamiento después de sincronización exitosa
+     * (correo, backup, actualización IVA)
+     * Se llama desde el frontend después de que el modal muestra éxito
+     * Solo necesita la fecha, todo lo demás se obtiene del backend
+     */
+    public function ejecutarPostSync(Request $request)
+    {
+        \Log::info('=== INICIO POST-SYNC (Petición separada) ===');
+        
+        try {
+            // Obtener fecha (del request o usar hoy)
+            $fecha = $request->input('fecha', date('Y-m-d'));
+            
+            // Obtener datos de sucursal
+            $sucursal = sucursal::first();
+            $from1 = $sucursal->correo ?? '';
+            $from = $sucursal->sucursal ?? 'Sucursal';
+            $subject = $sucursal->sucursal . " | CIERRE DIARIO | " . $fecha;
+            
+            // Obtener datos del cierre para el correo
+            $cierre = cierres::with("usuario")->where("fecha", $fecha)->first();
+            
+            if ($cierre) {
+                // Construir datos básicos para el correo
+                $arr_send = [
+                    "cierre" => $cierre,
+                    "sucursal" => $sucursal,
+                    "fecha" => $fecha,
+                ];
+                
+                // 1. Enviar correo
+                \Log::info('    Enviando correo de cierre...');
+                Mail::to($this->sends())->send(new enviarCierre(
+                    $arr_send, 
+                    $from1, 
+                    $from, 
+                    $subject
+                ));
+                \Log::info('    Correo enviado');
+            } else {
+                \Log::info('    No hay cierre para la fecha ' . $fecha . ', saltando correo');
+            }
+            
+            // 2. Ejecutar backup
+            \Log::info('    Ejecutando backup...');
+            \Artisan::call('database:backup');
+            \Artisan::call('backup:run');
+            \Log::info('    Backup completado');
+            
+            // 3. Actualizar IVA en inventarios
+            \Log::info('    Actualizando IVA...');
+            \DB::statement("UPDATE `inventarios` SET iva=1");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MACHETE%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'PEINILLA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOBOMBA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'ELECTROBOMBA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'DESMALEZADORA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOSIERRA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'CUCHILLA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'FUMIGADORA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MANGUERA%'");
+            
+            \Log::info('=== POST-SYNC COMPLETADO ===');
+            
+            return response()->json([
+                'estado' => true,
+                'msj' => 'Post-procesamiento completado'
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Error en post-sync: ' . $e->getMessage());
+            return response()->json([
+                'estado' => false,
+                'msj' => 'Error en post-procesamiento: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Enviar transacción al POS físico de débito
+     */
+    public function enviarTransaccionPOS(Request $request)
+    {
+        $payload = [
+            'operacion' => $request->input('operacion', 'COMPRA'),
+            'monto' => $request->input('monto'),
+            'tipoCuenta' => $request->input('tipoCuenta'),
+            'cedula' => $request->input('cedula'),
+            'numeroOrden' => $request->input('numeroOrden'),
+            'mensaje' => $request->input('mensaje', 'PowerBy:Ospino'),
+        ];
+        
+        $posUrl = 'http://192.168.0.191:9001/transaction';
+        
+        try {
+            $response = Http::timeout(120)
+                ->withHeaders([
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ])
+                ->post($posUrl, $payload);
+            
+            return response()->json([
+                'success' => $response->successful(),
+                'status' => $response->status(),
+                'data' => $response->json() ?? $response->body(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error POS: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 
 }

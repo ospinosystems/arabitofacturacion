@@ -2413,14 +2413,20 @@ class PedidosController extends Controller
             $subject = $sucursal->sucursal . " | CIERRE DIARIO | " . $fechareq;
             try {
 
-                return (new sendCentral)->sendAll([
+                $result = (new sendCentral)->sendAll([
                     $arr_send,
                     $from1,
                     $from,
                     $subject
                 ]);
-               /*  $sendEstadisticas = (new sendCentral)->sendEstadisticas();*/
-
+                
+                // Asegurar respuesta JSON válida
+                if (is_array($result)) {
+                    return Response::json($result);
+                } elseif (is_string($result)) {
+                    return Response::json(["msj" => $result, "estado" => false]);
+                }
+                return Response::json(["msj" => "Sincronización completada", "estado" => true]);
 
             } catch (\Exception $e) {
 

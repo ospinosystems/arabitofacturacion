@@ -21,5 +21,10 @@ class sucursal extends Model
         "nombre_registro",
         "rif",
         "modo_transferencia",
+        "pinpad",
+    ];
+    
+    protected $casts = [
+        'pinpad' => 'boolean',
     ];
 }
