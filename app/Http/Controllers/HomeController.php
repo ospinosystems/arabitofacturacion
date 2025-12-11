@@ -81,7 +81,7 @@ class HomeController extends Controller
         $su = sucursal::all()->first();
         if ($su) {
             // Redirigir a Warehouse Inventory si es Galpón Valencia 1
-            if ($su->codigo === 'galponvalencia1') {
+            /* if ($su->codigo === 'galponvalencia1') {
                 // Verificar si hay sesión activa
                 $sessionId = $request->header('X-Session-Token') ?? 
                             $request->cookie('session_token');
@@ -103,7 +103,7 @@ class HomeController extends Controller
                 
                 // Si no hay sesión, redirigir a login (nunca mostrar index en galponvalencia1)
                 return redirect('/login');
-            }
+            } */
             return view("facturar.index");
         }else{
 
