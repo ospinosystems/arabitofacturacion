@@ -3923,8 +3923,39 @@ export default function Facturar({
                         if (inputCedula) inputCedula.focus();
                     }, 100);
                 } else {
-                    // Ya se cubrió el total, preparar para finalizar
+                    // Ya se cubrió el total, finalizar automáticamente
                     setPosMontoDebito("0");
+                    
+                    // Ejecutar finalización automática después de un breve delay para mostrar el mensaje de éxito
+                    setTimeout(() => {
+                        // Usar la referencia de la última transacción como referencia principal
+                        const ultimaTrans = nuevasTransacciones[nuevasTransacciones.length - 1];
+                        const refFinal = ultimaTrans.refCorta;
+                        const totalAprobadoFinal = nuevasTransacciones.reduce((sum, t) => sum + t.monto, 0);
+                        const numTransacciones = nuevasTransacciones.length;
+                        
+                        // Limpiar transacciones del mapa para este pedido
+                        if (pedidoData?.id) {
+                            limpiarTransaccionesPedido(pedidoData.id);
+                        }
+                        
+                        // Cerrar modal y limpiar estados
+                        setShowModalPosDebito(false);
+                        setPosCedulaTitular("");
+                        setPosTipoCuenta("CORRIENTE");
+                        setPosMontoDebito("");
+                        setPosRespuesta(null);
+                        setPosTransaccionesAprobadas([]);
+                        setPosMontoTotalOriginal("");
+                        setDebitoRef(refFinal);
+                        
+                        // Actualizar el monto de débito con el total aprobado
+                        setDebito(totalAprobadoFinal.toFixed(2));
+                        
+                        notificar({ data: { msj: `✓ POS Completado - ${numTransacciones} transacción(es) - Total: Bs ${totalAprobadoFinal.toFixed(2)}`, estado: true } });
+                        procesarPagoInterno(posPendingCallback, refFinal);
+                        setPosPendingCallback(null);
+                    }, 1000); // 1 segundo para que el usuario vea el mensaje de éxito
                 }
             } else {
                 // Error del POS - mostrar mensaje en el modal (no cerrar)
@@ -8307,7 +8338,7 @@ export default function Facturar({
                     {/* Modal POS Débito Físico - Múltiples Transacciones */}
                     {showModalPosDebito && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                            <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+                            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
                                 <div className="bg-blue-600 text-white px-6 py-4 rounded-t-lg flex-shrink-0">
                                     <h3 className="text-lg font-semibold flex items-center gap-2">
                                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -8421,7 +8452,7 @@ export default function Facturar({
                                                         disabled={posLoading}
                                                     >
                                                         <option value="CORRIENTE">CORRIENTE</option>
-                                                        <option value="AHORRO">AHORRO</option>
+                                                        <option value="AHORROS">AHORROS</option>
                                                     </select>
                                                 </div>
                                                 <div>
