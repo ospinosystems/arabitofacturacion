@@ -58,18 +58,18 @@ class sendCentral extends Controller
 
     public function path()
     {
-       return "http://127.0.0.1:8001";
-       //return "https://phplaravel-1009655-3565285.cloudwaysapps.com";
+       //return "http://127.0.0.1:8001";
+       return "https://phplaravel-1009655-3565285.cloudwaysapps.com";
     }
 
     public function sends()
     {
         return [
-            /* "admon.arabito@gmail.com",   
+            /**/ "admon.arabito@gmail.com",   
             "omarelhenaoui@hotmail.com",           
             "yeisersalah2@gmail.com",           
             "amerelhenaoui@outlook.com",           
-            "yesers982@hotmail.com",  */ 
+            "yesers982@hotmail.com",   
             "alvaroospino79@gmail.com" 
         ];
     }
@@ -4498,7 +4498,6 @@ class sendCentral extends Controller
         } catch (\Exception $e) {
             $tiemposTotal['total'] = round(microtime(true) - $inicioTotal, 2) . 's';
             $errorMsg = $e->getMessage() . " - " . $e->getFile() . ":" . $e->getLine();
-            
             \Log::error('=== ERROR EN SINCRONIZACIÓN ===');
             \Log::error($errorMsg);
             
@@ -4513,55 +4512,46 @@ class sendCentral extends Controller
 
     /**
      * Ejecutar post-procesamiento después de sincronización exitosa
-     * (correo, backup, actualización IVA)
-     * Se llama desde el frontend después de que el modal muestra éxito
-     * Solo necesita la fecha, todo lo demás se obtiene del backend
+     * Obtiene todos los datos del backend usando PedidosController
      */
     public function ejecutarPostSync(Request $request)
     {
-        \Log::info('=== INICIO POST-SYNC (Petición separada) ===');
+        \Log::info('=== INICIO POST-SYNC ===');
         
         try {
-            // Obtener fecha (del request o usar hoy)
             $fecha = $request->input('fecha', date('Y-m-d'));
+            $totalizarcierre = $request->input('totalizarcierre', true);
             
-            // Obtener datos de sucursal
-            $sucursal = sucursal::first();
-            $from1 = $sucursal->correo ?? '';
-            $from = $sucursal->sucursal ?? 'Sucursal';
-            $subject = $sucursal->sucursal . " | CIERRE DIARIO | " . $fecha;
+            \Log::info('    Obteniendo datos del cierre para fecha: ' . $fecha);
             
-            // Obtener datos del cierre para el correo
-            $cierre = cierres::with("usuario")->where("fecha", $fecha)->first();
+            $pedidosController = new PedidosController();
+            $fakeRequest = new Request();
+            $fakeRequest->merge([
+                'fecha' => $fecha,
+                'type' => 'getData',
+                'totalizarcierre' => $totalizarcierre,
+            ]);
             
-            if ($cierre) {
-                // Construir datos básicos para el correo
-                $arr_send = [
-                    "cierre" => $cierre,
-                    "sucursal" => $sucursal,
-                    "fecha" => $fecha,
-                ];
-                
-                // 1. Enviar correo
+            $correoData = $pedidosController->verCierre($fakeRequest);
+            
+            if (is_array($correoData) && count($correoData) >= 4) {
                 \Log::info('    Enviando correo de cierre...');
                 Mail::to($this->sends())->send(new enviarCierre(
-                    $arr_send, 
-                    $from1, 
-                    $from, 
-                    $subject
+                    $correoData[0],
+                    $correoData[1],
+                    $correoData[2],
+                    $correoData[3]
                 ));
                 \Log::info('    Correo enviado');
             } else {
-                \Log::info('    No hay cierre para la fecha ' . $fecha . ', saltando correo');
+                \Log::info('    No se pudieron obtener datos del cierre');
             }
             
-            // 2. Ejecutar backup
             \Log::info('    Ejecutando backup...');
             \Artisan::call('database:backup');
             \Artisan::call('backup:run');
             \Log::info('    Backup completado');
             
-            // 3. Actualizar IVA en inventarios
             \Log::info('    Actualizando IVA...');
             \DB::statement("UPDATE `inventarios` SET iva=1");
             \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MACHETE%'");
@@ -4575,18 +4565,11 @@ class sendCentral extends Controller
             \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MANGUERA%'");
             
             \Log::info('=== POST-SYNC COMPLETADO ===');
-            
-            return response()->json([
-                'estado' => true,
-                'msj' => 'Post-procesamiento completado'
-            ]);
+            return response()->json(['estado' => true, 'msj' => 'Post-procesamiento completado']);
             
         } catch (\Exception $e) {
             \Log::error('Error en post-sync: ' . $e->getMessage());
-            return response()->json([
-                'estado' => false,
-                'msj' => 'Error en post-procesamiento: ' . $e->getMessage()
-            ]);
+            return response()->json(['estado' => false, 'msj' => 'Error: ' . $e->getMessage()]);
         }
     }
 
@@ -4604,7 +4587,20 @@ class sendCentral extends Controller
             'mensaje' => $request->input('mensaje', 'PowerBy:Ospino'),
         ];
         
-        $posUrl = 'http://192.168.0.191:9001/transaction';
+        // Obtener IP del PINPAD del request o usar la del usuario logueado
+        $ipPinpad = $request->input('ip_pinpad');
+        if (!$ipPinpad) {
+            // Fallback: obtener del usuario logueado
+            $userId = session('id_usuario');
+            if ($userId) {
+                $usuario = \App\Models\usuarios::find($userId);
+                $ipPinpad = $usuario->ip_pinpad ?? '192.168.0.191:9001';
+            } else {
+                $ipPinpad = '192.168.0.191:9001';
+            }
+        }
+        
+        $posUrl = 'http://' . $ipPinpad . '/transaction';
         
         try {
             $response = Http::timeout(120)

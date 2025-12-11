@@ -28,6 +28,7 @@ class UsuariosController extends Controller
                 "nombre"=>$req->nombres,
                 "usuario"=>$req->usuario,
                 "tipo_usuario"=>$req->role,
+                "ip_pinpad"=>$req->ip_pinpad,
             ];
             if ($req->clave) {
                 $arr["clave"] = Hash::make( preg_replace( '/[^a-z0-9 ]/i', '', strtolower($req->clave)) );
@@ -58,7 +59,7 @@ class UsuariosController extends Controller
     public function getUsuarios(Request $req)
     {
         $qBuscarUsuario = $req->q;
-        return usuarios::orwhere("usuario","LIKE",$qBuscarUsuario."%")->orwhere("nombre","LIKE",$qBuscarUsuario."%")->get(["id","nombre","usuario","tipo_usuario"]);
+        return usuarios::orwhere("usuario","LIKE",$qBuscarUsuario."%")->orwhere("nombre","LIKE",$qBuscarUsuario."%")->get(["id","nombre","usuario","tipo_usuario","ip_pinpad"]);
     }
     
 }

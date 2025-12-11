@@ -8,6 +8,8 @@ function Usuarios({
 	setusuarioRole,
 	usuarioClave,
 	setusuarioClave,
+	usuarioIpPinpad,
+	setusuarioIpPinpad,
 
 	indexSelectUsuarios,
 	setIndexSelectUsuarios,
@@ -42,6 +44,7 @@ function Usuarios({
 		setusuarioUsuario("")
 		setusuarioRole("")
 		setusuarioClave("")
+		setusuarioIpPinpad("")
 		setIndexSelectUsuarios(null)
 	}
 	return (
@@ -139,6 +142,16 @@ function Usuarios({
 								<input type="password"
 									value={usuarioClave}
 									onChange={e => setusuarioClave(e.target.value)}
+									className="form-control" />
+							</div>
+							<div className="form-group">
+								<label htmlFor="">
+									IP PINPAD
+								</label>
+								<input type="text"
+									value={usuarioIpPinpad}
+									onChange={e => setusuarioIpPinpad(e.target.value)}
+									placeholder="Ej: 192.168.0.191:9001"
 									className="form-control" />
 							</div>
 							<div className="form-group mt-1">

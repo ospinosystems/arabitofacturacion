@@ -20,6 +20,7 @@ class usuarios extends Model
         "usuario",
         "clave",
         "tipo_usuario",
+        "ip_pinpad",
     ];
 
 }

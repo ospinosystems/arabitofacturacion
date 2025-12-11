@@ -166,6 +166,8 @@ export default function Facturar({
     const [posMontoDebito, setPosMontoDebito] = useState("");
     const [posLoading, setPosLoading] = useState(false);
     const [posPendingCallback, setPosPendingCallback] = useState(null);
+    const [forzarReferenciaManual, setForzarReferenciaManual] = useState(false); // Para bypassear PINPAD
+    const [posRespuesta, setPosRespuesta] = useState(null); // {mensaje, exito} para mostrar en modal
     
     const [efectivo, setEfectivo] = useState("");
     const [transferencia, setTransferencia] = useState("");
@@ -416,6 +418,7 @@ export default function Facturar({
     const [usuarioUsuario, setusuarioUsuario] = useState("");
     const [usuarioRole, setusuarioRole] = useState("");
     const [usuarioClave, setusuarioClave] = useState("");
+    const [usuarioIpPinpad, setusuarioIpPinpad] = useState("");
 
     const [qBuscarUsuario, setQBuscarUsuario] = useState("");
     const [indexSelectUsuarios, setIndexSelectUsuarios] = useState(null);
@@ -3062,6 +3065,7 @@ export default function Facturar({
                     setTransferencia("");
                     setDebito("");
                     setDebitoRef(""); // Limpiar referencia de débito
+                    setForzarReferenciaManual(false); // Resetear modo manual
                     setEfectivo("");
                     setEfectivo_bs("");
                     setEfectivo_dolar("");
@@ -3725,14 +3729,14 @@ export default function Facturar({
     const [puedeFacturarTransfeTime, setpuedeFacturarTransfeTime] =
         useState(null);
     const setPagoPedido = (callback = null) => {
-        // Si hay débito positivo y la sucursal tiene PINPAD activo, abrir modal del POS físico
+        // Si hay débito positivo y la sucursal tiene PINPAD activo (y NO está forzando manual), abrir modal del POS físico
         // No se requiere validar debitoRef porque el POS lo setea automáticamente
-        if (debito && parseFloat(debito) > 0 && sucursaldata?.pinpad) {
+        if (debito && parseFloat(debito) > 0 && sucursaldata?.pinpad && !forzarReferenciaManual) {
             abrirModalPosDebito(callback);
             return;
         }
         
-        // Validar referencia de débito obligatoria (solo si NO hay PINPAD activo)
+        // Validar referencia de débito obligatoria (si NO hay PINPAD o si está forzando manual)
         if (debito && parseFloat(debito) > 0 && !debitoRef) {
             // Mostrar error visual y hacer foco en el campo de referencia
             setDebitoRefError(true);
@@ -3868,30 +3872,34 @@ export default function Facturar({
             const posData = response.data.data || {};
             
             if (response.data.success && posData.success) {
-                // Éxito: cerrar modal y continuar con el pago
-                setShowModalPosDebito(false);
-                setPosCedulaTitular("");
-                setPosTipoCuenta("CORRIENTE");
-                setPosMontoDebito("");
-                
-                // Obtener la referencia del POS (últimos 4 dígitos de reference o approval)
+                // Éxito: mostrar mensaje en modal y luego cerrar
                 const posReference = posData.reference || posData.approval || "";
                 const refUltimos4 = posReference.slice(-4).padStart(4, '0');
-                setDebitoRef(refUltimos4); // Actualizar estado para UI
                 
-                notificar({ data: { msj: `POS APROBADO - Ref: ${posReference}`, estado: true } });
+                setPosRespuesta({ mensaje: `✓ APROBADO - Ref: ${posReference}`, exito: true });
                 
-                // Procesar el pago pasando la referencia directamente (no esperar al setState)
-                procesarPagoInterno(posPendingCallback, refUltimos4);
-                setPosPendingCallback(null);
+                // Esperar 1.5 segundos para que el usuario vea el mensaje, luego cerrar y procesar
+                setTimeout(() => {
+                    setShowModalPosDebito(false);
+                    setPosCedulaTitular("");
+                    setPosTipoCuenta("CORRIENTE");
+                    setPosMontoDebito("");
+                    setPosRespuesta(null);
+                    setDebitoRef(refUltimos4);
+                    
+                    notificar({ data: { msj: `POS APROBADO - Ref: ${posReference}`, estado: true } });
+                    procesarPagoInterno(posPendingCallback, refUltimos4);
+                    setPosPendingCallback(null);
+                }, 1500);
             } else {
-                // Error del POS - mostrar mensaje específico
+                // Error del POS - mostrar mensaje en el modal (no cerrar)
                 const errorMsg = posData.message || response.data.error || "Error en transacción POS";
-                notificar({ data: { msj: `POS: ${errorMsg}`, estado: false } });
+                setPosRespuesta({ mensaje: `✗ ${errorMsg}`, exito: false });
             }
         } catch (error) {
             console.error("Error POS:", error);
-            notificar({ data: { msj: "Error de conexión: " + (error.response?.data?.error || error.message), estado: false } });
+            const errorMsg = error.response?.data?.error || error.message || "Error de conexión";
+            setPosRespuesta({ mensaje: `✗ ${errorMsg}`, exito: false });
         } finally {
             setPosLoading(false);
         }
@@ -3902,7 +3910,13 @@ export default function Facturar({
         // Precarga el monto del débito en Bs
         setPosMontoDebito(debito || "0");
         setPosPendingCallback(() => callback);
+        setPosRespuesta(null); // Limpiar respuesta anterior
         setShowModalPosDebito(true);
+        // Hacer foco en el input de cédula después de que el modal se renderice
+        setTimeout(() => {
+            const inputCedula = document.getElementById('pos-cedula-input');
+            if (inputCedula) inputCedula.focus();
+        }, 100);
     };
     
     const [inventariadoEstadistica, setinventariadoEstadistica] = useState([]);
@@ -5613,6 +5627,7 @@ export default function Facturar({
                 nombres: usuarioNombre,
                 usuario: usuarioUsuario,
                 clave: usuarioClave,
+                ip_pinpad: usuarioIpPinpad,
             }).then((res) => {
                 notificar(res);
                 setLoading(false);
@@ -5637,6 +5652,7 @@ export default function Facturar({
                 setusuarioUsuario(obj.usuario);
                 setusuarioRole(obj.tipo_usuario);
                 setusuarioClave(obj.clave);
+                setusuarioIpPinpad(obj.ip_pinpad || "");
             }
         }
     };
@@ -8038,6 +8054,8 @@ export default function Facturar({
                             setusuarioRole={setusuarioRole}
                             usuarioClave={usuarioClave}
                             setusuarioClave={setusuarioClave}
+                            usuarioIpPinpad={usuarioIpPinpad}
+                            setusuarioIpPinpad={setusuarioIpPinpad}
                             indexSelectUsuarios={indexSelectUsuarios}
                             setIndexSelectUsuarios={setIndexSelectUsuarios}
                             qBuscarUsuario={qBuscarUsuario}
@@ -8155,9 +8173,19 @@ export default function Facturar({
                                             Cédula del Titular
                                         </label>
                                         <input
+                                            id="pos-cedula-input"
                                             type="text"
                                             value={posCedulaTitular}
                                             onChange={(e) => setPosCedulaTitular(e.target.value.replace(/\D/g, ''))}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    if (posCedulaTitular && !posLoading) {
+                                                        enviarSolicitudPosDebito();
+                                                    }
+                                                }
+                                            }}
                                             placeholder="Ej: 12345678"
                                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                             autoFocus
@@ -8191,6 +8219,15 @@ export default function Facturar({
                                         <p><strong>Pedido:</strong> #{pedidoData.id}</p>
                                         <p><strong>Monto a enviar:</strong> {Math.round(parseFloat(posMontoDebito || 0) * 100)} (centavos)</p>
                                     </div>
+                                    {/* Área de respuesta del POS */}
+                                    {posRespuesta && (
+                                        <div className={`p-4 rounded-lg text-center font-semibold ${posRespuesta.exito ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'}`}>
+                                            <p className="text-lg">{posRespuesta.mensaje}</p>
+                                            {!posRespuesta.exito && (
+                                                <p className="text-sm mt-2 font-normal">Puede reintentar o usar referencia manual</p>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="flex gap-3 px-6 py-4 bg-gray-50 rounded-b-lg">
                                     <button
@@ -8200,11 +8237,34 @@ export default function Facturar({
                                             setPosCedulaTitular("");
                                             setPosTipoCuenta("CORRIENTE");
                                             setPosPendingCallback(null);
+                                            setPosRespuesta(null);
                                         }}
                                         disabled={posLoading}
-                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                                        className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
                                     >
                                         Cancelar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowModalPosDebito(false);
+                                            setPosCedulaTitular("");
+                                            setPosTipoCuenta("CORRIENTE");
+                                            setPosPendingCallback(null);
+                                            setPosRespuesta(null);
+                                            setForzarReferenciaManual(true);
+                                            // Hacer foco en el campo de referencia después de cerrar el modal
+                                            setTimeout(() => {
+                                                const debitoRefInput = document.querySelector('[data-ref-input="true"]');
+                                                if (debitoRefInput) {
+                                                    debitoRefInput.focus();
+                                                }
+                                            }, 100);
+                                        }}
+                                        disabled={posLoading}
+                                        className="px-4 py-2 border border-orange-400 rounded-lg text-orange-600 hover:bg-orange-50 transition-colors disabled:opacity-50"
+                                    >
+                                        Ref. Manual
                                     </button>
                                     <button
                                         type="button"

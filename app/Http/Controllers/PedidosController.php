@@ -2399,6 +2399,14 @@ class PedidosController extends Controller
 
         if ($type == "ver") {
             return view("reportes.cierre", $arr_send);
+        } else if ($type == "getData") {
+            // Retornar datos para uso interno (ej: ejecutarPostSync)
+            return [
+                $arr_send,
+                $sucursal->correo,
+                $sucursal->sucursal,
+                $sucursal->sucursal . " | CIERRE DIARIO | " . $fechareq
+            ];
         } else {
             //Enviar Central
 
