@@ -801,4 +801,143 @@ class PagosReferenciasController extends Controller
              "msj" => "Código generado exitosamente. Válido por 5 minutos."
          ]);
      }
+
+     /**
+      * Autovalidar transferencia directamente con Arabito Central
+      * Valida secuencialmente: pagomovil -> interbancaria -> banesco
+      * Si es exitosa, crea registro en pagos_referencias con estatus aprobado
+      */
+     public function autovalidarTransferencia(Request $req)
+     {
+         try {
+             $referencia = $req->referencia;
+             $telefono = $req->telefono;
+             $banco_origen = $req->banco_origen;
+             $fecha_pago = $req->fecha_pago;
+             $monto = $req->monto;
+             $id_pedido = $req->id_pedido;
+             $cedula = $req->cedula;
+
+             // Validaciones básicas
+             if (!$referencia || strlen($referencia) < 12 || strlen($referencia) > 15) {
+                 return Response::json([
+                     "estado" => false,
+                     "msj" => "La referencia debe tener entre 12 y 15 dígitos"
+                 ]);
+             }
+
+             if (!$telefono) {
+                 return Response::json([
+                     "estado" => false,
+                     "msj" => "El teléfono es obligatorio"
+                 ]);
+             }
+
+             if (!$banco_origen) {
+                 return Response::json([
+                     "estado" => false,
+                     "msj" => "El banco origen es obligatorio"
+                 ]);
+             }
+
+             if (!$fecha_pago) {
+                 return Response::json([
+                     "estado" => false,
+                     "msj" => "La fecha de pago es obligatoria"
+                 ]);
+             }
+
+             if (!$monto || floatval($monto) <= 0) {
+                 return Response::json([
+                     "estado" => false,
+                     "msj" => "El monto debe ser mayor a 0"
+                 ]);
+             }
+
+             if (!$id_pedido) {
+                 return Response::json([
+                     "estado" => false,
+                     "msj" => "El ID del pedido es obligatorio"
+                 ]);
+             }
+
+             // Verificar que el pedido exista
+             $pedido = pedidos::find($id_pedido);
+             if (!$pedido) {
+                 return Response::json([
+                     "estado" => false,
+                     "msj" => "Pedido no encontrado"
+                 ]);
+             }
+
+             // Verificar que no exista ya una referencia con el mismo número
+             $existeRef = pagos_referencias::where("descripcion", $referencia)
+                 ->where("estatus", "aprobada")
+                 ->first();
+             if ($existeRef) {
+                 return Response::json([
+                     "estado" => false,
+                     "msj" => "Ya existe una referencia aprobada con este número: " . $referencia
+                 ]);
+             }
+
+             // Enviar petición a Arabito Central para validar
+             $sendCentral = new sendCentral();
+             $resultado = $sendCentral->autovalidarTransferenciaCentral([
+                 'referencia' => $referencia,
+                 'telefono' => $telefono,
+                 'banco_origen' => $banco_origen,
+                 'fecha_pago' => $fecha_pago,
+                 'monto' => $monto,
+                 'id_pedido' => $id_pedido,
+                 'cedula' => $cedula,
+             ]);
+
+             // Si la validación fue exitosa, crear registro en pagos_referencias
+             if (isset($resultado['estado']) && $resultado['estado'] === true) {
+                 // Crear registro de pago con estatus aprobado
+                 $pagoRef = new pagos_referencias();
+                 $pagoRef->tipo = 1; // Transferencia
+                 $pagoRef->monto = $monto;
+                 $pagoRef->id_pedido = $id_pedido;
+                 $pagoRef->cedula = $cedula;
+                 $pagoRef->descripcion = $resultado['referencia_completa'] ?? $referencia;
+                 $pagoRef->banco = "0134"; // Banesco (destino)
+                 $pagoRef->banco_origen = $banco_origen;
+                 $pagoRef->telefono = $telefono;
+                 $pagoRef->fecha_pago = $fecha_pago;
+                 $pagoRef->estatus = "aprobada";
+                 $pagoRef->categoria = "autovalidar";
+                 $pagoRef->response = json_encode($resultado);
+                 $pagoRef->save();
+
+                 return Response::json([
+                     "estado" => true,
+                     "msj" => "¡Transferencia validada y aprobada exitosamente!",
+                     "data" => [
+                         "modalidad" => $resultado['modalidad'] ?? 'N/A',
+                         "referencia_completa" => $resultado['referencia_completa'] ?? $referencia,
+                         "id_referencia" => $pagoRef->id,
+                         "response_central" => $resultado
+                     ]
+                 ]);
+             } else {
+                 // Validación fallida
+                 return Response::json([
+                     "estado" => false,
+                     "msj" => $resultado['msj'] ?? "No se pudo validar la transferencia en ninguna modalidad",
+                     "data" => $resultado
+                 ]);
+             }
+
+         } catch (\Exception $e) {
+             \Log::error("Error en autovalidarTransferencia: " . $e->getMessage(), [
+                 'trace' => $e->getTraceAsString()
+             ]);
+             return Response::json([
+                 "estado" => false,
+                 "msj" => "Error al procesar la validación: " . $e->getMessage()
+             ]);
+         }
+     }
  }

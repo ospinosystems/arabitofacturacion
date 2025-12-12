@@ -172,6 +172,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('procesarRespuestaMegasoft', [PagosReferenciasController::class,"procesarRespuestaMegasoft"]);
 		Route::post('validarCodigoAprobacion', [PagosReferenciasController::class,"validarCodigoAprobacion"]);
 		Route::post('delRefPago', [PagosReferenciasController::class,"delRefPago"]);
+		Route::post('autovalidar-transferencia', [PagosReferenciasController::class,"autovalidarTransferencia"]);
 		
 
 		Route::post('addRetencionesPago', [RetencionesController::class,"addRetencionesPago"]);

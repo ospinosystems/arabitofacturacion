@@ -1246,6 +1246,17 @@ export default function Facturar({
             settipo_referenciapago(tipoTraido);
             setmonto_referenciapago(montoTraido * dolar);
         }
+        if (tipo == "recargar") {
+            // Recargar el pedido y cerrar el modal
+            getPedido(null, null, false);
+            settogglereferenciapago(false);
+            settipo_referenciapago("");
+            setdescripcion_referenciapago("");
+            setmonto_referenciapago("");
+            setbanco_referenciapago("");
+            setcedula_referenciapago("");
+            settelefono_referenciapago("");
+        }
         if (tipo == "enviar") {
             if (pedidoData.id && monto_referenciapago) {
                 let ref = descripcion_referenciapago;

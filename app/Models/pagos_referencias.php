@@ -28,5 +28,7 @@ class pagos_referencias extends Model
         'banco_origen',
         'monto_real',
         'cuenta_origen',
+        'telefono',
+        'cedula',
     ];
 }

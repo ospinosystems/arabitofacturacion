@@ -1515,7 +1515,7 @@ export default function PagarMain({
     useHotkeys(
         "c",
         (event) => {
-            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
+            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -1546,13 +1546,13 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast, showModalPosDebito]
+        [refaddfast, showModalPosDebito, togglereferenciapago]
     );
 
     useHotkeys(
         "t",
         (event) => {
-            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
+            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -1583,13 +1583,13 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast, showModalPosDebito]
+        [refaddfast, showModalPosDebito, togglereferenciapago]
     );
     //p - Biopago (Pago móvil)
     useHotkeys(
         "p",
         (event) => {
-            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
+            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -1615,13 +1615,13 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast, showModalPosDebito]
+        [refaddfast, showModalPosDebito, togglereferenciapago]
     );
     //b - Efectivo Bolívares
     useHotkeys(
         "b",
         (event) => {
-            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
+            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -1653,13 +1653,13 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast, showModalPosDebito]
+        [refaddfast, showModalPosDebito, togglereferenciapago]
     );
     //e - Efectivo USD
     useHotkeys(
         "e",
         (event) => {
-            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
+            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -1691,13 +1691,13 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast, showModalPosDebito]
+        [refaddfast, showModalPosDebito, togglereferenciapago]
     );
     //d
     useHotkeys(
         "d",
         (event) => {
-            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
+            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -1738,50 +1738,50 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast, debitoInputRef, showModalPosDebito]
+        [refaddfast, debitoInputRef, showModalPosDebito, togglereferenciapago]
     );
     //f5
     useHotkeys(
         "f5",
         () => {
-            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
+            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             del_pedido();
         },
         {
             enableOnTags: ["INPUT", "SELECT"],
         },
-        [showModalPosDebito]
+        [showModalPosDebito, togglereferenciapago]
     );
     //f4
     useHotkeys(
         "f4",
         () => {
-            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
+            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             viewReportPedido();
         },
         {
             enableOnTags: ["INPUT", "SELECT"],
         },
-        [showModalPosDebito]
+        [showModalPosDebito, togglereferenciapago]
     );
     //f3
     useHotkeys(
         "f3",
         () => {
-            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
+            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             toggleImprimirTicket();
         },
         {
             enableOnTags: ["INPUT", "SELECT"],
             filter: false,
         },
-        [showModalPosDebito]
+        [showModalPosDebito, togglereferenciapago]
     );
     //f2
     useHotkeys(
         "f2",
         () => {
-            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
+            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             setToggleAddPersonaFun(true, () => {
                 setclienteInpnombre("");
                 setclienteInptelefono("");
@@ -1795,13 +1795,13 @@ export default function PagarMain({
             });
         },
         { enableOnTags: ["INPUT", "SELECT"] },
-        [showModalPosDebito]
+        [showModalPosDebito, togglereferenciapago]
     );
     //ctrl+enter
     useHotkeys(
         "ctrl+enter",
         (event) => {
-            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
+            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             if (!event.repeat) {
                 facturar_e_imprimir();
             }
@@ -1811,13 +1811,13 @@ export default function PagarMain({
             keyup: false,
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [showModalPosDebito]
+        [showModalPosDebito, togglereferenciapago]
     );
     //f1 - Crear nuevo pedido
     useHotkeys(
         "f1",
         () => {
-            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
+            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             // Validar que existe la función addNewPedido
             if (typeof addNewPedido === "function") {
                 addNewPedido();
@@ -1828,14 +1828,14 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT"],
         },
-        [showModalPosDebito]
+        [showModalPosDebito, togglereferenciapago]
     );
 
     //f10 - Toggle header y menú flotante
     useHotkeys(
         "f10",
         (event) => {
-            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
+            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             event.preventDefault(); // Prevenir comportamiento por defecto del navegador
             setShowHeaderAndMenu(!showHeaderAndMenu);
             // Scroll al top
@@ -1845,7 +1845,7 @@ export default function PagarMain({
             enableOnTags: ["INPUT", "SELECT"],
             filter: false,
         },
-        [showHeaderAndMenu, showModalPosDebito]
+        [showHeaderAndMenu, showModalPosDebito, togglereferenciapago]
     );
 
     //tab - Comportamiento por defecto cuando el modal de referencia está abierto
@@ -1869,7 +1869,7 @@ export default function PagarMain({
     useHotkeys(
         "r",
         (event) => {
-            if (showModalPosDebito) return; // Bloquear si modal POS está abierto
+            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             // Solo ejecutar si NO estamos en ningún input o select
             const isInputOrSelect =
                 event.target.tagName === "INPUT" ||
@@ -2867,11 +2867,75 @@ export default function PagarMain({
                                                                         ) : null}
                                                                     </p>
                                                                     <p className="text-xs text-gray-500">
-                                                                        CI:{" "}
-                                                                        {
-                                                                            e.cedula
-                                                                        }
+                                                                        {e.cedula && <>CI: {e.cedula} | </>}
+                                                                        {e.telefono && <>Tel: {e.telefono} | </>}
+                                                                        {e.banco_origen && <>Origen: {e.banco_origen}</>}
                                                                     </p>
+                                                                    {/* Detalles de validación si existe response */}
+                                                                    {e.response && (() => {
+                                                                        try {
+                                                                            const resp = typeof e.response === 'string' ? JSON.parse(e.response) : e.response;
+                                                                            const dataResp = resp?.response?.data?.dataResponse || resp?.data?.dataResponse || {};
+                                                                            // transactionDetail puede ser array o objeto
+                                                                            let txnArray = dataResp?.transactionDetail || dataResp?.transaction || [];
+                                                                            if (!Array.isArray(txnArray)) txnArray = [txnArray];
+                                                                            const txn = txnArray[0] || {};
+                                                                            
+                                                                            if (txn && Object.keys(txn).length > 0) {
+                                                                                return (
+                                                                                    <div className="mt-1 p-1.5 bg-green-50 border border-green-200 rounded text-xs">
+                                                                                        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-green-800">
+                                                                                            {/* Referencia */}
+                                                                                            {txn.referenceNumber && (
+                                                                                                <span><b>Referencia:</b> {txn.referenceNumber}</span>
+                                                                                            )}
+                                                                                            {/* Monto */}
+                                                                                            {txn.amount && (
+                                                                                                <span><b>Monto:</b> {txn.amount} {txn.currencyCode || 'Bs'}</span>
+                                                                                            )}
+                                                                                            {/* Cuenta (enmascarada) */}
+                                                                                            {txn.accountId && (
+                                                                                                <span><b>Cuenta:</b> {txn.accountId}</span>
+                                                                                            )}
+                                                                                            {/* Cédula del beneficiario */}
+                                                                                            {txn.customerIdBen && (
+                                                                                                <span><b>CI Beneficiario:</b> {txn.customerIdBen}</span>
+                                                                                            )}
+                                                                                            {/* Banco origen */}
+                                                                                            {txn.sourceBankId && (
+                                                                                                <span><b>Banco Origen:</b> {txn.sourceBankId}</span>
+                                                                                            )}
+                                                                                            {/* Banco destino */}
+                                                                                            {txn.destBankId && (
+                                                                                                <span><b>Banco Destino:</b> {txn.destBankId}</span>
+                                                                                            )}
+                                                                                            {/* Fecha y hora */}
+                                                                                            {txn.trnDate && (
+                                                                                                <span><b>Fecha:</b> {txn.trnDate} {txn.trnTime || ''}</span>
+                                                                                            )}
+                                                                                            {/* Concepto */}
+                                                                                            {txn.concept && (
+                                                                                                <span><b>Concepto:</b> {txn.concept}</span>
+                                                                                            )}
+                                                                                            {/* Tipo de transacción */}
+                                                                                            {txn.trnType && (
+                                                                                                <span><b>Tipo:</b> {txn.trnType === 'CR' ? 'Crédito' : txn.trnType}</span>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        {resp?.modalidad && (
+                                                                                            <div className="mt-1 pt-1 border-t border-green-200 text-green-600">
+                                                                                                <b>Modalidad:</b> {resp.modalidad === 'pagomovil' ? 'Pago Móvil' : resp.modalidad === 'interbancaria' ? 'Interbancaria' : resp.modalidad === 'banesco' ? 'Banesco-Banesco' : resp.modalidad}
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                );
+                                                                            }
+                                                                            return null;
+                                                                        } catch (err) {
+                                                                            console.error('Error parsing response:', err);
+                                                                            return null;
+                                                                        }
+                                                                    })()}
                                                                 </div>
 
                                                                 {/* Monto como badge a la derecha */}

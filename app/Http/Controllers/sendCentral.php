@@ -2402,6 +2402,53 @@ class sendCentral extends Controller
         }
     }
 
+    /**
+     * Autovalidar transferencia en Arabito Central
+     * Valida secuencialmente: pagomovil -> interbancaria -> banesco
+     * 
+     * @param array $data Datos de la transferencia
+     * @return array Resultado de la validación
+     */
+    function autovalidarTransferenciaCentral($data) {
+        try {
+            $codigo_origen = $this->getOrigen();
+            
+            $response = Http::timeout(120)->post(
+                $this->path() . "/autovalidarTransferenciaSecuencial",
+                [
+                    "codigo_origen" => $codigo_origen,
+                    "referencia" => $data['referencia'],
+                    "telefono" => $data['telefono'],
+                    "banco_origen" => $data['banco_origen'],
+                    "fecha_pago" => $data['fecha_pago'],
+                    "monto" => $data['monto'],
+                    "id_pedido" => $data['id_pedido'],
+                    "cedula" => $data['cedula'] ?? null,
+                ]
+            );
+
+            \Log::info("Respuesta de autovalidarTransferenciaCentral:", [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            if ($response->ok()) {
+                return $response->json();
+            } else {
+                return [
+                    "estado" => false, 
+                    "msj" => "Error de comunicación con central: HTTP " . $response->status()
+                ];
+            }
+        } catch (\Exception $e) {
+            \Log::error("Error en autovalidarTransferenciaCentral: " . $e->getMessage());
+            return [
+                "estado" => false, 
+                "msj" => "Error de conexión con central: " . $e->getMessage()
+            ];
+        }
+    }
+
     function createAnulacionPedidoAprobacion($data) {
         $codigo_origen = $this->getOrigen();
         $response = Http::post(

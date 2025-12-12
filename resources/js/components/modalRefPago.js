@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
+import axios from "axios";
 
 const MODULOS = [
     { id: 'Central', label: 'Central', icon: 'fa-building' },
-    { id: 'AutoPagoMovil', label: 'Pago Móvil', icon: 'fa-mobile' },
-    { id: 'AutoBanescoBanesco', label: 'Banesco-Banesco', icon: 'fa-university' },
-    { id: 'AutoInterbancaria', label: 'Interbancaria', icon: 'fa-exchange' },
+    { id: 'AutoValidar', label: 'Auto-Validar', icon: 'fa-check-circle' },
 ];
 
 export default function ModalRefPago({
@@ -51,6 +50,10 @@ export default function ModalRefPago({
     const [telefonoPago, setTelefonoPago] = useState('');
     const [codigoBancoOrigen, setCodigoBancoOrigen] = useState('');
     const [montoReal, setMontoReal] = useState(''); // Monto real transferido (si es mayor al del pedido)
+
+    // Estados para autovalidación
+    const [autoValidando, setAutoValidando] = useState(false);
+    const [resultadoValidacion, setResultadoValidacion] = useState(null);
 
     // Monto total del pedido en Bs
     const montoTotalPedido = parseFloat(pedidoData?.bs || 0);
@@ -100,43 +103,23 @@ export default function ModalRefPago({
                     showAllFields: true,
                     showBanco: true,
                     showReferencia: true,
+                    referenciaMinLength: null,
                     referenciaMaxLength: null,
                     referenciaPlaceholder: 'Referencia completa de la transacción...',
                     showFechaPago: false,
                     showTelefonoPago: false,
                     showCodigoBancoOrigen: false,
                 };
-            case 'AutoPagoMovil':
+            case 'AutoValidar':
                 return {
                     showAllFields: false,
                     showBanco: false,
                     showReferencia: true,
-                    referenciaMaxLength: 6,
-                    referenciaPlaceholder: 'Últimos 6 dígitos numéricos...',
+                    referenciaMinLength: 12,
+                    referenciaMaxLength: 12,
+                    referenciaPlaceholder: 'Número de referencia (12 dígitos)...',
                     showFechaPago: true,
                     showTelefonoPago: true,
-                    showCodigoBancoOrigen: true,
-                };
-            case 'AutoBanescoBanesco':
-                return {
-                    showAllFields: false,
-                    showBanco: false,
-                    showReferencia: true,
-                    referenciaMaxLength: 12,
-                    referenciaPlaceholder: 'Últimos 12 dígitos numéricos...',
-                    showFechaPago: false,
-                    showTelefonoPago: false,
-                    showCodigoBancoOrigen: false,
-                };
-            case 'AutoInterbancaria':
-                return {
-                    showAllFields: false,
-                    showBanco: false,
-                    showReferencia: true,
-                    referenciaMaxLength: 6,
-                    referenciaPlaceholder: 'Últimos 6 dígitos numéricos...',
-                    showFechaPago: true,
-                    showTelefonoPago: false,
                     showCodigoBancoOrigen: true,
                 };
             default:
@@ -144,6 +127,7 @@ export default function ModalRefPago({
                     showAllFields: true,
                     showBanco: true,
                     showReferencia: true,
+                    referenciaMinLength: null,
                     referenciaMaxLength: null,
                     referenciaPlaceholder: 'Referencia completa de la transacción...',
                     showFechaPago: false,
@@ -154,6 +138,43 @@ export default function ModalRefPago({
     };
 
     const moduloConfig = getModuloConfig();
+
+    // Validar formulario para AutoValidar
+    const validateFormAutoValidar = () => {
+        const newErrors = {};
+
+        // Validar referencia (exactamente 12 dígitos, se autocompleta con ceros)
+        if (!descripcion_referenciapago || descripcion_referenciapago.trim() === '') {
+            newErrors.descripcion = 'La referencia es obligatoria';
+        }
+
+        // Validar teléfono
+        if (!telefonoPago) {
+            newErrors.telefonoPago = 'El teléfono es obligatorio';
+        } else if (!validarTelefono(telefonoPago)) {
+            newErrors.telefonoPago = 'Formato inválido. Debe ser: 0 + código (412,414,416,424,426,422) + 7 dígitos. Ej: 04141234567';
+        }
+
+        // Validar banco origen
+        if (!codigoBancoOrigen) {
+            newErrors.codigoBancoOrigen = 'El banco origen es obligatorio';
+        }
+
+        // Validar fecha de pago
+        if (!fechaPago) {
+            newErrors.fechaPago = 'La fecha de pago es obligatoria';
+        }
+
+        // Validar monto
+        if (!monto_referenciapago || monto_referenciapago == 0) {
+            newErrors.monto = 'El monto no puede ser 0';
+        } else if (!validarFormatoMonto(monto_referenciapago)) {
+            newErrors.monto = 'El monto debe tener formato válido (ej: 1234.56)';
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
 
     // Validar formulario
     const validateForm = () => {
@@ -169,54 +190,14 @@ export default function ModalRefPago({
             if (!banco_referenciapago || banco_referenciapago === '') {
                 newErrors.banco = 'Debe seleccionar un banco';
             }
-        } else {
-            // Validaciones para módulos automáticos
-            if (!descripcion_referenciapago || descripcion_referenciapago.trim() === '') {
-                newErrors.descripcion = 'La referencia es obligatoria';
-            } else if (moduloConfig.referenciaMaxLength && descripcion_referenciapago.length !== moduloConfig.referenciaMaxLength) {
-                newErrors.descripcion = `La referencia debe tener ${moduloConfig.referenciaMaxLength} dígitos`;
-            }
-
-            if (moduloConfig.showFechaPago && !fechaPago) {
-                newErrors.fechaPago = 'La fecha de pago es obligatoria';
-            }
-
-            if (moduloConfig.showTelefonoPago) {
-                if (!telefonoPago) {
-                    newErrors.telefonoPago = 'El teléfono es obligatorio';
-                } else if (!validarTelefono(telefonoPago)) {
-                    newErrors.telefonoPago = 'Formato inválido. Debe ser: 0 + código (412,414,416,424,426,422) + 7 dígitos. Ej: 04141234567';
-                }
-            }
-
-            if (moduloConfig.showCodigoBancoOrigen && !codigoBancoOrigen) {
-                newErrors.codigoBancoOrigen = 'El código de banco origen es obligatorio';
-            }
+        } else if (moduloSeleccionado === 'AutoValidar') {
+            return validateFormAutoValidar();
         }
 
         if (!monto_referenciapago || monto_referenciapago == 0) {
             newErrors.monto = 'El monto no puede ser 0';
         } else if (!validarFormatoMonto(monto_referenciapago)) {
-            newErrors.monto = 'El monto debe tener formato válido (ej: 1234.56 o -1234.56)';
-        } else if (parseFloat(monto_referenciapago) > montoMaximoPedido) {
-            newErrors.monto = `El monto no puede ser mayor a Bs ${montoMaximoPedido.toFixed(2)} (monto del pedido)`;
-        }
-
-        // Validar monto real si se proporciona
-        if (montoReal) {
-            if (!validarFormatoMonto(montoReal)) {
-                newErrors.montoReal = 'El monto real debe tener formato válido (ej: 1234.56)';
-            } else {
-                const montoRealNum = parseFloat(montoReal);
-                const montoNum = parseFloat(monto_referenciapago);
-                const limiteMaximo = montoNum * 1.05; // 5% más del monto
-
-                if (montoRealNum <= montoNum) {
-                    newErrors.montoReal = 'El monto real debe ser mayor al monto del pedido';
-                } else if (montoRealNum > limiteMaximo) {
-                    newErrors.montoReal = `El monto real no puede exceder el 5% del monto (máx: Bs ${limiteMaximo.toFixed(2)})`;
-                }
-            }
+            newErrors.monto = 'El monto debe tener formato válido (ej: 1234.56)';
         }
 
         setErrors(newErrors);
@@ -227,10 +208,74 @@ export default function ModalRefPago({
     const getCategoriaFromModulo = () => {
         switch (moduloSeleccionado) {
             case 'Central': return 'central';
-            case 'AutoPagoMovil': return 'pagomovil';
-            case 'AutoBanescoBanesco': return 'banesco';
-            case 'AutoInterbancaria': return 'interbancaria';
+            case 'AutoValidar': return 'autovalidar';
             default: return 'central';
+        }
+    };
+
+    // Función para autovalidar transferencia
+    const handleAutoValidar = async () => {
+        if (!validateFormAutoValidar()) {
+            return;
+        }
+
+        setAutoValidando(true);
+        setResultadoValidacion(null);
+
+        try {
+            // Autocompletar referencia con ceros a la izquierda hasta 12 dígitos
+            const referenciaFormateada = descripcion_referenciapago.padStart(12, '0');
+            
+            const response = await axios.post('/autovalidar-transferencia', {
+                referencia: referenciaFormateada,
+                telefono: formatearTelefono(telefonoPago),
+                banco_origen: codigoBancoOrigen,
+                fecha_pago: fechaPago,
+                monto: monto_referenciapago,
+                id_pedido: pedidoData?.id,
+                cedula: cedula_referenciapago,
+            });
+
+            if (response.data.estado === true) {
+                setResultadoValidacion({
+                    success: true,
+                    message: response.data.msj || '¡Transferencia validada y aprobada exitosamente!',
+                    data: response.data.data
+                });
+                
+                // Recargar el pedido después de 1.5 segundos
+                setTimeout(() => {
+                    addRefPago("recargar");
+                }, 1500);
+            } else if (response.data.monto_diferente) {
+                // Caso especial: referencia encontrada pero monto diferente
+                setResultadoValidacion({
+                    success: false,
+                    montoDiferente: true,
+                    message: response.data.msj,
+                    data: {
+                        modalidad: response.data.modalidad,
+                        referencia_encontrada: response.data.referencia_encontrada,
+                        monto_ingresado: response.data.monto_ingresado,
+                        monto_banco: response.data.monto_banco,
+                        response: response.data.response
+                    }
+                });
+            } else {
+                setResultadoValidacion({
+                    success: false,
+                    message: response.data.msj || 'No se pudo validar la transferencia',
+                    data: response.data.data
+                });
+            }
+        } catch (error) {
+            console.error('Error al autovalidar:', error);
+            setResultadoValidacion({
+                success: false,
+                message: error.response?.data?.msj || 'Error de conexión al validar la transferencia'
+            });
+        } finally {
+            setAutoValidando(false);
         }
     };
 
@@ -405,22 +450,25 @@ export default function ModalRefPago({
 
                 {/* Body compacto */}
                 <form onSubmit={handleSubmit} className="p-4 space-y-3">
-                    <div>
-                        <label className="block mb-1 text-xs font-medium text-gray-700">
-                            Cédula <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                            id="cedula-input"
-                            type="text"
-                            placeholder="Cédula"
-                            value={cedula_referenciapago}
-                            onChange={(e) =>
-                                setcedula_referenciapago(e.target.value)
-                            }
-                            onKeyPress={handleKeyPress}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400"
-                        />
-                    </div>
+                    {/* Cédula - Solo para módulo Central */}
+                    {moduloSeleccionado === 'Central' && (
+                        <div>
+                            <label className="block mb-1 text-xs font-medium text-gray-700">
+                                Cédula <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                id="cedula-input"
+                                type="text"
+                                placeholder="Cédula"
+                                value={cedula_referenciapago}
+                                onChange={(e) =>
+                                    setcedula_referenciapago(e.target.value)
+                                }
+                                onKeyPress={handleKeyPress}
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400"
+                            />
+                        </div>
+                    )}
 
                     {/* Módulo Central - Campos de banco y referencia siempre visibles */}
                     {moduloSeleccionado === 'Central' && (
@@ -488,28 +536,45 @@ export default function ModalRefPago({
                             <div>
                                 <label className="block mb-1 text-xs font-medium text-gray-700">
                                     Referencia <span className="text-red-500">*</span>
-                                    {moduloConfig.referenciaMaxLength && (
-                                        <span className="ml-1 text-gray-400">({moduloConfig.referenciaMaxLength} dígitos)</span>
-                                    )}
+                                    <span className="ml-1 text-gray-400">(12 dígitos)</span>
                                 </label>
-                                <input
-                                    type="text"
-                                    placeholder={moduloConfig.referenciaPlaceholder}
-                                    value={descripcion_referenciapago}
-                                    onChange={e => {
-                                        let value = number(e.target.value);
-                                        if (moduloConfig.referenciaMaxLength) {
-                                            value = value.slice(0, moduloConfig.referenciaMaxLength);
-                                        }
-                                        setdescripcion_referenciapago(value);
-                                    }}
-                                    onKeyPress={handleKeyPress}
-                                    maxLength={moduloConfig.referenciaMaxLength || undefined}
-                                    data-ref-input="true"
-                                    className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
-                                        errors.descripcion ? 'border-red-300' : 'border-gray-200'
-                                    }`}
-                                />
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        placeholder={moduloConfig.referenciaPlaceholder}
+                                        value={descripcion_referenciapago}
+                                        onChange={e => {
+                                            let value = number(e.target.value);
+                                            // Limitar a 12 dígitos máximo
+                                            value = value.slice(0, 12);
+                                            setdescripcion_referenciapago(value);
+                                        }}
+                                        onKeyPress={handleKeyPress}
+                                        maxLength={12}
+                                        data-ref-input="true"
+                                        className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
+                                            errors.descripcion ? 'border-red-300' : 'border-gray-200'
+                                        }`}
+                                    />
+                                    {/* Indicador de dígitos restantes */}
+                                    {descripcion_referenciapago && descripcion_referenciapago.length < 12 && (
+                                        <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-orange-500 font-medium">
+                                            Faltan {12 - descripcion_referenciapago.length} dígitos
+                                        </span>
+                                    )}
+                                    {descripcion_referenciapago && descripcion_referenciapago.length === 12 && (
+                                        <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-green-500 font-medium">
+                                            <i className="fa fa-check mr-1"></i>Completo
+                                        </span>
+                                    )}
+                                </div>
+                                {/* Mostrar cómo quedará con ceros a la izquierda */}
+                                {descripcion_referenciapago && descripcion_referenciapago.length > 0 && descripcion_referenciapago.length < 12 && (
+                                    <p className="mt-1 text-xs text-blue-600">
+                                        <i className="fa fa-info-circle mr-1"></i>
+                                        Se enviará como: <strong>{descripcion_referenciapago.padStart(12, '0')}</strong>
+                                    </p>
+                                )}
                                 {errors.descripcion && (
                                     <p className="mt-1 text-xs text-red-600">{errors.descripcion}</p>
                                 )}
@@ -560,33 +625,40 @@ export default function ModalRefPago({
                                         }`}
                                     >
                                         <option value="">Seleccionar banco...</option>
-                                        <option value="0102">Banco de Venezuela - 0102</option>
-                                        <option value="0104">Venezolano de Crédito - 0104</option>
-                                        <option value="0105">Banco Mercantil - 0105</option>
-                                        <option value="0108">Banco Provincial - 0108</option>
-                                        <option value="0114">Bancaribe - 0114</option>
-                                        <option value="0115">Banco Exterior - 0115</option>
-                                        <option value="0116">Banco Occidental de Descuento - 0116</option>
-                                        <option value="0128">Banco Caroní - 0128</option>
-                                        <option value="0134">Banesco - 0134</option>
-                                        <option value="0137">Sofitasa - 0137</option>
-                                        <option value="0138">Banco Plaza - 0138</option>
-                                        <option value="0146">Bangente - 0146</option>
-                                        <option value="0151">BFC Banco Fondo Común - 0151</option>
-                                        <option value="0156">100% Banco - 0156</option>
-                                        <option value="0157">Del Sur - 0157</option>
-                                        <option value="0163">Banco del Tesoro - 0163</option>
-                                        <option value="0166">Banco Agrícola de Venezuela - 0166</option>
-                                        <option value="0168">Bancrecer - 0168</option>
-                                        <option value="0169">Mi Banco - 0169</option>
-                                        <option value="0171">Banco Activo - 0171</option>
-                                        <option value="0172">Bancamiga - 0172</option>
-                                        <option value="0173">Banco Internacional de Desarrollo - 0173</option>
-                                        <option value="0174">Banplus - 0174</option>
-                                        <option value="0175">Banco Bicentenario - 0175</option>
-                                        <option value="0177">Banco de la Fuerza Armada Nacional - 0177</option>
-                                        <option value="0190">Citibank - 0190</option>
-                                        <option value="0191">Banco Nacional de Crédito - 0191</option>
+                                        <option value="0156">100% Banco - 0156</option> 
+                                        <option value="0171">Activo - 0171</option> 
+                                        <option value="0916">Agil - 0916</option> 
+                                        <option value="0166">Agricola de Venezuela - 0166</option> 
+                                        <option value="0172">Bancamiga - 0172</option> 
+                                        <option value="0114">BanCaribe - 0114</option> 
+                                        <option value="0168">BanCrecer - 0168</option> 
+                                        <option value="0134">Banesco - 0134</option> 
+                                        <option value="0174">Banplus - 0174</option> 
+                                        <option value="0175">BDT - 0175</option> 
+                                        <option value="0151">BFC - 0151</option> 
+                                        <option value="0116">BOD - 0116</option> 
+                                        <option value="0128">Caroni - 0128</option> 
+                                        <option value="0163">del Tesoro - 0163</option> 
+                                        <option value="0157">DelSur - 0157</option> 
+                                        <option value="0176">Espirito Santo - 0176</option> 
+                                        <option value="0115">Exterior - 0115</option> 
+                                        <option value="0177">Fuerza Armada Nacional - 0177</option> 
+                                        <option value="0146">Gente Emprendedora C.A - 0146</option> 
+                                        <option value="0003">Industrial de Venezuela - 0003</option> 
+                                        <option value="0105">Mercantil - 0105</option> 
+                                        <option value="0169">R4 Banco - 0169</option> 
+                                        <option value="0905">Mpandco - 0905</option> 
+                                        <option value="0914">Mueve - 0914</option> 
+                                        <option value="0903">MultiPagos - 0903</option> 
+                                        <option value="0191">Nacional de Credito - 0191</option> 
+                                        <option value="0138">Plaza - 0138</option> 
+                                        <option value="0108">Provincial - 0108</option> 
+                                        <option value="0149">Pueblo Soberano - 0149</option> 
+                                        <option value="0917">Sodexo - 0917</option> 
+                                        <option value="0137">Sofitasa - 0137</option> 
+                                        <option value="0104">Venezolano de Credito - 0104</option> 
+                                        <option value="0102">Venezuela - 0102</option> 
+                                        <option value="0911">Venmo - 0911</option> 
                                     </select>
                                     {errors.codigoBancoOrigen && (
                                         <p className="mt-1 text-xs text-red-600">{errors.codigoBancoOrigen}</p>
@@ -682,61 +754,134 @@ export default function ModalRefPago({
                         </p>
                     </div>
 
-                    {/* Monto Real - Solo si el cliente transfirió más */}
-                    {moduloSeleccionado !== 'Central' && (
-                        <div>
-                            <label className="block mb-1 text-xs font-medium text-gray-700">
-                                Monto Real Transferido{" "}
-                                <span className="px-2 py-0.5 text-xs font-medium text-yellow-700 bg-yellow-100 rounded">
-                                    Opcional
-                                </span>
-                            </label>
-                            <input
-                                type="text"
-                                placeholder="Solo si el cliente transfirió más de lo debido"
-                                value={montoReal}
-                                onChange={(e) => setMontoReal(e.target.value.replace(/[^0-9.]/g, ''))}
-                                onKeyPress={handleKeyPress}
-                                className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
-                                    errors.montoReal ? 'border-red-300' : 'border-gray-200'
-                                }`}
-                            />
-                            <p className="mt-1 text-xs text-gray-500">
-                                <i className="mr-1 fa fa-exclamation-triangle text-yellow-500"></i>
-                                <strong>Si el cliente transfirió más, ingrese aquí el monto total que cayó al banco.</strong> El sistema registrará el monto correcto y el sobrante. Máx. permitido: 5% adicional (Bs {(parseFloat(monto_referenciapago || 0) * 1.05).toFixed(2)})
-                            </p>
-                            {errors.montoReal && (
-                                <p className="mt-1 text-xs text-red-600">{errors.montoReal}</p>
-                            )}
+                    {/* Resultado de validación */}
+                    {moduloSeleccionado === 'AutoValidar' && resultadoValidacion && (
+                        <div className={`p-3 rounded-lg border overflow-hidden ${
+                            resultadoValidacion.success 
+                                ? 'bg-green-50 border-green-200' 
+                                : resultadoValidacion.montoDiferente
+                                    ? 'bg-amber-50 border-amber-300'
+                                    : 'bg-red-50 border-red-200'
+                        }`}>
+                            <div className="flex items-start">
+                                <i className={`mt-0.5 mr-2 fa ${
+                                    resultadoValidacion.success 
+                                        ? 'fa-check-circle text-green-500' 
+                                        : resultadoValidacion.montoDiferente
+                                            ? 'fa-exclamation-triangle text-amber-500'
+                                            : 'fa-times-circle text-red-500'
+                                } text-base flex-shrink-0`}></i>
+                                <div className="flex-1 min-w-0">
+                                    <p className={`font-medium text-sm ${
+                                        resultadoValidacion.success 
+                                            ? 'text-green-800' 
+                                            : resultadoValidacion.montoDiferente
+                                                ? 'text-amber-800'
+                                                : 'text-red-800'
+                                    }`}>
+                                        {resultadoValidacion.success 
+                                            ? '¡Transferencia Validada!' 
+                                            : resultadoValidacion.montoDiferente
+                                                ? '¡Referencia Encontrada - Monto Diferente!'
+                                                : 'Validación Fallida'}
+                                    </p>
+                                    <p className={`mt-1 text-xs break-words ${
+                                        resultadoValidacion.success 
+                                            ? 'text-green-700' 
+                                            : resultadoValidacion.montoDiferente
+                                                ? 'text-amber-700'
+                                                : 'text-red-700'
+                                    }`}>
+                                        {resultadoValidacion.message}
+                                    </p>
+                                    {/* Detalles adicionales para monto diferente */}
+                                    {resultadoValidacion.montoDiferente && resultadoValidacion.data && (
+                                        <div className="mt-2 p-2 bg-amber-100 rounded text-xs text-amber-800">
+                                            <p><strong>Referencia encontrada:</strong> {resultadoValidacion.data.referencia_encontrada}</p>
+                                            <p><strong>Monto ingresado:</strong> Bs {parseFloat(resultadoValidacion.data.monto_ingresado).toFixed(2)}</p>
+                                            <p><strong>Monto en banco:</strong> Bs {parseFloat(resultadoValidacion.data.monto_banco).toFixed(2)}</p>
+                                            <p className="mt-1 font-medium text-amber-900">
+                                                Diferencia: Bs {Math.abs(resultadoValidacion.data.monto_banco - resultadoValidacion.data.monto_ingresado).toFixed(2)}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {resultadoValidacion.data && resultadoValidacion.data.modalidad && (
+                                        <p className="mt-1 text-xs text-gray-600">
+                                            <strong>Modalidad:</strong> {
+                                                resultadoValidacion.data.modalidad === 'pagomovil' ? 'Pago Móvil' :
+                                                resultadoValidacion.data.modalidad === 'interbancaria' ? 'Interbancaria' :
+                                                resultadoValidacion.data.modalidad === 'banesco' ? 'Banesco-Banesco' :
+                                                resultadoValidacion.data.modalidad
+                                            }
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     )}
 
                     {/* Footer compacto */}
-                    <div className="flex items-center justify-end pt-3 space-x-2 border-t border-gray-100">
-                        <button
-                            type="button"
-                            onClick={handleClose}
-                            className="px-3 py-2 text-xs font-medium text-gray-600 transition-colors bg-gray-100 rounded hover:bg-gray-200"
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="flex items-center px-3 py-2 space-x-1 text-xs font-medium text-white transition-colors bg-orange-500 rounded hover:bg-orange-600 disabled:opacity-50"
-                        >
-                            {isSubmitting ? (
-                                <>
-                                    <i className="fa fa-spinner fa-spin"></i>
-                                    <span>Guardando...</span>
-                                </>
-                            ) : (
-                                <>
-                                    <i className="fa fa-check"></i>
-                                    <span>Guardar</span>
-                                </>
-                            )}
-                        </button>
+                    <div className="pt-3 border-t border-gray-100">
+                        {moduloSeleccionado === 'AutoValidar' ? (
+                            /* Botón grande para AutoValidar */
+                            <button
+                                type="button"
+                                onClick={handleAutoValidar}
+                                disabled={autoValidando || resultadoValidacion?.success}
+                                className={`w-full flex items-center justify-center px-6 py-4 text-base font-semibold text-white transition-all rounded-lg shadow-lg ${
+                                    resultadoValidacion?.success
+                                        ? 'bg-green-500 cursor-not-allowed'
+                                        : autoValidando
+                                            ? 'bg-blue-400 cursor-wait'
+                                            : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 hover:shadow-xl'
+                                }`}
+                            >
+                                {autoValidando ? (
+                                    <>
+                                        <i className="mr-3 text-xl fa fa-spinner fa-spin"></i>
+                                        <span>Validando transferencia...</span>
+                                    </>
+                                ) : resultadoValidacion?.success ? (
+                                    <>
+                                        <i className="mr-3 text-xl fa fa-check-circle"></i>
+                                        <span>¡Transferencia Aprobada!</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="mr-3 text-xl fa fa-shield"></i>
+                                        <span>Validar y Autovalidar Transferencia</span>
+                                    </>
+                                )}
+                            </button>
+                        ) : (
+                            /* Botones normales para Central */
+                            <div className="flex items-center justify-end space-x-2">
+                                <button
+                                    type="button"
+                                    onClick={handleClose}
+                                    className="px-3 py-2 text-xs font-medium text-gray-600 transition-colors bg-gray-100 rounded hover:bg-gray-200"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="flex items-center px-3 py-2 space-x-1 text-xs font-medium text-white transition-colors bg-orange-500 rounded hover:bg-orange-600 disabled:opacity-50"
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <i className="fa fa-spinner fa-spin"></i>
+                                            <span>Guardando...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="fa fa-check"></i>
+                                            <span>Guardar</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </form>
             </div>
