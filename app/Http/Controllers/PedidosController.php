@@ -1783,7 +1783,10 @@ class PedidosController extends Controller
                 
                 // Permitir una diferencia de hasta 0.01 por redondeos
                 if (abs($sumaMontosLotes - $cajaPuntoTotal) > 0.01) {
-                    return "Error: La suma de los lotes (Bs. " . number_format($sumaMontosLotes, 2, ',', '.') . ") no coincide con el total de bolívares en punto (Bs. " . number_format($cajaPuntoTotal, 2, ',', '.') . ")";
+                    // Si hay discrepancia, eliminar el cierre y cierres_puntos existentes del día
+                    cierres::where("fecha", $today)->whereIn("id_usuario", $id_vendedor)->delete();
+                    cierres_puntos::where("fecha", $today)->whereIn("id_usuario", $id_vendedor)->delete();
+                    return "Error: La suma de los lotes (Bs. " . number_format($sumaMontosLotes, 2, ',', '.') . ") no coincide con el total de bolívares en punto (Bs. " . number_format($cajaPuntoTotal, 2, ',', '.') . "). El cierre ha sido eliminado.";
                 }
 
                 foreach ($dataPuntosAdicionales as $e) {
