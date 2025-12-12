@@ -3,8 +3,8 @@ import { useHotkeys } from "react-hotkeys-hook";
 import axios from "axios";
 
 const MODULOS = [
-    { id: 'Central', label: 'Central', icon: 'fa-building' },
     { id: 'AutoValidar', label: 'Auto-Validar', icon: 'fa-check-circle' },
+    { id: 'Central', label: 'Central', icon: 'fa-building' },
 ];
 
 export default function ModalRefPago({
@@ -34,7 +34,7 @@ export default function ModalRefPago({
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Estado para el módulo seleccionado
-    const [moduloSeleccionado, setModuloSeleccionado] = useState('Central');
+    const [moduloSeleccionado, setModuloSeleccionado] = useState('AutoValidar');
 
     // Obtener fecha de hoy en formato YYYY-MM-DD
     const getTodayDate = () => {
