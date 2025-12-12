@@ -3744,6 +3744,15 @@ export default function Facturar({
     const [puedeFacturarTransfeTime, setpuedeFacturarTransfeTime] =
         useState(null);
     const setPagoPedido = (callback = null) => {
+        // Validar que si hay descuentos en algún ítem, debe haber un cliente registrado (distinto al por defecto id=1)
+        const tieneDescuentos = pedidoData?.items?.some(item => item.descuento && parseFloat(item.descuento) > 0);
+        const clientePorDefecto = !pedidoData?.id_cliente || pedidoData.id_cliente == 1;
+        
+        if (tieneDescuentos && clientePorDefecto) {
+            alert("Error: El pedido tiene descuentos aplicados. Debe registrar un cliente antes de procesar el pago.");
+            return;
+        }
+        
         // Si hay débito positivo y la sucursal tiene PINPAD activo (y NO está forzando manual), abrir modal del POS físico
         // No se requiere validar debitoRef porque el POS lo setea automáticamente
         if (debito && parseFloat(debito) > 0 && sucursaldata?.pinpad && !forzarReferenciaManual) {

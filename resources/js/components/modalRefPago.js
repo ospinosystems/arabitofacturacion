@@ -327,7 +327,12 @@ export default function ModalRefPago({
     const handleKeyPress = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            handleSubmit(e);
+            // Si está en modo AutoValidar, llamar a handleAutoValidar
+            if (moduloSeleccionado === 'AutoValidar') {
+                handleAutoValidar();
+            } else {
+                handleSubmit(e);
+            }
         }
     };
 
