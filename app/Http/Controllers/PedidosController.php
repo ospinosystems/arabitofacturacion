@@ -1773,6 +1773,19 @@ class PedidosController extends Controller
                         return "Lotes adicional con campo Vacío";
                     }
                 }
+
+                // Validar que la suma de los lotes coincida con el total de bolívares en punto
+                $sumaMontosLotes = 0;
+                foreach ($dataPuntosAdicionales as $e) {
+                    $sumaMontosLotes += floatval($e["monto"]);
+                }
+                $cajaPuntoTotal = floatval($req->caja_punto);
+                
+                // Permitir una diferencia de hasta 0.01 por redondeos
+                if (abs($sumaMontosLotes - $cajaPuntoTotal) > 0.01) {
+                    return "Error: La suma de los lotes (Bs. " . number_format($sumaMontosLotes, 2, ',', '.') . ") no coincide con el total de bolívares en punto (Bs. " . number_format($cajaPuntoTotal, 2, ',', '.') . ")";
+                }
+
                 foreach ($dataPuntosAdicionales as $e) {
                     $newpunadi = new cierres_puntos;
                     $newpunadi->fecha = $today;
