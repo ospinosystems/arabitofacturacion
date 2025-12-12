@@ -895,6 +895,26 @@ class PagosReferenciasController extends Controller
 
              // Si la validación fue exitosa, crear registro en pagos_referencias
              if (isset($resultado['estado']) && $resultado['estado'] === true) {
+                 // Obtener la referencia completa del banco
+                 $referenciaBanco = $resultado['referencia_completa'] ?? $referencia;
+                 
+                 // Verificar que no exista ya una referencia con la referencia del banco
+                 // (evita duplicados cuando el usuario cambia los primeros dígitos)
+                 $existeRefBanco = pagos_referencias::where("descripcion", $referenciaBanco)
+                     ->where("estatus", "aprobada")
+                     ->first();
+                 if ($existeRefBanco) {
+                     \Log::warning("Referencia del banco ya existe en facturación", [
+                         'referencia_ingresada' => $referencia,
+                         'referencia_banco' => $referenciaBanco,
+                         'id_existente' => $existeRefBanco->id
+                     ]);
+                     return Response::json([
+                         "estado" => false,
+                         "msj" => "Esta transferencia ya fue registrada anteriormente. Referencia del banco: " . $referenciaBanco
+                     ]);
+                 }
+                 
                  // Crear registro de pago con estatus aprobado
                  $pagoRef = new pagos_referencias();
                  $pagoRef->tipo = 1; // Transferencia

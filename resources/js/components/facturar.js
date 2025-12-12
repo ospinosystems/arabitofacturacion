@@ -1641,8 +1641,17 @@ export default function Facturar({
     const getSucursalFun = () => {
         db.getSucursal({}).then((res) => {
             if (res.data.codigo) {
+                console.log('[PINPAD DEBUG] Sucursal cargada:', {
+                    codigo: res.data.codigo,
+                    pinpad: res.data.pinpad,
+                    timestamp: new Date().toISOString()
+                });
                 setSucursaldata(res.data);
+            } else {
+                console.warn('[PINPAD DEBUG] getSucursal sin código:', res.data);
             }
+        }).catch((err) => {
+            console.error('[PINPAD DEBUG] Error al cargar sucursal:', err);
         });
     };
     const openReporteFalla = (id) => {
@@ -3751,6 +3760,25 @@ export default function Facturar({
         if (tieneDescuentos && clientePorDefecto) {
             alert("Error: El pedido tiene descuentos aplicados. Debe registrar un cliente antes de procesar el pago.");
             return;
+        }
+        
+        // DEBUG: Log para diagnosticar problema intermitente con PINPAD
+        // Si hay débito pero sucursaldata está vacío o sin pinpad, loguear para diagnóstico
+        if (debito && parseFloat(debito) > 0) {
+            console.log('[PINPAD DEBUG]', {
+                debito,
+                sucursaldata_exists: !!sucursaldata,
+                sucursaldata_pinpad: sucursaldata?.pinpad,
+                sucursaldata_codigo: sucursaldata?.codigo,
+                forzarReferenciaManual,
+                timestamp: new Date().toISOString()
+            });
+            
+            // Si sucursaldata está vacío o es string, intentar recargar datos de sucursal
+            if (!sucursaldata || typeof sucursaldata === 'string') {
+                console.warn('[PINPAD DEBUG] sucursaldata perdido, recargando...');
+                getSucursalFun();
+            }
         }
         
         // Si hay débito positivo y la sucursal tiene PINPAD activo (y NO está forzando manual), abrir modal del POS físico
@@ -8366,7 +8394,7 @@ export default function Facturar({
                         <div 
                             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
                             onKeyDown={(e) => {
-                                // Bloquear todos los atajos de teclado excepto Escape
+                                // Bloquear todos los atajos de teclado excepto Escape y Enter
                                 e.stopPropagation();
                                 
                                 if (e.key === 'Escape' && !posLoading) {
@@ -8376,6 +8404,19 @@ export default function Facturar({
                                     setPosTipoCuenta("CORRIENTE");
                                     setPosPendingCallback(null);
                                     setPosRespuesta(null);
+                                }
+                                
+                                // Enter para procesar pago
+                                if (e.key === 'Enter' && !posLoading) {
+                                    e.preventDefault();
+                                    const montoActual = parseFloat(posMontoDebito) || 0;
+                                    const totalAprobado = posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0);
+                                    const totalOriginal = parseFloat(posMontoTotalOriginal || 0);
+                                    
+                                    // Solo procesar si hay monto pendiente y cédula ingresada
+                                    if (posCedulaTitular && montoActual > 0 && totalAprobado < totalOriginal) {
+                                        enviarSolicitudPosDebito();
+                                    }
                                 }
                                 
                                 // Bloquear Ctrl+Enter, F keys, etc. mientras el modal está abierto

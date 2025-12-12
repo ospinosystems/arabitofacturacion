@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import axios from "axios";
 
@@ -54,6 +54,9 @@ export default function ModalRefPago({
     // Estados para autovalidación
     const [autoValidando, setAutoValidando] = useState(false);
     const [resultadoValidacion, setResultadoValidacion] = useState(null);
+    
+    // Ref para bloqueo inmediato (evita múltiples envíos por Enter rápido)
+    const validandoRef = useRef(false);
 
     // Monto total del pedido en Bs
     const montoTotalPedido = parseFloat(pedidoData?.bs || 0);
@@ -95,6 +98,14 @@ export default function ModalRefPago({
         return regex.test(monto);
     };
 
+    // Truncar a 2 decimales sin redondear
+    const truncarDosDecimales = (num) => {
+        const numero = parseFloat(num);
+        if (isNaN(numero)) return "0.00";
+        const factor = 100;
+        return (Math.floor(numero * factor) / factor).toFixed(2);
+    };
+
     // Obtener configuración de campos según módulo
     const getModuloConfig = () => {
         switch (moduloSeleccionado) {
@@ -117,7 +128,7 @@ export default function ModalRefPago({
                     showReferencia: true,
                     referenciaMinLength: 12,
                     referenciaMaxLength: 12,
-                    referenciaPlaceholder: 'Número de referencia (12 dígitos)...',
+                    referenciaPlaceholder: 'Referencia completa (máx. 12 dígitos)...',
                     showFechaPago: true,
                     showTelefonoPago: true,
                     showCodigoBancoOrigen: true,
@@ -215,7 +226,16 @@ export default function ModalRefPago({
 
     // Función para autovalidar transferencia
     const handleAutoValidar = async () => {
+        // Prevenir doble envío con ref (bloqueo inmediato sincrónico)
+        if (validandoRef.current || resultadoValidacion?.success) {
+            return;
+        }
+        
+        // Bloquear inmediatamente con ref (antes de que React actualice estado)
+        validandoRef.current = true;
+        
         if (!validateFormAutoValidar()) {
+            validandoRef.current = false;
             return;
         }
 
@@ -276,6 +296,7 @@ export default function ModalRefPago({
             });
         } finally {
             setAutoValidando(false);
+            validandoRef.current = false;
         }
     };
 
@@ -329,7 +350,10 @@ export default function ModalRefPago({
             e.preventDefault();
             // Si está en modo AutoValidar, llamar a handleAutoValidar
             if (moduloSeleccionado === 'AutoValidar') {
-                handleAutoValidar();
+                // No ejecutar si ya está validando o si ya fue exitoso
+                if (!autoValidando && !resultadoValidacion?.success) {
+                    handleAutoValidar();
+                }
             } else {
                 handleSubmit(e);
             }
@@ -340,7 +364,7 @@ export default function ModalRefPago({
     useEffect(() => {
         // Para módulos automáticos, siempre es en Bs
         if (moduloSeleccionado !== 'Central') {
-            let monto = (transferencia * dolar).toFixed(2);
+            let monto = truncarDosDecimales(transferencia * dolar);
             setmonto_referenciapago(monto);
             setisrefbanbs(true);
         } else if (
@@ -349,9 +373,9 @@ export default function ModalRefPago({
             banco_referenciapago == "AirTM"
         ) {
             setisrefbanbs(false);
-            setmonto_referenciapago(transferencia);
+            setmonto_referenciapago(truncarDosDecimales(transferencia));
         } else {
-            let monto = (transferencia * dolar).toFixed(2);
+            let monto = truncarDosDecimales(transferencia * dolar);
             setmonto_referenciapago(monto);
             setisrefbanbs(true);
         }
@@ -541,7 +565,7 @@ export default function ModalRefPago({
                             <div>
                                 <label className="block mb-1 text-xs font-medium text-gray-700">
                                     Referencia <span className="text-red-500">*</span>
-                                    <span className="ml-1 text-gray-400">(12 dígitos)</span>
+                                    <span className="ml-1 text-gray-400">(máx. 12 dígitos)</span>
                                 </label>
                                 <div className="relative">
                                     <input
