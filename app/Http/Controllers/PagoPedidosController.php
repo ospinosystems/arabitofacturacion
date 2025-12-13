@@ -1327,7 +1327,7 @@ class PagoPedidosController extends Controller
                 }
             }
             
-            $porcentaje_descuento = ($monto_descuento_real / $monto_bruto) * 100;
+            $porcentaje_descuento = $monto_bruto > 0 ? ($monto_descuento_real / $monto_bruto) * 100 : 0;
             
             // Verificar si ya existe una solicitud para este pedido
             $solicitudExistente = (new sendCentral)->verificarSolicitudDescuento([

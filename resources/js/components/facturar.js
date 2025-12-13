@@ -3453,7 +3453,7 @@ export default function Facturar({
         }
         
         const montoFinal = window.prompt(
-            `Monto total final del ítem (Subtotal actual: $${subtotalItem.toFixed(2)})\n*Ingrese 0 para eliminar descuento*`
+            `Monto total final del ítem (Subtotal actual: $${subtotalItem.toFixed(4)})\n*Ingrese 0 para eliminar descuento*`
         );
         
         if (montoFinal === null || montoFinal === "") return;
@@ -3490,7 +3490,7 @@ export default function Facturar({
             }
             
             // Calcular el porcentaje de descuento: descuento = 100 - ((montoFinal * 100) / subtotal)
-            const descuento = (100 - ((montoFinalNum * 100) / subtotalItem)).toFixed(3);
+            const descuento = (100 - ((montoFinalNum * 100) / subtotalItem)).toFixed(4);
             
             let params = { index, descuento };
             db.setDescuentoUnitario(params).then((res) => {
