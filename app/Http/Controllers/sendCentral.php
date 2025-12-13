@@ -2380,15 +2380,15 @@ class sendCentral extends Controller
         }
     }
 
-    function deleteTranferenciaAprobacion($idinsucursal, $id_pedido) {
+    function deleteTranferenciaAprobacion($id_pedido, $loteserial) {
         try {
             $codigo_origen = $this->getOrigen();
             $response = Http::post(
                 $this->path() . "/deleteTranferenciaAprobacion",
                 [
                     "codigo_origen" => $codigo_origen,
-                    "idinsucursal" => $idinsucursal,
                     "id_pedido" => $id_pedido,
+                    "loteserial" => $loteserial, // referencia/descripcion de la transferencia
                 ]
             );
 

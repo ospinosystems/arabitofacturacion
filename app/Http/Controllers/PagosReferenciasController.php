@@ -615,7 +615,10 @@ class PagosReferenciasController extends Controller
             // Eliminar en central primero (si aplica)
             $sucursal = sucursal::first();
             if ($sucursal && $sucursal->modo_transferencia === 'central') {
-                $resultCentral = (new sendCentral)->deleteTranferenciaAprobacion($id, $pagos_referencias->id_pedido);
+                $resultCentral = (new sendCentral)->deleteTranferenciaAprobacion(
+                    $pagos_referencias->id_pedido,
+                    $pagos_referencias->descripcion // loteserial/referencia
+                );
                 \Log::info("Resultado eliminar en central:", ['result' => $resultCentral]);
                 
                 // Solo eliminar localmente si central confirmó la eliminación
