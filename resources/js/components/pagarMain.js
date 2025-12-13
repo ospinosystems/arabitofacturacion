@@ -3457,20 +3457,18 @@ export default function PagarMain({
                                             <span>Ver</span>
                                         </button>
 
-                                        {editable && (
-                                            <>
-                                                <button
-                                                    className="flex items-center gap-1 px-2 py-1 text-xs text-gray-700 transition-colors border !border-gray-300 rounded bg-gray-100 hover:bg-gray-200"
-                                                    onClick={() =>
-                                                        sendReciboFiscal()
-                                                    }
-                                                    title="Recibo Fiscal"
-                                                >
-                                                    <i className="fa fa-file-text"></i>
-                                                    <span>Recib.</span>
-                                                </button>
-                                            </>
-                                        )}
+                                        
+                                        <button
+                                            className="flex items-center gap-1 px-2 py-1 text-xs text-gray-700 transition-colors border !border-gray-300 rounded bg-gray-100 hover:bg-gray-200"
+                                            onClick={() =>
+                                                sendReciboFiscal()
+                                            }
+                                            title="Recibo Fiscal"
+                                        >
+                                            <i className="fa fa-file-text"></i>
+                                            <span>Recib.</span>
+                                        </button>
+                                          
                                         <button
                                             className="flex items-center gap-1 px-2 py-1 text-xs text-amber-700 transition-colors border !border-amber-300 rounded bg-amber-100 hover:bg-amber-200"
                                             onClick={() => printBultos()}
