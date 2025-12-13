@@ -2510,9 +2510,9 @@ class PedidosController extends Controller
 
         // Validar que el pedido original no sea una devolución (debe tener monto positivo)
         $montoTotal = items_pedidos::where('id_pedido', $id_pedido_original)->sum('monto');
-        if ($montoTotal <= 0) {
+       /*  if ($montoTotal <= 0) {
             return Response::json(["msj" => "El pedido #$id_pedido_original no es válido como factura original (monto no positivo)", "estado" => false]);
-        }
+        } */
 
         // Validar que el pedido original esté facturado (estado > 0)
         if ($pedidoOriginal->estado == 0) {
