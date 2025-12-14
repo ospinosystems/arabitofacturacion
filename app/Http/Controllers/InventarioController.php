@@ -216,25 +216,19 @@ class InventarioController extends Controller
             ]);
         }
 
-        return inventario::with([
-            'proveedor',
-            'categoria',
-            'marca',
-            'deposito',
-        ])
-            ->whereIn('id', function ($q) use ($fecha1pedido, $fecha2pedido, $tipoestadopedido) {
-                $q
-                    ->from('items_pedidos')
-                    ->whereIn('id_pedido', function ($q) use ($fecha1pedido, $fecha2pedido, $tipoestadopedido) {
-                        $q
-                            ->from('pedidos')
-                            ->when($fecha1pedido != '', function ($q) use ($fecha1pedido, $fecha2pedido) {
-                                $q->whereBetween('created_at', ["$fecha1pedido 00:00:00", "$fecha2pedido 23:59:59"]);
-                            })
-                            // ->whereIn('id', pago_pedidos::where('tipo', '<>', 4)->select('id_pedido'))
-                            ->select('id');
-                    })
-                    ->select('id_producto');
+        return inventario::whereIn('id', function ($q) use ($fecha1pedido, $fecha2pedido, $tipoestadopedido) {
+            $q
+                ->from('items_pedidos')
+                ->whereIn('id_pedido', function ($q) use ($fecha1pedido, $fecha2pedido, $tipoestadopedido) {
+                    $q
+                        ->from('pedidos')
+                        ->when($fecha1pedido != '', function ($q) use ($fecha1pedido, $fecha2pedido) {
+                            $q->whereBetween('fecha_factura', ["$fecha1pedido 00:00:00", "$fecha2pedido 23:59:59"]);
+                        })
+                        // ->whereIn('id', pago_pedidos::where('tipo', '<>', 4)->select('id_pedido'))
+                        ->select('id');
+                })
+                ->select('id_producto');
             })
             ->when(!empty($categoriaEstaInve), function ($query) use ($categoriaEstaInve) {
                 return $query->where('id_categoria', $categoriaEstaInve);
