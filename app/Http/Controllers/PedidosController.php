@@ -2742,7 +2742,8 @@ class PedidosController extends Controller
             'pagos:id,id_pedido,tipo,monto,monto_original,moneda,referencia',
             'items:id,id_pedido,monto,descuento,cantidad',
             'vendedor:id,nombre,usuario',
-            'cliente:id,nombre,identificacion'
+            'cliente:id,nombre,identificacion',
+            'referencias:id,id_pedido,descripcion,monto,estatus'
         ])
         ->whereBetween('fecha_factura', ["$fecha1 00:00:00", "$fecha2 23:59:59"])
         ->where('estado', '!=', 2); // Excluir anulados
@@ -2814,12 +2815,12 @@ class PedidosController extends Controller
                 $ref = $pago->referencia ?? '';
                 
                 switch ($pago->tipo) {
-                    case 1: // Transferencia
+                    case 1: // Transferencia - referencias vienen de pagos_referencias
                         $pagosDesglose['transferencia_usd'] += $montoUSD;
-                        if ($ref) $pagosDesglose['transferencia_ref'][] = $ref;
                         break;
-                    case 2: // Débito
-                        $pagosDesglose['debito_usd'] += $montoUSD;
+                    case 2: // Débito - usar monto_original
+                        $montoOriginal = floatval($pago->monto_original ?? $pago->monto);
+                        $pagosDesglose['debito_usd'] += $montoOriginal;
                         if ($ref) $pagosDesglose['debito_ref'][] = $ref;
                         break;
                     case 3: // Efectivo
@@ -2838,6 +2839,14 @@ class PedidosController extends Controller
                         $pagosDesglose['biopago_usd'] += $montoUSD;
                         if ($ref) $pagosDesglose['biopago_ref'][] = $ref;
                         break;
+                }
+            }
+            
+            // Obtener referencias de transferencias desde pagos_referencias
+            // Formato: referencia:monto-referencia:monto
+            foreach ($pedido->referencias as $ref) {
+                if ($ref->estatus == 1) { // Solo referencias aprobadas
+                    $pagosDesglose['transferencia_ref'][] = $ref->descripcion . ':' . number_format(floatval($ref->monto), 2, '.', '');
                 }
             }
             
@@ -2865,7 +2874,7 @@ class PedidosController extends Controller
                 number_format($totalBs, 2, '.', ''),
                 // Métodos de pago
                 number_format($pagosDesglose['transferencia_usd'], 2, '.', ''),
-                '"' . implode('; ', $pagosDesglose['transferencia_ref']) . '"',
+                '"' . implode('-', $pagosDesglose['transferencia_ref']) . '"',
                 number_format($pagosDesglose['debito_usd'], 2, '.', ''),
                 '"' . implode('; ', $pagosDesglose['debito_ref']) . '"',
                 number_format($pagosDesglose['efectivo_usd'], 2, '.', ''),
