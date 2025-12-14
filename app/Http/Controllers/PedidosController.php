@@ -2719,5 +2719,172 @@ class PedidosController extends Controller
         ]);
     }
 
+    /**
+     * Exportar ventas a CSV con desglose de métodos de pago
+     * Admin (tipo_usuario=1): todos los pedidos
+     * Otros usuarios: solo sus propios pedidos
+     */
+    public function exportarVentasCSV(Request $req)
+    {
+        $fecha1 = $req->fecha1 ?: date('Y-m-d');
+        $fecha2 = $req->fecha2 ?: date('Y-m-d');
+        
+        // Obtener usuario y tipo de sesión
+        $id_usuario = session("id_usuario");
+        $tipo_usuario = session("tipo_usuario");
+        $esAdmin = ($tipo_usuario == 1);
+        
+        // Obtener tasa de cambio actual
+        $bs_rate = $this->get_moneda()['bs'] ?? 1;
+        
+        // Obtener pedidos con sus relaciones
+        $query = pedidos::with([
+            'pagos:id,id_pedido,tipo,monto,monto_original,moneda,referencia',
+            'items:id,id_pedido,monto,descuento,cantidad',
+            'vendedor:id,nombre,usuario',
+            'cliente:id,nombre,identificacion'
+        ])
+        ->whereBetween('fecha_factura', ["$fecha1 00:00:00", "$fecha2 23:59:59"])
+        ->where('estado', '!=', 2); // Excluir anulados
+        
+        // Si NO es admin, filtrar solo por sus pedidos
+        if (!$esAdmin) {
+            $query->where('id_vendedor', $id_usuario);
+        }
+        
+        $pedidos = $query->orderBy('id', 'asc')->get();
+        
+        // Construir CSV
+        $csv = [];
+        
+        // Encabezados
+        $headers = [
+            'ID_Pedido',
+            'Fecha',
+            'Hora',
+            'Estado',
+            'Tasa_Bs',
+            'Cajero_ID',
+            'Cajero_Nombre',
+            'Cliente_ID',
+            'Cliente_Nombre',
+            'Cliente_Cedula',
+            'Cant_Items',
+            'Total_USD',
+            'Total_Bs',
+            // Métodos de pago en USD
+            'Transferencia_USD',
+            'Transferencia_Ref',
+            'Debito_USD',
+            'Debito_Ref',
+            'Efectivo_USD',
+            'Efectivo_Bs',
+            'Credito_USD',
+            'Biopago_USD',
+            'Biopago_Ref',
+        ];
+        $csv[] = implode(',', $headers);
+        
+        foreach ($pedidos as $pedido) {
+            // Calcular total del pedido
+            $totalUSD = 0;
+            $cantItems = 0;
+            foreach ($pedido->items as $item) {
+                $montoItem = $item->monto - ($item->monto * ($item->descuento / 100));
+                $totalUSD += $montoItem;
+                $cantItems += abs($item->cantidad);
+            }
+            $totalBs = $totalUSD * $bs_rate;
+            
+            // Inicializar montos por método de pago
+            $pagosDesglose = [
+                'transferencia_usd' => 0,
+                'transferencia_ref' => [],
+                'debito_usd' => 0,
+                'debito_ref' => [],
+                'efectivo_usd' => 0,
+                'efectivo_bs' => 0,
+                'credito_usd' => 0,
+                'biopago_usd' => 0,
+                'biopago_ref' => [],
+            ];
+            
+            foreach ($pedido->pagos as $pago) {
+                $montoUSD = floatval($pago->monto);
+                $ref = $pago->referencia ?? '';
+                
+                switch ($pago->tipo) {
+                    case 1: // Transferencia
+                        $pagosDesglose['transferencia_usd'] += $montoUSD;
+                        if ($ref) $pagosDesglose['transferencia_ref'][] = $ref;
+                        break;
+                    case 2: // Débito
+                        $pagosDesglose['debito_usd'] += $montoUSD;
+                        if ($ref) $pagosDesglose['debito_ref'][] = $ref;
+                        break;
+                    case 3: // Efectivo
+                        $pagosDesglose['efectivo_usd'] += $montoUSD;
+                        // Si el pago es en bolívares (moneda = 2), calcular equivalente
+                        if ($pago->moneda == 2) {
+                            $pagosDesglose['efectivo_bs'] += floatval($pago->monto_original ?? ($montoUSD * $bs_rate));
+                        } else {
+                            $pagosDesglose['efectivo_bs'] += $montoUSD * $bs_rate;
+                        }
+                        break;
+                    case 4: // Crédito
+                        $pagosDesglose['credito_usd'] += $montoUSD;
+                        break;
+                    case 5: // Biopago
+                        $pagosDesglose['biopago_usd'] += $montoUSD;
+                        if ($ref) $pagosDesglose['biopago_ref'][] = $ref;
+                        break;
+                }
+            }
+            
+            // Estado del pedido
+            $estadoTexto = $pedido->estado == 0 ? 'Pendiente' : ($pedido->estado == 1 ? 'Procesado' : 'Anulado');
+            
+            // Extraer fecha y hora por separado
+            $fechaPedido = date('Y-m-d', strtotime($pedido->fecha_factura));
+            $horaPedido = date('H:i:s', strtotime($pedido->fecha_factura));
+            
+            // Construir fila
+            $row = [
+                $pedido->id,
+                $fechaPedido,
+                $horaPedido,
+                $estadoTexto,
+                number_format($bs_rate, 2, '.', ''),
+                $pedido->id_vendedor,
+                '"' . ($pedido->vendedor->nombre ?? 'N/A') . '"',
+                $pedido->id_cliente ?? '',
+                '"' . ($pedido->cliente->nombre ?? 'Sin cliente') . '"',
+                $pedido->cliente->identificacion ?? '',
+                $cantItems,
+                number_format($totalUSD, 2, '.', ''),
+                number_format($totalBs, 2, '.', ''),
+                // Métodos de pago
+                number_format($pagosDesglose['transferencia_usd'], 2, '.', ''),
+                '"' . implode('; ', $pagosDesglose['transferencia_ref']) . '"',
+                number_format($pagosDesglose['debito_usd'], 2, '.', ''),
+                '"' . implode('; ', $pagosDesglose['debito_ref']) . '"',
+                number_format($pagosDesglose['efectivo_usd'], 2, '.', ''),
+                number_format($pagosDesglose['efectivo_bs'], 2, '.', ''),
+                number_format($pagosDesglose['credito_usd'], 2, '.', ''),
+                number_format($pagosDesglose['biopago_usd'], 2, '.', ''),
+                '"' . implode('; ', $pagosDesglose['biopago_ref']) . '"',
+            ];
+            
+            $csv[] = implode(',', $row);
+        }
+        
+        $contenido = implode("\n", $csv);
+        $filename = "ventas_{$fecha1}_a_{$fecha2}.csv";
+        
+        return response($contenido)
+            ->header('Content-Type', 'text/csv; charset=UTF-8')
+            ->header('Content-Disposition', "attachment; filename=\"$filename\"");
+    }
+
 
 }

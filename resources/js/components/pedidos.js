@@ -264,6 +264,13 @@ function Pedidos({
 									>
 										<i className="fa fa-sync-alt"></i>
 									</button>
+									<a 
+										href={`/exportarVentasCSV?fecha1=${fecha1pedido}&fecha2=${fecha2pedido}`}
+										className="px-2 py-1 text-xs text-green-600 transition-colors border border-green-300 rounded hover:bg-green-50"
+										title="Descargar CSV de ventas"
+									>
+										<i className="fa fa-download"></i>
+									</a>
 								</form>
 							</div>
 						</div>

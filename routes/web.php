@@ -152,6 +152,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('setPrecioAlternoCarrito', [ItemsPedidosController::class,"setPrecioAlternoCarrito"]);
 		
 		Route::post('getPedidos', [PedidosController::class,"getPedidos"]);
+		Route::get('exportarVentasCSV', [PedidosController::class,"exportarVentasCSV"]);
 		
 		Route::get('notaentregapedido', [PedidosController::class,"notaentregapedido"]);
 		
