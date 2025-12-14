@@ -903,7 +903,7 @@ class PagosReferenciasController extends Controller
                  
                  // Verificar que no exista ya una referencia con la referencia del banco
                  // (evita duplicados cuando el usuario cambia los primeros dígitos)
-                 $existeRefBanco = pagos_referencias::where("descripcion", $referenciaBanco)
+                 /* $existeRefBanco = pagos_referencias::where("descripcion", $referenciaBanco)
                      ->where("estatus", "aprobada")
                      ->first();
                  if ($existeRefBanco) {
@@ -916,7 +916,7 @@ class PagosReferenciasController extends Controller
                          "estado" => false,
                          "msj" => "Esta transferencia ya fue registrada anteriormente. Referencia del banco: " . $referenciaBanco
                      ]);
-                 }
+                 } */
                  
                  // Crear registro de pago con estatus aprobado
                  $pagoRef = new pagos_referencias();
