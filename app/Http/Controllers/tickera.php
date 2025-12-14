@@ -548,8 +548,11 @@ class tickera extends Controller
                 $printer->text("\n");
                 $printer->text("Monto: " . number_format($saldoFinal, 2));
                 $printer->text("\n");
-                $printer->text("Método: " . $this->determinarMetodoPago($pedido));
+                $printer->setEmphasis(true);
+                $printer->text("Método de Pago:");
+                $printer->setEmphasis(false);
                 $printer->text("\n");
+                $this->imprimirPagosDetallados($printer, $pedido, $dolar);
             } elseif ($saldoFinal < 0) {
                 $printer->setEmphasis(true);
                 $printer->text("DINERO A DEVOLVER:");
@@ -557,8 +560,11 @@ class tickera extends Controller
                 $printer->text("\n");
                 $printer->text("Monto: " . number_format(abs($saldoFinal), 2));
                 $printer->text("\n");
-                $printer->text("Método: " . $this->determinarMetodoPago($pedido));
+                $printer->setEmphasis(true);
+                $printer->text("Método de Pago:");
+                $printer->setEmphasis(false);
                 $printer->text("\n");
+                $this->imprimirPagosDetallados($printer, $pedido, $dolar);
             } else {
                 $printer->setEmphasis(true);
                 $printer->text("SALDO CERO:");
@@ -621,8 +627,11 @@ class tickera extends Controller
             $printer->text("\n");
             $printer->text("Total a devolver: " . number_format($totalDevolucion, 2));
             $printer->text("\n");
-            $printer->text("Método: " . $this->determinarMetodoPago($pedido));
+            $printer->setEmphasis(true);
+            $printer->text("Método de Pago:");
+            $printer->setEmphasis(false);
             $printer->text("\n");
+            $this->imprimirPagosDetallados($printer, $pedido, $dolar);
         }
         
         $printer->text("---------------------------");
@@ -693,6 +702,69 @@ class tickera extends Controller
         }
         
         return implode(", ", array_unique($metodos));
+    }
+
+    /**
+     * Imprimir detalle de pagos con monto original, referencia y equivalente en Bs
+     */
+    private function imprimirPagosDetallados($printer, $pedido, $dolar)
+    {
+        $pagos = \App\Models\pago_pedidos::where('id_pedido', $pedido->id)->get();
+        
+        if ($pagos->isEmpty()) {
+            $printer->text("No especificado");
+            $printer->text("\n");
+            return;
+        }
+        
+        foreach ($pagos as $pago) {
+            $tipoPago = $this->getTipoPagoDescripcion($pago->tipo);
+            $montoOriginal = floatval($pago->monto_original ?? $pago->monto);
+            $montoBs = floatval($pago->monto);
+            $moneda = $pago->moneda ?? '$';
+            $referencia = $pago->referencia ?? '';
+            
+            // Determinar si es monto negativo
+            $esNegativo = $montoOriginal < 0;
+            $signo = $esNegativo ? "-" : "";
+            $montoOriginalAbs = abs($montoOriginal);
+            $montoBsAbs = abs($montoBs);
+            
+            // Calcular monto en dólares
+            $montoDolares = ($moneda == 'bs' && $dolar > 0) ? ($montoOriginalAbs / $dolar) : $montoOriginalAbs;
+            if ($moneda == '$') {
+                $montoDolares = $montoOriginalAbs;
+            }
+            
+            // Línea 1: Tipo de pago
+            $printer->setEmphasis(true);
+            $printer->text($tipoPago);
+            $printer->setEmphasis(false);
+            $printer->text("\n");
+            
+            // Línea 2: Monto original (con signo si es negativo)
+            if ($moneda == '$') {
+                $printer->text(" " . $signo . number_format($montoOriginalAbs, 2));
+            } elseif ($moneda == 'bs') {
+                $printer->text(" " . $signo . "Bs" . number_format($montoOriginalAbs, 2));
+            } elseif ($moneda == 'cop') {
+                $printer->text(" " . $signo . "COP" . number_format($montoOriginalAbs, 0));
+            } else {
+                $printer->text(" " . $signo . number_format($montoDolares, 2));
+            }
+            
+            // Agregar referencia si es transferencia o débito
+            if (($pago->tipo == 1 || $pago->tipo == 2) && !empty($referencia)) {
+                $printer->text(" REF:" . $referencia);
+            }
+            $printer->text("\n");
+            
+            // Línea 3: Equivalente en Bs (si la moneda original no es Bs)
+            if ($moneda != 'bs') {
+                $printer->text(" =" . $signo . "Bs" . number_format($montoBsAbs, 2));
+                $printer->text("\n");
+            }
+        }
     }
 
     /**
@@ -885,8 +957,52 @@ class tickera extends Controller
                 $printer->setEmphasis(false);
                 $printer->text("\n");
                 foreach ($pedido->pagos as $pago) { 
-                    $printer->text((new tickera)->getTipoPagoDescripcion($pago->tipo).": ".moneda($pago->monto));
+                    $tipoPago = (new tickera)->getTipoPagoDescripcion($pago->tipo);
+                    $montoOriginal = floatval($pago->monto_original ?? $pago->monto);
+                    $montoBs = floatval($pago->monto);
+                    $moneda = $pago->moneda ?? '$';
+                    $referencia = $pago->referencia ?? '';
+                    
+                    // Determinar si es monto negativo
+                    $esNegativo = $montoOriginal < 0;
+                    $signo = $esNegativo ? "-" : "";
+                    $montoOriginalAbs = abs($montoOriginal);
+                    $montoBsAbs = abs($montoBs);
+                    
+                    // Calcular monto en dólares
+                    $montoDolares = ($moneda == 'bs' && $dolar > 0) ? ($montoOriginalAbs / $dolar) : $montoOriginalAbs;
+                    if ($moneda == '$') {
+                        $montoDolares = $montoOriginalAbs;
+                    }
+                    
+                    // Línea 1: Tipo de pago
+                    $printer->setEmphasis(true);
+                    $printer->text($tipoPago);
+                    $printer->setEmphasis(false);
                     $printer->text("\n");
+                    
+                    // Línea 2: Monto original (con signo si es negativo)
+                    if ($moneda == '$') {
+                        $printer->text(" " . $signo . number_format($montoOriginalAbs, 2));
+                    } elseif ($moneda == 'bs') {
+                        $printer->text(" " . $signo . "Bs" . number_format($montoOriginalAbs, 2));
+                    } elseif ($moneda == 'cop') {
+                        $printer->text(" " . $signo . "COP" . number_format($montoOriginalAbs, 0));
+                    } else {
+                        $printer->text(" " . $signo . number_format($montoDolares, 2));
+                    }
+                    
+                    // Agregar referencia si es transferencia o débito
+                    if (($pago->tipo == 1 || $pago->tipo == 2) && !empty($referencia)) {
+                        $printer->text(" REF:" . $referencia);
+                    }
+                    $printer->text("\n");
+                    
+                    // Línea 3: Equivalente en Bs (si la moneda original no es Bs)
+                    if ($moneda != 'bs') {
+                        $printer->text(" =" . $signo . "Bs" . number_format($montoBsAbs, 2));
+                        $printer->text("\n");
+                    }
                 }
             }
             $printer->text("\n");
