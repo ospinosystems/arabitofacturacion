@@ -2777,6 +2777,7 @@ class PedidosController extends Controller
             'Transferencia_USD',
             'Transferencia_Ref',
             'Debito_USD',
+            'Debito_Bs',
             'Debito_Ref',
             'Efectivo_USD',
             'Efectivo_Bs',
@@ -2802,6 +2803,7 @@ class PedidosController extends Controller
                 'transferencia_usd' => 0,
                 'transferencia_ref' => [],
                 'debito_usd' => 0,
+                'debito_bs' => 0,
                 'debito_ref' => [],
                 'efectivo_usd' => 0,
                 'efectivo_bs' => 0,
@@ -2818,9 +2820,9 @@ class PedidosController extends Controller
                     case 1: // Transferencia - referencias vienen de pagos_referencias
                         $pagosDesglose['transferencia_usd'] += $montoUSD;
                         break;
-                    case 2: // Débito - usar monto_original
-                        $montoOriginal = floatval($pago->monto_original ?? $pago->monto);
-                        $pagosDesglose['debito_usd'] += $montoOriginal;
+                    case 2: // Débito - monto en USD, monto_original en Bs, referencia
+                        $pagosDesglose['debito_usd'] += $montoUSD;
+                        $pagosDesglose['debito_bs'] += floatval($pago->monto_original ?? 0);
                         if ($ref) $pagosDesglose['debito_ref'][] = $ref;
                         break;
                     case 3: // Efectivo
@@ -2845,9 +2847,8 @@ class PedidosController extends Controller
             // Obtener referencias de transferencias desde pagos_referencias
             // Formato: referencia:monto-referencia:monto
             foreach ($pedido->referencias as $ref) {
-                if ($ref->estatus == 1) { // Solo referencias aprobadas
-                    $pagosDesglose['transferencia_ref'][] = $ref->descripcion . ':' . number_format(floatval($ref->monto), 2, '.', '');
-                }
+                // Incluir todas las referencias (estatus 1 = aprobada, pero incluimos todas por si acaso)
+                $pagosDesglose['transferencia_ref'][] = $ref->descripcion . ':' . number_format(floatval($ref->monto), 2, '.', '');
             }
             
             // Estado del pedido
@@ -2876,6 +2877,7 @@ class PedidosController extends Controller
                 number_format($pagosDesglose['transferencia_usd'], 2, '.', ''),
                 '"' . implode('-', $pagosDesglose['transferencia_ref']) . '"',
                 number_format($pagosDesglose['debito_usd'], 2, '.', ''),
+                number_format($pagosDesglose['debito_bs'], 2, '.', ''),
                 '"' . implode('; ', $pagosDesglose['debito_ref']) . '"',
                 number_format($pagosDesglose['efectivo_usd'], 2, '.', ''),
                 number_format($pagosDesglose['efectivo_bs'], 2, '.', ''),
