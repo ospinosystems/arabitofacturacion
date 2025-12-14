@@ -873,6 +873,14 @@ class PagosReferenciasController extends Controller
                  ]);
              }
 
+             // Verificar que el pedido esté pendiente (estado 0 = pendiente, 1 = procesado)
+             if ($pedido->estado != 0) {
+                 return Response::json([
+                     "estado" => false,
+                     "msj" => "El pedido ya está procesado"
+                 ]);
+             }
+
              // Verificar que no exista ya una referencia con el mismo número
              $existeRef = pagos_referencias::where("descripcion", $referencia)
                  ->where("estatus", "aprobada")
