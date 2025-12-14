@@ -201,10 +201,10 @@ class ItemsPedidosController extends Controller
             if ($descuento<0) {
                 return Response::json(["msj"=>"Error: No puede ser Negativo","estado"=>false]);
             }
-            $checkItemsPedidoCondicionGarantiaCero = (new PedidosController)->checkItemsPedidoCondicionGarantiaCero($item->id_pedido);
+           /*  $checkItemsPedidoCondicionGarantiaCero = (new PedidosController)->checkItemsPedidoCondicionGarantiaCero($item->id_pedido);
             if ($checkItemsPedidoCondicionGarantiaCero!==true) {
                 return Response::json(["msj"=>"Error: El pedido tiene garantias, no puede aplicar descuento unitario","estado"=>false]);
-            }
+            } */
             $isPermiso = (new TareaslocalController)->checkIsResolveTarea([
                 "id_pedido" => $item->id_pedido,
                 "tipo" => "descuentoUnitario",
