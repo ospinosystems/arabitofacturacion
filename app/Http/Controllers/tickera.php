@@ -928,7 +928,20 @@ class tickera extends Controller
            // Configurar ancho de columnas para ticket de 58mm
            $printer->setTextSize(1, 1);
            if (!$isFullFiscal) {
-               $printer->text("P/U:" . number_format(floatval($item['pu']), 2, ".", ",") . "  TOT:" . ($item['totalprecio']));
+               // Precio unitario en dólares
+               $puDolares = floatval($item['pu']);
+               // Calcular total en dólares (P/U * cantidad)
+               $cantidad = floatval($item['cantidad']);
+               $totDolares = $puDolares * $cantidad;
+               // Calcular equivalentes en bolívares
+               $puBs = $puDolares * $dolar;
+               $totBs = $totDolares * $dolar;
+               
+               // Línea 1: P/U y TOT en dólares (REF)
+               $printer->text("P/U:" . number_format($puDolares, 2) . " TOT:" . number_format($totDolares, 2) . " REF");
+               $printer->text("\n");
+               // Línea 2: P/U y TOT en bolívares
+               $printer->text("P/U:Bs" . number_format($puBs, 2) . " TOT:Bs" . number_format($totBs, 2));
                $printer->text("\n");
            }
            
