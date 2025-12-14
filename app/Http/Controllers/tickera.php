@@ -464,23 +464,29 @@ class tickera extends Controller
 
                     // Precio unitario y total (usar precio del item, no del producto actual)
                     $printer->setTextSize(1, 1);
-                    $precio = $item->precio_unitario ?? $item->producto->precio;
-                    $cantidad = abs(floatval($item->cantidad)); // Convertir a positivo
-                    $total = $precio * $cantidad;
-                    $printer->text("P/U:" . number_format($precio, 2) . "  TOT:" . number_format($total, 2));
+                    $puDolares = $item->precio_unitario ?? $item->producto->precio;
+                    $cantidadAbs = abs(floatval($item->cantidad)); // Convertir a positivo
+                    $totDolares = $puDolares * $cantidadAbs;
+                    $puBs = $puDolares * $dolar;
+                    $totBs = $totDolares * $dolar;
+                    // Línea 1: P/U y TOT en dólares (REF)
+                    $printer->text("P/U:" . number_format($puDolares, 2) . " TOT:" . number_format($totDolares, 2) . " REF");
+                    $printer->text("\n");
+                    // Línea 2: P/U y TOT en bolívares
+                    $printer->text("P/U:Bs" . number_format($puBs, 2) . " TOT:Bs" . number_format($totBs, 2));
                     $printer->text("\n");
                     
                     // Cantidad (en negativo para mostrar que es devolución)
                     $printer->setTextSize(1, 1);
                     $printer->text("Ct:");
                     $printer->setTextSize(2, 1);
-                    $printer->text("-" . $this->formato_numero_dos_decimales($cantidad));
+                    $printer->text("-" . $this->formato_numero_dos_decimales($cantidadAbs));
                     $printer->text("\n");
                     $printer->setTextSize(1, 1);
 
                     $printer->feed();
                     
-                    $cantidadTotalDevolucion += $cantidad;
+                    $cantidadTotalDevolucion += $cantidadAbs;
                 }
             }
 
@@ -506,23 +512,29 @@ class tickera extends Controller
 
                     // Precio unitario y total (usar precio del item, no del producto actual)
                     $printer->setTextSize(1, 1);
-                    $precio = $item->precio_unitario ?? $item->producto->precio;
-                    $cantidad = floatval($item->cantidad);
-                    $total = $precio * $cantidad;
-                    $printer->text("P/U:" . number_format($precio, 2) . "  TOT:" . number_format($total, 2));
+                    $puDolares = $item->precio_unitario ?? $item->producto->precio;
+                    $cantidadItem = floatval($item->cantidad);
+                    $totDolares = $puDolares * $cantidadItem;
+                    $puBs = $puDolares * $dolar;
+                    $totBs = $totDolares * $dolar;
+                    // Línea 1: P/U y TOT en dólares (REF)
+                    $printer->text("P/U:" . number_format($puDolares, 2) . " TOT:" . number_format($totDolares, 2) . " REF");
+                    $printer->text("\n");
+                    // Línea 2: P/U y TOT en bolívares
+                    $printer->text("P/U:Bs" . number_format($puBs, 2) . " TOT:Bs" . number_format($totBs, 2));
                     $printer->text("\n");
                     
                     // Cantidad
                     $printer->setTextSize(1, 1);
                     $printer->text("Ct:");
                     $printer->setTextSize(2, 1);
-                    $printer->text("+" . $this->formato_numero_dos_decimales($cantidad));
+                    $printer->text("+" . $this->formato_numero_dos_decimales($cantidadItem));
                     $printer->text("\n");
                     $printer->setTextSize(1, 1);
 
                     $printer->feed();
                     
-                    $cantidadTotalEntrada += $cantidad;
+                    $cantidadTotalEntrada += $cantidadItem;
                 }
             }
 
@@ -533,9 +545,13 @@ class tickera extends Controller
             $printer->text("RESUMEN FINAL:");
             $printer->setEmphasis(false);
             $printer->text("\n");
-            $printer->text("Total devuelto: " . number_format($totalDevolucion, 2));
+            $printer->text("Total devuelto: " . number_format($totalDevolucion, 2) . " REF");
             $printer->text("\n");
-            $printer->text("Total saliente: " . number_format($totalEntrada, 2));
+            $printer->text("Total devuelto: Bs" . number_format($totalDevolucion * $dolar, 2));
+            $printer->text("\n");
+            $printer->text("Total saliente: " . number_format($totalEntrada, 2) . " REF");
+            $printer->text("\n");
+            $printer->text("Total saliente: Bs" . number_format($totalEntrada * $dolar, 2));
             $printer->text("\n");
             $printer->text("---------------------------");
             $printer->text("\n");
@@ -596,23 +612,29 @@ class tickera extends Controller
 
                     // Precio unitario y total (usar precio del item, no del producto actual)
                     $printer->setTextSize(1, 1);
-                    $precio = $item->precio_unitario ?? $item->producto->precio;
-                    $cantidad = abs(floatval($item->cantidad)); // Convertir a positivo
-                    $total = $precio * $cantidad;
-                    $printer->text("P/U:" . number_format($precio, 2) . "  TOT:" . number_format($total, 2));
+                    $puDolares = $item->precio_unitario ?? $item->producto->precio;
+                    $cantidadAbs = abs(floatval($item->cantidad)); // Convertir a positivo
+                    $totDolares = $puDolares * $cantidadAbs;
+                    $puBs = $puDolares * $dolar;
+                    $totBs = $totDolares * $dolar;
+                    // Línea 1: P/U y TOT en dólares (REF)
+                    $printer->text("P/U:" . number_format($puDolares, 2) . " TOT:" . number_format($totDolares, 2) . " REF");
+                    $printer->text("\n");
+                    // Línea 2: P/U y TOT en bolívares
+                    $printer->text("P/U:Bs" . number_format($puBs, 2) . " TOT:Bs" . number_format($totBs, 2));
                     $printer->text("\n");
                     
                     // Cantidad (en negativo para mostrar que es devolución)
                     $printer->setTextSize(1, 1);
                     $printer->text("Ct:");
                     $printer->setTextSize(2, 1);
-                    $printer->text("-" . $this->formato_numero_dos_decimales($cantidad));
+                    $printer->text("-" . $this->formato_numero_dos_decimales($cantidadAbs));
                     $printer->text("\n");
                     $printer->setTextSize(1, 1);
 
                     $printer->feed();
                     
-                    $cantidadTotalDevolucion += $cantidad;
+                    $cantidadTotalDevolucion += $cantidadAbs;
                 }
             }
 
@@ -625,7 +647,9 @@ class tickera extends Controller
             $printer->text("\n");
             $printer->text("Cantidad total devuelta: " . $cantidadTotalDevolucion);
             $printer->text("\n");
-            $printer->text("Total a devolver: " . number_format($totalDevolucion, 2));
+            $printer->text("Total a devolver: " . number_format($totalDevolucion, 2) . " REF");
+            $printer->text("\n");
+            $printer->text("Total a devolver: Bs" . number_format($totalDevolucion * $dolar, 2));
             $printer->text("\n");
             $printer->setEmphasis(true);
             $printer->text("Método de Pago:");
