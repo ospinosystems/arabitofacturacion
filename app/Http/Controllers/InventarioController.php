@@ -206,8 +206,6 @@ class InventarioController extends Controller
         $orderByColumEstaInv = $data['orderByColumEstaInv'];
         $categoriaEstaInve = $data['categoriaEstaInve'];
 
-        $tipoestadopedido = 1;
-
         // Si ambas fechas son vacías, no ejecutar la búsqueda y retornar un error o arreglo vacío
         if (empty($fecha1pedido) && empty($fecha2pedido)) {
             return Response::json([
@@ -216,40 +214,41 @@ class InventarioController extends Controller
             ]);
         }
 
-        return inventario::whereIn('id', function ($q) use ($fecha1pedido, $fecha2pedido, $tipoestadopedido) {
-            $q
-                ->from('items_pedidos')
-                ->whereIn('id_pedido', function ($q) use ($fecha1pedido, $fecha2pedido, $tipoestadopedido) {
-                    $q
-                        ->from('pedidos')
-                        ->when($fecha1pedido != '', function ($q) use ($fecha1pedido, $fecha2pedido) {
-                            $q->whereBetween('fecha_factura', ["$fecha1pedido 00:00:00", "$fecha2pedido 23:59:59"]);
-                        })
-                        // ->whereIn('id', pago_pedidos::where('tipo', '<>', 4)->select('id_pedido'))
-                        ->select('id');
-                })
-                ->select('id_producto');
+        $fechaInicio = "$fecha1pedido 00:00:00";
+        $fechaFin = "$fecha2pedido 23:59:59";
+
+        // Usar una sola consulta con JOINs y agregaciones pre-calculadas
+        return DB::table('inventarios')
+            ->join('items_pedidos', 'inventarios.id', '=', 'items_pedidos.id_producto')
+            ->join('pedidos', 'items_pedidos.id_pedido', '=', 'pedidos.id')
+            ->leftJoin('pago_pedidos', function ($join) {
+                $join->on('pedidos.id', '=', 'pago_pedidos.id_pedido')
+                    ->where('pago_pedidos.tipo', '=', 4);
             })
-            ->when(!empty($categoriaEstaInve), function ($query) use ($categoriaEstaInve) {
-                return $query->where('id_categoria', $categoriaEstaInve);
+            ->when($fecha1pedido != '', function ($q) use ($fechaInicio, $fechaFin) {
+                $q->whereBetween('pedidos.fecha_factura', [$fechaInicio, $fechaFin]);
             })
-            ->where(function ($q) use ($fechaQEstaInve) {
-                $q
-                    ->orWhere('descripcion', 'LIKE', "%$fechaQEstaInve%")
-                    ->orWhere('codigo_proveedor', 'LIKE', "%$fechaQEstaInve%");
+            ->when(!empty($categoriaEstaInve), function ($q) use ($categoriaEstaInve) {
+                $q->where('inventarios.id_categoria', $categoriaEstaInve);
             })
-            ->selectRaw('*,@cantidadtotal := (SELECT sum(cantidad) FROM items_pedidos WHERE id_producto=inventarios.id ' . ($fecha1pedido == '' ? '' : ("AND created_at BETWEEN '$fecha1pedido 00:00:00' AND '$fecha2pedido 23:59:59'")) . ') as cantidadtotal,(@cantidadtotal*inventarios.precio) as totalventa, @cantidad_credito := (SELECT COALESCE(sum(cantidad), 0) FROM items_pedidos WHERE id_producto=inventarios.id AND id_pedido IN (SELECT id_pedido FROM pago_pedidos WHERE tipo=4) ' . ($fecha1pedido == '' ? '' : ("AND created_at BETWEEN '$fecha1pedido 00:00:00' AND '$fecha2pedido 23:59:59'")) . ') as cantidad_credito, (@cantidad_credito*inventarios.precio) as totalventa_credito, @cantidad_contado := (SELECT COALESCE(sum(cantidad), 0) FROM items_pedidos WHERE id_producto=inventarios.id AND id_pedido NOT IN (SELECT id_pedido FROM pago_pedidos WHERE tipo=4) ' . ($fecha1pedido == '' ? '' : ("AND created_at BETWEEN '$fecha1pedido 00:00:00' AND '$fecha2pedido 23:59:59'")) . ') as cantidad_contado, (@cantidad_contado*inventarios.precio) as totalventa_contado')
-            ->orderByRaw(" $orderByColumEstaInv" . ' ' . $orderByEstaInv)
+            ->when(!empty($fechaQEstaInve), function ($q) use ($fechaQEstaInve) {
+                $q->where(function ($q2) use ($fechaQEstaInve) {
+                    $q2->where('inventarios.descripcion', 'LIKE', "%$fechaQEstaInve%")
+                       ->orWhere('inventarios.codigo_proveedor', 'LIKE', "%$fechaQEstaInve%");
+                });
+            })
+            ->groupBy('inventarios.id')
+            ->selectRaw('
+                inventarios.*,
+                SUM(items_pedidos.cantidad) as cantidadtotal,
+                SUM(items_pedidos.cantidad) * inventarios.precio as totalventa,
+                SUM(CASE WHEN pago_pedidos.id IS NOT NULL THEN items_pedidos.cantidad ELSE 0 END) as cantidad_credito,
+                SUM(CASE WHEN pago_pedidos.id IS NOT NULL THEN items_pedidos.cantidad ELSE 0 END) * inventarios.precio as totalventa_credito,
+                SUM(CASE WHEN pago_pedidos.id IS NULL THEN items_pedidos.cantidad ELSE 0 END) as cantidad_contado,
+                SUM(CASE WHEN pago_pedidos.id IS NULL THEN items_pedidos.cantidad ELSE 0 END) * inventarios.precio as totalventa_contado
+            ')
+            ->orderByRaw("$orderByColumEstaInv $orderByEstaInv")
             ->get();
-        // ->map(function($q)use ($fecha1pedido,$fecha2pedido){
-        //     $items = items_pedidos::whereBetween("created_at",["$fecha1pedido 00:00:00","$fecha2pedido 23:59:59"])
-        //     ->where("id_producto",$q->id)->sum("cantidad");
-
-        //     $q->cantidadtotal = $items
-        //     // $q->items = $items->get();
-
-        //     return $q;
-        // })->sortBy("cantidadtotal");
     }
 
     public function hacer_pedido($id, $id_pedido, $cantidad, $type, $typeafter = null, $usuario = null, $devolucionTipo = 0, $arrgarantia = null, $valinputsetclaveadmin = null)
