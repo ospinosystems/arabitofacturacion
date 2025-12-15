@@ -237,9 +237,34 @@ class InventarioController extends Controller
                        ->orWhere('inventarios.codigo_proveedor', 'LIKE', "%$fechaQEstaInve%");
                 });
             })
-            ->groupBy('inventarios.id')
+            ->groupBy('inventarios.id', 'inventarios.precio', 'inventarios.descripcion', 'inventarios.codigo_proveedor', 'inventarios.codigo_barras')
             ->selectRaw('
-                inventarios.*,
+                inventarios.id,
+                inventarios.descripcion,
+                inventarios.codigo_proveedor,
+                inventarios.codigo_barras,
+                inventarios.precio,
+                ANY_VALUE(inventarios.super) as super,
+                ANY_VALUE(inventarios.id_proveedor) as id_proveedor,
+                ANY_VALUE(inventarios.id_categoria) as id_categoria,
+                ANY_VALUE(inventarios.id_marca) as id_marca,
+                ANY_VALUE(inventarios.unidad) as unidad,
+                ANY_VALUE(inventarios.id_deposito) as id_deposito,
+                ANY_VALUE(inventarios.iva) as iva,
+                ANY_VALUE(inventarios.porcentaje_ganancia) as porcentaje_ganancia,
+                ANY_VALUE(inventarios.precio_base) as precio_base,
+                ANY_VALUE(inventarios.cantidad) as cantidad,
+                ANY_VALUE(inventarios.bulto) as bulto,
+                ANY_VALUE(inventarios.precio1) as precio1,
+                ANY_VALUE(inventarios.precio2) as precio2,
+                ANY_VALUE(inventarios.precio3) as precio3,
+                ANY_VALUE(inventarios.stockmin) as stockmin,
+                ANY_VALUE(inventarios.stockmax) as stockmax,
+                ANY_VALUE(inventarios.id_vinculacion) as id_vinculacion,
+                ANY_VALUE(inventarios.push) as push,
+                ANY_VALUE(inventarios.activo) as activo,
+                ANY_VALUE(inventarios.created_at) as created_at,
+                ANY_VALUE(inventarios.updated_at) as updated_at,
                 SUM(items_pedidos.cantidad) as cantidadtotal,
                 SUM(items_pedidos.cantidad) * inventarios.precio as totalventa,
                 SUM(CASE WHEN pago_pedidos.id IS NOT NULL THEN items_pedidos.cantidad ELSE 0 END) as cantidad_credito,
