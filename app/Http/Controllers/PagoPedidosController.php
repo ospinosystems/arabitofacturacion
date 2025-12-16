@@ -1026,7 +1026,58 @@ class PagoPedidosController extends Controller
     public function setPagoCredito(Request $req)
     {
         try {
-            $monto_pago_deudor = $req->monto_pago_deudor;
+            $monto_pago_deudor = floatval($req->monto_pago_deudor);
+            $tipo_pago_deudor = $req->tipo_pago_deudor;
+            $moneda_pago_deudor = $req->moneda_pago_deudor ?? null; // Moneda opcional para efectivo
+            
+            // Obtener tasas de cambio
+            $monedas = (new PedidosController)->get_moneda();
+            $tasaDolar = $monedas["bs"] ?? 1;
+            $tasaPeso = $monedas["cop"] ?? 1;
+            if ($tasaDolar <= 0) $tasaDolar = 1;
+            if ($tasaPeso <= 0) $tasaPeso = 1;
+            
+            // Variables para guardar monto original y moneda
+            $montoOriginal = null;
+            $monedaGuardar = null;
+            
+            // Tipos de pago:
+            // 1 = Transferencia (puede ser Bs o USD según el banco)
+            // 2 = Débito (siempre en Bs)
+            // 3 = Efectivo (puede ser USD, Bs o Pesos)
+            // 5 = Biopago (siempre en Bs)
+            
+            if ($tipo_pago_deudor == 2) {
+                // Débito: siempre viene en Bs, convertir a USD
+                $montoOriginal = $monto_pago_deudor;
+                $monedaGuardar = "bs";
+                $monto_pago_deudor = $monto_pago_deudor / $tasaDolar;
+            } 
+            elseif ($tipo_pago_deudor == 5) {
+                // Biopago: siempre viene en Bs, convertir a USD
+                $montoOriginal = $monto_pago_deudor;
+                $monedaGuardar = "bs";
+                $monto_pago_deudor = $monto_pago_deudor / $tasaDolar;
+            }
+            elseif ($tipo_pago_deudor == 3 && $moneda_pago_deudor) {
+                // Efectivo: verificar si viene en otra moneda
+                if ($moneda_pago_deudor === 'bs') {
+                    $montoOriginal = $monto_pago_deudor;
+                    $monedaGuardar = "bs";
+                    $monto_pago_deudor = $monto_pago_deudor / $tasaDolar;
+                } elseif ($moneda_pago_deudor === 'peso') {
+                    $montoOriginal = $monto_pago_deudor;
+                    $monedaGuardar = "peso";
+                    $monto_pago_deudor = $monto_pago_deudor / $tasaPeso;
+                }
+                // Si es 'dolar' o no se especifica, el monto ya está en USD
+            }
+            elseif ($tipo_pago_deudor == 1 && $moneda_pago_deudor === 'bs') {
+                // Transferencia en Bs (bancos nacionales)
+                $montoOriginal = $monto_pago_deudor;
+                $monedaGuardar = "bs";
+                $monto_pago_deudor = $monto_pago_deudor / $tasaDolar;
+            }
     
             if (session()->has("id_usuario")) {
     
@@ -1058,9 +1109,6 @@ class PagoPedidosController extends Controller
                 $pedido->id_vendedor = session("id_usuario");
     
                 if ($pedido->save()) {
-                    $tipo_pago_deudor = $req->tipo_pago_deudor;
-                    $monto_pago_deudor = $req->monto_pago_deudor;
-    
                     $tipo = $monto_pago_deudor<0?"DEVOLUCION":"PAGO";
     
                     $cliente = clientes::find($id_cliente);
@@ -1074,14 +1122,21 @@ class PagoPedidosController extends Controller
                     $items_pedidos->id_pedido = $pedido->id;
                     $items_pedidos->cantidad = 1;
                     $items_pedidos->descuento = 0;
-                    $items_pedidos->monto = $monto_pago_deudor;
+                    $items_pedidos->monto = $monto_pago_deudor; // Monto en USD
                     $items_pedidos->save();
                     
                     $pago_pedidos = new pago_pedidos;
                     $pago_pedidos->tipo = $tipo_pago_deudor;
-                    $pago_pedidos->monto = $monto_pago_deudor;
+                    $pago_pedidos->monto = $monto_pago_deudor; // Monto en USD
                     $pago_pedidos->id_pedido = $pedido->id;
                     $pago_pedidos->cuenta = 0;
+                    
+                    // Si hubo conversión de moneda, guardar monto original y moneda
+                    if ($montoOriginal !== null && $monedaGuardar !== null) {
+                        $pago_pedidos->monto_original = $montoOriginal;
+                        $pago_pedidos->moneda = $monedaGuardar;
+                    }
+                    
                     $pago_pedidos->save();
     
                     return Response::json(["msj"=>"Pago registrado con éxito","estado"=>true,"id_pedido"=>$pedido->id]);
