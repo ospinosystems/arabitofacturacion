@@ -360,26 +360,7 @@ function Credito({
               {!onlyVueltos && (
                 <tr className={!creditsUpdated ? 'table-secondary' : ''}>
                   <td colSpan="2"></td>
-                  <td>
-                    {!creditsUpdated ? (
-                      <div className="alert alert-warning py-2 mb-0">
-                        <i className="fa fa-lock"></i> 
-                        Sección bloqueada hasta actualizar créditos
-                      </div>
-                    ) : (
-                      <form onSubmit={setPagoCredito} className="w-50">
-                        <div className="form-group">
-                          <label htmlFor="">Tipo de pago</label>
-                          <select value={tipo_pago_deudor} name="tipo_pago_deudor" onChange={onchangecaja} className="form-control">
-                            <option value="3">Efectivo</option>            
-                            <option value="2">Débito</option>            
-                            <option value="5">Biopago</option>            
-                          </select>
-                        </div>
-                      </form>
-                    )}
-                  </td>
-                  <td colSpan="2">
+                  <td colSpan="3">
                     {!creditsUpdated ? (
                       <div className="alert alert-warning py-2 mb-0">
                         <i className="fa fa-lock"></i> 
@@ -388,8 +369,9 @@ function Credito({
                     ) : (
                       <form onSubmit={setPagoCredito} className="">
                         <div className="form-group">
-                          <label htmlFor="">Monto Pago</label>
-                          <input name="monto_pago_deudor" value={monto_pago_deudor} onChange={onchangecaja} className="form-control"/>
+                          <label htmlFor="">Monto Abono (USD)</label>
+                          <input type="number" step="0.01" name="monto_pago_deudor" value={monto_pago_deudor} onChange={onchangecaja} className="form-control" placeholder="0.00"/>
+                          <small className="text-muted">El método de pago se selecciona al procesar el pedido</small>
                         </div>
                       </form>
                     )}

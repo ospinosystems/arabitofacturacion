@@ -1057,6 +1057,7 @@ class PagoPedidosController extends Controller
                 $pedido->estado = 0;
                 $pedido->id_cliente = $id_cliente;
                 $pedido->id_vendedor = session("id_usuario");
+                $pedido->fecha_factura = now();
     
                 if ($pedido->save()) {
                     $tipo = $monto_pago_deudor<0?"DEVOLUCION":"PAGO";

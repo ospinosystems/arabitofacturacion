@@ -4516,41 +4516,23 @@ export default function Facturar({
     const setPagoCredito = (e) => {
         e.preventDefault();
         if (deudoresList[selectDeudor]) {
-            let ref, banco;
-            if (tipo_pago_deudor == "1") {
-                ref = window.prompt("Referencia");
-                banco = window.prompt("Banco");
+            if (!monto_pago_deudor || parseFloat(monto_pago_deudor) === 0) {
+                alert("Error: Debe ingresar un monto válido para el abono.");
+                return;
             }
-
-            if (tipo_pago_deudor == "1" && (!ref || !banco)) {
-                alert(
-                    "Error: Debe cargar referencia de transferencia electrónica."
-                );
-            } else {
-                let id_cliente = deudoresList[selectDeudor].id;
-                setLoading(true);
-                db.setPagoCredito({
-                    id_cliente,
-                    tipo_pago_deudor,
-                    monto_pago_deudor,
-                }).then((res) => {
-                    notificar(res);
-                    setLoading(false);
-                    getDeudor(id_cliente);
-
-                    if (ref && banco) {
-                        db.addRefPago({
-                            tipo: 1,
-                            descripcion: ref,
-                            monto: monto_pago_deudor,
-                            banco: banco,
-                            id_pedido: res.data.id_pedido,
-                        }).then((res) => {
-                            notificar(res);
-                        });
-                    }
-                });
-            }
+            
+            let id_cliente = deudoresList[selectDeudor].id;
+            setLoading(true);
+            
+            // Solo enviar el monto en USD - el tipo de pago se selecciona en pagarMain
+            db.setPagoCredito({
+                id_cliente,
+                monto_pago_deudor,
+            }).then((res) => {
+                notificar(res);
+                setLoading(false);
+                getDeudor(id_cliente);
+            });
         }
     };
     const getDeudores = (e) => {
