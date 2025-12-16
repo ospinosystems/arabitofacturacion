@@ -1066,7 +1066,11 @@ class PagoPedidosController extends Controller
     
                     $producto_pago_desc = $tipo." ".$cliente->nombre;
                     
-    
+                    // Obtener tasas actuales
+                    $monedas = (new PedidosController)->get_moneda();
+                    $tasaDolar = $monedas["bs"] ?? 1;
+                    $tasaPeso = $monedas["cop"] ?? 1;
+
                     // Solo crear el item del pedido (tipo PAGO/DEVOLUCION)
                     // El pago_pedidos se crea después en setPagoPedido (pagarMain)
                     // cuando el usuario seleccione el método de pago
@@ -1076,7 +1080,10 @@ class PagoPedidosController extends Controller
                     $items_pedidos->id_pedido = $pedido->id;
                     $items_pedidos->cantidad = 1;
                     $items_pedidos->descuento = 0;
-                    $items_pedidos->monto = $monto_pago_deudor; // Monto en USD
+                    $items_pedidos->monto = $monto_pago_deudor; // Monto total en USD
+                    $items_pedidos->precio_unitario = $monto_pago_deudor; // Precio unitario en USD
+                    $items_pedidos->tasa = $tasaDolar; // Tasa Bs/USD
+                    $items_pedidos->tasa_cop = $tasaPeso; // Tasa COP/USD
                     $items_pedidos->save();
     
                     return Response::json(["msj"=>"Abono creado con éxito. Procese el pago en el pedido.","estado"=>true,"id_pedido"=>$pedido->id]);
