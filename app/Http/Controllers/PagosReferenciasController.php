@@ -612,23 +612,40 @@ class PagosReferenciasController extends Controller
                 return $checkPedidoPago;
             }
 
-            // Eliminar en central primero (si aplica)
+            // Eliminar en central primero (OBLIGATORIO para modo central)
             $sucursal = sucursal::first();
-            if ($sucursal && $sucursal->modo_transferencia === 'central') {
+            $modoTransferencia = $sucursal ? $sucursal->modo_transferencia : null;
+            
+            \Log::info("Intentando eliminar referencia", [
+                'id' => $id,
+                'id_pedido' => $pagos_referencias->id_pedido,
+                'descripcion' => $pagos_referencias->descripcion,
+                'modo_transferencia' => $modoTransferencia
+            ]);
+
+            if ($modoTransferencia === 'central') {
                 $resultCentral = (new sendCentral)->deleteTranferenciaAprobacion(
                     $pagos_referencias->id_pedido,
                     $pagos_referencias->descripcion // loteserial/referencia
                 );
-                \Log::info("Resultado eliminar en central:", ['result' => $resultCentral]);
                 
-                // Solo eliminar localmente si central confirmó la eliminación
-                if (!isset($resultCentral['estado']) || $resultCentral['estado'] !== true) {
-                    $errorMsg = $resultCentral['msj'] ?? 'Error desconocido al eliminar en central';
+                \Log::info("Resultado eliminar en central:", [
+                    'result' => $resultCentral,
+                    'tipo_estado' => isset($resultCentral['estado']) ? gettype($resultCentral['estado']) : 'no existe',
+                    'valor_estado' => $resultCentral['estado'] ?? 'null'
+                ]);
+                
+                // OBLIGATORIO: Solo eliminar localmente si central confirmó la eliminación con estado === true
+                if (!is_array($resultCentral) || !isset($resultCentral['estado']) || $resultCentral['estado'] !== true) {
+                    $errorMsg = is_array($resultCentral) ? ($resultCentral['msj'] ?? 'Central no confirmó la eliminación') : 'Respuesta inválida de central';
+                    \Log::warning("NO se eliminará localmente - Central no confirmó", ['resultCentral' => $resultCentral]);
                     return Response::json([
                         "msj" => "No se pudo eliminar: " . $errorMsg,
                         "estado" => false
                     ]);
                 }
+                
+                \Log::info("Central confirmó eliminación, procediendo a eliminar localmente");
             }
 
             $pagos_referencias->delete();

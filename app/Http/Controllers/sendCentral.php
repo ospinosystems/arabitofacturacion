@@ -2383,7 +2383,14 @@ class sendCentral extends Controller
     function deleteTranferenciaAprobacion($id_pedido, $loteserial) {
         try {
             $codigo_origen = $this->getOrigen();
-            $response = Http::post(
+            
+            \Log::info("Intentando eliminar transferencia en central", [
+                'id_pedido' => $id_pedido,
+                'loteserial' => $loteserial,
+                'codigo_origen' => $codigo_origen
+            ]);
+
+            $response = Http::timeout(30)->post(
                 $this->path() . "/deleteTranferenciaAprobacion",
                 [
                     "codigo_origen" => $codigo_origen,
@@ -2393,11 +2400,26 @@ class sendCentral extends Controller
             );
 
             if ($response->ok()) {
-                return $response->json();
+                $resultado = $response->json();
+                \Log::info("Respuesta de central al eliminar transferencia", ['resultado' => $resultado]);
+                
+                // Verificar que central confirme explícitamente la eliminación
+                if (isset($resultado['estado']) && $resultado['estado'] === true) {
+                    return $resultado;
+                } else {
+                    $errorMsg = $resultado['msj'] ?? 'Central no confirmó la eliminación';
+                    \Log::warning("Central no confirmó eliminación", ['resultado' => $resultado]);
+                    return ["estado" => false, "msj" => $errorMsg];
+                }
             } else {
-                return ["estado" => false, "msj" => "Error de comunicación con central"];
+                \Log::error("Error HTTP al eliminar en central", ['status' => $response->status()]);
+                return ["estado" => false, "msj" => "Error de comunicación con central (HTTP " . $response->status() . ")"];
             }
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            \Log::error("Error de conexión al eliminar en central: " . $e->getMessage());
+            return ["estado" => false, "msj" => "Error de conexión con central. Verifique la red e intente nuevamente."];
         } catch (\Exception $e) {
+            \Log::error("Error al eliminar transferencia en central: " . $e->getMessage());
             return ["estado" => false, "msj" => "Error: " . $e->getMessage()];
         }
     }
