@@ -3156,7 +3156,7 @@ export default function Facturar({
                     const pagoCredito = d.find((e) => e.tipo == 4);
                     if (pagoCredito && pagoCredito.monto != "0.00") {
                         setCredito(pagoCredito.monto);
-                        setShowCredito(true); // Mostrar el input de crédito
+                        //setShowCredito(true); // Mostrar el input de crédito
                     }
 
                     // Biopago (tipo 5)

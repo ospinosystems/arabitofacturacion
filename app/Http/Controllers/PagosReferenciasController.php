@@ -933,7 +933,7 @@ class PagosReferenciasController extends Controller
                  $pagoRef->id_pedido = $id_pedido;
                  $pagoRef->cedula = $cedula;
                  $pagoRef->descripcion = $resultado['referencia_completa'] ?? $referencia;
-                 $pagoRef->banco = "0134"; // Banesco (destino)
+                 $pagoRef->banco = $resultado['banco'] ?? "0134"; // Banco destino desde central
                  $pagoRef->banco_origen = $banco_origen;
                  $pagoRef->telefono = $telefono;
                  $pagoRef->fecha_pago = $fecha_pago;
