@@ -652,19 +652,16 @@ class SyncProgressController extends Controller
                 $campoSync = $tablaConfig['campo_sync'] ?? 'sincronizado';
                 $campoFecha = $tablaConfig['campo_fecha'] ?? 'created_at';
                 
-                // EXCEPCIÓN: Para inventarios, FORZAR envío de todo
-                $soloNuevosTabla = ($tabla === 'inventarios') ? false : $soloNuevos;
-                
                 $query = $model::query();
                 
-                // Filtrar por campo de sincronización si solo queremos nuevos
-                if ($soloNuevosTabla) {
-                    $query->where($campoSync, 0);
-                }
-                
-                // SIEMPRE aplicar filtro de fecha de corte
-                // EXCEPCIÓN: Para inventarios, NO aplicar filtro de fecha (enviar todo)
-                if ($tabla !== 'inventarios') {
+                // Para INVENTARIOS: contar TODO sin ningún filtro
+                if ($tabla === 'inventarios') {
+                    // No aplicar ningún filtro - enviar todo
+                } else {
+                    // Para otras tablas: aplicar filtros normales
+                    if ($soloNuevos) {
+                        $query->where($campoSync, 0);
+                    }
                     $query->where($campoFecha, '>=', $fechaInicio);
                 }
                 
@@ -750,27 +747,20 @@ class SyncProgressController extends Controller
         $procesados = 0;
         $errores = [];
         
-        // EXCEPCIÓN: Para inventarios, FORZAR envío de todo
-        if ($nombreTabla === 'inventarios') {
-            $soloNuevos = false;
-        }
-        
         // Construir query base
         $query = $model::query();
         
-        // Filtrar por campo de sincronización si solo queremos nuevos
-        if ($soloNuevos) {
-            $query->where($campoSync, 0);
-        }
-        
-        // SIEMPRE aplicar filtro de fecha de corte (2025-12-01)
-        // EXCEPCIÓN: Para inventarios, NO aplicar filtro de fecha (enviar todo)
-        if ($nombreTabla !== 'inventarios') {
+        // Para INVENTARIOS: enviar TODO sin ningún filtro
+        if ($nombreTabla === 'inventarios') {
+            Log::info("    [{$nombreTabla}] Enviando TODO el inventario (sin filtro de fecha ni push)");
+        } else {
+            // Para otras tablas: aplicar filtros normales
+            if ($soloNuevos) {
+                $query->where($campoSync, 0);
+            }
             $fechaInicio = $this->getFechaInicioSync();
             $query->where($campoFecha, '>=', $fechaInicio);
             Log::info("    [{$nombreTabla}] Filtrando desde: {$fechaInicio}");
-        } else {
-            Log::info("    [{$nombreTabla}] Enviando TODO el inventario (sin filtro de fecha ni push)");
         }
         
         $total = $query->count();
