@@ -654,7 +654,8 @@ class SyncProgressController extends Controller
                 
                 $query = $model::query();
                 
-                if ($soloNuevos) {
+                // EXCEPCIÓN: Para inventarios, siempre enviar todo independientemente del push
+                if ($soloNuevos && $tabla !== 'inventarios') {
                     $query->where($campoSync, 0);
                 }
                 
