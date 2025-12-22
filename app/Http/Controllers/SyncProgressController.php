@@ -652,10 +652,13 @@ class SyncProgressController extends Controller
                 $campoSync = $tablaConfig['campo_sync'] ?? 'sincronizado';
                 $campoFecha = $tablaConfig['campo_fecha'] ?? 'created_at';
                 
+                // EXCEPCIÓN: Para inventarios, FORZAR envío de todo
+                $soloNuevosTabla = ($tabla === 'inventarios') ? false : $soloNuevos;
+                
                 $query = $model::query();
                 
-                // EXCEPCIÓN: Para inventarios, siempre enviar todo independientemente del push
-                if ($soloNuevos && $tabla !== 'inventarios') {
+                // Filtrar por campo de sincronización si solo queremos nuevos
+                if ($soloNuevosTabla) {
                     $query->where($campoSync, 0);
                 }
                 
@@ -747,12 +750,16 @@ class SyncProgressController extends Controller
         $procesados = 0;
         $errores = [];
         
+        // EXCEPCIÓN: Para inventarios, FORZAR envío de todo
+        if ($nombreTabla === 'inventarios') {
+            $soloNuevos = false;
+        }
+        
         // Construir query base
         $query = $model::query();
         
         // Filtrar por campo de sincronización si solo queremos nuevos
-        // EXCEPCIÓN: Para inventarios, siempre enviar todo independientemente del push
-        if ($soloNuevos && $nombreTabla !== 'inventarios') {
+        if ($soloNuevos) {
             $query->where($campoSync, 0);
         }
         
