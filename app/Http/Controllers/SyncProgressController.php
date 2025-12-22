@@ -660,7 +660,10 @@ class SyncProgressController extends Controller
                 }
                 
                 // SIEMPRE aplicar filtro de fecha de corte
-                $query->where($campoFecha, '>=', $fechaInicio);
+                // EXCEPCIÓN: Para inventarios, NO aplicar filtro de fecha (enviar todo)
+                if ($tabla !== 'inventarios') {
+                    $query->where($campoFecha, '>=', $fechaInicio);
+                }
                 
                 $totalRegistros += $query->count();
             }
@@ -754,10 +757,14 @@ class SyncProgressController extends Controller
         }
         
         // SIEMPRE aplicar filtro de fecha de corte (2025-12-01)
-        // Nunca se sincronizan registros anteriores a esta fecha
-        $fechaInicio = $this->getFechaInicioSync();
-        $query->where($campoFecha, '>=', $fechaInicio);
-        Log::info("    [{$nombreTabla}] Filtrando desde: {$fechaInicio}");
+        // EXCEPCIÓN: Para inventarios, NO aplicar filtro de fecha (enviar todo)
+        if ($nombreTabla !== 'inventarios') {
+            $fechaInicio = $this->getFechaInicioSync();
+            $query->where($campoFecha, '>=', $fechaInicio);
+            Log::info("    [{$nombreTabla}] Filtrando desde: {$fechaInicio}");
+        } else {
+            Log::info("    [{$nombreTabla}] Enviando TODO el inventario (sin filtro de fecha ni push)");
+        }
         
         $total = $query->count();
         
