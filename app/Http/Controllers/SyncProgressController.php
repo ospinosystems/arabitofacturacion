@@ -779,7 +779,9 @@ class SyncProgressController extends Controller
         Log::info("    [{$nombreTabla}] Total a procesar: {$total}");
         
         // Procesar en lotes
+        Log::info(">>> Iniciando chunk para {$nombreTabla}. Query SQL: " . $query->toSql());
         $query->orderBy('id')->chunk(self::BATCH_SIZE, function($registros) use ($nombreTabla, $config, $campoSync, &$procesados, &$errores, $total, $progressCallback) {
+            Log::info(">>> Procesando lote de {$nombreTabla}: " . count($registros) . " registros");
             // Si hay función de transformación, aplicarla
             $transformar = $config['transformar'] ?? null;
             
