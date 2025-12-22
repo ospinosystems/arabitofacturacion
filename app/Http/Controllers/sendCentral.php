@@ -2829,7 +2829,7 @@ class sendCentral extends Controller
 
         try {
             $codigo_origen = $this->getOrigen();
-            $data = inventario::whereIn("id", $idsSuccess)->get();
+            $data = inventario::all();
 
             $requestData = [
                 "sendInventarioCt" => base64_encode(gzcompress(json_encode($data))),
