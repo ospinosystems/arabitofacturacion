@@ -656,7 +656,7 @@ class SyncProgressController extends Controller
                 
                 // Para INVENTARIOS: contar TODO sin ningún filtro
                 if ($tabla === 'inventarios') {
-                    // No aplicar ningún filtro - enviar todo
+                    Log::info(">>> INVENTARIOS: NO aplicando filtros. Total en BD: " . $model::count());
                 } else {
                     // Para otras tablas: aplicar filtros normales
                     if ($soloNuevos) {
@@ -665,7 +665,9 @@ class SyncProgressController extends Controller
                     $query->where($campoFecha, '>=', $fechaInicio);
                 }
                 
-                $totalRegistros += $query->count();
+                $count = $query->count();
+                Log::info(">>> Tabla [{$tabla}]: count = {$count}");
+                $totalRegistros += $count;
             }
         }
         
@@ -750,13 +752,17 @@ class SyncProgressController extends Controller
         // Construir query base
         $query = $model::query();
         
+        Log::info(">>> sincronizarTabla() - nombreTabla: {$nombreTabla}, soloNuevos: " . ($soloNuevos ? 'true' : 'false'));
+        
         // Para INVENTARIOS: enviar TODO sin ningún filtro
-        if ($model === 'inventarios') {
-            Log::info("    [{$nombreTabla}] Enviando TODO el inventario (sin filtro de fecha ni push)");
+        if ($nombreTabla === 'inventarios') {
+            Log::info(">>> INVENTARIOS DETECTADO - NO aplicando ningún filtro");
+            Log::info(">>> Total inventario en BD: " . $model::count());
         } else {
             // Para otras tablas: aplicar filtros normales
             if ($soloNuevos) {
                 $query->where($campoSync, 0);
+                Log::info(">>> Aplicando filtro: {$campoSync} = 0");
             }
             $fechaInicio = $this->getFechaInicioSync();
             $query->where($campoFecha, '>=', $fechaInicio);
@@ -764,6 +770,7 @@ class SyncProgressController extends Controller
         }
         
         $total = $query->count();
+        Log::info(">>> Query count para {$nombreTabla}: {$total}");
         
         if ($total === 0) {
             return ['procesados' => 0, 'errores' => []];
