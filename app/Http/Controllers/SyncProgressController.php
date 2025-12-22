@@ -317,7 +317,7 @@ class SyncProgressController extends Controller
                 'campos' => ['id', 'codigo_barras', 'codigo_proveedor', 'id_proveedor', 'id_categoria', 
                             'id_marca', 'unidad', 'descripcion', 'iva', 'porcentaje_ganancia',
                             'precio_base', 'precio', 'cantidad', 'stockmin', 'stockmax', 
-                            'push', 'id_vinculacion', 'updated_at'],
+                            'push', 'id_vinculacion', 'created_at','updated_at'],
             ],
             'pedidos' => [
                 'nombre' => 'Pedidos',
@@ -751,7 +751,7 @@ class SyncProgressController extends Controller
         $query = $model::query();
         
         // Para INVENTARIOS: enviar TODO sin ningún filtro
-        if ($nombreTabla === 'inventarios') {
+        if ($model === 'inventarios') {
             Log::info("    [{$nombreTabla}] Enviando TODO el inventario (sin filtro de fecha ni push)");
         } else {
             // Para otras tablas: aplicar filtros normales
