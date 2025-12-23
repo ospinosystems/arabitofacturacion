@@ -2341,7 +2341,7 @@ class sendCentral extends Controller
 
     function createCreditoAprobacion($data) {
         $codigo_origen = $this->getOrigen();
-        $response = Http::post(
+        $response = Http::timeout(120)->post(
             $this->path() . "/createCreditoAprobacion",
             [
                 "codigo_origen" => $codigo_origen,
@@ -2350,7 +2350,6 @@ class sendCentral extends Controller
         );
 
         if ($response->ok()) {
-            //Retorna respuesta solo si es Array
             return $response->body();
         }else{
             return $response;
