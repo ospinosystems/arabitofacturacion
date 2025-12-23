@@ -787,19 +787,20 @@ class PagoPedidosController extends Controller
     }
 
     function getDeudaFechaPago($id_cliente) {
-        $getfecha = pedidos::with(["pagos"=>function($q){
-            $q->orderBy("tipo","desc");
-        },
-        // Cargar items para poder mostrar cantidad de productos por pedido en la interfaz de créditos
-        "items"])
-        ->where(function($q){
-            $q->whereIn("id",pago_pedidos::orWhere(function($q){
-                $q->where("cuenta",0); //Abono
-            })->where("monto","<>",0)->select("id_pedido"));
-
+        // Optimizado: Solo obtener la fecha sin cargar relaciones
+        $getfecha = pedidos::select('created_at')
+        ->whereExists(function($query) {
+            $query->select(\DB::raw(1))
+                  ->from('pago_pedidos')
+                  ->whereColumn('pago_pedidos.id_pedido', 'pedidos.id')
+                  ->where(function($q) {
+                      $q->where('cuenta', 0) // Abono
+                        ->orWhere('tipo', 4); // Crédito
+                  })
+                  ->where('monto', '<>', 0);
         })
-        ->where("id_cliente",$id_cliente)
-        ->orderBy("created_at","desc")
+        ->where("id_cliente", $id_cliente)
+        ->orderBy("created_at", "desc")
         ->first();
 
         if ($getfecha) {
@@ -811,56 +812,106 @@ class PagoPedidosController extends Controller
 
     public function getDeudaFun($onlyVueltos,$id_cliente)
     {
-        $pedidos = pedidos::with([
-            "pagos"=>function($q) use ($onlyVueltos){
-                if ($onlyVueltos) {
-                    $q->where("tipo",6)->where("monto","<>",0);
-                }
-                $q->orderBy("tipo","desc");
-            },
-            // Cargar items para que el frontend pueda mostrar la cantidad de productos por pedido
-            "items"])
-        ->where(function($q) use ($onlyVueltos){
-            if ($onlyVueltos) {
-                $q->whereIn("id",pago_pedidos::where("tipo",6)->where("monto","<>",0)->select("id_pedido"));
-            }else{
-                $q->whereIn("id",pago_pedidos::orWhere(function($q){
-                    $q->orWhere("tipo",4); //Credito
-                    $q->orWhere("cuenta",0); //Abono
-                })->where("monto","<>",0)->select("id_pedido"));
-
-            }
-        })
-        ->where("id_cliente",$id_cliente)
-        ->orderBy("created_at","desc")
-        ->get()
-        ->map(function($q){
+        // Optimizado: Usar agregaciones SQL directas en lugar de cargar todo en memoria
+        if ($onlyVueltos) {
+            // Solo vueltos (tipo 6)
+            $totalVueltos = \DB::table('pago_pedidos')
+                ->join('pedidos', 'pago_pedidos.id_pedido', '=', 'pedidos.id')
+                ->where('pedidos.id_cliente', $id_cliente)
+                ->where('pago_pedidos.tipo', 6)
+                ->where('pago_pedidos.monto', '<>', 0)
+                ->sum('pago_pedidos.monto');
             
-            $q->saldoDebe = $q->pagos->where("tipo",4)->sum("monto");
-            $q->saldoAbono = $q->pagos->where("cuenta",0)->sum("monto");
-
-            $q->entregado = [];
-
-            return $q;
-        });
-        $pedido_total[0] = $pedidos->sum("saldoAbono");
-        $pedido_total[1] = $pedidos->sum("saldoDebe");
-
-        // $diferencia = 0;
-
-        // if ($pedido_total[1] && $pedido_total[0]) {
-        // $diferencia = ;
-        // }
-        $d = $pedido_total[0] - $pedido_total[1];
-
-        $check = true;
-
-        if ($d<0) {
-            $check = false;
+            $pedido_total = [
+                0 => 0,
+                1 => 0,
+                "diferencia" => number_format(-$totalVueltos, 2),
+                "diferencia_clean" => -$totalVueltos,
+                "check" => $totalVueltos <= 0,
+            ];
+            
+            // Solo cargar pedidos si realmente se necesitan para mostrar
+            $pedidos = pedidos::with([
+                "pagos" => function($q) {
+                    $q->where("tipo", 6)->where("monto", "<>", 0)->orderBy("tipo", "desc");
+                },
+                "items"
+            ])
+            ->whereExists(function($query) {
+                $query->select(\DB::raw(1))
+                      ->from('pago_pedidos')
+                      ->whereColumn('pago_pedidos.id_pedido', 'pedidos.id')
+                      ->where('tipo', 6)
+                      ->where('monto', '<>', 0);
+            })
+            ->where("id_cliente", $id_cliente)
+            ->orderBy("created_at", "desc")
+            ->get()
+            ->map(function($q) {
+                $q->saldoDebe = 0;
+                $q->saldoAbono = $q->pagos->sum("monto");
+                $q->entregado = [];
+                return $q;
+            });
+        } else {
+            // Créditos y abonos - Usar agregaciones SQL
+            $totales = \DB::table('pago_pedidos')
+                ->join('pedidos', 'pago_pedidos.id_pedido', '=', 'pedidos.id')
+                ->where('pedidos.id_cliente', $id_cliente)
+                ->where('pago_pedidos.monto', '<>', 0)
+                ->where(function($q) {
+                    $q->where('pago_pedidos.tipo', 4) // Crédito
+                      ->orWhere('pago_pedidos.cuenta', 0); // Abono
+                })
+                ->selectRaw('
+                    SUM(CASE WHEN pago_pedidos.cuenta = 0 THEN pago_pedidos.monto ELSE 0 END) as total_abonos,
+                    SUM(CASE WHEN pago_pedidos.tipo = 4 THEN pago_pedidos.monto ELSE 0 END) as total_creditos
+                ')
+                ->first();
+            
+            $totalAbonos = floatval($totales->total_abonos ?? 0);
+            $totalCreditos = floatval($totales->total_creditos ?? 0);
+            $d = $totalAbonos - $totalCreditos;
+            
+            $pedido_total = [
+                0 => $totalAbonos,
+                1 => $totalCreditos,
+                "diferencia" => number_format($d, 2),
+                "diferencia_clean" => $d,
+                "check" => $d >= 0,
+            ];
+            
+            // Solo cargar pedidos si realmente se necesitan para mostrar
+            $pedidos = pedidos::with([
+                "pagos" => function($q) {
+                    $q->where(function($query) {
+                        $query->where("tipo", 4)->orWhere("cuenta", 0);
+                    })
+                    ->where("monto", "<>", 0)
+                    ->orderBy("tipo", "desc");
+                },
+                "items"
+            ])
+            ->whereExists(function($query) {
+                $query->select(\DB::raw(1))
+                      ->from('pago_pedidos')
+                      ->whereColumn('pago_pedidos.id_pedido', 'pedidos.id')
+                      ->where(function($q) {
+                          $q->where('tipo', 4)->orWhere('cuenta', 0);
+                      })
+                      ->where('monto', '<>', 0);
+            })
+            ->where("id_cliente", $id_cliente)
+            ->orderBy("created_at", "desc")
+            ->get()
+            ->map(function($q) {
+                $q->saldoDebe = $q->pagos->where("tipo", 4)->sum("monto");
+                $q->saldoAbono = $q->pagos->where("cuenta", 0)->sum("monto");
+                $q->entregado = [];
+                return $q;
+            });
         }
-        $pedido_total["diferencia"] = number_format($d,2);
-        $pedido_total["diferencia_clean"] = $d;
-        $pedido_total["check"] = $check;
+        
         return [
             "pedido" => $pedidos,
             "pedido_total" => $pedido_total,
