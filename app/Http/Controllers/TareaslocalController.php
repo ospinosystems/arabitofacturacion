@@ -49,7 +49,7 @@ class TareaslocalController extends Controller
             if($t->estado){
                 $permiso = true;
                 $valoraprobado = $t->valoraprobado;
-                tareaslocal::find($t->id)->delete();
+                $t->delete();
             };
         }
         
@@ -122,7 +122,7 @@ class TareaslocalController extends Controller
 
         if ($t) {
             if ($t->estado) {
-                tareaslocal::find($t->id)->delete();
+                $t->delete();
                 return Response::json(["msj"=>"APROBADO","estado"=>true]);
             }
             return Response::json(["id_tarea"=>$t->id, "msj"=>"RECHAZADO","estado"=>false]);
