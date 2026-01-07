@@ -69,7 +69,7 @@ class DevolucionesController extends Controller
                     $date = new \DateTime($req->fechaMovimientos);
                     $fechaMovimientos = $date->getTimestamp();
                    
-                    $restar_cantidad_query = inventario::find($id_producto);
+                    $restar_cantidad_query = inventario::where('id', $id_producto)->lockForUpdate()->first();
                     $type_mov = "";
         
                     if ($tipoMovMovimientos==0) {

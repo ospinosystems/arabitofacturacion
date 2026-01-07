@@ -822,7 +822,7 @@ class TCDController extends Controller
             
             // Procesar cada item de la orden
             foreach ($orden->items as $item) {
-                $producto = inventario::findOrFail($item->inventario_id);
+                $producto = inventario::where('id', $item->inventario_id)->lockForUpdate()->firstOrFail();
                 
                 // Obtener todas las asignaciones de este item
                 $asignaciones = $orden->asignaciones()->where('tcd_orden_item_id', $item->id)->get();
