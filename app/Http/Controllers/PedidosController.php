@@ -909,7 +909,7 @@ class PedidosController extends Controller
                 $items_mov->cantidad = $item->cantidad;
                 $items_mov->tipo = 2;
 
-                $producto = inventario::select(["cantidad"])->find($id_producto);
+                $producto = inventario::select(["cantidad"])->where('id', $id_producto)->lockForUpdate()->first();
                 
                 if ($pedido->estado==0) {
                 
