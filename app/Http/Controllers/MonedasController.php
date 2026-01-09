@@ -331,7 +331,7 @@ class MonedasController extends Controller
           
                 return Response::json([
                     "estado" => false,
-                    "msj" => "Error al actualizar: " . $e->getMessage() . ". Fallback también falló: " . $fallbackError->getMessage()
+                    "msj" => "Error al actualizar: " . $e->getMessage() . ". Fallback también falló: " . $e->getMessage()
                 ]);
         }
     }

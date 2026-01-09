@@ -1642,6 +1642,48 @@ class PedidosController extends Controller
         $arr_pagos["lotes"] = $lotes;
         $arr_pagos["biopagos"] = $biopagos;
 
+        // Generar estructura de pagos agrupados por tipo y moneda
+        $pagos_por_moneda = [];
+        $pagos_raw = pago_pedidos::whereIn("id_pedido", $pedido->select("id"))
+            ->where("monto", "<>", 0)
+            ->whereNotIn("tipo", [4, 6]) // Excluir créditos y vueltos
+            ->get();
+
+        foreach ($pagos_raw as $pago) {
+            $tipo = $pago->tipo;
+            $moneda = $pago->moneda ?? 'USD'; // Default a USD si no tiene moneda
+            
+            // Inicializar tipo si no existe
+            if (!isset($pagos_por_moneda[$tipo])) {
+                $pagos_por_moneda[$tipo] = [
+                    'tipo' => $tipo,
+                    'monedas' => []
+                ];
+            }
+            
+            // Inicializar moneda dentro del tipo si no existe
+            if (!isset($pagos_por_moneda[$tipo]['monedas'][$moneda])) {
+                $pagos_por_moneda[$tipo]['monedas'][$moneda] = [
+                    'moneda' => $moneda,
+                    'monto' => 0,
+                    'monto_original' => 0
+                ];
+            }
+            
+            // Sumar montos
+            $pagos_por_moneda[$tipo]['monedas'][$moneda]['monto'] += floatval($pago->monto);
+            $pagos_por_moneda[$tipo]['monedas'][$moneda]['monto_original'] += floatval($pago->monto_original ?? $pago->monto);
+        }
+
+        // Convertir a array indexado para JSON
+        $pagos_por_moneda_final = [];
+        foreach ($pagos_por_moneda as $tipo_data) {
+            $tipo_data['monedas'] = array_values($tipo_data['monedas']);
+            $pagos_por_moneda_final[] = $tipo_data;
+        }
+
+        $arr_pagos["pagos_por_moneda"] = $pagos_por_moneda_final;
+
         return $arr_pagos;
     }
     public function getCierres(Request $req)
