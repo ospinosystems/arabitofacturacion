@@ -4612,10 +4612,10 @@ export default function Facturar({
                 if (res.data) {
                     let d = res.data;
 
-                    if (!d.caja_usd) {
+                   /*  if (!d.caja_usd) {
                         notificar(res.data);
                         return;
-                    }
+                    } */
                     setCaja_usd(d.caja_usd);
                     setCaja_cop(d.caja_cop);
                     setCaja_bs(d.caja_bs);
