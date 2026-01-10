@@ -130,7 +130,8 @@ class PagoPedidosController extends Controller
             $metodos_pago[] = ['tipo' => 'transferencia', 'monto' => floatval($req->transferencia)];
         }
         if ($req->biopago && floatval($req->biopago)) {
-            $metodos_pago[] = ['tipo' => 'biopago', 'monto' => floatval($req->biopago)];
+            $req->biopago = 0; //Biopago no se registra
+            $metodos_pago[] = ['tipo' => 'biopago', 'monto' => 0]; //Biopago no se registra
         }
         if ($req->credito && floatval($req->credito)) {
             $metodos_pago[] = ['tipo' => 'credito', 'monto' => floatval($req->credito)];

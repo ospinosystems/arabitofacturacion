@@ -27,6 +27,11 @@ class SyncObserver
      */
     public function updating(Model $model)
     {
+        // Excluir el modelo inventario de este comportamiento
+        if (get_class($model) === 'App\Models\inventario') {
+            return;
+        }
+        
         // Verificar si el modelo tiene campo push
         if (!$this->tieneCampoPush($model)) {
             return;

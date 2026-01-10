@@ -968,6 +968,7 @@ export default function PagarMain({
     };
 
     const getBiopagoLocal = () => {
+        return;
         const tasaBsPedido = getTasaPromedioCarrito();
         const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
         
@@ -1589,6 +1590,7 @@ export default function PagarMain({
     useHotkeys(
         "p",
         (event) => {
+            return;
             if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
