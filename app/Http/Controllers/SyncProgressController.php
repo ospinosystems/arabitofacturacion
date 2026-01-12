@@ -826,15 +826,18 @@ class SyncProgressController extends Controller
                         
                         if ($resultado['estado'] ?? false) {
                             // Marcar como sincronizados usando el campo correcto
-                            $ids = $registros->pluck('id')->toArray();
-                            $updateData = [$campoSync => 1];
-                            
-                            // Si no es 'push', también actualizar sincronizado_at
-                            if ($campoSync !== 'push') {
-                                $updateData['sincronizado_at'] = now();
+                            // EXCEPTO para inventarios - no actualizar el campo push
+                            if ($nombreTabla !== 'inventarios') {
+                                $ids = $registros->pluck('id')->toArray();
+                                $updateData = [$campoSync => 1];
+                                
+                                // Si no es 'push', también actualizar sincronizado_at
+                                if ($campoSync !== 'push') {
+                                    $updateData['sincronizado_at'] = now();
+                                }
+                                
+                                $config['model']::whereIn('id', $ids)->update($updateData);
                             }
-                            
-                            $config['model']::whereIn('id', $ids)->update($updateData);
                             
                             $procesados += count($data);
                             $exito = true;
