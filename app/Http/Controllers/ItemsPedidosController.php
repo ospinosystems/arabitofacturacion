@@ -153,11 +153,13 @@ class ItemsPedidosController extends Controller
                 $monto_con_descuento = 0;
                 $monto_descuento_real = 0;
 
-                $ids_productos = $items_pedido->map(function($item_pedido) use ($descuento, &$monto_bruto, &$monto_con_descuento, &$monto_descuento_real) {
+                $ids_productos = $items_pedido->map(function($item_pedido) use ($item, $descuento, &$monto_bruto, &$monto_con_descuento, &$monto_descuento_real) {
                     $subtotal_item = $item_pedido->cantidad * ($item_pedido->producto ? $item_pedido->producto->precio : 0);
                     
-                    // Si el producto ya tiene descuento, usar su descuento original; si no, usar el nuevo descuento
-                    $porcentaje_a_aplicar = ($item_pedido->descuento > 0) ? $item_pedido->descuento : $descuento;
+                    // Determinar el porcentaje a aplicar:
+                    // - Si es el producto que se está editando, usar el nuevo descuento
+                    // - Si no es el producto que se está editando, usar su descuento actual (puede ser 0)
+                    $porcentaje_a_aplicar = ($item_pedido->id === $item->id) ? $descuento : $item_pedido->descuento;
                     $subtotal_con_descuento = $subtotal_item * (1 - ($porcentaje_a_aplicar / 100));
                     
                     // Acumular totales
