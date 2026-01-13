@@ -147,24 +147,23 @@ class ItemsPedidosController extends Controller
 
                 // Crear nueva solicitud de descuento
                 $items_pedido = items_pedidos::with('producto')->where('id_pedido', $item->id_pedido)->get();
-                $monto_bruto = $items_pedido->sum('monto');
                 
-                // Calcular el descuento real item por item
+                // Calcular montos respetando descuentos individuales de cada producto
+                $monto_bruto = 0;
+                $monto_con_descuento = 0;
                 $monto_descuento_real = 0;
-                foreach ($items_pedido as $item_pedido) {
-                    $subtotal_item = $item_pedido->cantidad * ($item_pedido->producto ? $item_pedido->producto->precio : 0);
-                    $descuento_item = $subtotal_item * ($descuento / 100);
-                    $monto_descuento_real += $descuento_item;
-                }
-                
-                $monto_con_descuento = $monto_bruto - $monto_descuento_real;
 
-                $ids_productos = $items_pedido->map(function($item_pedido) use ($descuento) {
+                $ids_productos = $items_pedido->map(function($item_pedido) use ($descuento, &$monto_bruto, &$monto_con_descuento, &$monto_descuento_real) {
                     $subtotal_item = $item_pedido->cantidad * ($item_pedido->producto ? $item_pedido->producto->precio : 0);
                     
                     // Si el producto ya tiene descuento, usar su descuento original; si no, usar el nuevo descuento
                     $porcentaje_a_aplicar = ($item_pedido->descuento > 0) ? $item_pedido->descuento : $descuento;
                     $subtotal_con_descuento = $subtotal_item * (1 - ($porcentaje_a_aplicar / 100));
+                    
+                    // Acumular totales
+                    $monto_bruto += $subtotal_item;
+                    $monto_con_descuento += $subtotal_con_descuento;
+                    $monto_descuento_real += ($subtotal_item - $subtotal_con_descuento);
                     
                     return [
                         'id_producto' => $item_pedido->id_producto,
