@@ -161,7 +161,10 @@ class ItemsPedidosController extends Controller
 
                 $ids_productos = $items_pedido->map(function($item_pedido) use ($descuento) {
                     $subtotal_item = $item_pedido->cantidad * ($item_pedido->producto ? $item_pedido->producto->precio : 0);
-                    $subtotal_con_descuento = $subtotal_item * (1 - ($descuento / 100));
+                    
+                    // Si el producto ya tiene descuento, usar su descuento original; si no, usar el nuevo descuento
+                    $porcentaje_a_aplicar = ($item_pedido->descuento > 0) ? $item_pedido->descuento : $descuento;
+                    $subtotal_con_descuento = $subtotal_item * (1 - ($porcentaje_a_aplicar / 100));
                     
                     return [
                         'id_producto' => $item_pedido->id_producto,
@@ -170,7 +173,7 @@ class ItemsPedidosController extends Controller
                         'precio_base' => $item_pedido->producto ? $item_pedido->producto->precio_base : 0,
                         'subtotal' => $subtotal_item,
                         'subtotal_con_descuento' => $subtotal_con_descuento,
-                        'porcentaje_descuento' => $descuento
+                        'porcentaje_descuento' => $porcentaje_a_aplicar
                     ];
                 })->toArray();
 
