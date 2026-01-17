@@ -165,13 +165,13 @@ class sendCentral extends Controller
     public function getAllInventarioFromCentral() {
         try {
             // Verificar si hay pedidos pendientes
-            $pedidosPendientes = pedidos::where("estado", 0)->pluck('id');
+            /* $pedidosPendientes = pedidos::where("estado", 0)->pluck('id');
             if ($pedidosPendientes->isNotEmpty()) {
                 return Response::json([
                     "estado" => false,
                     "msj" => "No se puede sincronizar. Debe completar o eliminar los pedidos pendientes: " . $pedidosPendientes->implode(', ')
                 ]);
-            }
+            } */
             
             // Check if there are tasks before proceeding
             $checkTasks = Http::get($this->path() . "/thereAreTasks", [
@@ -4689,6 +4689,55 @@ class sendCentral extends Controller
             return response()->json([
                 'success' => false,
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Registrar operación POS rechazada
+     */
+    public function registrarPosRechazado(Request $request)
+    {
+        try {
+            \App\Models\PosOperacionRechazada::create([
+                'message' => $request->input('message'),
+                'reference' => $request->input('reference'),
+                'ordernumber' => $request->input('ordernumber'),
+                'sequence' => $request->input('sequence'),
+                'approval' => $request->input('approval'),
+                'lote' => $request->input('lote'),
+                'responsecode' => $request->input('responsecode'),
+                'datetime' => $request->input('datetime'),
+                'amount' => $request->input('amount'),
+                'commerce' => $request->input('commerce'),
+                'cardtype' => $request->input('cardtype'),
+                'authid' => $request->input('authid'),
+                'cardNumber' => $request->input('cardNumber'),
+                'cardholderid' => $request->input('cardholderid'),
+                'idmerchant' => $request->input('idmerchant'),
+                'terminal' => $request->input('terminal'),
+                'bank' => $request->input('bank'),
+                'bankmessage' => $request->input('bankmessage'),
+                'tvr' => $request->input('tvr'),
+                'arqc' => $request->input('arqc'),
+                'tsi' => $request->input('tsi'),
+                'na' => $request->input('na'),
+                'aid' => $request->input('aid'),
+                'json_response' => $request->input('json_response'),
+                'id_pedido' => $request->input('id_pedido'),
+                'id_usuario' => session('id_usuario'),
+                'id_sucursal' => session('sucursal')
+            ]);
+
+            return response()->json([
+                'estado' => true,
+                'msj' => 'Operación rechazada registrada correctamente'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error al registrar POS rechazado: ' . $e->getMessage());
+            return response()->json([
+                'estado' => false,
+                'msj' => 'Error al registrar operación rechazada'
             ], 500);
         }
     }

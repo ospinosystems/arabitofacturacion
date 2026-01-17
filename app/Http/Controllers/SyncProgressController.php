@@ -22,6 +22,8 @@ use App\Models\pagos_referencias;
 use App\Models\cajas;
 use App\Models\movimientosinventariounitario;
 use App\Models\sucursal;
+use App\Http\Controllers\PagoPedidosController;
+use App\Http\Controllers\PedidosController;
 
 /**
  * Controlador de Sincronización con Progreso en Tiempo Real
@@ -74,24 +76,61 @@ class SyncProgressController extends Controller
         $status = [];
         
         foreach ($tables as $key => $config) {
-            $model = $config['model'];
-            $campoSync = $config['campo_sync'] ?? 'sincronizado';
-            
-            $total = $model::count();
-            $pendientes = $model::where($campoSync, 0)->count();
-            $sincronizados = $total - $pendientes;
-            
-            $status[$key] = [
-                'nombre' => $config['nombre'],
-                'tabla_destino' => $config['tabla_destino'],
-                'total' => $total,
-                'sincronizados' => $sincronizados,
-                'pendientes' => $pendientes,
-                'porcentaje' => $total > 0 ? round(($sincronizados / $total) * 100, 1) : 100,
-                'ultimo_sync' => $this->getUltimoSync($model, $campoSync),
-                'orden' => $config['orden'],
-                'grupo' => $config['grupo'],
-            ];
+            // Caso especial: deudores (cálculo, no tabla)
+            if (isset($config['es_calculo']) && $config['es_calculo']) {
+                try {
+                    $pagoPedidosController = new PagoPedidosController();
+                    $pedidosController = new PedidosController();
+                    $today = $pedidosController->today();
+                    $deudores = $pagoPedidosController->getDeudoresFun('', 'saldo', 'ASC', $today, 100000);
+                    $total = $deudores->filter(function($cliente) {
+                        return isset($cliente->saldo) && floatval($cliente->saldo) < 0;
+                    })->count();
+                    
+                    $status[$key] = [
+                        'nombre' => $config['nombre'],
+                        'tabla_destino' => $config['tabla_destino'],
+                        'total' => $total,
+                        'sincronizados' => $total, // Siempre sincronizado (se recalcula completo)
+                        'pendientes' => 0,
+                        'porcentaje' => 100,
+                        'ultimo_sync' => null,
+                        'orden' => $config['orden'],
+                        'grupo' => $config['grupo'],
+                    ];
+                } catch (\Exception $e) {
+                    $status[$key] = [
+                        'nombre' => $config['nombre'],
+                        'tabla_destino' => $config['tabla_destino'],
+                        'total' => 0,
+                        'sincronizados' => 0,
+                        'pendientes' => 0,
+                        'porcentaje' => 0,
+                        'ultimo_sync' => null,
+                        'orden' => $config['orden'],
+                        'grupo' => $config['grupo'],
+                    ];
+                }
+            } else {
+                $model = $config['model'];
+                $campoSync = $config['campo_sync'] ?? 'sincronizado';
+                
+                $total = $model::count();
+                $pendientes = $model::where($campoSync, 0)->count();
+                $sincronizados = $total - $pendientes;
+                
+                $status[$key] = [
+                    'nombre' => $config['nombre'],
+                    'tabla_destino' => $config['tabla_destino'],
+                    'total' => $total,
+                    'sincronizados' => $sincronizados,
+                    'pendientes' => $pendientes,
+                    'porcentaje' => $total > 0 ? round(($sincronizados / $total) * 100, 1) : 100,
+                    'ultimo_sync' => $this->getUltimoSync($model, $campoSync),
+                    'orden' => $config['orden'],
+                    'grupo' => $config['grupo'],
+                ];
+            }
         }
         
         // Ordenar por orden definido
@@ -504,6 +543,17 @@ class SyncProgressController extends Controller
                 'campos' => ['id', 'id_producto', 'id_pedido', 'id_usuario', 'cantidad', 
                             'cantidadafter', 'origen', 'created_at', 'updated_at'],
             ],
+            'deudores' => [
+                'nombre' => 'Deudores (Créditos)',
+                'model' => null, // No es un modelo, es un cálculo
+                'tabla_destino' => 'creditos',
+                'orden' => 10,
+                'grupo' => 'ultimo',
+                'campo_sync' => null, // No aplica
+                'campo_fecha' => null, // No aplica
+                'es_calculo' => true, // Marca especial para indicar que es un cálculo
+                'metodo_obtener' => 'getDeudoresFun', // Método a llamar
+            ],
         ];
     }
     
@@ -648,26 +698,38 @@ class SyncProgressController extends Controller
         foreach ($tablasASincronizar as $tabla) {
             if (isset($config[$tabla])) {
                 $tablaConfig = $config[$tabla];
-                $model = $tablaConfig['model'];
-                $campoSync = $tablaConfig['campo_sync'] ?? 'sincronizado';
-                $campoFecha = $tablaConfig['campo_fecha'] ?? 'created_at';
                 
-                $query = $model::query();
-                
-                // Para INVENTARIOS: contar TODO sin ningún filtro
-                if ($tabla === 'inventarios') {
-                    Log::info(">>> INVENTARIOS: NO aplicando filtros. Total en BD: " . $model::count());
+                // Para deudores (cálculo), usar método especial
+                if (isset($tablaConfig['es_calculo']) && $tablaConfig['es_calculo']) {
+                    // Obtener deudores usando getDeudoresFun
+                    $pagoPedidosController = new PagoPedidosController();
+                    $today = (new PedidosController)->today();
+                    $deudores = $pagoPedidosController->getDeudoresFun('', 'saldo', 'ASC', $today, 10000);
+                    $count = $deudores->count();
+                    Log::info(">>> Tabla [{$tabla}]: count = {$count} (cálculo)");
+                    $totalRegistros += $count;
                 } else {
-                    // Para otras tablas: aplicar filtros normales
-                    if ($soloNuevos) {
-                        $query->where($campoSync, 0);
+                    $model = $tablaConfig['model'];
+                    $campoSync = $tablaConfig['campo_sync'] ?? 'sincronizado';
+                    $campoFecha = $tablaConfig['campo_fecha'] ?? 'created_at';
+                    
+                    $query = $model::query();
+                    
+                    // Para INVENTARIOS: contar TODO sin ningún filtro
+                    if ($tabla === 'inventarios') {
+                        Log::info(">>> INVENTARIOS: NO aplicando filtros. Total en BD: " . $model::count());
+                    } else {
+                        // Para otras tablas: aplicar filtros normales
+                        if ($soloNuevos) {
+                            $query->where($campoSync, 0);
+                        }
+                        $query->where($campoFecha, '>=', $fechaInicio);
                     }
-                    $query->where($campoFecha, '>=', $fechaInicio);
+                    
+                    $count = $query->count();
+                    Log::info(">>> Tabla [{$tabla}]: count = {$count}");
+                    $totalRegistros += $count;
                 }
-                
-                $count = $query->count();
-                Log::info(">>> Tabla [{$tabla}]: count = {$count}");
-                $totalRegistros += $count;
             }
         }
         
@@ -743,11 +805,17 @@ class SyncProgressController extends Controller
      */
     private function sincronizarTabla($nombreTabla, $config, $soloNuevos, $progressCallback = null)
     {
+        $procesados = 0;
+        $errores = [];
+        
+        // Caso especial: deudores (cálculo, no tabla)
+        if (isset($config['es_calculo']) && $config['es_calculo']) {
+            return $this->sincronizarDeudores($nombreTabla, $config, $progressCallback);
+        }
+        
         $model = $config['model'];
         $campoSync = $config['campo_sync'] ?? 'sincronizado';
         $campoFecha = $config['campo_fecha'] ?? 'created_at';
-        $procesados = 0;
-        $errores = [];
         
         // Construir query base
         $query = $model::query();
@@ -884,6 +952,133 @@ class SyncProgressController extends Controller
         return [
             'procesados' => $procesados,
             'eliminados' => $eliminados,
+            'errores' => $errores,
+        ];
+    }
+    
+    /**
+     * Sincroniza deudores (cálculo de deuda de trabajadores)
+     * Obtiene la lista completa usando getDeudoresFun y la envía a Central
+     */
+    private function sincronizarDeudores($nombreTabla, $config, $progressCallback = null)
+    {
+        $procesados = 0;
+        $errores = [];
+        
+        Log::info(">>> sincronizarDeudores() - Iniciando sincronización de deudores");
+        
+        try {
+            // Obtener lista completa de deudores usando getDeudoresFun
+            $pagoPedidosController = new PagoPedidosController();
+            $pedidosController = new PedidosController();
+            $today = $pedidosController->today();
+            
+            // Obtener todos los deudores (sin límite o con límite alto)
+            $deudores = $pagoPedidosController->getDeudoresFun('', 'saldo', 'ASC', $today, 100000);
+            
+            $total = $deudores->count();
+            Log::info(">>> Total deudores a sincronizar: {$total}");
+            
+            if ($total === 0) {
+                return ['procesados' => 0, 'errores' => []];
+            }
+            
+            // Transformar datos al formato esperado por el modelo créditos en Central
+            // Solo incluir clientes con saldo negativo (deudores)
+            $data = $deudores->filter(function($cliente) {
+                // El saldo viene calculado: abono - credito
+                // Si saldo < 0, es deudor
+                return isset($cliente->saldo) && floatval($cliente->saldo) < 0;
+            })->map(function($cliente) {
+                return [
+                    'id_cliente' => $cliente->id,
+                    'saldo' => abs(floatval($cliente->saldo)), // Valor absoluto del saldo (deuda)
+                ];
+            })->values()->toArray();
+            
+            $totalDeudores = count($data);
+            Log::info(">>> Total deudores con saldo negativo: {$totalDeudores}");
+            
+            if ($totalDeudores === 0) {
+                return ['procesados' => 0, 'errores' => []];
+            }
+            
+            // Procesar en lotes
+            $chunks = array_chunk($data, self::BATCH_SIZE);
+            
+            foreach ($chunks as $chunk) {
+                $maxReintentos = 3;
+                $exito = false;
+                $ultimoError = null;
+                
+                for ($intento = 1; $intento <= $maxReintentos && !$exito; $intento++) {
+                    try {
+                        // Guardar checkpoint antes de enviar
+                        Cache::put('sync_checkpoint', [
+                            'tabla' => $nombreTabla,
+                            'lote_actual' => $procesados,
+                            'total' => $totalDeudores,
+                            'timestamp' => now()->toISOString(),
+                        ], 3600);
+                        
+                        $response = Http::timeout(120)
+                            ->retry(2, 1000)
+                            ->post($this->getCentralUrl() . "/api/sync/batch", [
+                                'codigo_origen' => $this->getCodigoOrigen(),
+                                'tabla' => $nombreTabla,
+                                'tabla_destino' => $config['tabla_destino'],
+                                'data' => base64_encode(gzcompress(json_encode($chunk))),
+                                'batch_size' => count($chunk),
+                            ]);
+                        
+                        if ($response->ok()) {
+                            $resultado = $response->json();
+                            
+                            if ($resultado['estado'] ?? false) {
+                                $procesados += count($chunk);
+                                $exito = true;
+                                Log::info("    [{$nombreTabla}] Lote enviado: " . count($chunk) . " registros");
+                            } else {
+                                $ultimoError = $resultado['mensaje'] ?? 'Error desconocido';
+                            }
+                        } else {
+                            $ultimoError = 'HTTP ' . $response->status();
+                        }
+                    } catch (\Exception $e) {
+                        $ultimoError = $e->getMessage();
+                        
+                        if ($intento < $maxReintentos) {
+                            $waitSeconds = pow(2, $intento);
+                            Log::warning("    [{$nombreTabla}] Reintento {$intento}/{$maxReintentos} en {$waitSeconds}s: {$ultimoError}");
+                            sleep($waitSeconds);
+                        }
+                    }
+                }
+                
+                if (!$exito && $ultimoError) {
+                    $errores[] = "Falló después de {$maxReintentos} intentos: {$ultimoError}";
+                    Log::error("    [{$nombreTabla}] Error persistente: {$ultimoError}");
+                }
+                
+                // Callback de progreso
+                if ($progressCallback) {
+                    $progressCallback($procesados, $totalDeudores);
+                }
+                
+                // Pausa para no saturar
+                usleep(50000); // 50ms
+            }
+            
+            Log::info("<<< {$nombreTabla} completado: {$procesados} deudores sincronizados");
+            
+        } catch (\Exception $e) {
+            Log::error("Error sincronizando deudores: " . $e->getMessage());
+            $errores[] = $e->getMessage();
+        }
+        
+        return [
+            'procesados' => $procesados,
+            'eliminados' => 0,
             'errores' => $errores,
         ];
     }
