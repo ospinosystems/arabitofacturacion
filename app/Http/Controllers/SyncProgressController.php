@@ -991,8 +991,19 @@ class SyncProgressController extends Controller
                 return isset($cliente->saldo) && floatval($cliente->saldo) < 0;
             })->map(function($cliente) {
                 return [
-                    'id_cliente' => $cliente->id,
-                    'saldo' => abs(floatval($cliente->saldo)), // Valor absoluto del saldo (deuda)
+                    // Información del cliente (completa)
+                    'cliente' => [
+                        'id_insucursal' => $cliente->id, // ID en la sucursal
+                        'identificacion' => $cliente->identificacion ?? null,
+                        'nombre' => $cliente->nombre ?? null,
+                        'correo' => $cliente->correo ?? null,
+                        'direccion' => $cliente->direccion ?? null,
+                        'telefono' => $cliente->telefono ?? null,
+                        'estado' => $cliente->estado ?? null,
+                        'ciudad' => $cliente->ciudad ?? null,
+                    ],
+                    // Información del crédito
+                    'saldo' => $cliente->saldo, // Valor absoluto del saldo (deuda)
                 ];
             })->values()->toArray();
             
