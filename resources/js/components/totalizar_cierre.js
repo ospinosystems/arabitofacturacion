@@ -214,6 +214,20 @@ function TotalizarCierre({
 		}
 	};
 
+	const enviarCierre = () => {
+		// Usar la fecha retornada por el backend
+		const fecha = fechaCierreBackend || "";
+		
+		if (!fecha) {
+			alert('No hay fecha de cierre disponible para enviar');
+			return;
+		}
+		
+		// Abrir endpoint de enviar cierre en nueva pestaña
+		const url = `${db.getHost()}verCierre?type=enviar&fecha=${fecha}`;
+		window.open(url, '_blank');
+	};
+
 	const reversarCierreAdmin = async () => {
 		// PRIMERA CONFIRMACIÓN
 		if (!confirm('⚠️ ADVERTENCIA ⚠️\n\n¿Está seguro que desea REVERSAR el cierre de administrador?\n\nEsta acción eliminará TODOS los cierres del día (cajeros y administrador).\n\nPresione OK para continuar.')) {
@@ -536,26 +550,36 @@ function TotalizarCierre({
 							</div>
 						)}
 
-						{/* Botones de Acción - Guardar/Ver/Reversar Cierre Admin */}
+						{/* Botones de Acción - Guardar/Enviar/Ver/Reversar Cierre Admin */}
 						<div className="mt-4 flex justify-end gap-3">
 							{!cierreAdminGuardado ? (
-								<button 
-									onClick={guardarCierreAdmin}
-									disabled={guardandoCierre}
-									className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-								>
-									{guardandoCierre ? (
-										<>
-											<i className="fa fa-spinner fa-spin"></i>
-											Guardando...
-										</>
-									) : (
-										<>
-											<i className="fa fa-save"></i>
-											Guardar Cierre Administrador
-										</>
-									)}
-								</button>
+								<>
+									<button 
+										onClick={guardarCierreAdmin}
+										disabled={guardandoCierre}
+										className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+									>
+										{guardandoCierre ? (
+											<>
+												<i className="fa fa-spinner fa-spin"></i>
+												Guardando...
+											</>
+										) : (
+											<>
+												<i className="fa fa-save"></i>
+												Guardar Cierre Administrador
+											</>
+										)}
+									</button>
+									<button 
+										onClick={enviarCierre}
+										disabled={guardandoCierre}
+										className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+									>
+										<i className="fa fa-paper-plane"></i>
+										Enviar Cierre
+									</button>
+								</>
 							) : (
 								<>
 									<button 

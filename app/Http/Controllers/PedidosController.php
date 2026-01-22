@@ -1298,6 +1298,11 @@ class PedidosController extends Controller
      */
     public function cerrarFun($fecha, $datosUsuario = [], $opciones = [])
     {
+        \Log::info('=== CERRARFUN - INICIO ===');
+        \Log::info('CERRARFUN - Fecha: ' . $fecha);
+        \Log::info('CERRARFUN - Datos recibidos: ' . json_encode($datosUsuario, JSON_PRETTY_PRINT));
+        \Log::info('CERRARFUN - Opciones recibidas: ' . json_encode($opciones, JSON_PRETTY_PRINT));
+        
         // Extraer datos del usuario
         $caja_usd = floatval($datosUsuario['caja_usd'] ?? 0);
         $caja_bs = floatval($datosUsuario['caja_bs'] ?? 0);
@@ -1308,6 +1313,16 @@ class PedidosController extends Controller
         $dejar_cop = floatval($datosUsuario['dejar_cop'] ?? 0);
         $puntos_adicionales_request = $datosUsuario['puntos_adicionales'] ?? [];
         
+        \Log::info('CERRARFUN - Datos extraídos:');
+        \Log::info('CERRARFUN - caja_usd: ' . $caja_usd);
+        \Log::info('CERRARFUN - caja_bs: ' . $caja_bs);
+        \Log::info('CERRARFUN - caja_cop: ' . $caja_cop);
+        \Log::info('CERRARFUN - total_biopago: ' . $total_biopago);
+        \Log::info('CERRARFUN - dejar_usd: ' . $dejar_usd);
+        \Log::info('CERRARFUN - dejar_bs: ' . $dejar_bs);
+        \Log::info('CERRARFUN - dejar_cop: ' . $dejar_cop);
+        \Log::info('CERRARFUN - puntos_adicionales: ' . json_encode($puntos_adicionales_request, JSON_PRETTY_PRINT));
+        
         // total_punto se calcula automáticamente, NO viene del usuario
         
         // Extraer opciones
@@ -1315,6 +1330,12 @@ class PedidosController extends Controller
         $totalizarcierre = $opciones['totalizarcierre'] ?? false;
         $check_pendiente = $opciones['check_pendiente'] ?? true;
         $usuario = $opciones['usuario'] ?? null;
+        
+        \Log::info('CERRARFUN - Opciones extraídas:');
+        \Log::info('CERRARFUN - grafica: ' . ($grafica ? 'true' : 'false'));
+        \Log::info('CERRARFUN - totalizarcierre: ' . ($totalizarcierre ? 'true' : 'false'));
+        \Log::info('CERRARFUN - check_pendiente: ' . ($check_pendiente ? 'true' : 'false'));
+        \Log::info('CERRARFUN - usuario: ' . json_encode($usuario));
         
         // Preparar array de caja efectivo para compatibilidad con código legacy
         $caja_efectivo = [
@@ -1356,6 +1377,8 @@ class PedidosController extends Controller
 
         $id_vendedor = $usuario ? (is_array($usuario) ? $usuario : [$usuario]) : $this->selectUsersTotalizar($totalizarcierre,$fecha);
         
+        \Log::info('CERRARFUN - ID Vendedores: ' . json_encode($id_vendedor));
+        
         $ultimo_cierre = $this->ultimoCierre($fecha, $id_vendedor);
 
         $caja_inicial = 0;
@@ -1369,6 +1392,12 @@ class PedidosController extends Controller
             // Saldo inicial en bolívares (BS)
             $caja_inicialbs = round($ultimo_cierre->sum("dejar_bss"), 3);
         }
+        
+        \Log::info('CERRARFUN - Caja Inicial:');
+        \Log::info('CERRARFUN - caja_inicial (USD): ' . $caja_inicial);
+        \Log::info('CERRARFUN - caja_inicialpeso (COP): ' . $caja_inicialpeso);
+        \Log::info('CERRARFUN - caja_inicialbs (BS): ' . $caja_inicialbs);
+        
         // ========== CARGAR PEDIDOS CON TODAS SUS RELACIONES (EAGER LOADING) ==========
         // Esto evita N+1 queries y mejora el rendimiento significativamente
         $pedidos_collection = pedidos::where("fecha_factura", "LIKE", $fecha . "%")
@@ -1382,6 +1411,9 @@ class PedidosController extends Controller
             ])
             ->get();
         
+        \Log::info('CERRARFUN - Pedidos encontrados: ' . $pedidos_collection->count());
+        \Log::info('CERRARFUN - IDs de pedidos: ' . $pedidos_collection->pluck('id')->toJson());
+        
         // Cargar TODOS los cierres del día con sus puntos UNA SOLA VEZ (optimización)
         $cierres_del_dia = cierres::where("fecha", $fecha)
             ->whereIn("id_usuario", $id_vendedor)
@@ -1390,11 +1422,20 @@ class PedidosController extends Controller
             }])
             ->get();
         
+        \Log::info('CERRARFUN - Cierres del día encontrados: ' . $cierres_del_dia->count());
+        foreach ($cierres_del_dia as $cierre_dia) {
+            \Log::info('CERRARFUN - Cierre ID: ' . $cierre_dia->id . ', Usuario: ' . $cierre_dia->id_usuario . ', Tipo: ' . $cierre_dia->tipo_cierre);
+        }
+        
         // Obtener lotes de débito de CierresMetodosPago
         $puntosAdicional = $cierres_del_dia->pluck('metodosPago')->flatten();
         
+        \Log::info('CERRARFUN - Puntos adicionales desde BD: ' . $puntosAdicional->count());
+        
         // Filtrar solo cierres tipo cajero (tipo_cierre = 0) para biopagos
         $cierres_tipo_cajero = $cierres_del_dia->where('tipo_cierre', 0);
+        
+        \Log::info('CERRARFUN - Cierres tipo cajero: ' . $cierres_tipo_cajero->count());
         
 
         /////Montos de ganancias
@@ -1408,6 +1449,14 @@ class PedidosController extends Controller
         
         // Extraer todos los pagos de los pedidos (ya cargados, sin query adicional)
         $todos_pagos = $pedidos_collection->pluck('pagos')->flatten()->sortByDesc('id');
+        
+        \Log::info('CERRARFUN - Total pagos encontrados: ' . $todos_pagos->count());
+        \Log::info('CERRARFUN - Pagos por tipo:');
+        \Log::info('CERRARFUN - Tipo 1 (Transferencia): ' . $todos_pagos->where('tipo', 1)->count() . ', Suma: ' . $todos_pagos->where('tipo', 1)->sum('monto'));
+        \Log::info('CERRARFUN - Tipo 2 (Débito): ' . $todos_pagos->where('tipo', 2)->count() . ', Suma: ' . $todos_pagos->where('tipo', 2)->sum('monto'));
+        \Log::info('CERRARFUN - Tipo 3 (Efectivo): ' . $todos_pagos->where('tipo', 3)->count() . ', Suma: ' . $todos_pagos->where('tipo', 3)->sum('monto'));
+        \Log::info('CERRARFUN - Tipo 4 (Crédito): ' . $todos_pagos->where('tipo', 4)->count() . ', Suma: ' . $todos_pagos->where('tipo', 4)->sum('monto'));
+        \Log::info('CERRARFUN - Tipo 5 (Biopago): ' . $todos_pagos->where('tipo', 5)->count() . ', Suma: ' . $todos_pagos->where('tipo', 5)->sum('monto'));
         
         // Usar items ya cargados con eager loading (sin query adicional)
         // ==========================================
@@ -1510,16 +1559,21 @@ class PedidosController extends Controller
             $factor_margen = 1 + ($margen_porcentaje / 100);
         }
         
+        // Proteger contra factor_margen cero o negativo (puede pasar si margen_porcentaje <= -100)
+        if ($factor_margen <= 0) {
+            $factor_margen = 1.0; // Fallback seguro
+        }
+        
         // ==========================================
         // PASO 8: CALCULAR COSTO BASE DE ABONOS
         // ==========================================
         // Los ABONOS sí generan ganancia (son cobros efectivos de créditos pasados)
         // Aplicar margen inverso para obtener el costo base: costo = venta / factor_margen
-        $costo_abonos = round($monto_abonos / $factor_margen, 2);
+        $costo_abonos = $factor_margen > 0 ? round($monto_abonos / $factor_margen, 2) : round($monto_abonos, 2);
         
         // Los CRÉDITOS NO generan ganancia hasta que se cobren
         // Se calculan solo para reporte informativo
-        $costo_creditos = round($monto_creditos / $factor_margen, 2);
+        $costo_creditos = $factor_margen > 0 ? round($monto_creditos / $factor_margen, 2) : round($monto_creditos, 2);
         
         // ==========================================
         // PASO 9: CALCULAR TOTALES FINALES DEL CIERRE
@@ -1671,12 +1725,20 @@ class PedidosController extends Controller
         // $todos_pagos ya fue definido arriba en la línea ~1417
         
         $numventas_arr = [];
-        $todos_pagos->map(function ($q) use (&$arr_pagos, &$numventas_arr) {
+        $suma_por_tipo = [1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0];
+        
+        \Log::info('CERRARFUN - Procesando pagos individuales:');
+        $todos_pagos->map(function ($q) use (&$arr_pagos, &$numventas_arr, &$suma_por_tipo) {
             if (array_key_exists($q->tipo, $arr_pagos)) {
                 $arr_pagos[$q->tipo] += $q->monto;
             } else {
                 $arr_pagos[$q->tipo] = $q->monto;
             }
+            
+            if (isset($suma_por_tipo[$q->tipo])) {
+                $suma_por_tipo[$q->tipo] += $q->monto;
+            }
+            
             if ($q->tipo != 4) {  // Solo excluir créditos (tipo 4)
                 $hora = date("h:i", strtotime($q->updated_at));
                 if (!array_key_exists($q->id_pedido, $numventas_arr)) {
@@ -1687,6 +1749,14 @@ class PedidosController extends Controller
                 $arr_pagos["total"] += $q->monto;
             }
         });
+        
+        \Log::info('CERRARFUN - Suma de pagos por tipo (después de procesar):');
+        \Log::info('CERRARFUN - Tipo 1 (Transferencia): ' . $suma_por_tipo[1] . ' USD, arr_pagos[1]=' . ($arr_pagos[1] ?? 0));
+        \Log::info('CERRARFUN - Tipo 2 (Débito): ' . $suma_por_tipo[2] . ' USD, arr_pagos[2]=' . ($arr_pagos[2] ?? 0));
+        \Log::info('CERRARFUN - Tipo 3 (Efectivo): ' . $suma_por_tipo[3] . ' USD, arr_pagos[3]=' . ($arr_pagos[3] ?? 0));
+        \Log::info('CERRARFUN - Tipo 4 (Crédito): ' . $suma_por_tipo[4] . ' USD, arr_pagos[4]=' . ($arr_pagos[4] ?? 0));
+        \Log::info('CERRARFUN - Tipo 5 (Biopago): ' . $suma_por_tipo[5] . ' USD, arr_pagos[5]=' . ($arr_pagos[5] ?? 0));
+        \Log::info('CERRARFUN - Total (sin créditos): ' . ($arr_pagos["total"] ?? 0));
             
         $arr_pagos["numventas"] = count($numventas_arr);
         $arr_pagos["ventas"] = array_values($numventas_arr);
@@ -1702,11 +1772,20 @@ class PedidosController extends Controller
         $arr_pagos["efectivo_digital"] = $arr_pagos[3];
         $arr_pagos["biopago_digital"] = $arr_pagos[5];
         
+        \Log::info('CERRARFUN - Montos digitales calculados:');
+        \Log::info('CERRARFUN - transferencia_digital: ' . $arr_pagos["transferencia_digital"]);
+        \Log::info('CERRARFUN - debito_digital: ' . $arr_pagos["debito_digital"]);
+        \Log::info('CERRARFUN - efectivo_digital: ' . $arr_pagos["efectivo_digital"]);
+        \Log::info('CERRARFUN - biopago_digital: ' . $arr_pagos["biopago_digital"]);
+        
         // Las variables $dejar_usd, $dejar_cop, $dejar_bs ya están definidas al inicio de la función (líneas 1307-1309)
         
         // ========== PROCESAMIENTO DE OTROS PUNTOS (DÉBITO/CRÉDITO NO-PINPAD) ==========
         // Extraer puntos adicionales UNA VEZ y reutilizar para lotes y cálculos
         $puntosFromRequest = $this->extraerPuntosAdicionales($puntos_adicionales_request);
+        
+        \Log::info('CERRARFUN - Puntos desde request extraídos: ' . count($puntosFromRequest));
+        \Log::info('CERRARFUN - Puntos desde request: ' . json_encode($puntosFromRequest, JSON_PRETTY_PRINT));
         
         $lotes = [];
         $biopagos = [];
@@ -1754,15 +1833,20 @@ class PedidosController extends Controller
             }
         } else {
             // Usar datos de la BD (cierres guardados - desde CierresMetodosPago)
-            // Ahora los lotes están consolidados: buscar el registro con subtipo 'otros_puntos'
-            $registro_otros = $cierres_del_dia->pluck('metodosPago')
+            // IMPORTANTE: Cuando es consolidado, hay MÚLTIPLES registros (uno por cada caja)
+            // Necesitamos obtener TODOS los registros de 'otros_puntos' de TODAS las cajas
+            $registros_otros = $cierres_del_dia->pluck('metodosPago')
                 ->flatten()
-                ->where('subtipo', 'otros_puntos')
-                ->first();
+                ->where('subtipo', 'otros_puntos');
             
-            if ($registro_otros) {
+            \Log::info('OTROS PUNTOS - Consolidado: Encontrados ' . $registros_otros->count() . ' registros de otras cajas');
+            
+            // Procesar TODOS los registros de todas las cajas
+            foreach ($registros_otros as $registro_otros) {
                 $metadatos = is_string($registro_otros->metadatos) ? json_decode($registro_otros->metadatos, true) : $registro_otros->metadatos;
                 $puntos_desde_bd = $metadatos['puntos'] ?? [];
+                
+                \Log::info('OTROS PUNTOS - Procesando registro ID: ' . $registro_otros->id . ', Cierre ID: ' . $registro_otros->id_cierre . ', Puntos: ' . count($puntos_desde_bd));
                 
                 // Procesar cada punto individual desde el JSON
                 foreach ($puntos_desde_bd as $punto) {
@@ -1774,8 +1858,12 @@ class PedidosController extends Controller
                         "lote" => $punto['descripcion'] ?? '',
                         "banco" => $punto['banco'] ?? '',
                     ];
+                    
+                    \Log::info('OTROS PUNTOS - Punto agregado: ' . ($punto['descripcion'] ?? 'N/A') . ', Monto: ' . ($punto['monto_real'] ?? $punto['monto'] ?? 0));
                 }
             }
+            
+            \Log::info('OTROS PUNTOS - Total puntos consolidados: ' . count($puntos_otros) . ', Total lotes: ' . count($lotes));
         }
         
         // Cargar biopagos desde los cierres tipo cajero
@@ -1799,11 +1887,25 @@ class PedidosController extends Controller
         // Reutilizar $todos_pagos en lugar de hacer otra consulta
         $pagos_raw = $todos_pagos->whereNotIn("tipo", [4]); // Excluir créditos
 
+        \Log::info('CERRARFUN - Agrupando pagos por tipo y moneda:');
+        \Log::info('CERRARFUN - Pagos a procesar (sin créditos): ' . $pagos_raw->count());
+        
+        $contador_por_tipo_moneda = [];
+        
         foreach ($pagos_raw as $pago) {
             $tipo = $pago->tipo;
             
             // Determinar la moneda real del pago
             $moneda = ($tipo == 3) ? $this->determinarMonedaPago($pago) : strtoupper($pago->moneda ?? 'USD');
+            
+            // Inicializar contador
+            $key_contador = $tipo . '_' . $moneda;
+            if (!isset($contador_por_tipo_moneda[$key_contador])) {
+                $contador_por_tipo_moneda[$key_contador] = ['count' => 0, 'suma_monto' => 0, 'suma_monto_original' => 0];
+            }
+            $contador_por_tipo_moneda[$key_contador]['count']++;
+            $contador_por_tipo_moneda[$key_contador]['suma_monto'] += floatval($pago->monto);
+            $contador_por_tipo_moneda[$key_contador]['suma_monto_original'] += floatval($pago->monto_original ?? $pago->monto);
             
             // Inicializar tipo si no existe
             if (!isset($pagos_por_moneda[$tipo])) {
@@ -1839,6 +1941,20 @@ class PedidosController extends Controller
                 'categoria' => null,
                 'banco' => null,
             ];
+        }
+        
+        \Log::info('CERRARFUN - Resumen de pagos por tipo y moneda:');
+        foreach ($contador_por_tipo_moneda as $key => $data) {
+            list($tipo, $moneda) = explode('_', $key, 2);
+            \Log::info('CERRARFUN - Tipo ' . $tipo . ' (' . $moneda . '): ' . $data['count'] . ' pagos, Suma monto=' . $data['suma_monto'] . ', Suma monto_original=' . $data['suma_monto_original']);
+        }
+        
+        \Log::info('CERRARFUN - Estructura pagos_por_moneda:');
+        foreach ($pagos_por_moneda as $tipo_key => $tipo_data) {
+            \Log::info('CERRARFUN - Tipo ' . $tipo_key . ' tiene ' . count($tipo_data['monedas']) . ' monedas');
+            foreach ($tipo_data['monedas'] as $moneda_key => $moneda_data) {
+                \Log::info('CERRARFUN -   Moneda ' . $moneda_key . ': monto=' . $moneda_data['monto'] . ', monto_original=' . $moneda_data['monto_original'] . ', cantidad_pagos=' . count($moneda_data['pagos']));
+            }
         }
         
         // Si hay transferencias, usar referencias ya cargadas con eager loading
@@ -2036,12 +2152,19 @@ class PedidosController extends Controller
         $caja_bs_entregado = isset($caja_efectivo["caja_bs"]) ? floatval($caja_efectivo["caja_bs"]) : 0;
         $caja_cop_entregado = isset($caja_efectivo["caja_cop"]) ? floatval($caja_efectivo["caja_cop"]) : 0;
         
+        \Log::info('CERRARFUN - Efectivo entregado (real contado):');
+        \Log::info('CERRARFUN - caja_usd: ' . $caja_usd);
+        \Log::info('CERRARFUN - caja_bs_entregado: ' . $caja_bs_entregado);
+        \Log::info('CERRARFUN - caja_cop_entregado: ' . $caja_cop_entregado);
+        
         // Obtener efectivo digital en Bs y COP
         $efectivo_bs_digital = 0;
         $efectivo_cop_digital = 0;
         
         if (isset($pagos_por_moneda[3])) { // Tipo 3 = Efectivo
-            foreach ($pagos_por_moneda[3]['monedas'] as $moneda_data) {
+            \Log::info('CERRARFUN - Pagos efectivo por moneda encontrados: ' . count($pagos_por_moneda[3]['monedas']));
+            foreach ($pagos_por_moneda[3]['monedas'] as $moneda_key => $moneda_data) {
+                \Log::info('CERRARFUN - Efectivo moneda ' . $moneda_key . ': monto=' . $moneda_data['monto'] . ', monto_original=' . $moneda_data['monto_original']);
                 if ($moneda_data['moneda'] == 'bs') {
                     $efectivo_bs_digital = $moneda_data['monto_original'];
                 } elseif ($moneda_data['moneda'] == 'cop') {
@@ -2049,6 +2172,11 @@ class PedidosController extends Controller
                 }
             }
         }
+        
+        \Log::info('CERRARFUN - Efectivo digital calculado:');
+        \Log::info('CERRARFUN - efectivo_digital_usd: ' . $arr_pagos["efectivo_digital"]);
+        \Log::info('CERRARFUN - efectivo_bs_digital: ' . $efectivo_bs_digital);
+        \Log::info('CERRARFUN - efectivo_cop_digital: ' . $efectivo_cop_digital);
         
         // Calcular diferencias
         $diff_efectivo_bs = $caja_bs_entregado - $efectivo_bs_digital;
@@ -2084,6 +2212,7 @@ class PedidosController extends Controller
         }
 
         // ========== CUADRE DETALLADO POR TIPO Y MONEDA ==========
+        \Log::info('=== CERRARFUN - CALCULANDO CUADRE DETALLADO ===');
         $cuadre_detallado = [];
         
         // Extraer montos digitales de efectivo por moneda desde pagos_por_moneda
@@ -2105,12 +2234,23 @@ class PedidosController extends Controller
             }
         }
         
+        \Log::info('CERRARFUN - Efectivo digital extraído de pagos_por_moneda:');
+        \Log::info('CERRARFUN - efectivo_digital_usd: ' . $efectivo_digital_usd);
+        \Log::info('CERRARFUN - efectivo_digital_bs: ' . $efectivo_digital_bs);
+        \Log::info('CERRARFUN - efectivo_digital_cop: ' . $efectivo_digital_cop);
+        
         // 1. EFECTIVO - USD
         $efectivo_usd_real = isset($caja_efectivo["caja_usd"]) ? floatval($caja_efectivo["caja_usd"]) : 0;
         $efectivo_usd_inicial = floatval($caja_inicial);
         $efectivo_usd_digital = $efectivo_digital_usd;
         // Fórmula correcta: Real - Digital - Inicial
         $efectivo_usd_diferencia = $efectivo_usd_real - $efectivo_usd_digital - $efectivo_usd_inicial;
+        
+        \Log::info('CERRARFUN - Efectivo USD:');
+        \Log::info('CERRARFUN - Real: ' . $efectivo_usd_real . ' (desde caja_efectivo["caja_usd"])');
+        \Log::info('CERRARFUN - Digital: ' . $efectivo_usd_digital . ' (desde pagos_por_moneda)');
+        \Log::info('CERRARFUN - Inicial: ' . $efectivo_usd_inicial . ' (desde ultimo_cierre->sum("dejar_dolar"))');
+        \Log::info('CERRARFUN - Diferencia: ' . $efectivo_usd_diferencia . ' (Real - Digital - Inicial)');
         
         $cuadre_detallado['efectivo_usd'] = [
             'tipo' => 'efectivo',
@@ -2130,6 +2270,12 @@ class PedidosController extends Controller
         // Fórmula correcta: Real - Digital - Inicial
         $efectivo_bs_diferencia = $efectivo_bs_real - $efectivo_bs_digital_calc - $efectivo_bs_inicial;
         
+        \Log::info('CERRARFUN - Efectivo BS:');
+        \Log::info('CERRARFUN - Real: ' . $efectivo_bs_real . ' (desde caja_bs_entregado)');
+        \Log::info('CERRARFUN - Digital: ' . $efectivo_bs_digital_calc . ' (desde pagos_por_moneda)');
+        \Log::info('CERRARFUN - Inicial: ' . $efectivo_bs_inicial . ' (desde ultimo_cierre->sum("dejar_bss"))');
+        \Log::info('CERRARFUN - Diferencia: ' . $efectivo_bs_diferencia . ' (Real - Digital - Inicial)');
+        
         $cuadre_detallado['efectivo_bs'] = [
             'tipo' => 'efectivo',
             'moneda' => 'BS',
@@ -2147,6 +2293,12 @@ class PedidosController extends Controller
         $efectivo_cop_digital_calc = $efectivo_digital_cop;
         // Fórmula correcta: Real - Digital - Inicial
         $efectivo_cop_diferencia = $efectivo_cop_real - $efectivo_cop_digital_calc - $efectivo_cop_inicial;
+        
+        \Log::info('CERRARFUN - Efectivo COP:');
+        \Log::info('CERRARFUN - Real: ' . $efectivo_cop_real . ' (desde caja_cop_entregado)');
+        \Log::info('CERRARFUN - Digital: ' . $efectivo_cop_digital_calc . ' (desde pagos_por_moneda)');
+        \Log::info('CERRARFUN - Inicial: ' . $efectivo_cop_inicial . ' (desde ultimo_cierre->sum("dejar_peso"))');
+        \Log::info('CERRARFUN - Diferencia: ' . $efectivo_cop_diferencia . ' (Real - Digital - Inicial)');
         
         $cuadre_detallado['efectivo_cop'] = [
             'tipo' => 'efectivo',
@@ -2181,9 +2333,14 @@ class PedidosController extends Controller
         // Los lotes pinpad ya vienen calculados correctamente de los pagos reales
         // No hay "digital" vs "real" aquí - es el mismo valor de las transacciones procesadas
         $debito_pinpad_total = 0;
-        foreach ($lotes_pinpad as $lote) {
-            $debito_pinpad_total += floatval($lote['monto_bs']);
+        \Log::info('CERRARFUN - Lotes pinpad encontrados: ' . count($lotes_pinpad));
+        foreach ($lotes_pinpad as $index => $lote) {
+            $monto_lote = floatval($lote['monto_bs']);
+            $debito_pinpad_total += $monto_lote;
+            \Log::info('CERRARFUN - Lote pinpad #' . $index . ': terminal=' . ($lote['terminal'] ?? 'N/A') . ', monto_bs=' . $monto_lote . ', acumulado=' . $debito_pinpad_total);
         }
+        
+        \Log::info('CERRARFUN - Debito Pinpad Total: ' . $debito_pinpad_total . ' BS');
         
         // En pinpad, real = digital (son transacciones ya procesadas por el dispositivo)
         $cuadre_detallado['debito_pinpad'] = [
@@ -2203,15 +2360,25 @@ class PedidosController extends Controller
         // IMPORTANTE: "Otros Puntos" incluye TODOS los lotes (DEBITO y CREDITO)
         $debito_otros_real = 0;
         
+        \Log::info('DEBITO OTROS - Iniciando cálculo. Total puntos_otros: ' . count($puntos_otros));
+        \Log::info('DEBITO OTROS - totalizarcierre: ' . ($totalizarcierre ? 'true' : 'false'));
+        
         foreach ($puntos_otros as $index => $punto) {
             $categoria = is_array($punto) ? ($punto['categoria'] ?? null) : ($punto->categoria ?? null);
             $monto = is_array($punto) ? ($punto['monto_real'] ?? $punto['monto'] ?? 0) : ($punto->monto_real ?? $punto->monto ?? 0);
             
+            \Log::info('DEBITO OTROS - Punto #' . $index . ': Categoria=' . ($categoria ?? 'NULL') . ', Monto=' . $monto);
+            
             // Sumar solo DEBITO y CREDITO (pinpad ya está excluido)
             if ($categoria == 'DEBITO' || $categoria == 'CREDITO') {
                 $debito_otros_real += floatval($monto);
+                \Log::info('DEBITO OTROS - Sumado. Acumulado: ' . $debito_otros_real);
+            } else {
+                \Log::info('DEBITO OTROS - Omitido (categoria no es DEBITO/CREDITO)');
             }
         }
+        
+        \Log::info('DEBITO OTROS - Total REAL calculado: ' . $debito_otros_real . ' Bs');
         
         // Calcular digital de otros puntos (débito tipo 2 que NO son pinpad)
         $debito_otros_digital = 0;
@@ -2220,11 +2387,19 @@ class PedidosController extends Controller
             return $pago->tipo == 2 && (empty($pago->pos_terminal) || $pago->pos_terminal == "");
         });
         
+        \Log::info('DEBITO OTROS - Total pagos digitales encontrados: ' . $pagos_debito_otros->count());
+        
         foreach ($pagos_debito_otros as $pago) {
-            $debito_otros_digital += floatval($pago->monto_original ?? $pago->monto);
+            $monto_pago = floatval($pago->monto_original ?? $pago->monto);
+            $debito_otros_digital += $monto_pago;
+            \Log::info('DEBITO OTROS - Pago digital ID: ' . $pago->id . ', Monto: ' . $monto_pago . ', Acumulado: ' . $debito_otros_digital);
         }
         
+        \Log::info('DEBITO OTROS - Total DIGITAL calculado: ' . $debito_otros_digital . ' Bs');
+        
         $debito_otros_diferencia = $debito_otros_real - $debito_otros_digital;
+        
+        \Log::info('DEBITO OTROS - Diferencia: ' . $debito_otros_diferencia . ' Bs');
         
         $cuadre_detallado['debito_otros'] = [
             'tipo' => 'debito',
@@ -2238,6 +2413,8 @@ class PedidosController extends Controller
             'mensaje' => abs($debito_otros_diferencia) <= 5 ? 'CUADRADO' : ($debito_otros_diferencia > 0 ? 'SOBRAN' : 'FALTAN')
         ];
         
+        \Log::info('DEBITO OTROS - Cuadre guardado: ' . json_encode($cuadre_detallado['debito_otros']));
+        
         // CALCULAR TOTAL_PUNTO AUTOMÁTICAMENTE (suma de todos los lotes en Bs)
         $total_punto_real = $debito_pinpad_total + $debito_otros_real;
         $arr_pagos["total_punto"] = round($total_punto_real, 2);
@@ -2245,6 +2422,9 @@ class PedidosController extends Controller
         // 6. TRANSFERENCIA (en USD)
         // Las transferencias siempre cuadran porque son digitales (no hay "real" vs "digital")
         $transferencia_total = isset($arr_pagos[1]) ? floatval($arr_pagos[1]) : 0;
+        
+        \Log::info('CERRARFUN - Transferencia:');
+        \Log::info('CERRARFUN - Total: ' . $transferencia_total . ' USD (desde arr_pagos[1] = suma de pagos tipo 1)');
         
         $cuadre_detallado['transferencia'] = [
             'tipo' => 'transferencia',
@@ -2256,6 +2436,11 @@ class PedidosController extends Controller
             'estado' => 'cuadrado',
             'mensaje' => 'CUADRADO'
         ];
+        
+        \Log::info('=== CERRARFUN - CUADRE DETALLADO FINAL ===');
+        \Log::info('CERRARFUN - Cuadre detallado completo: ' . json_encode($cuadre_detallado, JSON_PRETTY_PRINT));
+        \Log::info('CERRARFUN - Total punto calculado: ' . $total_punto_real . ' BS');
+        \Log::info('=== CERRARFUN - FIN ===');
         
         $arr_pagos["cuadre_detallado"] = $cuadre_detallado;
 
@@ -2423,6 +2608,38 @@ class PedidosController extends Controller
             
             // RECALCULAR TODO usando cerrarFun con datos originales
             // NOTA: total_punto se calcula automáticamente dentro de cerrarFun
+            \Log::info('=== GUARDAR CIERRE - ANTES DE CERRARFUN ===');
+            \Log::info('GUARDAR CIERRE - Tipo cierre: ' . $tipo_cierre . ', Totalizar: ' . ($totalizarcierre ? 'true' : 'false'));
+            \Log::info('GUARDAR CIERRE - Fecha: ' . $today);
+            \Log::info('GUARDAR CIERRE - ID Usuario: ' . $id_usuario);
+            \Log::info('GUARDAR CIERRE - Datos enviados a cerrarFun:');
+            \Log::info('GUARDAR CIERRE - caja_usd: ' . ($req->caja_usd ?? 0));
+            \Log::info('GUARDAR CIERRE - caja_bs: ' . ($req->caja_bs ?? 0));
+            \Log::info('GUARDAR CIERRE - caja_cop: ' . ($req->caja_cop ?? 0));
+            \Log::info('GUARDAR CIERRE - total_biopago: ' . ($req->total_biopago ?? 0));
+            \Log::info('GUARDAR CIERRE - dejar_usd: ' . ($dejar['dejar_usd'] ?? 0));
+            \Log::info('GUARDAR CIERRE - dejar_bs: ' . ($dejar['dejar_bs'] ?? 0));
+            \Log::info('GUARDAR CIERRE - dejar_cop: ' . ($dejar['dejar_cop'] ?? 0));
+            \Log::info('GUARDAR CIERRE - Puntos adicionales recibidos del request: ' . json_encode($puntos_adicionales_request, JSON_PRETTY_PRINT));
+            \Log::info('GUARDAR CIERRE - Cantidad puntos en request: ' . (is_array($puntos_adicionales_request['puntos'] ?? []) ? count($puntos_adicionales_request['puntos']) : 'N/A'));
+            \Log::info('GUARDAR CIERRE - Cantidad lotes pinpad en request: ' . (is_array($puntos_adicionales_request['lotes_pinpad'] ?? []) ? count($puntos_adicionales_request['lotes_pinpad']) : 'N/A'));
+            
+            // Para consolidados, verificar qué cierres de cajeros existen
+            if ($tipo_cierre == 1) {
+                $cierres_cajeros_antes = cierres::where('fecha', $today)
+                    ->where('tipo_cierre', 0)
+                    ->get();
+                
+                \Log::info('GUARDAR CIERRE - CONSOLIDADO - Cierres de cajeros encontrados antes de cerrarFun: ' . $cierres_cajeros_antes->count());
+                foreach ($cierres_cajeros_antes as $cierre_cajero_antes) {
+                    \Log::info('GUARDAR CIERRE - CONSOLIDADO - Cierre Cajero ID: ' . $cierre_cajero_antes->id . 
+                        ', Usuario: ' . $cierre_cajero_antes->id_usuario . 
+                        ', Efectivo USD: ' . ($cierre_cajero_antes->efectivo_actual ?? 0) . 
+                        ', Efectivo BS: ' . ($cierre_cajero_antes->efectivo_actual_bs ?? 0) . 
+                        ', Efectivo COP: ' . ($cierre_cajero_antes->efectivo_actual_cop ?? 0));
+                }
+            }
+            
             $resultado_cierre = $this->cerrarFun(
                 $today,
                 [
@@ -2460,6 +2677,66 @@ class PedidosController extends Controller
             
             // Extraer datos calculados para usar en guardado
             $cuadre_detallado = $calculos['cuadre_detallado'] ?? [];
+            
+            \Log::info('=== GUARDAR CIERRE - DESPUÉS DE CERRARFUN ===');
+            \Log::info('GUARDAR CIERRE - Tipo cierre: ' . $tipo_cierre . ', Totalizar: ' . ($totalizarcierre ? 'true' : 'false'));
+            \Log::info('GUARDAR CIERRE - Tipo de resultado: ' . gettype($resultado_cierre));
+            \Log::info('GUARDAR CIERRE - Tipo de calculos: ' . gettype($calculos));
+            \Log::info('GUARDAR CIERRE - Tiene cuadre_detallado: ' . (isset($calculos['cuadre_detallado']) ? 'SI' : 'NO'));
+            
+            // Logs de valores principales de calculos
+            \Log::info('GUARDAR CIERRE - Valores principales de calculos:');
+            \Log::info('GUARDAR CIERRE - efectivo_guardado_usd: ' . ($calculos['efectivo_guardado_usd'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - efectivo_guardado_bs: ' . ($calculos['efectivo_guardado_bs'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - efectivo_guardado_cop: ' . ($calculos['efectivo_guardado_cop'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - total_punto: ' . ($calculos['total_punto'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - debito_digital: ' . ($calculos['debito_digital'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - efectivo_digital: ' . ($calculos['efectivo_digital'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - transferencia_digital: ' . ($calculos['transferencia_digital'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - biopago_digital: ' . ($calculos['biopago_digital'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - descuadre: ' . ($calculos['descuadre'] ?? 'NO EXISTE'));
+            
+            // Logs detallados del cuadre_detallado
+            \Log::info('GUARDAR CIERRE - Cuadre detallado completo desde cerrarFun: ' . json_encode($cuadre_detallado, JSON_PRETTY_PRINT));
+            \Log::info('GUARDAR CIERRE - Debito otros real desde cerrarFun: ' . ($cuadre_detallado['debito_otros']['real'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - Debito otros digital desde cerrarFun: ' . ($cuadre_detallado['debito_otros']['digital'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - Debito pinpad real desde cerrarFun: ' . ($cuadre_detallado['debito_pinpad']['real'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - Debito pinpad digital desde cerrarFun: ' . ($cuadre_detallado['debito_pinpad']['digital'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - Efectivo USD real desde cerrarFun: ' . ($cuadre_detallado['efectivo_usd']['real'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - Efectivo USD digital desde cerrarFun: ' . ($cuadre_detallado['efectivo_usd']['digital'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - Efectivo USD inicial desde cerrarFun: ' . ($cuadre_detallado['efectivo_usd']['inicial'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - Efectivo BS real desde cerrarFun: ' . ($cuadre_detallado['efectivo_bs']['real'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - Efectivo BS digital desde cerrarFun: ' . ($cuadre_detallado['efectivo_bs']['digital'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - Efectivo BS inicial desde cerrarFun: ' . ($cuadre_detallado['efectivo_bs']['inicial'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - Efectivo COP real desde cerrarFun: ' . ($cuadre_detallado['efectivo_cop']['real'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - Efectivo COP digital desde cerrarFun: ' . ($cuadre_detallado['efectivo_cop']['digital'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - Efectivo COP inicial desde cerrarFun: ' . ($cuadre_detallado['efectivo_cop']['inicial'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - Transferencia real desde cerrarFun: ' . ($cuadre_detallado['transferencia']['real'] ?? 'NO EXISTE'));
+            \Log::info('GUARDAR CIERRE - Transferencia digital desde cerrarFun: ' . ($cuadre_detallado['transferencia']['digital'] ?? 'NO EXISTE'));
+            
+            // Si es consolidado, verificar que el valor sea la suma de todas las cajas
+            if ($tipo_cierre == 1) {
+                $cierres_cajeros_para_verificar = cierres::where('fecha', $today)
+                    ->where('tipo_cierre', 0)
+                    ->get();
+                
+                $suma_verificacion = 0;
+                foreach ($cierres_cajeros_para_verificar as $cierre_cajero_ver) {
+                    $registro_otros_ver = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero_ver->id)
+                        ->where('tipo_pago', 2)
+                        ->where('subtipo', 'otros_puntos')
+                        ->first();
+                    
+                    if ($registro_otros_ver) {
+                        $suma_verificacion += floatval($registro_otros_ver->monto_real ?? 0);
+                    }
+                }
+                
+                \Log::info('GUARDAR CIERRE - Verificación: Suma real de todas las cajas: ' . $suma_verificacion . ' Bs');
+                \Log::info('GUARDAR CIERRE - Verificación: Valor que se va a guardar: ' . ($cuadre_detallado['debito_otros']['real'] ?? 'NO EXISTE') . ' Bs');
+                \Log::info('GUARDAR CIERRE - Verificación: Diferencia: ' . ($suma_verificacion - floatval($cuadre_detallado['debito_otros']['real'] ?? 0)) . ' Bs');
+            }
+            
             $efectivo_guardado_usd = $calculos['efectivo_guardado_usd'] ?? $calculos['efectivo_guardado'] ?? 0;
             $efectivo_guardado_bs = $calculos['efectivo_guardado_bs'] ?? 0;
             $efectivo_guardado_cop = $calculos['efectivo_guardado_cop'] ?? 0;
@@ -2536,33 +2813,9 @@ class PedidosController extends Controller
                 $puntosAdicionales = json_decode(json_encode($puntosAdicionales), true);
                 $lotesPinpadArray = json_decode(json_encode($lotesPinpadArray), true);
 
-                // Validar que la suma de los "otros puntos" + lotes Pinpad coincida con el total de punto
-                $sumaMontosOtrosPuntos = 0;
-                $sumaMontosLotesPinpad = 0;
-                
-                // Sumar "otros puntos" (campo "monto" o "monto_real")
-                if (!empty($puntosAdicionales)) {
-                    foreach ($puntosAdicionales as $e) {
-                        // Buscar monto_real primero (viene de BD al re-guardar), luego monto (nuevo)
-                        $monto = $e["monto_real"] ?? $e["monto"] ?? null;
-                        if ($monto !== null) {
-                            $sumaMontosOtrosPuntos += floatval($monto);
-                        }
-                    }
-                }
-                
-                // Sumar lotes Pinpad (tienen campo "monto_bs")
-                if (!empty($lotesPinpadArray)) {
-                    foreach ($lotesPinpadArray as $lote) {
-                        if (isset($lote["monto_bs"])) {
-                            $sumaMontosLotesPinpad += floatval($lote["monto_bs"]);
-                        }
-                    }
-                }
-                
-                // Calcular total_punto automáticamente (suma de todos los lotes en Bs)
-                $sumaMontosLotes = $sumaMontosOtrosPuntos + $sumaMontosLotesPinpad;
-                $total_punto_real = $sumaMontosLotes; // Este es el valor REAL del débito
+                // OPTIMIZACIÓN: Usar total_punto calculado por cerrarFun (ya está en calculos)
+                // NO recalcular, solo usar el valor ya calculado
+                $total_punto_real = floatval($calculos['total_punto'] ?? 0);
                 
                 // Preparar datos de lotes para guardar después del cierre
                 // (se guardarán en CierresMetodosPago después de tener id_cierre)
@@ -2592,92 +2845,62 @@ class PedidosController extends Controller
             }
             
             // ========== VALIDAR FALTANTE A NIVEL GENERAL ==========
-            // Usar EXACTAMENTE la misma lógica que se usa en cierre.blade.php
-            // en la sección "CUADRE CONSOLIDADO EN DÓLARES (TODOS LOS TIPOS GLOBALES)"
+            // OPTIMIZACIÓN: Usar directamente los datos calculados por cerrarFun (cuadre_detallado)
+            // NO recalcular nada, solo usar los valores ya calculados
             
             \Log::info("=== VALIDACION FALTANTE - TIPO CIERRE: " . $tipo_cierre . " ===");
+            \Log::info("VALIDACION FALTANTE - Fecha: " . $today);
+            \Log::info("VALIDACION FALTANTE - ID Usuario: " . $id_usuario);
             
             // Obtener tasas de cambio (evitar división por cero)
             $tasa_bs_safe = $bs > 0 ? $bs : 1;
             $tasa_cop_safe = $cop > 0 ? $cop : 1;
             
-            \Log::info("Tasas: BS=" . $tasa_bs_safe . ", COP=" . $tasa_cop_safe);
+            \Log::info("VALIDACION FALTANTE - Tasas: BS=" . $tasa_bs_safe . ", COP=" . $tasa_cop_safe);
             
-            // ========== EFECTIVO (igual que en cierre.blade.php líneas 443-451) ==========
+            // ========== LOGS DETALLADOS DEL CUADRE_DETALLADO ==========
+            \Log::info("VALIDACION FALTANTE - Cuadre detallado completo: " . json_encode($cuadre_detallado, JSON_PRETTY_PRINT));
+            
+            // ========== USAR DATOS DIRECTAMENTE DEL CUADRE_DETALLADO (ya calculados por cerrarFun) ==========
+            // Efectivo: usar valores del cuadre_detallado y convertir a USD
             $efectivo_usd_real_raw = floatval($cuadre_detallado['efectivo_usd']['real'] ?? 0);
             $efectivo_bs_real_raw = floatval($cuadre_detallado['efectivo_bs']['real'] ?? 0);
             $efectivo_cop_real_raw = floatval($cuadre_detallado['efectivo_cop']['real'] ?? 0);
-            $efectivo_real_usd = $efectivo_usd_real_raw + 
-                                ($efectivo_bs_real_raw / $tasa_bs_safe) + 
-                                ($efectivo_cop_real_raw / $tasa_cop_safe);
             
             $efectivo_usd_digital_raw = floatval($cuadre_detallado['efectivo_usd']['digital'] ?? 0);
             $efectivo_bs_digital_raw = floatval($cuadre_detallado['efectivo_bs']['digital'] ?? 0);
             $efectivo_cop_digital_raw = floatval($cuadre_detallado['efectivo_cop']['digital'] ?? 0);
-            $efectivo_digital_usd = $efectivo_usd_digital_raw + 
-                                   ($efectivo_bs_digital_raw / $tasa_bs_safe) + 
-                                   ($efectivo_cop_digital_raw / $tasa_cop_safe);
             
             $efectivo_usd_inicial_raw = floatval($cuadre_detallado['efectivo_usd']['inicial'] ?? 0);
             $efectivo_bs_inicial_raw = floatval($cuadre_detallado['efectivo_bs']['inicial'] ?? 0);
             $efectivo_cop_inicial_raw = floatval($cuadre_detallado['efectivo_cop']['inicial'] ?? 0);
+            
+            \Log::info("VALIDACION FALTANTE - Efectivo RAW - USD Real: " . $efectivo_usd_real_raw . ", Digital: " . $efectivo_usd_digital_raw . ", Inicial: " . $efectivo_usd_inicial_raw);
+            \Log::info("VALIDACION FALTANTE - Efectivo RAW - BS Real: " . $efectivo_bs_real_raw . ", Digital: " . $efectivo_bs_digital_raw . ", Inicial: " . $efectivo_bs_inicial_raw);
+            \Log::info("VALIDACION FALTANTE - Efectivo RAW - COP Real: " . $efectivo_cop_real_raw . ", Digital: " . $efectivo_cop_digital_raw . ", Inicial: " . $efectivo_cop_inicial_raw);
+            
+            $efectivo_real_usd = $efectivo_usd_real_raw + 
+                                ($efectivo_bs_real_raw / $tasa_bs_safe) + 
+                                ($efectivo_cop_real_raw / $tasa_cop_safe);
+            
+            $efectivo_digital_usd = $efectivo_usd_digital_raw + 
+                                   ($efectivo_bs_digital_raw / $tasa_bs_safe) + 
+                                   ($efectivo_cop_digital_raw / $tasa_cop_safe);
+            
             $efectivo_inicial_usd = $efectivo_usd_inicial_raw + 
                                    ($efectivo_bs_inicial_raw / $tasa_bs_safe) + 
                                    ($efectivo_cop_inicial_raw / $tasa_cop_safe);
             
-            \Log::info("EFECTIVO - Real USD: " . $efectivo_usd_real_raw . " + BS: " . $efectivo_bs_real_raw . " (" . ($efectivo_bs_real_raw / $tasa_bs_safe) . " USD) + COP: " . $efectivo_cop_real_raw . " (" . ($efectivo_cop_real_raw / $tasa_cop_safe) . " USD) = " . $efectivo_real_usd);
-            \Log::info("EFECTIVO - Digital USD: " . $efectivo_usd_digital_raw . " + BS: " . $efectivo_bs_digital_raw . " (" . ($efectivo_bs_digital_raw / $tasa_bs_safe) . " USD) + COP: " . $efectivo_cop_digital_raw . " (" . ($efectivo_cop_digital_raw / $tasa_cop_safe) . " USD) = " . $efectivo_digital_usd);
-            \Log::info("EFECTIVO - Inicial USD: " . $efectivo_usd_inicial_raw . " + BS: " . $efectivo_bs_inicial_raw . " (" . ($efectivo_bs_inicial_raw / $tasa_bs_safe) . " USD) + COP: " . $efectivo_cop_inicial_raw . " (" . ($efectivo_cop_inicial_raw / $tasa_cop_safe) . " USD) = " . $efectivo_inicial_usd);
+            \Log::info("VALIDACION FALTANTE - Efectivo USD Convertido - Real: " . $efectivo_real_usd . ", Digital: " . $efectivo_digital_usd . ", Inicial: " . $efectivo_inicial_usd);
             
-            // ========== DÉBITO (igual que en cierre.blade.php líneas 487-490) ==========
-            // Si es cierre totalizado (tipo 1), sumar débitos de TODOS los cierres de cajeros guardados
-            // Si es cierre de cajero (tipo 0), usar los valores del cuadre_detallado
-            if ($tipo_cierre == 1) {
-                // Sumar débitos reales y digitales de todos los cierres de cajeros
-                $debito_pinpad_real_raw = 0;
-                $debito_otros_real_raw = 0;
-                $debito_pinpad_digital_raw = 0;
-                $debito_otros_digital_raw = 0;
-                
-                $cierres_cajeros = cierres::where('fecha', $today)
-                    ->where('tipo_cierre', 0)
-                    ->get();
-                
-                \Log::info("CIERRE TOTALIZADO - Sumando débitos de " . $cierres_cajeros->count() . " cierres de cajeros");
-                
-                foreach ($cierres_cajeros as $cierre_cajero) {
-                    // Obtener débito pinpad
-                    $registro_pinpad = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero->id)
-                        ->where('tipo_pago', 2)
-                        ->where('subtipo', 'pinpad')
-                        ->first();
-                    
-                    if ($registro_pinpad) {
-                        $debito_pinpad_real_raw += floatval($registro_pinpad->monto_real ?? 0);
-                        $debito_pinpad_digital_raw += floatval($registro_pinpad->monto_digital ?? 0);
-                    }
-                    
-                    // Obtener débito otros puntos
-                    $registro_otros = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero->id)
-                        ->where('tipo_pago', 2)
-                        ->where('subtipo', 'otros_puntos')
-                        ->first();
-                    
-                    if ($registro_otros) {
-                        $debito_otros_real_raw += floatval($registro_otros->monto_real ?? 0);
-                        $debito_otros_digital_raw += floatval($registro_otros->monto_digital ?? 0);
-                    }
-                }
-                
-                \Log::info("DEBITO TOTALIZADO - Real Pinpad: " . $debito_pinpad_real_raw . " (" . ($debito_pinpad_real_raw / $tasa_bs_safe) . " USD) + Otros: " . $debito_otros_real_raw . " (" . ($debito_otros_real_raw / $tasa_bs_safe) . " USD)");
-                \Log::info("DEBITO TOTALIZADO - Digital Pinpad: " . $debito_pinpad_digital_raw . " (" . ($debito_pinpad_digital_raw / $tasa_bs_safe) . " USD) + Otros: " . $debito_otros_digital_raw . " (" . ($debito_otros_digital_raw / $tasa_bs_safe) . " USD)");
-            } else {
-                // Cierre de cajero individual - usar valores del cuadre_detallado
-                $debito_pinpad_real_raw = floatval($cuadre_detallado['debito_pinpad']['real'] ?? 0);
-                $debito_otros_real_raw = floatval($cuadre_detallado['debito_otros']['real'] ?? 0);
-                $debito_pinpad_digital_raw = floatval($cuadre_detallado['debito_pinpad']['digital'] ?? 0);
-                $debito_otros_digital_raw = floatval($cuadre_detallado['debito_otros']['digital'] ?? 0);
-            }
+            // Débito: usar valores del cuadre_detallado y convertir a USD
+            $debito_pinpad_real_raw = floatval($cuadre_detallado['debito_pinpad']['real'] ?? 0);
+            $debito_otros_real_raw = floatval($cuadre_detallado['debito_otros']['real'] ?? 0);
+            $debito_pinpad_digital_raw = floatval($cuadre_detallado['debito_pinpad']['digital'] ?? 0);
+            $debito_otros_digital_raw = floatval($cuadre_detallado['debito_otros']['digital'] ?? 0);
+            
+            \Log::info("VALIDACION FALTANTE - Debito RAW - Pinpad Real: " . $debito_pinpad_real_raw . " BS, Digital: " . $debito_pinpad_digital_raw . " BS");
+            \Log::info("VALIDACION FALTANTE - Debito RAW - Otros Real: " . $debito_otros_real_raw . " BS, Digital: " . $debito_otros_digital_raw . " BS");
             
             $debito_real_usd = ($debito_pinpad_real_raw / $tasa_bs_safe) + 
                               ($debito_otros_real_raw / $tasa_bs_safe);
@@ -2685,21 +2908,21 @@ class PedidosController extends Controller
             $debito_digital_usd = ($debito_pinpad_digital_raw / $tasa_bs_safe) + 
                                  ($debito_otros_digital_raw / $tasa_bs_safe);
             
-            \Log::info("DEBITO FINAL - Real: " . $debito_real_usd . " USD, Digital: " . $debito_digital_usd . " USD");
+            \Log::info("VALIDACION FALTANTE - Debito USD Convertido - Real: " . $debito_real_usd . ", Digital: " . $debito_digital_usd);
             
-            // ========== TRANSFERENCIA (igual que en cierre.blade.php línea 513) ==========
+            // Transferencia: usar valores del cuadre_detallado (ya está en USD)
             $transferencia_real_usd = floatval($cuadre_detallado['transferencia']['real'] ?? 0);
             $transferencia_digital_usd = floatval($cuadre_detallado['transferencia']['digital'] ?? 0);
             
-            \Log::info("TRANSFERENCIA - Real: " . $transferencia_real_usd . ", Digital: " . $transferencia_digital_usd);
+            \Log::info("VALIDACION FALTANTE - Transferencia USD - Real: " . $transferencia_real_usd . ", Digital: " . $transferencia_digital_usd);
             
-            // ========== BIOPAGO ==========
+            // Biopago: usar valores del request/calculos (ya está en USD)
             $biopago_real_usd = floatval($req->total_biopago ?? 0);
             $biopago_digital_usd = floatval($calculos['biopago_digital'] ?? 0);
             
-            \Log::info("BIOPAGO - Real: " . $biopago_real_usd . ", Digital: " . $biopago_digital_usd);
+            \Log::info("VALIDACION FALTANTE - Biopago USD - Real: " . $biopago_real_usd . ", Digital: " . $biopago_digital_usd);
             
-            // ========== CALCULAR TOTALES (igual que en cierre.blade.php líneas 527-533) ==========
+            // ========== CALCULAR TOTALES ==========
             $total_inicial = $efectivo_inicial_usd; // Efectivo tiene inicial, débito y transferencia no
             
             $total_real = $efectivo_real_usd + $debito_real_usd + $transferencia_real_usd + $biopago_real_usd;
@@ -2709,10 +2932,193 @@ class PedidosController extends Controller
             // Fórmula exacta del reporte: total_diferencia = total_real - total_digital - total_inicial
             $total_diferencia = $total_real - $total_digital - $total_inicial;
             
-            \Log::info("TOTALES - Inicial: " . $total_inicial);
-            \Log::info("TOTALES - Real: " . $efectivo_real_usd . " + " . $debito_real_usd . " + " . $transferencia_real_usd . " + " . $biopago_real_usd . " = " . $total_real);
-            \Log::info("TOTALES - Digital: " . $efectivo_digital_usd . " + " . $debito_digital_usd . " + " . $transferencia_digital_usd . " + " . $biopago_digital_usd . " = " . $total_digital);
-            \Log::info("TOTALES - Diferencia: " . $total_real . " - " . $total_digital . " - " . $total_inicial . " = " . $total_diferencia);
+            \Log::info("VALIDACION FALTANTE - Total Inicial: " . $total_inicial . " USD");
+            \Log::info("VALIDACION FALTANTE - Total Real: " . $efectivo_real_usd . " + " . $debito_real_usd . " + " . $transferencia_real_usd . " + " . $biopago_real_usd . " = " . $total_real . " USD");
+            \Log::info("VALIDACION FALTANTE - Total Digital: " . $efectivo_digital_usd . " + " . $debito_digital_usd . " + " . $transferencia_digital_usd . " + " . $biopago_digital_usd . " = " . $total_digital . " USD");
+            \Log::info("VALIDACION FALTANTE - Total Diferencia: " . $total_real . " - " . $total_digital . " - " . $total_inicial . " = " . $total_diferencia . " USD");
+            
+            // ========== PARA CONSOLIDADOS: VERIFICAR VALORES DESDE CIERRES GUARDADOS ==========
+            if ($tipo_cierre == 1) {
+                \Log::info("=== VALIDACION FALTANTE - VERIFICACION CONSOLIDADO ===");
+                
+                $cierres_cajeros_verificar = cierres::where('fecha', $today)
+                    ->where('tipo_cierre', 0)
+                    ->get();
+                
+                \Log::info("VALIDACION FALTANTE - Cantidad cierres de cajeros encontrados: " . $cierres_cajeros_verificar->count());
+                
+                $suma_efectivo_usd_real = 0;
+                $suma_efectivo_bs_real = 0;
+                $suma_efectivo_cop_real = 0;
+                $suma_efectivo_usd_digital = 0;
+                $suma_efectivo_bs_digital = 0;
+                $suma_efectivo_cop_digital = 0;
+                $suma_efectivo_usd_inicial = 0;
+                $suma_efectivo_bs_inicial = 0;
+                $suma_efectivo_cop_inicial = 0;
+                $suma_debito_pinpad_real = 0;
+                $suma_debito_otros_real = 0;
+                $suma_debito_pinpad_digital = 0;
+                $suma_debito_otros_digital = 0;
+                $suma_transferencia_real = 0;
+                $suma_transferencia_digital = 0;
+                $suma_biopago_real = 0;
+                $suma_biopago_digital = 0;
+                
+                foreach ($cierres_cajeros_verificar as $cierre_cajero_ver) {
+                    \Log::info("VALIDACION FALTANTE - Cierre Cajero ID: " . $cierre_cajero_ver->id . ", Usuario: " . $cierre_cajero_ver->id_usuario);
+                    
+                    // Logs detallados de valores del cierre
+                    \Log::info("VALIDACION FALTANTE - Valores del cierre directamente:");
+                    \Log::info("VALIDACION FALTANTE -   efectivo_actual: " . ($cierre_cajero_ver->efectivo_actual ?? 'NULL'));
+                    \Log::info("VALIDACION FALTANTE -   efectivo_actual_bs: " . ($cierre_cajero_ver->efectivo_actual_bs ?? 'NULL'));
+                    \Log::info("VALIDACION FALTANTE -   efectivo_actual_cop: " . ($cierre_cajero_ver->efectivo_actual_cop ?? 'NULL'));
+                    \Log::info("VALIDACION FALTANTE -   efectivo_digital: " . ($cierre_cajero_ver->efectivo_digital ?? 'NULL'));
+                    \Log::info("VALIDACION FALTANTE -   efectivo_digital_bs: " . ($cierre_cajero_ver->efectivo_digital_bs ?? 'NULL'));
+                    \Log::info("VALIDACION FALTANTE -   efectivo_digital_cop: " . ($cierre_cajero_ver->efectivo_digital_cop ?? 'NULL'));
+                    \Log::info("VALIDACION FALTANTE -   caja_inicial: " . ($cierre_cajero_ver->caja_inicial ?? 'NULL'));
+                    \Log::info("VALIDACION FALTANTE -   caja_inicialbs: " . ($cierre_cajero_ver->caja_inicialbs ?? 'NULL'));
+                    \Log::info("VALIDACION FALTANTE -   caja_inicialcop: " . ($cierre_cajero_ver->caja_inicialcop ?? 'NULL'));
+                    
+                    // Obtener efectivo desde CierresMetodosPago
+                    $registro_efectivo = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero_ver->id)
+                        ->where('tipo_pago', 3) // Tipo 3 = Efectivo
+                        ->first();
+                    
+                    \Log::info("VALIDACION FALTANTE - Registro efectivo en CierresMetodosPago: " . ($registro_efectivo ? 'ENCONTRADO (ID: ' . $registro_efectivo->id . ')' : 'NO ENCONTRADO'));
+                    
+                    if ($registro_efectivo) {
+                        $metadatos_ef = is_string($registro_efectivo->metadatos) 
+                            ? json_decode($registro_efectivo->metadatos, true) 
+                            : ($registro_efectivo->metadatos ?? []);
+                        
+                        \Log::info("VALIDACION FALTANTE - Metadatos efectivo: " . json_encode($metadatos_ef, JSON_PRETTY_PRINT));
+                        
+                        $suma_efectivo_usd_real += floatval($metadatos_ef['monto_usd_real'] ?? 0);
+                        $suma_efectivo_bs_real += floatval($metadatos_ef['monto_bs_real'] ?? 0);
+                        $suma_efectivo_cop_real += floatval($metadatos_ef['monto_cop_real'] ?? 0);
+                        $suma_efectivo_usd_digital += floatval($metadatos_ef['monto_usd_digital'] ?? 0);
+                        $suma_efectivo_bs_digital += floatval($metadatos_ef['monto_bs_digital'] ?? 0);
+                        $suma_efectivo_cop_digital += floatval($metadatos_ef['monto_cop_digital'] ?? 0);
+                        $suma_efectivo_usd_inicial += floatval($metadatos_ef['monto_usd_inicial'] ?? 0);
+                        $suma_efectivo_bs_inicial += floatval($metadatos_ef['monto_bs_inicial'] ?? 0);
+                        $suma_efectivo_cop_inicial += floatval($metadatos_ef['monto_cop_inicial'] ?? 0);
+                        
+                        \Log::info("VALIDACION FALTANTE - Sumando desde CierresMetodosPago:");
+                        \Log::info("VALIDACION FALTANTE -   USD Real: " . ($metadatos_ef['monto_usd_real'] ?? 0) . ", Acumulado: " . $suma_efectivo_usd_real);
+                        \Log::info("VALIDACION FALTANTE -   BS Real: " . ($metadatos_ef['monto_bs_real'] ?? 0) . ", Acumulado: " . $suma_efectivo_bs_real);
+                        \Log::info("VALIDACION FALTANTE -   COP Real: " . ($metadatos_ef['monto_cop_real'] ?? 0) . ", Acumulado: " . $suma_efectivo_cop_real);
+                    } else {
+                        // Si no hay registro, usar valores del cierre directamente
+                        $efectivo_usd_real_cierre = floatval($cierre_cajero_ver->efectivo_actual ?? 0);
+                        $efectivo_bs_real_cierre = floatval($cierre_cajero_ver->efectivo_actual_bs ?? 0);
+                        $efectivo_cop_real_cierre = floatval($cierre_cajero_ver->efectivo_actual_cop ?? 0);
+                        $efectivo_usd_digital_cierre = floatval($cierre_cajero_ver->efectivo_digital ?? 0);
+                        $efectivo_bs_digital_cierre = floatval($cierre_cajero_ver->efectivo_digital_bs ?? 0);
+                        $efectivo_cop_digital_cierre = floatval($cierre_cajero_ver->efectivo_digital_cop ?? 0);
+                        $efectivo_usd_inicial_cierre = floatval($cierre_cajero_ver->caja_inicial ?? 0);
+                        $efectivo_bs_inicial_cierre = floatval($cierre_cajero_ver->caja_inicialbs ?? 0);
+                        $efectivo_cop_inicial_cierre = floatval($cierre_cajero_ver->caja_inicialcop ?? 0);
+                        
+                        \Log::info("VALIDACION FALTANTE - Sumando desde cierre directamente:");
+                        \Log::info("VALIDACION FALTANTE -   USD Real: " . $efectivo_usd_real_cierre . ", Acumulado antes: " . $suma_efectivo_usd_real);
+                        \Log::info("VALIDACION FALTANTE -   BS Real: " . $efectivo_bs_real_cierre . ", Acumulado antes: " . $suma_efectivo_bs_real);
+                        \Log::info("VALIDACION FALTANTE -   COP Real: " . $efectivo_cop_real_cierre . ", Acumulado antes: " . $suma_efectivo_cop_real);
+                        
+                        $suma_efectivo_usd_real += $efectivo_usd_real_cierre;
+                        $suma_efectivo_bs_real += $efectivo_bs_real_cierre;
+                        $suma_efectivo_cop_real += $efectivo_cop_real_cierre;
+                        $suma_efectivo_usd_digital += $efectivo_usd_digital_cierre;
+                        $suma_efectivo_bs_digital += $efectivo_bs_digital_cierre;
+                        $suma_efectivo_cop_digital += $efectivo_cop_digital_cierre;
+                        $suma_efectivo_usd_inicial += $efectivo_usd_inicial_cierre;
+                        $suma_efectivo_bs_inicial += $efectivo_bs_inicial_cierre;
+                        $suma_efectivo_cop_inicial += $efectivo_cop_inicial_cierre;
+                        
+                        \Log::info("VALIDACION FALTANTE -   Acumulado después - USD: " . $suma_efectivo_usd_real . ", BS: " . $suma_efectivo_bs_real . ", COP: " . $suma_efectivo_cop_real);
+                    }
+                    
+                    // Obtener débito pinpad
+                    $registro_pinpad = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero_ver->id)
+                        ->where('tipo_pago', 2)
+                        ->where('subtipo', 'pinpad')
+                        ->first();
+                    
+                    if ($registro_pinpad) {
+                        $suma_debito_pinpad_real += floatval($registro_pinpad->monto_real ?? 0);
+                        $suma_debito_pinpad_digital += floatval($registro_pinpad->monto_digital ?? 0);
+                    }
+                    
+                    // Obtener débito otros puntos
+                    $registro_otros = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero_ver->id)
+                        ->where('tipo_pago', 2)
+                        ->where('subtipo', 'otros_puntos')
+                        ->first();
+                    
+                    if ($registro_otros) {
+                        $suma_debito_otros_real += floatval($registro_otros->monto_real ?? 0);
+                        $suma_debito_otros_digital += floatval($registro_otros->monto_digital ?? 0);
+                    }
+                    
+                    // Obtener transferencia
+                    $registro_transf = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero_ver->id)
+                        ->where('tipo_pago', 1) // Tipo 1 = Transferencia
+                        ->first();
+                    
+                    if ($registro_transf) {
+                        $suma_transferencia_real += floatval($registro_transf->monto_real ?? 0);
+                        $suma_transferencia_digital += floatval($registro_transf->monto_digital ?? 0);
+                    } else {
+                        $suma_transferencia_real += floatval($cierre_cajero_ver->transferencia ?? 0);
+                        $suma_transferencia_digital += floatval($cierre_cajero_ver->transferencia_digital ?? 0);
+                    }
+                    
+                    // Obtener biopago
+                    $registro_bio = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero_ver->id)
+                        ->where('tipo_pago', 4) // Tipo 4 = Biopago
+                        ->first();
+                    
+                    if ($registro_bio) {
+                        $suma_biopago_real += floatval($registro_bio->monto_real ?? 0);
+                        $suma_biopago_digital += floatval($registro_bio->monto_digital ?? 0);
+                    } else {
+                        $suma_biopago_real += floatval($cierre_cajero_ver->caja_biopago ?? 0);
+                        $suma_biopago_digital += floatval($cierre_cajero_ver->biopago_digital ?? 0);
+                    }
+                }
+                
+                \Log::info("VALIDACION FALTANTE - SUMA DESDE CIERRES GUARDADOS:");
+                \Log::info("VALIDACION FALTANTE - Efectivo USD - Real: " . $suma_efectivo_usd_real . ", Digital: " . $suma_efectivo_usd_digital . ", Inicial: " . $suma_efectivo_usd_inicial);
+                \Log::info("VALIDACION FALTANTE - Efectivo BS - Real: " . $suma_efectivo_bs_real . ", Digital: " . $suma_efectivo_bs_digital . ", Inicial: " . $suma_efectivo_bs_inicial);
+                \Log::info("VALIDACION FALTANTE - Efectivo COP - Real: " . $suma_efectivo_cop_real . ", Digital: " . $suma_efectivo_cop_digital . ", Inicial: " . $suma_efectivo_cop_inicial);
+                \Log::info("VALIDACION FALTANTE - Debito Pinpad - Real: " . $suma_debito_pinpad_real . " BS, Digital: " . $suma_debito_pinpad_digital . " BS");
+                \Log::info("VALIDACION FALTANTE - Debito Otros - Real: " . $suma_debito_otros_real . " BS, Digital: " . $suma_debito_otros_digital . " BS");
+                \Log::info("VALIDACION FALTANTE - Transferencia - Real: " . $suma_transferencia_real . " USD, Digital: " . $suma_transferencia_digital . " USD");
+                \Log::info("VALIDACION FALTANTE - Biopago - Real: " . $suma_biopago_real . " USD, Digital: " . $suma_biopago_digital . " USD");
+                
+                // Convertir a USD para comparar
+                $suma_efectivo_real_usd_verif = $suma_efectivo_usd_real + ($suma_efectivo_bs_real / $tasa_bs_safe) + ($suma_efectivo_cop_real / $tasa_cop_safe);
+                $suma_efectivo_digital_usd_verif = $suma_efectivo_usd_digital + ($suma_efectivo_bs_digital / $tasa_bs_safe) + ($suma_efectivo_cop_digital / $tasa_cop_safe);
+                $suma_efectivo_inicial_usd_verif = $suma_efectivo_usd_inicial + ($suma_efectivo_bs_inicial / $tasa_bs_safe) + ($suma_efectivo_cop_inicial / $tasa_cop_safe);
+                $suma_debito_real_usd_verif = ($suma_debito_pinpad_real / $tasa_bs_safe) + ($suma_debito_otros_real / $tasa_bs_safe);
+                $suma_debito_digital_usd_verif = ($suma_debito_pinpad_digital / $tasa_bs_safe) + ($suma_debito_otros_digital / $tasa_bs_safe);
+                
+                $suma_total_real_verif = $suma_efectivo_real_usd_verif + $suma_debito_real_usd_verif + $suma_transferencia_real + $suma_biopago_real;
+                $suma_total_digital_verif = $suma_efectivo_digital_usd_verif + $suma_debito_digital_usd_verif + $suma_transferencia_digital + $suma_biopago_digital;
+                $suma_total_diferencia_verif = $suma_total_real_verif - $suma_total_digital_verif - $suma_efectivo_inicial_usd_verif;
+                
+                \Log::info("VALIDACION FALTANTE - COMPARACION:");
+                \Log::info("VALIDACION FALTANTE - Efectivo Real USD - Cuadre: " . $efectivo_real_usd . " vs Suma: " . $suma_efectivo_real_usd_verif . " (Diferencia: " . ($efectivo_real_usd - $suma_efectivo_real_usd_verif) . ")");
+                \Log::info("VALIDACION FALTANTE - Efectivo Digital USD - Cuadre: " . $efectivo_digital_usd . " vs Suma: " . $suma_efectivo_digital_usd_verif . " (Diferencia: " . ($efectivo_digital_usd - $suma_efectivo_digital_usd_verif) . ")");
+                \Log::info("VALIDACION FALTANTE - Efectivo Inicial USD - Cuadre: " . $efectivo_inicial_usd . " vs Suma: " . $suma_efectivo_inicial_usd_verif . " (Diferencia: " . ($efectivo_inicial_usd - $suma_efectivo_inicial_usd_verif) . ")");
+                \Log::info("VALIDACION FALTANTE - Debito Real USD - Cuadre: " . $debito_real_usd . " vs Suma: " . $suma_debito_real_usd_verif . " (Diferencia: " . ($debito_real_usd - $suma_debito_real_usd_verif) . ")");
+                \Log::info("VALIDACION FALTANTE - Debito Digital USD - Cuadre: " . $debito_digital_usd . " vs Suma: " . $suma_debito_digital_usd_verif . " (Diferencia: " . ($debito_digital_usd - $suma_debito_digital_usd_verif) . ")");
+                \Log::info("VALIDACION FALTANTE - Transferencia Real USD - Cuadre: " . $transferencia_real_usd . " vs Suma: " . $suma_transferencia_real . " (Diferencia: " . ($transferencia_real_usd - $suma_transferencia_real) . ")");
+                \Log::info("VALIDACION FALTANTE - Transferencia Digital USD - Cuadre: " . $transferencia_digital_usd . " vs Suma: " . $suma_transferencia_digital . " (Diferencia: " . ($transferencia_digital_usd - $suma_transferencia_digital) . ")");
+                \Log::info("VALIDACION FALTANTE - Biopago Real USD - Cuadre: " . $biopago_real_usd . " vs Suma: " . $suma_biopago_real . " (Diferencia: " . ($biopago_real_usd - $suma_biopago_real) . ")");
+                \Log::info("VALIDACION FALTANTE - Biopago Digital USD - Cuadre: " . $biopago_digital_usd . " vs Suma: " . $suma_biopago_digital . " (Diferencia: " . ($biopago_digital_usd - $suma_biopago_digital) . ")");
+                \Log::info("VALIDACION FALTANTE - Total Diferencia - Cuadre: " . $total_diferencia . " vs Suma: " . $suma_total_diferencia_verif . " (Diferencia: " . ($total_diferencia - $suma_total_diferencia_verif) . ")");
+            }
             
             // ========== VALIDAR FALTANTE ==========
             // Si total_diferencia < -5: FALTANTE (bloquear)
@@ -2826,6 +3232,9 @@ class PedidosController extends Controller
                 $debito_pinpad_real = floatval($cuadre_detallado['debito_pinpad']['real'] ?? 0);
                 $debito_otros_real = floatval($cuadre_detallado['debito_otros']['real'] ?? 0);
                 
+                \Log::info('GUARDAR CIERRE - Tipo: ' . $tipo_cierre . ', Debito Pinpad Real: ' . $debito_pinpad_real . ' Bs, Debito Otros Real: ' . $debito_otros_real . ' Bs');
+                \Log::info('GUARDAR CIERRE - Cuadre detallado debito_otros completo: ' . json_encode($cuadre_detallado['debito_otros'] ?? []));
+                
                 // Sumar ambos débitos convertidos a USD
                 $objcierres->debito = ($debito_pinpad_real / $tasa_bs_safe) + 
                     ($debito_otros_real / $tasa_bs_safe);
@@ -2894,9 +3303,71 @@ class PedidosController extends Controller
                 $objcierres->biopagoserialmontobs = floatval($req->total_biopago ?? 0);
                 
                 // Guardar cuadre_detallado completo como JSON (flexible y sin campos redundantes)
+                // IMPORTANTE: Para consolidado, asegurar que debito_otros tenga la suma correcta
+                if ($tipo_cierre == 1) {
+                    // Verificar y corregir si es necesario
+                    $debito_otros_calculado = floatval($cuadre_detallado['debito_otros']['real'] ?? 0);
+                    
+                    // Sumar directamente desde CierresMetodosPago para verificar
+                    $suma_verificacion_otros = 0;
+                    $cierres_cajeros_verificar = cierres::where('fecha', $today)
+                        ->where('tipo_cierre', 0)
+                        ->get();
+                    
+                    foreach ($cierres_cajeros_verificar as $cierre_cajero_ver) {
+                        $registro_otros_ver = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero_ver->id)
+                            ->where('tipo_pago', 2)
+                            ->where('subtipo', 'otros_puntos')
+                            ->first();
+                        
+                        if ($registro_otros_ver) {
+                            $suma_verificacion_otros += floatval($registro_otros_ver->monto_real ?? 0);
+                        }
+                    }
+                    
+                    \Log::info('GUARDAR CIERRE - ANTES DE GUARDAR - Debito otros en cuadre_detallado: ' . $debito_otros_calculado);
+                    \Log::info('GUARDAR CIERRE - ANTES DE GUARDAR - Suma desde CierresMetodosPago: ' . $suma_verificacion_otros);
+                    
+                    // Si hay discrepancia, corregir el cuadre_detallado
+                    if (abs($debito_otros_calculado - $suma_verificacion_otros) > 0.01) {
+                        \Log::warning('GUARDAR CIERRE - CORRIGIENDO: Debito otros incorrecto. Calculado: ' . $debito_otros_calculado . ', Correcto: ' . $suma_verificacion_otros);
+                        
+                        // Corregir el valor en cuadre_detallado
+                        $cuadre_detallado['debito_otros']['real'] = $suma_verificacion_otros;
+                        $cuadre_detallado['debito_otros']['diferencia'] = 
+                            $suma_verificacion_otros - floatval($cuadre_detallado['debito_otros']['digital'] ?? 0);
+                        
+                        $diferencia_otros = abs($cuadre_detallado['debito_otros']['diferencia']);
+                        if ($diferencia_otros <= 5) {
+                            $cuadre_detallado['debito_otros']['estado'] = 'cuadrado';
+                            $cuadre_detallado['debito_otros']['mensaje'] = 'CUADRADO';
+                        } else if ($cuadre_detallado['debito_otros']['diferencia'] > 0) {
+                            $cuadre_detallado['debito_otros']['estado'] = 'sobra';
+                            $cuadre_detallado['debito_otros']['mensaje'] = 'SOBRAN';
+                        } else {
+                            $cuadre_detallado['debito_otros']['estado'] = 'falta';
+                            $cuadre_detallado['debito_otros']['mensaje'] = 'FALTAN';
+                        }
+                        
+                        \Log::info('GUARDAR CIERRE - CORREGIDO - Nuevo cuadre debito_otros: ' . json_encode($cuadre_detallado['debito_otros']));
+                    }
+                }
+                
                 $objcierres->cuadre_detallado = $cuadre_detallado;
                 
+                \Log::info('GUARDAR CIERRE - Guardando cuadre_detallado. Debito otros real: ' . ($cuadre_detallado['debito_otros']['real'] ?? 'NO EXISTE'));
+                \Log::info('GUARDAR CIERRE - Cuadre completo debito_otros: ' . json_encode($cuadre_detallado['debito_otros'] ?? []));
+                
                 $objcierres->save();
+                
+                // Verificar qué se guardó realmente
+                $cierre_guardado = cierres::find($objcierres->id);
+                $cuadre_guardado = is_string($cierre_guardado->cuadre_detallado) 
+                    ? json_decode($cierre_guardado->cuadre_detallado, true) 
+                    : $cierre_guardado->cuadre_detallado;
+                
+                \Log::info('GUARDAR CIERRE - DESPUÉS DE GUARDAR - Debito otros real en BD: ' . ($cuadre_guardado['debito_otros']['real'] ?? 'NO EXISTE'));
+                \Log::info('GUARDAR CIERRE - Cierre guardado ID: ' . $objcierres->id . ', Tipo: ' . $objcierres->tipo_cierre);
                 
                 // Invalidar caché de addNewPedido para este usuario y fecha
                 $cache_key = "cierre_guardado_usuario_{$id_usuario}_fecha_{$today}";
@@ -2914,16 +3385,12 @@ class PedidosController extends Controller
                     
                     // === REGISTRO 1: PINPAD (Total con cuadre) ===
                     if (!empty($lotes_para_guardar['lotes_pinpad'])) {
-                        // Calcular monto real total de todos los lotes pinpad
-                        $monto_pinpad_real = 0;
-                        foreach ($lotes_para_guardar['lotes_pinpad'] as $lote) {
-                            $monto_pinpad_real += floatval($lote['monto_bs'] ?? 0);
-                        }
-                        
-                        // Obtener monto digital del cuadre_detallado
+                        // OPTIMIZACIÓN: Usar valores directamente del cuadre_detallado (ya calculados por cerrarFun)
+                        // NO recalcular, solo usar los valores ya calculados
+                        $monto_pinpad_real = floatval($cuadre_detallado['debito_pinpad']['real'] ?? 0);
                         $monto_pinpad_digital = floatval($cuadre_detallado['debito_pinpad']['digital'] ?? 0);
                         $monto_pinpad_inicial = floatval($cuadre_detallado['debito_pinpad']['inicial'] ?? 0);
-                        $monto_pinpad_diferencia = $monto_pinpad_real - $monto_pinpad_digital;
+                        $monto_pinpad_diferencia = floatval($cuadre_detallado['debito_pinpad']['diferencia'] ?? 0);
                         $estado_pinpad = $cuadre_detallado['debito_pinpad']['estado'] ?? 'cuadrado';
                         $mensaje_pinpad = $cuadre_detallado['debito_pinpad']['mensaje'] ?? 'CUADRADO';
                         
@@ -2948,19 +3415,12 @@ class PedidosController extends Controller
                     
                     // === REGISTRO 2: OTROS PUNTOS (Total con cuadre) ===
                     if (!empty($lotes_para_guardar['otros_puntos'])) {
-                        // Calcular monto real total de todos los otros puntos
-                        $monto_otros_real = 0;
-                        
-                        foreach ($lotes_para_guardar['otros_puntos'] as $punto) {
-                            // El campo puede venir como 'monto' (nuevo) o 'monto_real' (desde BD al re-guardar)
-                            $monto_punto = floatval($punto['monto_real'] ?? $punto['monto'] ?? 0);
-                            $monto_otros_real += $monto_punto;
-                        }
-                        
-                        // Obtener monto digital del cuadre_detallado
+                        // OPTIMIZACIÓN: Usar valores directamente del cuadre_detallado (ya calculados por cerrarFun)
+                        // NO recalcular, solo usar los valores ya calculados
+                        $monto_otros_real = floatval($cuadre_detallado['debito_otros']['real'] ?? 0);
                         $monto_otros_digital = floatval($cuadre_detallado['debito_otros']['digital'] ?? 0);
                         $monto_otros_inicial = floatval($cuadre_detallado['debito_otros']['inicial'] ?? 0);
-                        $monto_otros_diferencia = $monto_otros_real - $monto_otros_digital;
+                        $monto_otros_diferencia = floatval($cuadre_detallado['debito_otros']['diferencia'] ?? 0);
                         $estado_otros = $cuadre_detallado['debito_otros']['estado'] ?? 'cuadrado';
                         $mensaje_otros = $cuadre_detallado['debito_otros']['mensaje'] ?? 'CUADRADO';
                         
@@ -2978,6 +3438,105 @@ class PedidosController extends Controller
                             'metadatos' => [
                                 'puntos' => $lotes_para_guardar['otros_puntos'],
                                 'cantidad_puntos' => count($lotes_para_guardar['otros_puntos']),
+                                'fecha' => $today
+                            ]
+                        ]);
+                    }
+                }
+                
+                // Si es cierre consolidado (tipo_cierre == 1), guardar también los registros de pinpad y otros puntos consolidados
+                if ($tipo_cierre == 1) {
+                    // Obtener todos los cierres de cajeros de esta fecha
+                    $cierres_cajeros_para_consolidar = cierres::where('fecha', $today)
+                        ->where('tipo_cierre', 0)
+                        ->with('metodosPago')
+                        ->get();
+                    
+                    // Consolidar lotes de pinpad y otros puntos desde todos los cierres de cajeros
+                    $lotes_pinpad_consolidados = [];
+                    $lotes_otros_consolidados = [];
+                    
+                    foreach ($cierres_cajeros_para_consolidar as $cierre_cajero) {
+                        $metodos_pago = $cierre_cajero->metodosPago;
+                        
+                        // Buscar pinpad en los metodosPago
+                        $registro_pinpad = $metodos_pago->where('subtipo', 'pinpad')->first();
+                        if ($registro_pinpad) {
+                            $metadatos = is_string($registro_pinpad->metadatos) 
+                                ? json_decode($registro_pinpad->metadatos, true) 
+                                : $registro_pinpad->metadatos;
+                            
+                            if (isset($metadatos['lotes'])) {
+                                $lotes_pinpad_consolidados = array_merge($lotes_pinpad_consolidados, $metadatos['lotes']);
+                            }
+                        }
+                        
+                        // Buscar otros_puntos en los metodosPago
+                        $registro_otros = $metodos_pago->where('subtipo', 'otros_puntos')->first();
+                        if ($registro_otros) {
+                            $metadatos = is_string($registro_otros->metadatos) 
+                                ? json_decode($registro_otros->metadatos, true) 
+                                : $registro_otros->metadatos;
+                            
+                            if (isset($metadatos['puntos'])) {
+                                $lotes_otros_consolidados = array_merge($lotes_otros_consolidados, $metadatos['puntos']);
+                            }
+                        }
+                    }
+                    
+                    // === REGISTRO 1: PINPAD CONSOLIDADO ===
+                    if (!empty($lotes_pinpad_consolidados) || isset($cuadre_detallado['debito_pinpad'])) {
+                        // Usar valores directamente del cuadre_detallado (ya calculados por cerrarFun)
+                        $monto_pinpad_real = floatval($cuadre_detallado['debito_pinpad']['real'] ?? 0);
+                        $monto_pinpad_digital = floatval($cuadre_detallado['debito_pinpad']['digital'] ?? 0);
+                        $monto_pinpad_inicial = floatval($cuadre_detallado['debito_pinpad']['inicial'] ?? 0);
+                        $monto_pinpad_diferencia = floatval($cuadre_detallado['debito_pinpad']['diferencia'] ?? 0);
+                        $estado_pinpad = $cuadre_detallado['debito_pinpad']['estado'] ?? 'cuadrado';
+                        $mensaje_pinpad = $cuadre_detallado['debito_pinpad']['mensaje'] ?? 'CUADRADO';
+                        
+                        \App\Models\CierresMetodosPago::create([
+                            'id_cierre' => $objcierres->id,
+                            'tipo_pago' => 2, // Débito
+                            'subtipo' => 'pinpad',
+                            'moneda' => 'BS',
+                            'monto_real' => $monto_pinpad_real,
+                            'monto_inicial' => $monto_pinpad_inicial,
+                            'monto_digital' => $monto_pinpad_digital,
+                            'monto_diferencia' => $monto_pinpad_diferencia,
+                            'estado_cuadre' => $estado_pinpad,
+                            'mensaje_cuadre' => $mensaje_pinpad,
+                            'metadatos' => [
+                                'lotes' => $lotes_pinpad_consolidados,
+                                'cantidad_lotes' => count($lotes_pinpad_consolidados),
+                                'fecha' => $today
+                            ]
+                        ]);
+                    }
+                    
+                    // === REGISTRO 2: OTROS PUNTOS CONSOLIDADO ===
+                    if (!empty($lotes_otros_consolidados) || isset($cuadre_detallado['debito_otros'])) {
+                        // Usar valores directamente del cuadre_detallado (ya calculados por cerrarFun)
+                        $monto_otros_real = floatval($cuadre_detallado['debito_otros']['real'] ?? 0);
+                        $monto_otros_digital = floatval($cuadre_detallado['debito_otros']['digital'] ?? 0);
+                        $monto_otros_inicial = floatval($cuadre_detallado['debito_otros']['inicial'] ?? 0);
+                        $monto_otros_diferencia = floatval($cuadre_detallado['debito_otros']['diferencia'] ?? 0);
+                        $estado_otros = $cuadre_detallado['debito_otros']['estado'] ?? 'cuadrado';
+                        $mensaje_otros = $cuadre_detallado['debito_otros']['mensaje'] ?? 'CUADRADO';
+                        
+                        \App\Models\CierresMetodosPago::create([
+                            'id_cierre' => $objcierres->id,
+                            'tipo_pago' => 2, // Débito
+                            'subtipo' => 'otros_puntos',
+                            'moneda' => 'BS',
+                            'monto_real' => $monto_otros_real,
+                            'monto_inicial' => $monto_otros_inicial,
+                            'monto_digital' => $monto_otros_digital,
+                            'monto_diferencia' => $monto_otros_diferencia,
+                            'estado_cuadre' => $estado_otros,
+                            'mensaje_cuadre' => $mensaje_otros,
+                            'metadatos' => [
+                                'puntos' => $lotes_otros_consolidados,
+                                'cantidad_puntos' => count($lotes_otros_consolidados),
                                 'fecha' => $today
                             ]
                         ]);
@@ -3138,7 +3697,7 @@ class PedidosController extends Controller
             
             // Llamar a cerrarFun UNA SOLA VEZ con TODOS los usuarios
             // OPTIMIZACIÓN: Desactivar check_pendiente ya que estamos totalizando cierres ya guardados
-            $cierre_consolidado = $this->cerrarFun(
+            $resultado_cierre_consolidado = $this->cerrarFun(
                 $fecha,
                 [
                     "caja_usd" => $total_caja_usd,
@@ -3156,6 +3715,14 @@ class PedidosController extends Controller
                     'usuario' => $ids_usuarios // Pasar IDs de usuarios para filtrar pedidos
                 ]
             );
+            
+            // Extraer datos de cerrarFun (puede retornar JsonResponse o array)
+            $cierre_consolidado = null;
+            if ($resultado_cierre_consolidado instanceof \Illuminate\Http\JsonResponse) {
+                $cierre_consolidado = $resultado_cierre_consolidado->getData(true);
+            } else {
+                $cierre_consolidado = is_array($resultado_cierre_consolidado) ? $resultado_cierre_consolidado : json_decode($resultado_cierre_consolidado, true);
+            }
             
             // ==============================================
             // 2. GENERAR CIERRES INDIVIDUALES DE CADA CAJERO
@@ -3189,7 +3756,7 @@ class PedidosController extends Controller
                 
                 // Llamar a cerrarFun para este usuario específico
                 // OPTIMIZACIÓN: Desactivar check_pendiente ya que estamos totalizando cierres ya guardados
-                $cierre_individual = $this->cerrarFun(
+                $resultado_cierre_individual = $this->cerrarFun(
                     $fecha,
                     [
                         "caja_usd" => $cierre->efectivo_actual ?? 0,
@@ -3208,7 +3775,15 @@ class PedidosController extends Controller
                     ]
                 );
                 
-                // Calcular efectivo guardado individual
+                // Extraer datos de cerrarFun (puede retornar JsonResponse o array)
+                $cierre_individual = null;
+                if ($resultado_cierre_individual instanceof \Illuminate\Http\JsonResponse) {
+                    $cierre_individual = $resultado_cierre_individual->getData(true);
+                } else {
+                    $cierre_individual = is_array($resultado_cierre_individual) ? $resultado_cierre_individual : json_decode($resultado_cierre_individual, true);
+                }
+                
+                // Usar valores ya calculados por cerrarFun() (no recalcular)
                 $efectivo_usd = $cierre->efectivo_actual ?? 0;
                 $efectivo_cop = $cierre->efectivo_actual_cop ?? 0;
                 $efectivo_bs = $cierre->efectivo_actual_bs ?? 0;
@@ -3217,9 +3792,10 @@ class PedidosController extends Controller
                 $dejar_cop = $cierre->dejar_peso ?? 0;
                 $dejar_bs = $cierre->dejar_bss ?? 0;
                 
-                $guardar_usd = $efectivo_usd - $dejar_usd;
-                $guardar_cop = $efectivo_cop - $dejar_cop;
-                $guardar_bs = $efectivo_bs - $dejar_bs;
+                // Usar efectivo_guardado ya calculado por cerrarFun()
+                $guardar_usd = floatval($cierre_individual['efectivo_guardado_usd'] ?? ($efectivo_usd - $dejar_usd));
+                $guardar_cop = floatval($cierre_individual['efectivo_guardado_cop'] ?? ($efectivo_cop - $dejar_cop));
+                $guardar_bs = floatval($cierre_individual['efectivo_guardado_bs'] ?? ($efectivo_bs - $dejar_bs));
                 
                 $cierres_individuales[] = [
                     'id_usuario' => $cierre->id_usuario,
@@ -3246,10 +3822,10 @@ class PedidosController extends Controller
                 ];
             }
             
-            // Calcular efectivo guardado consolidado (efectivo real - dejar en caja)
-            $total_guardar_usd = $total_caja_usd - $total_dejar_usd;
-            $total_guardar_cop = $total_caja_cop - $total_dejar_cop;
-            $total_guardar_bs = $total_caja_bs - $total_dejar_bs;
+            // Usar efectivo_guardado ya calculado por cerrarFun() (no recalcular)
+            $total_guardar_usd = floatval($cierre_consolidado['efectivo_guardado_usd'] ?? ($total_caja_usd - $total_dejar_usd));
+            $total_guardar_cop = floatval($cierre_consolidado['efectivo_guardado_cop'] ?? ($total_caja_cop - $total_dejar_cop));
+            $total_guardar_bs = floatval($cierre_consolidado['efectivo_guardado_bs'] ?? ($total_caja_bs - $total_dejar_bs));
             
             // Retornar cierre consolidado + cierres individuales + datos introducidos
             return Response::json([
@@ -3493,93 +4069,40 @@ class PedidosController extends Controller
                 return $q;
             });
 
-        // Extraer datos del cuadre_detallado guardado (sin cálculos)
+        // Extraer datos del cuadre_detallado guardado (SIN CÁLCULOS - solo de BD)
         $cuadre_consolidado = null;
         $cuadres_individuales = [];
         
         if ($totalizarcierre && $cierre) {
-            // Cierre consolidado desde el cierre admin
+            // Cierre consolidado desde el cierre admin (sin recálculos)
             $cuadre_consolidado = is_string($cierre->cuadre_detallado) 
                 ? json_decode($cierre->cuadre_detallado, true) 
                 : $cierre->cuadre_detallado;
             
-            // CORRECCIÓN: Si debito_otros.real es 0 pero digital no es 0, recalcular para consolidado
-            if (isset($cuadre_consolidado['debito_otros']) && 
-                floatval($cuadre_consolidado['debito_otros']['real'] ?? 0) == 0 && 
-                floatval($cuadre_consolidado['debito_otros']['digital'] ?? 0) > 0) {
-                
-                // Recalcular consolidado
-                $cuadre_recalculado = $this->cerrarFun($fechareq, [], [
-                    'grafica' => false,
-                    'totalizarcierre' => true,
-                    'check_pendiente' => false,
-                    'usuario' => $id_vendedor
-                ]);
-                
-                if (is_array($cuadre_recalculado)) {
-                    $cuadre_detallado_recalculado = $cuadre_recalculado['cuadre_detallado'] ?? [];
-                    if (isset($cuadre_detallado_recalculado['debito_otros'])) {
-                        $cuadre_consolidado['debito_otros']['real'] = $cuadre_detallado_recalculado['debito_otros']['real'];
-                        $cuadre_consolidado['debito_otros']['diferencia'] = 
-                            $cuadre_consolidado['debito_otros']['real'] - 
-                            $cuadre_consolidado['debito_otros']['digital'];
-                        
-                        $diferencia = abs($cuadre_consolidado['debito_otros']['diferencia']);
-                        if ($diferencia <= 5) {
-                            $cuadre_consolidado['debito_otros']['estado'] = 'cuadrado';
-                            $cuadre_consolidado['debito_otros']['mensaje'] = 'CUADRADO';
-                        } else if ($cuadre_consolidado['debito_otros']['diferencia'] > 0) {
-                            $cuadre_consolidado['debito_otros']['estado'] = 'sobra';
-                            $cuadre_consolidado['debito_otros']['mensaje'] = 'SOBRAN';
-                        } else {
-                            $cuadre_consolidado['debito_otros']['estado'] = 'falta';
-                            $cuadre_consolidado['debito_otros']['mensaje'] = 'FALTAN';
-                        }
-                    }
-                }
-            }
+            \Log::info('=== VER CIERRE - CONSOLIDADO ===');
+            \Log::info('VER CIERRE - Cierre consolidado ID: ' . $cierre->id . ', Tipo: ' . $cierre->tipo_cierre . ', Fecha: ' . $fechareq);
+            \Log::info('VER CIERRE - Total cierres de cajeros: ' . $cierres_cajeros->count());
             
-            // Cuadres individuales desde cierres de cajeros
+            // Sumar valores de debito_otros de todas las cajas individuales para comparar
+            $suma_individuales_debito_otros = 0;
+            $valores_individuales = [];
+            
+            // Cuadres individuales desde cierres de cajeros (sin recálculos)
             foreach ($cierres_cajeros as $cierre_cajero) {
                 $cuadre_individual = is_string($cierre_cajero->cuadre_detallado) 
                     ? json_decode($cierre_cajero->cuadre_detallado, true) 
                     : $cierre_cajero->cuadre_detallado;
                 
-                // CORRECCIÓN: Si debito_otros.real es 0 pero digital no es 0, recalcular para individual
-                if (isset($cuadre_individual['debito_otros']) && 
-                    floatval($cuadre_individual['debito_otros']['real'] ?? 0) == 0 && 
-                    floatval($cuadre_individual['debito_otros']['digital'] ?? 0) > 0) {
-                    
-                    // Recalcular individual
-                    $cuadre_recalculado = $this->cerrarFun($fechareq, [], [
-                        'grafica' => false,
-                        'totalizarcierre' => false,
-                        'check_pendiente' => false,
-                        'usuario' => [$cierre_cajero->id_usuario]
-                    ]);
-                    
-                    if (is_array($cuadre_recalculado)) {
-                        $cuadre_detallado_recalculado = $cuadre_recalculado['cuadre_detallado'] ?? [];
-                        if (isset($cuadre_detallado_recalculado['debito_otros'])) {
-                            $cuadre_individual['debito_otros']['real'] = $cuadre_detallado_recalculado['debito_otros']['real'];
-                            $cuadre_individual['debito_otros']['diferencia'] = 
-                                $cuadre_individual['debito_otros']['real'] - 
-                                $cuadre_individual['debito_otros']['digital'];
-                            
-                            $diferencia = abs($cuadre_individual['debito_otros']['diferencia']);
-                            if ($diferencia <= 5) {
-                                $cuadre_individual['debito_otros']['estado'] = 'cuadrado';
-                                $cuadre_individual['debito_otros']['mensaje'] = 'CUADRADO';
-                            } else if ($cuadre_individual['debito_otros']['diferencia'] > 0) {
-                                $cuadre_individual['debito_otros']['estado'] = 'sobra';
-                                $cuadre_individual['debito_otros']['mensaje'] = 'SOBRAN';
-                            } else {
-                                $cuadre_individual['debito_otros']['estado'] = 'falta';
-                                $cuadre_individual['debito_otros']['mensaje'] = 'FALTAN';
-                            }
-                        }
-                    }
-                }
+                $debito_otros_individual = floatval($cuadre_individual['debito_otros']['real'] ?? 0);
+                $suma_individuales_debito_otros += $debito_otros_individual;
+                
+                $valores_individuales[] = [
+                    'cierre_id' => $cierre_cajero->id,
+                    'usuario_id' => $cierre_cajero->id_usuario,
+                    'debito_otros_real' => $debito_otros_individual
+                ];
+                
+                \Log::info('VER CIERRE - Cierre individual ID: ' . $cierre_cajero->id . ', Usuario: ' . $cierre_cajero->id_usuario . ', Debito otros real: ' . $debito_otros_individual);
                 
                 $cuadres_individuales[] = [
                     'cierre' => $cierre_cajero,
@@ -3587,148 +4110,208 @@ class PedidosController extends Controller
                     'usuario' => $cierre_cajero->usuario
                 ];
             }
+            
+            $debito_otros_consolidado = floatval($cuadre_consolidado['debito_otros']['real'] ?? 0);
+            
+            \Log::info('=== COMPARACIÓN DEBITO OTROS ===');
+            \Log::info('VER CIERRE - Suma de individuales: ' . $suma_individuales_debito_otros . ' Bs');
+            \Log::info('VER CIERRE - Valor en consolidado: ' . $debito_otros_consolidado . ' Bs');
+            \Log::info('VER CIERRE - Diferencia: ' . ($suma_individuales_debito_otros - $debito_otros_consolidado) . ' Bs');
+            \Log::info('VER CIERRE - Valores individuales: ' . json_encode($valores_individuales));
+            \Log::info('VER CIERRE - Cuadre completo debito_otros consolidado: ' . json_encode($cuadre_consolidado['debito_otros'] ?? []));
+            
+            // También verificar desde CierresMetodosPago
+            $suma_metodos_pago = 0;
+            foreach ($cierres_cajeros as $cierre_cajero) {
+                $registro_otros = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero->id)
+                    ->where('tipo_pago', 2)
+                    ->where('subtipo', 'otros_puntos')
+                    ->first();
+                
+                if ($registro_otros) {
+                    $monto_real = floatval($registro_otros->monto_real ?? 0);
+                    $suma_metodos_pago += $monto_real;
+                    \Log::info('VER CIERRE - CierresMetodosPago - Cierre ID: ' . $cierre_cajero->id . ', monto_real: ' . $monto_real);
+                }
+            }
+            
+            \Log::info('VER CIERRE - Suma desde CierresMetodosPago: ' . $suma_metodos_pago . ' Bs');
+            \Log::info('VER CIERRE - Comparación: Consolidado=' . $debito_otros_consolidado . ', Suma Individuales=' . $suma_individuales_debito_otros . ', Suma MetodosPago=' . $suma_metodos_pago);
+            
         } else if ($cierre) {
-            // Cierre individual
+            // Cierre individual (sin recálculos)
             $cuadre_consolidado = is_string($cierre->cuadre_detallado) 
                 ? json_decode($cierre->cuadre_detallado, true) 
                 : $cierre->cuadre_detallado;
             
-            // CORRECCIÓN: Si debito_otros.real es 0 pero digital no es 0, recalcular
-            // Esto corrige cierres guardados con valores incorrectos debido a arrays anidados
-            if (isset($cuadre_consolidado['debito_otros']) && 
-                floatval($cuadre_consolidado['debito_otros']['real'] ?? 0) == 0 && 
-                floatval($cuadre_consolidado['debito_otros']['digital'] ?? 0) > 0) {
+            \Log::info('VER CIERRE - Cierre individual ID: ' . $cierre->id);
+            \Log::info('VER CIERRE - Debito otros real: ' . ($cuadre_consolidado['debito_otros']['real'] ?? 'NO EXISTE'));
+        }
+        
+        // Obtener datos SOLO de cierres y cierres_metodos_pago (SIN CÁLCULOS hasta NOTA)
+        // Los datos después de NOTA sí pueden venir de otros modelos
+        
+        // Obtener lotes desde CierresMetodosPago guardados
+        $lotes_pinpad_guardados = [];
+        $lotes_otros_puntos = [];
+        
+        // Obtener todos los cierres del día para obtener los lotes
+        $cierres_del_dia = cierres::where("fecha", $fechareq)
+            ->when($totalizarcierre, function($q) {
+                // Si es consolidado, obtener cierres de cajeros (tipo_cierre = 0)
+                return $q->where("tipo_cierre", 0);
+            }, function($q) use ($usuarioLogin) {
+                // Si es individual, obtener solo el cierre del usuario
+                return $q->where("tipo_cierre", 0)
+                    ->when($usuarioLogin, function($q2) use ($usuarioLogin) {
+                        return $q2->where("id_usuario", $usuarioLogin);
+                    });
+            })
+            ->with('metodosPago')
+            ->get();
+        
+        // Extraer lotes desde metadatos de CierresMetodosPago
+        foreach ($cierres_del_dia as $cierre_item) {
+            foreach ($cierre_item->metodosPago as $metodo_pago) {
+                $metadatos = is_string($metodo_pago->metadatos) 
+                    ? json_decode($metodo_pago->metadatos, true) 
+                    : $metodo_pago->metadatos;
                 
-                // Recalcular usando cerrarFun para obtener valores correctos
-                $cuadre_recalculado = $this->cerrarFun($fechareq, [], [
-                    'grafica' => false,
-                    'totalizarcierre' => false,
-                    'check_pendiente' => false,
-                    'usuario' => [$usuarioLogin]
-                ]);
-                
-                if (is_array($cuadre_recalculado)) {
-                    $cuadre_detallado_recalculado = $cuadre_recalculado['cuadre_detallado'] ?? [];
-                    if (isset($cuadre_detallado_recalculado['debito_otros'])) {
-                        // Actualizar solo el valor real de debito_otros
-                        $cuadre_consolidado['debito_otros']['real'] = $cuadre_detallado_recalculado['debito_otros']['real'];
-                        $cuadre_consolidado['debito_otros']['diferencia'] = 
-                            $cuadre_consolidado['debito_otros']['real'] - 
-                            $cuadre_consolidado['debito_otros']['digital'];
-                        
-                        // Actualizar estado
-                        $diferencia = abs($cuadre_consolidado['debito_otros']['diferencia']);
-                        if ($diferencia <= 5) {
-                            $cuadre_consolidado['debito_otros']['estado'] = 'cuadrado';
-                            $cuadre_consolidado['debito_otros']['mensaje'] = 'CUADRADO';
-                        } else if ($cuadre_consolidado['debito_otros']['diferencia'] > 0) {
-                            $cuadre_consolidado['debito_otros']['estado'] = 'sobra';
-                            $cuadre_consolidado['debito_otros']['mensaje'] = 'SOBRAN';
-                        } else {
-                            $cuadre_consolidado['debito_otros']['estado'] = 'falta';
-                            $cuadre_consolidado['debito_otros']['mensaje'] = 'FALTAN';
-                        }
+                if ($metodo_pago->subtipo == 'pinpad') {
+                    $lotes = $metadatos['lotes'] ?? [];
+                    foreach ($lotes as $lote) {
+                        $lotes_pinpad_guardados[] = [
+                            'banco' => $lote['banco_nombre'] ?? $lote['banco'] ?? '',
+                            'lote' => $lote['terminal'] ?? $lote['lote'] ?? '',
+                            'monto' => number_format(floatval($lote['monto_bs'] ?? $lote['monto'] ?? 0), 2),
+                        ];
+                    }
+                } else if ($metodo_pago->subtipo == 'otros_puntos') {
+                    $lotes = $metadatos['lotes'] ?? [];
+                    foreach ($lotes as $lote) {
+                        $lotes_otros_puntos[] = [
+                            'banco' => $lote['banco'] ?? '',
+                            'lote' => $lote['descripcion'] ?? $lote['lote'] ?? '',
+                            'monto' => number_format(floatval($lote['monto'] ?? 0), 2),
+                        ];
                     }
                 }
             }
         }
         
-        // Para compatibilidad con código existente, mantener facturado pero solo para datos que no están en cierres
-        $facturado = $this->cerrarFun($fechareq, [], [
-            'grafica' => false,
-            'totalizarcierre' => $totalizarcierre,
-            'check_pendiente' => true,
-            'usuario' => $usuario ? $usuario : null
-        ]);
-        if (is_array($facturado)) {
-            $total_inventario = $facturado["total_inventario"];
-            $total_inventario_base = $facturado["total_inventario_base"];
-            $cred_total = $facturado["cred_total"];
-            $pedidos_abonos = $facturado["pedidos_abonos"];
-            $abonosdeldia = $facturado["abonosdeldia"];
-            
-            // Obtener lotes de pinpad desde CierresMetodosPago guardados
-            $lotes_pinpad_guardados = [];
-            
-            // Obtener todos los cierres del día para obtener los lotes
-            $cierres_del_dia = cierres::where("fecha", $fechareq)
-                ->when($totalizarcierre, function($q) {
-                    // Si es consolidado, obtener cierres de cajeros (tipo_cierre = 0)
-                    return $q->where("tipo_cierre", 0);
-                }, function($q) use ($usuarioLogin) {
-                    // Si es individual, obtener solo el cierre del usuario
-                    return $q->where("tipo_cierre", 0)
-                        ->when($usuarioLogin, function($q2) use ($usuarioLogin) {
-                            return $q2->where("id_usuario", $usuarioLogin);
-                        });
-                })
-                ->with(['metodosPago' => function($query) {
-                    $query->where('subtipo', 'pinpad');
-                }])
-                ->get();
-            
-            // Extraer lotes de pinpad desde metadatos
-            foreach ($cierres_del_dia as $cierre_item) {
-                foreach ($cierre_item->metodosPago as $metodo_pago) {
-                    if ($metodo_pago->subtipo == 'pinpad') {
-                        $metadatos = is_string($metodo_pago->metadatos) 
-                            ? json_decode($metodo_pago->metadatos, true) 
-                            : $metodo_pago->metadatos;
-                        
-                        $lotes = $metadatos['lotes'] ?? [];
-                        foreach ($lotes as $lote) {
-                            $lotes_pinpad_guardados[] = [
-                                'banco' => $lote['banco_nombre'] ?? $lote['banco'] ?? '',
-                                'lote' => $lote['terminal'] ?? $lote['lote'] ?? '',
-                                'monto' => number_format(floatval($lote['monto_bs'] ?? $lote['monto'] ?? 0), 2),
-                            ];
-                        }
-                    }
-                }
-            }
-            
-            // Reemplazar o agregar lotes de pinpad guardados
-            if (!empty($lotes_pinpad_guardados)) {
-                // Si ya hay lotes en facturado, reemplazar solo los pinpad
-                if (isset($facturado["lotes"]) && is_array($facturado["lotes"])) {
-                    // Filtrar lotes que no sean pinpad
-                    $lotes_no_pinpad = [];
-                    foreach ($facturado["lotes"] as $lote) {
-                        // Los lotes de pinpad tienen 'banco' y 'lote', pero no tienen un campo 'tipo'
-                        // Vamos a asumir que si tiene 'banco' y 'lote' y no está en nuestros guardados, puede ser otro tipo
-                        // Mejor: agregar todos los lotes existentes y luego los pinpad guardados
-                        $lotes_no_pinpad[] = $lote;
-                    }
-                    // Agregar los lotes de pinpad guardados al final
-                    $facturado["lotes"] = array_merge($lotes_no_pinpad, $lotes_pinpad_guardados);
-                } else {
-                    $facturado["lotes"] = $lotes_pinpad_guardados;
-                }
-            }
-        } else {
-            return $facturado;
+        // Obtener caja inicial desde cuadre_detallado guardado (valores guardados en cierres)
+        $caja_inicial = 0;
+        $caja_inicialpeso = 0;
+        $caja_inicialbs = 0;
+        
+        if ($cuadre_consolidado) {
+            // Leer valores iniciales desde cuadre_detallado guardado
+            $caja_inicial = floatval($cuadre_consolidado['efectivo_usd']['inicial'] ?? 0);
+            $caja_inicialpeso = floatval($cuadre_consolidado['efectivo_cop']['inicial'] ?? 0);
+            $caja_inicialbs = floatval($cuadre_consolidado['efectivo_bs']['inicial'] ?? 0);
         }
-
-        if (is_object($facturado)) {
-            return $facturado;
-        }
+        
+        // Construir facturado solo con valores de cierres (para compatibilidad)
+        $facturado = [
+            // Valores de cierres guardados
+            "precio" => $cierre->precio ?? 0,
+            "precio_base" => $cierre->precio_base ?? 0,
+            "ganancia" => $cierre->ganancia ?? 0,
+            "porcentaje" => $cierre->porcentaje ?? 0,
+            "desc_total" => $cierre->desc_total ?? 0,
+            "numventas" => $cierre->numventas ?? 0,
+            "total" => $cierre->totalventa ?? 0,
+            
+            // Métodos de pago desde cierres (valores guardados)
+            "1" => $cierre->transferencia ?? 0,
+            "2" => $cierre->debito ?? 0,
+            "3" => $cierre->efectivo ?? 0,
+            "4" => 0, // Crédito - viene de otros modelos (después de NOTA)
+            "5" => $cierre->caja_biopago ?? 0,
+            
+            // Totales guardados
+            "total_caja" => $cierre->efectivo ?? 0,
+            "total_punto" => $cierre->debito ?? 0,
+            "total_biopago" => $cierre->caja_biopago ?? 0,
+            
+            // Caja inicial desde cuadre_detallado guardado (valores guardados en cierres)
+            "caja_inicial" => $caja_inicial,
+            "caja_inicialpeso" => $caja_inicialpeso,
+            "caja_inicialbs" => $caja_inicialbs,
+            
+            // Lotes desde CierresMetodosPago
+            "lotes" => array_merge($lotes_pinpad_guardados, $lotes_otros_puntos),
+            "biopagos" => $cierre->biopagoserial ? [[
+                "serial" => $cierre->biopagoserial,
+                "monto" => $cierre->biopagoserialmontobs ?? 0
+            ]] : [],
+        ];
+        
+        // Valores que vienen de otros modelos (después de NOTA - se calculan directamente)
+        // Estos valores se usan DESPUÉS de la sección NOTA, así que está bien calcularlos
+        // NO usar cerrarFun() - calcular directamente desde modelos
+        
+        // Total inventario
+        $total_inventario = DB::table("inventarios")
+            ->select(DB::raw("sum(precio*cantidad) as suma"))->first()->suma ?? 0;
+        $total_inventario_base = DB::table("inventarios")
+            ->select(DB::raw("sum(precio_base*cantidad) as suma"))->first()->suma ?? 0;
+        
+        // Créditos totales
+        $cred_total = clientes::selectRaw("*,@credito := (SELECT COALESCE(sum(monto),0) FROM pago_pedidos WHERE id_pedido IN (SELECT id FROM pedidos WHERE id_cliente=clientes.id) AND tipo=4) as credito,
+        @abono := (SELECT COALESCE(sum(monto),0) FROM pago_pedidos WHERE id_pedido IN (SELECT id FROM pedidos WHERE id_cliente=clientes.id) AND cuenta=0) as abono,
+        (@credito-@abono) as saldo")
+            ->get(["saldo"])
+            ->sum("saldo");
+        
+        // Abonos del día
+        $pedidos_del_dia = pedidos::where("fecha_factura", "LIKE", $fechareq . "%")
+            ->where("estado", 1)
+            ->whereIn("id_vendedor", $id_vendedor)
+            ->with(['pagos', 'cliente'])
+            ->get();
+        
+        $abonosdeldia = 0;
+        $pedidos_abonos = $pedidos_del_dia
+            ->filter(function($pedido) {
+                // Filtrar pedidos que tienen abonos (cuenta = 0)
+                return $pedido->pagos->where("cuenta", 0)->where("monto", "<>", 0)->isNotEmpty();
+            })
+            ->map(function ($q) use (&$abonosdeldia) {
+                $saldoDebe = $q->pagos->where("tipo", 4)->sum("monto");
+                $saldoAbono = $q->pagos->where("cuenta", 0)->sum("monto");
+                
+                $q->saldoDebe = $saldoDebe;
+                $q->saldoAbono = $saldoAbono;
+                
+                $abonosdeldia += $q->pagos->where("cuenta", 0)->sum("monto");
+                return $q;
+            });
+        // Calcular cierre_tot desde valores guardados (no calculado)
+        $cierre_tot = $cierre->debito + $cierre->efectivo + $cierre->transferencia + $cierre->caja_biopago;
+        
+        // Calcular facturado_tot desde valores guardados (no calculado)
+        $facturado_tot = $facturado[2] + $facturado[3] + $facturado[1] + $facturado[5];
+        
         $arr_send = [
             "referencias" => $pagos_referencias,
             "cierre" => $cierre,
-            "cierre_tot" => moneda($cierre->debito + $cierre->efectivo + $cierre->transferencia + $cierre->caja_biopago),
+            "cierre_tot" => moneda($cierre_tot),
 
+            // Valores que vienen de otros modelos (después de NOTA)
             "total_inventario" => ($total_inventario),
             "total_inventario_format" => moneda($total_inventario),
             "total_inventario_base" => ($total_inventario_base),
             "total_inventario_base_format" => moneda($total_inventario_base),
 
-            "precio" => moneda($facturado["precio"]),
-            "precio_base" => moneda($facturado["precio_base"]),
-            "ganancia" => moneda(round($facturado["ganancia"], 2)),
-            "porcentaje" => moneda($facturado["porcentaje"]),
-            "desc_total" => moneda(round($facturado["desc_total"], 2)),
+            // Valores desde cierres guardados (sin cálculos)
+            "precio" => moneda($cierre->precio ?? 0),
+            "precio_base" => moneda($cierre->precio_base ?? 0),
+            "ganancia" => moneda(round($cierre->ganancia ?? 0, 2)),
+            "porcentaje" => moneda($cierre->porcentaje ?? 0),
+            "desc_total" => moneda(round($cierre->desc_total ?? 0, 2)),
             "facturado" => $facturado,
-            "facturado_tot" => moneda($facturado[2] + $facturado[3] + $facturado[1] + $facturado[5]),
+            "facturado_tot" => moneda($facturado_tot),
             "sucursal" => $sucursal,
             "movimientos" => $movimientos,
             "movimientosInventario" => $movimientosInventario,

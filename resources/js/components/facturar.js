@@ -4152,6 +4152,9 @@ export default function Facturar({
                     const totalAprobadoFinal = nuevasTransacciones.reduce((sum, t) => sum + t.monto, 0);
                     const numTransacciones = nuevasTransacciones.length;
                     
+                    // Obtener el total de la factura en bolívares (ya viene calculado en el pedido)
+                    const totalFacturaBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
+                    
                     // Limpiar transacciones del mapa para este pedido
                     if (pedidoData?.id) {
                         limpiarTransaccionesPedido(pedidoData.id);
@@ -4171,7 +4174,21 @@ export default function Facturar({
                     setDebito(totalAprobadoFinal.toFixed(2));
                     
                     notificar({ data: { msj: `✓ POS Completado - ${numTransacciones} transacción(es) - Total: Bs ${totalAprobadoFinal.toFixed(2)}`, estado: true } });
-                    procesarPagoInterno(posPendingCallback, refFinal);
+                    
+                    // Si el monto total aprobado es igual al total de la factura en bolívares, procesar e imprimir automáticamente
+                    const diferencia = Math.abs(totalAprobadoFinal - totalFacturaBs);
+                    if (diferencia < 0.01) { // Tolerancia de 0.01 para comparación de decimales
+                        // El monto aprobado coincide exactamente con el total de la factura
+                        // Procesar e imprimir automáticamente
+                        setTimeout(() => {
+                            if (facturar_e_imprimir) {
+                                facturar_e_imprimir();
+                            }
+                        }, 100); // Pequeño delay para asegurar que el débito se haya actualizado
+                    } else {
+                        // Solo procesar el pago sin facturar
+                        procesarPagoInterno(posPendingCallback, refFinal);
+                    }
                     setPosPendingCallback(null);
                 }
             } else {
@@ -4236,7 +4253,24 @@ export default function Facturar({
         if (totalCubierto && !forzarSinProcesar) {
             // Total cubierto: procesar pago y facturar
             notificar({ data: { msj: `✓ POS Completado - ${numTransacciones} transacción(es) - Total: Bs ${totalAprobado.toFixed(2)}`, estado: true } });
-            procesarPagoInterno(posPendingCallback, refFinal);
+            
+            // Obtener el total de la factura en bolívares (ya viene calculado en el pedido)
+            const totalFacturaBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
+            
+            // Si el monto total aprobado es igual al total de la factura en bolívares, procesar e imprimir automáticamente
+            const diferencia = Math.abs(totalAprobado - totalFacturaBs);
+            if (diferencia < 0.01) { // Tolerancia de 0.01 para comparación de decimales
+                // El monto aprobado coincide exactamente con el total de la factura
+                // Procesar e imprimir automáticamente
+                setTimeout(() => {
+                    if (facturar_e_imprimir) {
+                        facturar_e_imprimir();
+                    }
+                }, 500); // Pequeño delay para asegurar que el débito se haya actualizado
+            } else {
+                // Solo procesar el pago sin facturar
+                procesarPagoInterno(posPendingCallback, refFinal);
+            }
         } else {
             // Total NO cubierto: solo aplicar monto al campo débito, el usuario completará con otros métodos
             const restante = montoOriginal - totalAprobado;

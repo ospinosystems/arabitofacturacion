@@ -1785,6 +1785,34 @@ export default function PagarMain({
         }
     }, [efectivo_dolar, efectivo_bs, efectivo_peso, dolar, peso]);
 
+    // Auto-procesar e imprimir cuando el total de transacciones POS aprobadas coincida con el total en Bolívares
+    useEffect(() => {
+        if (!pedidoData?.id || !posTransaccionesPorPedido || !posTransaccionesPorPedido[pedidoData.id]) {
+            return;
+        }
+
+        const transacciones = posTransaccionesPorPedido[pedidoData.id];
+        if (!transacciones || transacciones.length === 0) {
+            return;
+        }
+
+        // Calcular el total aprobado sumando todos los montos de las transacciones
+        const totalAprobado = transacciones.reduce((sum, t) => sum + parseFloat(t.monto || 0), 0);
+
+        // Obtener el total de la factura en bolívares (ya viene calculado en el pedido)
+        const totalFacturaBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
+
+        // Si el total aprobado coincide exactamente con el total de la factura, procesar e imprimir automáticamente
+        const diferencia = Math.abs(totalAprobado - totalFacturaBs);
+        if (diferencia < 0.01 && totalAprobado > 0 && totalFacturaBs > 0) {
+            // El monto aprobado coincide exactamente con el total de la factura
+            // Ejecutar inmediatamente sin delay para asegurar que se detecte el cambio
+            if (facturar_e_imprimir) {
+                facturar_e_imprimir();
+            }
+        }
+    }, [posTransaccionesPorPedido, pedidoData?.id, pedidoData?.bs_clean, pedidoData?.bs, facturar_e_imprimir]);
+
     useEffect(() => {
         getPedidosFast();
     }, []);
