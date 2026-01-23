@@ -2158,13 +2158,8 @@ export default function PagarMain({
     useHotkeys(
         "ctrl+enter",
         (event) => {
-            console.log("ctrl+enter");
-            console.log(showModalPosDebito);
-            console.log(togglereferenciapago);
-            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
-            if (!event.repeat) {
+            
                 facturar_e_imprimir();
-            }
         },
         {
             keydown: true,
