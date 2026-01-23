@@ -3836,19 +3836,66 @@ export default function Facturar({
     };
 
     const facturar_e_imprimir = () => {
-        facturar_pedido(() => {
-            toggleImprimirTicket();
+        console.log('[FACTURAR_E_IMPRIMIR] Inicio', {
+            timestamp: new Date().toISOString(),
+            pedidoData_id: pedidoData?.id,
+            pedidoData_exists: !!pedidoData,
+            facturar_pedido_exists: typeof facturar_pedido === 'function',
+            toggleImprimirTicket_exists: typeof toggleImprimirTicket === 'function'
         });
+        
+        if (typeof facturar_pedido !== 'function') {
+            console.error('[FACTURAR_E_IMPRIMIR] ERROR: facturar_pedido no es una función', {
+                type: typeof facturar_pedido,
+                value: facturar_pedido
+            });
+            return;
+        }
+        
+        try {
+            console.log('[FACTURAR_E_IMPRIMIR] Llamando a facturar_pedido con callback toggleImprimirTicket');
+            facturar_pedido(() => {
+                console.log('[FACTURAR_E_IMPRIMIR] Callback ejecutado, llamando toggleImprimirTicket');
+                if (typeof toggleImprimirTicket === 'function') {
+                    toggleImprimirTicket();
+                    console.log('[FACTURAR_E_IMPRIMIR] toggleImprimirTicket ejecutado');
+                } else {
+                    console.error('[FACTURAR_E_IMPRIMIR] ERROR: toggleImprimirTicket no es una función');
+                }
+            });
+            console.log('[FACTURAR_E_IMPRIMIR] facturar_pedido() llamado exitosamente');
+        } catch (error) {
+            console.error('[FACTURAR_E_IMPRIMIR] ERROR al ejecutar:', error);
+        }
     };
     const [puedeFacturarTransfe, setpuedeFacturarTransfe] = useState(true);
     const [puedeFacturarTransfeTime, setpuedeFacturarTransfeTime] =
         useState(null);
     const setPagoPedido = (callback = null) => {
+        console.log('[SET_PAGO_PEDIDO] Inicio', {
+            timestamp: new Date().toISOString(),
+            pedidoData_id: pedidoData?.id,
+            callback_exists: typeof callback === 'function',
+            debito: debito,
+            debitos: debitos,
+            efectivo: efectivo,
+            transferencia: transferencia,
+            credito: credito,
+            biopago: biopago
+        });
+        
         // Validar que si hay descuentos en algún ítem, debe haber un cliente registrado (distinto al por defecto id=1)
         const tieneDescuentos = pedidoData?.items?.some(item => item.descuento && parseFloat(item.descuento) > 0);
         const clientePorDefecto = !pedidoData?.id_cliente || pedidoData.id_cliente == 1;
         
+        console.log('[SET_PAGO_PEDIDO] Validación descuentos', {
+            tieneDescuentos,
+            clientePorDefecto,
+            id_cliente: pedidoData?.id_cliente
+        });
+        
         if (tieneDescuentos && clientePorDefecto) {
+            console.warn('[SET_PAGO_PEDIDO] Bloqueado: descuentos sin cliente registrado');
             alert("Error: El pedido tiene descuentos aplicados. Debe registrar un cliente antes de procesar el pago.");
             return;
         }
@@ -3856,7 +3903,7 @@ export default function Facturar({
         // DEBUG: Log para diagnosticar problema intermitente con PINPAD
         // Si hay débito pero sucursaldata está vacío o sin pinpad, loguear para diagnóstico
         if (debito && parseFloat(debito) > 0) {
-            console.log('[PINPAD DEBUG]', {
+            console.log('[SET_PAGO_PEDIDO] [PINPAD DEBUG]', {
                 debito,
                 sucursaldata_exists: !!sucursaldata,
                 sucursaldata_pinpad: sucursaldata?.pinpad,
@@ -3867,7 +3914,7 @@ export default function Facturar({
             
             // Si sucursaldata está vacío o es string, intentar recargar datos de sucursal
             if (!sucursaldata || typeof sucursaldata === 'string') {
-                console.warn('[PINPAD DEBUG] sucursaldata perdido, recargando...');
+                console.warn('[SET_PAGO_PEDIDO] [PINPAD DEBUG] sucursaldata perdido, recargando...');
                 getSucursalFun();
             }
         }
@@ -3875,35 +3922,60 @@ export default function Facturar({
         // Verificar si hay débitos en el array
         const debitosValidos = debitos.filter(d => parseFloat(d.monto) > 0);
         
+        console.log('[SET_PAGO_PEDIDO] Validación débitos', {
+            debitosValidos_count: debitosValidos.length,
+            debitos_total: debitos.length,
+            sucursaldata_pinpad: sucursaldata?.pinpad,
+            forzarReferenciaManual
+        });
+        
         // Si hay débitos y la sucursal tiene PINPAD activo (y NO está forzando manual)
         if (debitosValidos.length > 0 && sucursaldata?.pinpad && !forzarReferenciaManual) {
+            console.log('[SET_PAGO_PEDIDO] PINPAD activo, buscando débito sin procesar');
             // Buscar el primer débito sin referencia o no bloqueado
             const debitoSinProcesar = debitosValidos.find(d => !d.bloqueado || !d.referencia || d.referencia.length !== 4);
             
             if (debitoSinProcesar) {
+                console.log('[SET_PAGO_PEDIDO] Débito sin procesar encontrado, abriendo modal POS', {
+                    debito: debitoSinProcesar,
+                    index: debitos.findIndex(d => d === debitoSinProcesar)
+                });
                 // Encontrar el índice del débito sin procesar
                 const index = debitos.findIndex(d => d === debitoSinProcesar);
                 // Abrir modal POS para este débito específico
                 abrirModalPosDebitoConMonto(debitoSinProcesar.monto, index);
                 return;
+            } else {
+                console.log('[SET_PAGO_PEDIDO] Todos los débitos están procesados');
             }
         }
         
         // Validar referencias de débitos obligatorias (si NO hay PINPAD o si está forzando manual)
         if (debitosValidos.length > 0) {
+            console.log('[SET_PAGO_PEDIDO] Validando referencias de débitos');
             for (let i = 0; i < debitosValidos.length; i++) {
                 const debito = debitosValidos[i];
+                console.log('[SET_PAGO_PEDIDO] Validando débito', {
+                    index: i,
+                    debito_index: debitos.indexOf(debito),
+                    referencia: debito.referencia,
+                    referencia_length: debito.referencia?.length
+                });
                 if (!debito.referencia) {
+                    console.warn('[SET_PAGO_PEDIDO] Débito sin referencia, abortando');
                     alert(`Error: Debe ingresar la referencia para la tarjeta #${debitos.indexOf(debito) + 1}`);
                     return;
                 }
                 if (debito.referencia.length !== 4) {
+                    console.warn('[SET_PAGO_PEDIDO] Referencia inválida, abortando');
                     alert(`Error: La referencia de la tarjeta #${debitos.indexOf(debito) + 1} debe tener exactamente 4 dígitos.`);
                     return;
                 }
             }
+            console.log('[SET_PAGO_PEDIDO] Todas las referencias son válidas');
         }
         
+        console.log('[SET_PAGO_PEDIDO] Mostrando confirmación');
         if (
             confirm(
                 "¿Realmente desea guardar e imprimir pedido (" +
@@ -3911,21 +3983,52 @@ export default function Facturar({
                     ")?"
             )
         ) {
+            console.log('[SET_PAGO_PEDIDO] Confirmación aceptada');
             // Limpiar error si la referencia está cargada
             setDebitoRefError(false);
             if (transferencia && !refPago.filter((e) => e.tipo == 1).length) {
+                console.warn('[SET_PAGO_PEDIDO] Error: falta referencia de transferencia');
                 alert(
                     "Error: Debe cargar referencia de transferencia electrónica."
                 );
             } else {
-                procesarPagoInterno(callback);
+                console.log('[SET_PAGO_PEDIDO] Llamando procesarPagoInterno');
+                if (typeof procesarPagoInterno !== 'function') {
+                    console.error('[SET_PAGO_PEDIDO] ERROR: procesarPagoInterno no es una función');
+                    return;
+                }
+                try {
+                    procesarPagoInterno(callback);
+                    console.log('[SET_PAGO_PEDIDO] procesarPagoInterno() llamado exitosamente');
+                } catch (error) {
+                    console.error('[SET_PAGO_PEDIDO] ERROR al ejecutar procesarPagoInterno:', error);
+                }
             }
+        } else {
+            console.log('[SET_PAGO_PEDIDO] Confirmación cancelada por el usuario');
         }
     };
     
     // Función interna para procesar el pago (llamada después de POS exitoso o sin débito)
     // refOverride: permite pasar la referencia directamente (para cuando viene del POS)
     const procesarPagoInterno = (callback = null, refOverride = null) => {
+        console.log('[PROCESAR_PAGO_INTERNO] Inicio', {
+            timestamp: new Date().toISOString(),
+            pedidoData_id: pedidoData?.id,
+            callback_exists: typeof callback === 'function',
+            refOverride,
+            debito,
+            debitos,
+            efectivo,
+            efectivo_bs,
+            efectivo_peso,
+            efectivo_dolar,
+            transferencia,
+            biopago,
+            credito,
+            vuelto
+        });
+        
         setLoading(true);
         // Construir pagos adicionales de efectivo (Bs y COP)
         let pagosAdicionales = [];
@@ -3978,31 +4081,52 @@ export default function Facturar({
             pagosAdicionales: pagosAdicionales.length > 0 ? pagosAdicionales : null,
         };
         
+        console.log('[PROCESAR_PAGO_INTERNO] Enviando pago al servidor', {
+            params: JSON.stringify(params, null, 2)
+        });
+        
         db.setPagoPedido(params).then((res) => {
+            console.log('[PROCESAR_PAGO_INTERNO] Respuesta del servidor', {
+                estado: res.data?.estado,
+                msj: res.data?.msj,
+                id_tarea: res.data?.id_tarea
+            });
+            
             notificar(res);
             setLoading(false);
             if (res.data.estado) {
+                console.log('[PROCESAR_PAGO_INTERNO] Pago procesado exitosamente');
                 // Limpiar datos de localStorage para este pedido procesado
                 const pedidoId = params.id;
                 if (pedidoId) {
+                    console.log('[PROCESAR_PAGO_INTERNO] Limpiando transacciones del pedido:', pedidoId);
                     limpiarTransaccionesPedido(pedidoId);
                 }
                 
+                console.log('[PROCESAR_PAGO_INTERNO] Actualizando lista de pedidos y limpiando estado');
                 getPedidosFast();
                 setPedidoData({});
                 setSelectItem(null);
                 setviewconfigcredito(false);
                 if (callback) {
+                    console.log('[PROCESAR_PAGO_INTERNO] Ejecutando callback');
                     callback();
                 }
+                console.log('[PROCESAR_PAGO_INTERNO] Flujo completado exitosamente');
             }
             if (res.data.estado === false) {
+                console.warn('[PROCESAR_PAGO_INTERNO] Pago rechazado, abriendo validación de tarea', {
+                    id_tarea: res.data.id_tarea
+                });
                 setLastDbRequest({
                     dbFunction: db.setPagoPedido,
                     params,
                 });
                 openValidationTarea(res.data.id_tarea);
             }
+        }).catch(error => {
+            console.error('[PROCESAR_PAGO_INTERNO] ERROR en setPagoPedido:', error);
+            setLoading(false);
         });
     };
     
@@ -4450,19 +4574,50 @@ export default function Facturar({
         }
     };
     const facturar_pedido = (callback = null) => {
-        if (pedidoData.id) {
-            if (credito) {
-                db.checkDeuda({ id_cliente: pedidoData.id_cliente }).then(
-                    (res) => {
-                        if (res.data) {
-                            let p = res.data.pedido_total;
-                            setdatadeudacredito(p);
-                            setviewconfigcredito(true);
-                        }
+        console.log('[FACTURAR_PEDIDO] Inicio', {
+            timestamp: new Date().toISOString(),
+            pedidoData_id: pedidoData?.id,
+            pedidoData_exists: !!pedidoData,
+            credito: credito,
+            callback_exists: typeof callback === 'function',
+            setPagoPedido_exists: typeof setPagoPedido === 'function'
+        });
+        
+        if (!pedidoData || !pedidoData.id) {
+            console.warn('[FACTURAR_PEDIDO] No hay pedidoData.id, abortando');
+            return;
+        }
+        
+        if (credito) {
+            console.log('[FACTURAR_PEDIDO] Es crédito, verificando deuda', {
+                id_cliente: pedidoData.id_cliente
+            });
+            db.checkDeuda({ id_cliente: pedidoData.id_cliente }).then(
+                (res) => {
+                    console.log('[FACTURAR_PEDIDO] Respuesta checkDeuda:', res);
+                    if (res.data) {
+                        let p = res.data.pedido_total;
+                        console.log('[FACTURAR_PEDIDO] Deuda encontrada:', p);
+                        setdatadeudacredito(p);
+                        setviewconfigcredito(true);
+                    } else {
+                        console.log('[FACTURAR_PEDIDO] No hay deuda, continuando');
                     }
-                );
-            } else {
+                }
+            ).catch(error => {
+                console.error('[FACTURAR_PEDIDO] ERROR en checkDeuda:', error);
+            });
+        } else {
+            console.log('[FACTURAR_PEDIDO] No es crédito, llamando setPagoPedido');
+            if (typeof setPagoPedido !== 'function') {
+                console.error('[FACTURAR_PEDIDO] ERROR: setPagoPedido no es una función');
+                return;
+            }
+            try {
                 setPagoPedido(callback);
+                console.log('[FACTURAR_PEDIDO] setPagoPedido() llamado exitosamente');
+            } catch (error) {
+                console.error('[FACTURAR_PEDIDO] ERROR al ejecutar setPagoPedido:', error);
             }
         }
     };
