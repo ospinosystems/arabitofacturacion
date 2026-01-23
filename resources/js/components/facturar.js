@@ -3843,13 +3843,50 @@ export default function Facturar({
     const [puedeFacturarTransfe, setpuedeFacturarTransfe] = useState(true);
     const [puedeFacturarTransfeTime, setpuedeFacturarTransfeTime] =
         useState(null);
+    // Ref para evitar ejecuciones múltiples de setPagoPedido
+    const procesandoPagoRef = useRef(false);
+    
     const setPagoPedido = (callback = null) => {
+        // Log detallado de la llamada
+        const timestamp = new Date().toISOString();
+        const stackTrace = new Error().stack;
+        const callerInfo = stackTrace ? stackTrace.split('\n').slice(1, 4).join(' -> ') : 'Stack trace no disponible';
+        
+        console.log('=== SETPAGOPEDIDO LLAMADO ===', {
+            timestamp,
+            pedidoId: pedidoData?.id,
+            callback: callback ? 'Sí' : 'No',
+            procesando: procesandoPagoRef.current,
+            caller: callerInfo,
+            stackTrace: stackTrace?.split('\n').slice(1, 6)
+        });
+        
+        // Evitar ejecuciones múltiples
+        if (procesandoPagoRef.current) {
+            console.warn('⚠️ SETPAGOPEDIDO BLOQUEADO - Ya está en proceso', {
+                timestamp,
+                pedidoId: pedidoData?.id,
+                caller: callerInfo
+            });
+            return;
+        }
+        
+        console.log('✅ SETPAGOPEDIDO INICIANDO PROCESO', {
+            timestamp,
+            pedidoId: pedidoData?.id
+        });
+        
         // Validar que si hay descuentos en algún ítem, debe haber un cliente registrado (distinto al por defecto id=1)
         const tieneDescuentos = pedidoData?.items?.some(item => item.descuento && parseFloat(item.descuento) > 0);
         const clientePorDefecto = !pedidoData?.id_cliente || pedidoData.id_cliente == 1;
         
         if (tieneDescuentos && clientePorDefecto) {
+            console.log('❌ SETPAGOPEDIDO CANCELADO - Descuentos sin cliente', {
+                timestamp: new Date().toISOString(),
+                pedidoId: pedidoData?.id
+            });
             alert("Error: El pedido tiene descuentos aplicados. Debe registrar un cliente antes de procesar el pago.");
+            procesandoPagoRef.current = false;
             return;
         }
         
@@ -3883,7 +3920,14 @@ export default function Facturar({
             if (debitoSinProcesar) {
                 // Encontrar el índice del débito sin procesar
                 const index = debitos.findIndex(d => d === debitoSinProcesar);
+                console.log('🔄 SETPAGOPEDIDO - Abriendo modal POS', {
+                    timestamp: new Date().toISOString(),
+                    pedidoId: pedidoData?.id,
+                    monto: debitoSinProcesar.monto,
+                    index
+                });
                 // Abrir modal POS para este débito específico
+                // Nota: El flag se mantiene activo porque el pago continuará después del POS
                 abrirModalPosDebitoConMonto(debitoSinProcesar.monto, index);
                 return;
             }
@@ -3894,11 +3938,24 @@ export default function Facturar({
             for (let i = 0; i < debitosValidos.length; i++) {
                 const debito = debitosValidos[i];
                 if (!debito.referencia) {
+                    console.log('❌ SETPAGOPEDIDO CANCELADO - Referencia faltante', {
+                        timestamp: new Date().toISOString(),
+                        pedidoId: pedidoData?.id,
+                        tarjetaNum: debitos.indexOf(debito) + 1
+                    });
                     alert(`Error: Debe ingresar la referencia para la tarjeta #${debitos.indexOf(debito) + 1}`);
+                    procesandoPagoRef.current = false;
                     return;
                 }
                 if (debito.referencia.length !== 4) {
+                    console.log('❌ SETPAGOPEDIDO CANCELADO - Referencia inválida', {
+                        timestamp: new Date().toISOString(),
+                        pedidoId: pedidoData?.id,
+                        tarjetaNum: debitos.indexOf(debito) + 1,
+                        referenciaLength: debito.referencia.length
+                    });
                     alert(`Error: La referencia de la tarjeta #${debitos.indexOf(debito) + 1} debe tener exactamente 4 dígitos.`);
+                    procesandoPagoRef.current = false;
                     return;
                 }
             }
@@ -3907,10 +3964,21 @@ export default function Facturar({
         // Limpiar error si la referencia está cargada
         setDebitoRefError(false);
         if (transferencia && !refPago.filter((e) => e.tipo == 1).length) {
+            console.log('❌ SETPAGOPEDIDO CANCELADO - Referencia transferencia faltante', {
+                timestamp: new Date().toISOString(),
+                pedidoId: pedidoData?.id
+            });
             alert(
                 "Error: Debe cargar referencia de transferencia electrónica."
             );
+            // Liberar el flag si hay error de validación
+            procesandoPagoRef.current = false;
         } else {
+            console.log('🚀 SETPAGOPEDIDO - Llamando a procesarPagoInterno', {
+                timestamp: new Date().toISOString(),
+                pedidoId: pedidoData?.id,
+                tieneCallback: !!callback
+            });
             procesarPagoInterno(callback);
         }
     };
@@ -3918,6 +3986,21 @@ export default function Facturar({
     // Función interna para procesar el pago (llamada después de POS exitoso o sin débito)
     // refOverride: permite pasar la referencia directamente (para cuando viene del POS)
     const procesarPagoInterno = (callback = null, refOverride = null) => {
+        const timestamp = new Date().toISOString();
+        const stackTrace = new Error().stack;
+        const callerInfo = stackTrace ? stackTrace.split('\n').slice(1, 4).join(' -> ') : 'Stack trace no disponible';
+        
+        console.log('=== PROCESARPAGOINTERNO LLAMADO ===', {
+            timestamp,
+            pedidoId: pedidoData?.id,
+            callback: callback ? 'Sí' : 'No',
+            refOverride: refOverride ? 'Sí' : 'No',
+            caller: callerInfo,
+            stackTrace: stackTrace?.split('\n').slice(1, 6)
+        });
+        
+        // Marcar como procesando
+        procesandoPagoRef.current = true;
         setLoading(true);
         // Construir pagos adicionales de efectivo (Bs y COP)
         let pagosAdicionales = [];
@@ -3970,10 +4053,34 @@ export default function Facturar({
             pagosAdicionales: pagosAdicionales.length > 0 ? pagosAdicionales : null,
         };
         
+        console.log('📤 PROCESARPAGOINTERNO - Enviando petición al backend', {
+            timestamp: new Date().toISOString(),
+            pedidoId: params.id,
+            params: {
+                ...params,
+                debitos: params.debitos ? `${params.debitos.length} débitos` : null
+            }
+        });
+        
         db.setPagoPedido(params).then((res) => {
+            const timestamp = new Date().toISOString();
+            console.log('📥 PROCESARPAGOINTERNO - Respuesta recibida', {
+                timestamp,
+                pedidoId: params.id,
+                estado: res.data?.estado,
+                msj: res.data?.msj
+            });
+            
             notificar(res);
             setLoading(false);
+            // Liberar el flag de procesamiento
+            procesandoPagoRef.current = false;
+            
             if (res.data.estado) {
+                console.log('✅ PROCESARPAGOINTERNO - Pago exitoso', {
+                    timestamp,
+                    pedidoId: params.id
+                });
                 // Limpiar datos de localStorage para este pedido procesado
                 const pedidoId = params.id;
                 if (pedidoId) {
@@ -3995,11 +4102,31 @@ export default function Facturar({
                 });
                 openValidationTarea(res.data.id_tarea);
             }
+        }).catch((error) => {
+            const timestamp = new Date().toISOString();
+            // En caso de error, también liberar el flag
+            console.error('❌ PROCESARPAGOINTERNO - Error en petición', {
+                timestamp,
+                pedidoId: params.id,
+                error: error.message || error,
+                stack: error.stack
+            });
+            procesandoPagoRef.current = false;
+            setLoading(false);
         });
     };
     
     // Función para enviar solicitud al POS físico de débito
     const enviarSolicitudPosDebito = async () => {
+        // Evitar ejecuciones múltiples mientras se procesa
+        if (posLoading) {
+            console.warn('⚠️ ENVIAR POS - Ya está procesando, ignorando llamada duplicada', {
+                timestamp: new Date().toISOString(),
+                pedidoId: pedidoData?.id
+            });
+            return;
+        }
+        
         if (!posCedulaTitular) {
             alert("Debe ingresar la cédula del titular");
             return;
@@ -4010,6 +4137,13 @@ export default function Facturar({
             alert("Debe ingresar un monto válido");
             return;
         }
+        
+        console.log('📤 ENVIAR POS - Iniciando transacción', {
+            timestamp: new Date().toISOString(),
+            pedidoId: pedidoData?.id,
+            monto: montoActual,
+            cedula: posCedulaTitular
+        });
         
         setPosLoading(true);
         
@@ -4035,11 +4169,21 @@ export default function Facturar({
         try {
             // Enviar a través del backend para evitar CORS
             const response = await db.enviarTransaccionPOS(payload);
-            console.log("Respuesta POS:", response.data);
+            console.log("📥 ENVIAR POS - Respuesta recibida", {
+                timestamp: new Date().toISOString(),
+                pedidoId: pedidoData?.id,
+                success: response.data.success,
+                posData: response.data.data
+            });
             
             const posData = response.data.data || {};
             
             if (response.data.success && posData.success) {
+                console.log('✅ ENVIAR POS - Transacción exitosa', {
+                    timestamp: new Date().toISOString(),
+                    pedidoId: pedidoData?.id,
+                    referencia: posData.reference || posData.approval
+                });
                 // Éxito: agregar transacción al array
                 const posReference = posData.reference || posData.approval || "";
                 const refUltimos4 = posReference.slice(-4).padStart(4, '0');
@@ -4172,20 +4316,62 @@ export default function Facturar({
                     if (diferencia < 0.01) { // Tolerancia de 0.01 para comparación de decimales
                         // El monto aprobado coincide exactamente con el total de la factura
                         // Procesar e imprimir automáticamente
+                        console.log('🔄 POS COMPLETO - Llamando a facturar_e_imprimir', {
+                            timestamp: new Date().toISOString(),
+                            pedidoId: pedidoData?.id,
+                            totalAprobado: totalAprobadoFinal,
+                            totalFactura: totalFacturaBs
+                        });
                         setTimeout(() => {
-                            if (facturar_e_imprimir) {
+                            // Verificar que no esté ya procesando antes de llamar
+                            if (!procesandoPagoRef.current && facturar_e_imprimir) {
+                                console.log('✅ POS COMPLETO - Ejecutando facturar_e_imprimir', {
+                                    timestamp: new Date().toISOString(),
+                                    pedidoId: pedidoData?.id
+                                });
                                 facturar_e_imprimir();
+                            } else {
+                                console.warn('⚠️ POS COMPLETO - Ya está procesando, ignorando facturar_e_imprimir', {
+                                    timestamp: new Date().toISOString(),
+                                    pedidoId: pedidoData?.id,
+                                    procesando: procesandoPagoRef.current
+                                });
                             }
                         }, 100); // Pequeño delay para asegurar que el débito se haya actualizado
                     } else {
                         // Solo procesar el pago sin facturar
-                        procesarPagoInterno(posPendingCallback, refFinal);
+                        console.log('🔄 POS PARCIAL - Llamando a procesarPagoInterno', {
+                            timestamp: new Date().toISOString(),
+                            pedidoId: pedidoData?.id,
+                            totalAprobado: totalAprobadoFinal,
+                            totalFactura: totalFacturaBs,
+                            diferencia: diferencia
+                        });
+                        // Verificar que no esté ya procesando antes de llamar
+                        if (!procesandoPagoRef.current) {
+                            console.log('✅ POS PARCIAL - Ejecutando procesarPagoInterno', {
+                                timestamp: new Date().toISOString(),
+                                pedidoId: pedidoData?.id
+                            });
+                            procesarPagoInterno(posPendingCallback, refFinal);
+                        } else {
+                            console.warn('⚠️ POS PARCIAL - Ya está procesando, ignorando procesarPagoInterno', {
+                                timestamp: new Date().toISOString(),
+                                pedidoId: pedidoData?.id,
+                                procesando: procesandoPagoRef.current
+                            });
+                        }
                     }
                     setPosPendingCallback(null);
                 }
             } else {
                 // Error del POS - mostrar mensaje en el modal (no cerrar) y registrar en BD
                 const errorMsg = posData.message || response.data.error || "Error en transacción POS";
+                console.log('❌ ENVIAR POS - Transacción rechazada', {
+                    timestamp: new Date().toISOString(),
+                    pedidoId: pedidoData?.id,
+                    error: errorMsg
+                });
                 setPosRespuesta({ mensaje: `✗ ${errorMsg}`, exito: false });
                 
                 // Registrar operación rechazada en el backend
@@ -4198,7 +4384,12 @@ export default function Facturar({
                 }
             }
         } catch (error) {
-            console.error("Error POS:", error);
+            console.error("❌ ENVIAR POS - Error en petición", {
+                timestamp: new Date().toISOString(),
+                pedidoId: pedidoData?.id,
+                error: error.message || error,
+                stack: error.stack
+            });
             const errorMsg = error.response?.data?.error || error.message || "Error de conexión";
             setPosRespuesta({ mensaje: `✗ ${errorMsg}`, exito: false });
         } finally {
@@ -4209,10 +4400,26 @@ export default function Facturar({
     // Función para finalizar múltiples transacciones POS
     // Si el total no está cubierto, solo aplica el monto al campo débito sin procesar el pago
     const finalizarTransaccionesPOS = (forzarSinProcesar = false) => {
+        // Evitar ejecuciones múltiples
+        if (procesandoPagoRef.current) {
+            console.warn('⚠️ FINALIZAR POS - Ya está procesando, ignorando llamada duplicada', {
+                timestamp: new Date().toISOString(),
+                pedidoId: pedidoData?.id
+            });
+            return;
+        }
+        
         if (posTransaccionesAprobadas.length === 0) {
             alert("No hay transacciones aprobadas");
             return;
         }
+        
+        console.log('🔄 FINALIZAR POS - Iniciando finalización', {
+            timestamp: new Date().toISOString(),
+            pedidoId: pedidoData?.id,
+            numTransacciones: posTransaccionesAprobadas.length,
+            forzarSinProcesar
+        });
         
         // Usar la referencia de la última transacción como referencia principal
         const ultimaTransaccion = posTransaccionesAprobadas[posTransaccionesAprobadas.length - 1];
@@ -4254,14 +4461,51 @@ export default function Facturar({
             if (diferencia < 0.01) { // Tolerancia de 0.01 para comparación de decimales
                 // El monto aprobado coincide exactamente con el total de la factura
                 // Procesar e imprimir automáticamente
+                console.log('🔄 FINALIZAR POS - Llamando a facturar_e_imprimir', {
+                    timestamp: new Date().toISOString(),
+                    pedidoId: pedidoData?.id,
+                    totalAprobado: totalAprobado,
+                    totalFactura: totalFacturaBs
+                });
                 setTimeout(() => {
-                    if (facturar_e_imprimir) {
+                    // Verificar que no esté ya procesando antes de llamar
+                    if (!procesandoPagoRef.current && facturar_e_imprimir) {
+                        console.log('✅ FINALIZAR POS - Ejecutando facturar_e_imprimir', {
+                            timestamp: new Date().toISOString(),
+                            pedidoId: pedidoData?.id
+                        });
                         facturar_e_imprimir();
+                    } else {
+                        console.warn('⚠️ FINALIZAR POS - Ya está procesando, ignorando facturar_e_imprimir', {
+                            timestamp: new Date().toISOString(),
+                            pedidoId: pedidoData?.id,
+                            procesando: procesandoPagoRef.current
+                        });
                     }
                 }, 500); // Pequeño delay para asegurar que el débito se haya actualizado
             } else {
                 // Solo procesar el pago sin facturar
-                procesarPagoInterno(posPendingCallback, refFinal);
+                console.log('🔄 FINALIZAR POS - Llamando a procesarPagoInterno', {
+                    timestamp: new Date().toISOString(),
+                    pedidoId: pedidoData?.id,
+                    totalAprobado: totalAprobado,
+                    totalFactura: totalFacturaBs,
+                    diferencia: diferencia
+                });
+                // Verificar que no esté ya procesando antes de llamar
+                if (!procesandoPagoRef.current) {
+                    console.log('✅ FINALIZAR POS - Ejecutando procesarPagoInterno', {
+                        timestamp: new Date().toISOString(),
+                        pedidoId: pedidoData?.id
+                    });
+                    procesarPagoInterno(posPendingCallback, refFinal);
+                } else {
+                    console.warn('⚠️ FINALIZAR POS - Ya está procesando, ignorando procesarPagoInterno', {
+                        timestamp: new Date().toISOString(),
+                        pedidoId: pedidoData?.id,
+                        procesando: procesandoPagoRef.current
+                    });
+                }
             }
         } else {
             // Total NO cubierto: solo aplicar monto al campo débito, el usuario completará con otros métodos
@@ -8888,6 +9132,12 @@ export default function Facturar({
                                             setPosRespuesta(null);
                                             setPosTransaccionesAprobadas([]);
                                             setPosMontoTotalOriginal("");
+                                            // Liberar el flag si se cancela el modal
+                                            console.log('🚫 MODAL POS - Cancelado por usuario', {
+                                                timestamp: new Date().toISOString(),
+                                                pedidoId: pedidoData?.id
+                                            });
+                                            procesandoPagoRef.current = false;
                                         }}
                                         disabled={posLoading}
                                         className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
@@ -8905,6 +9155,12 @@ export default function Facturar({
                                             setPosTransaccionesAprobadas([]);
                                             setPosMontoTotalOriginal("");
                                             setForzarReferenciaManual(true);
+                                            // Liberar el flag si se cancela el modal
+                                            console.log('🚫 MODAL POS - Cambiando a referencia manual', {
+                                                timestamp: new Date().toISOString(),
+                                                pedidoId: pedidoData?.id
+                                            });
+                                            procesandoPagoRef.current = false;
                                             // Hacer foco en el campo de referencia después de cerrar el modal
                                             setTimeout(() => {
                                                 const debitoRefInput = document.querySelector('[data-ref-input="true"]');
