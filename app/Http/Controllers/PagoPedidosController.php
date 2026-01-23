@@ -160,13 +160,13 @@ class PagoPedidosController extends Controller
                 }
             }
             
-            if (!$tieneMetodosPago) {
+           /*  if (!$tieneMetodosPago) {
                 \DB::rollback();
                 return Response::json([
                     "msj" => "Error: Debe ingresar al menos un método de pago válido",
                     "estado" => false
                 ]);
-            }
+            } DESABILITADO PARA PERMITIR DEVOLUCIONES CUYO BALANCE SEA CERO*/ 
 
             // VALIDACION "Error: No se pueden mezclar métodos de pago positivos y negativos en la misma transacción"
             if (count($metodos_pago) > 1) {
