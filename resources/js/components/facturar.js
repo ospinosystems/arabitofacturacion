@@ -159,6 +159,20 @@ export default function Facturar({
     const [debitoRef, setDebitoRef] = useState(""); // Referencia obligatoria del débito
     const [debitoRefError, setDebitoRefError] = useState(false); // Error de referencia faltante
     
+    // Estados para múltiples débitos (array de {monto, referencia, bloqueado, posData})
+    const [debitos, setDebitos] = useState([{ monto: "", referencia: "", bloqueado: false, posData: null }]);
+    const [usarMultiplesDebitos, setUsarMultiplesDebitos] = useState(false);
+    // Mapa de débitos por pedido: { pedidoId: [{monto, referencia, bloqueado, posData}] }
+    const [debitosPorPedido, setDebitosPorPedido] = useState(() => {
+        try {
+            const saved = localStorage.getItem('debitosPorPedido');
+            return saved ? JSON.parse(saved) : {};
+        } catch (error) {
+            console.error('Error cargando débitos desde localStorage:', error);
+            return {};
+        }
+    });
+    
     // Estados para modal POS débito físico
     const [showModalPosDebito, setShowModalPosDebito] = useState(false);
     const [posCedulaTitular, setPosCedulaTitular] = useState("");
@@ -171,7 +185,53 @@ export default function Facturar({
     const [posTransaccionesAprobadas, setPosTransaccionesAprobadas] = useState([]); // Array de transacciones aprobadas del pedido actual [{monto, cedula, referencia, tipoCuenta}]
     const [posMontoTotalOriginal, setPosMontoTotalOriginal] = useState(""); // Monto total original del débito
     // Mapa global de transacciones POS por pedido: { pedidoId: [{monto, cedula, referencia, ...}] }
-    const [posTransaccionesPorPedido, setPosTransaccionesPorPedido] = useState({});
+    const [posTransaccionesPorPedido, setPosTransaccionesPorPedido] = useState(() => {
+        try {
+            const saved = localStorage.getItem('posTransaccionesPorPedido');
+            return saved ? JSON.parse(saved) : {};
+        } catch (error) {
+            console.error('Error cargando transacciones POS desde localStorage:', error);
+            return {};
+        }
+    });
+    
+    // useEffect para guardar y restaurar débitos al cambiar de pedido
+    useEffect(() => {
+        if (pedidoData?.id) {
+            // Guardar débitos del pedido anterior si había uno
+            const pedidoAnteriorId = Object.keys(debitosPorPedido).find(id => 
+                debitosPorPedido[id] && id !== String(pedidoData.id)
+            );
+            
+            // Restaurar débitos del pedido actual o inicializar vacío
+            if (debitosPorPedido[pedidoData.id]) {
+                setDebitos(debitosPorPedido[pedidoData.id]);
+            } else {
+                // Nuevo pedido: inicializar con un débito vacío
+                setDebitos([{ monto: "", referencia: "", bloqueado: false, posData: null }]);
+            }
+        } else {
+            // No hay pedido seleccionado: limpiar débitos
+            setDebitos([{ monto: "", referencia: "", bloqueado: false, posData: null }]);
+        }
+    }, [pedidoData?.id]);
+    
+    // Función para guardar débitos del pedido actual
+    const guardarDebitosPorPedido = (pedidoId, debitosActuales) => {
+        setDebitosPorPedido(prev => {
+            const nuevo = {
+                ...prev,
+                [pedidoId]: debitosActuales
+            };
+            // Guardar en localStorage
+            try {
+                localStorage.setItem('debitosPorPedido', JSON.stringify(nuevo));
+            } catch (error) {
+                console.error('Error guardando débitos en localStorage:', error);
+            }
+            return nuevo;
+        });
+    };
     
     const [efectivo, setEfectivo] = useState("");
     const [transferencia, setTransferencia] = useState("");
@@ -237,6 +297,7 @@ export default function Facturar({
 
     const [lotespuntototalizar, setlotespuntototalizar] = useState([]);
     const [biopagostotalizar, setbiopagostotalizar] = useState([]);
+    const [lotesPinpad, setLotesPinpad] = useState([]);
 
     const [cierre, setCierre] = useState({});
     const [totalizarcierre, setTotalizarcierre] = useState(false);
@@ -458,14 +519,7 @@ export default function Facturar({
     const [CajaChicaEntradaCierreBs, setCajaChicaEntradaCierreBs] =
         useState("0");
 
-    const [lote1punto, setlote1punto] = useState("");
-    const [montolote1punto, setmontolote1punto] = useState("");
-    const [lote2punto, setlote2punto] = useState("");
-    const [montolote2punto, setmontolote2punto] = useState("");
     const [serialbiopago, setserialbiopago] = useState("");
-
-    const [puntolote1banco, setpuntolote1banco] = useState("");
-    const [puntolote2banco, setpuntolote2banco] = useState("");
 
     const [modFact, setmodFact] = useState("factura");
 
@@ -1199,9 +1253,24 @@ export default function Facturar({
     const [refPago, setrefPago] = useState([]);
 
     const addNewPedido = () => {
-        db.addNewPedido({}).then((res) => {
-            onClickEditPedido(null, res.data);
-        });
+        db.addNewPedido({})
+            .then((res) => {
+                // Si la respuesta tiene estado false (hay cierre guardado)
+                if (res.data && res.data.estado === false) {
+                    notificar(res);
+                    return;
+                }
+                // Si es exitoso, abrir el pedido
+                onClickEditPedido(null, res.data);
+            })
+            .catch((error) => {
+                // Manejar errores de red u otros
+                const errorMsg = error.response?.data?.msj || 'Error al crear el pedido';
+                notificar({
+                    msj: errorMsg,
+                    estado: false
+                });
+            });
     };
     const [categoriasCajas, setcategoriasCajas] = useState([]);
     const [departamentosCajas, setdepartamentosCajas] = useState([]);
@@ -1244,7 +1313,7 @@ export default function Facturar({
             settogglereferenciapago(!togglereferenciapago);
 
             settipo_referenciapago(tipoTraido);
-            setmonto_referenciapago(montoTraido * dolar);
+            setmonto_referenciapago((montoTraido * dolar).toFixed(2));
         }
         if (tipo == "recargar") {
             // Recargar el pedido y cerrar el modal
@@ -1857,6 +1926,11 @@ export default function Facturar({
             dejar_usd,
             dejar_cop,
             dejar_bs,
+            caja_usd,
+            caja_bs,
+            caja_cop,
+            dataPuntosAdicionales,
+            lotesPinpad,
             totalizarcierre,
             total_biopago,
         }).then((res) => {
@@ -1874,6 +1948,22 @@ export default function Facturar({
                     if (cierreData["puntosAdicional"].length) {
                         setdataPuntosAdicionales(cierreData["puntosAdicional"]);
                     }
+                }
+
+                // Cargar lotes Pinpad precalculados, PRESERVANDO los bancos seleccionados
+                if (cierreData["lotes_pinpad"]) {
+                    // Fusionar: mantener bancos del frontend, usar datos del backend
+                    const lotesConBancosPreservados = cierreData["lotes_pinpad"].map(loteBackend => {
+                        // Buscar si este terminal ya tiene un banco seleccionado
+                        const loteExistente = lotesPinpad.find(l => l.terminal === loteBackend.terminal);
+                        
+                        return {
+                            ...loteBackend,
+                            banco: loteExistente?.banco || loteBackend.banco // Preservar banco del frontend si existe
+                        };
+                    });
+                    
+                    setLotesPinpad(lotesConBancosPreservados);
                 }
 
                 /* setCajaFuerteEntradaCierreBs()
@@ -3121,8 +3211,9 @@ export default function Facturar({
                     
                     // Débito (tipo 2) - Usar monto_original (Bs) si existe
                     const pagoDebito = d.find((e) => e.tipo == 2);
-                    if (pagoDebito && pagoDebito.monto != "0.00") {
+                    if (pagoDebito) {
                         // monto_original tiene el valor en Bs que escribió la cajera
+                        // Mostrar todos los débitos sin importar el monto (importante para montos pequeños en Bs)
                         const valorDebito = pagoDebito.monto_original || pagoDebito.monto;
                         setDebito(valorDebito);
                         // También setear la referencia si existe
@@ -3781,38 +3872,36 @@ export default function Facturar({
             }
         }
         
-        // Si hay débito positivo y la sucursal tiene PINPAD activo (y NO está forzando manual), abrir modal del POS físico
-        // No se requiere validar debitoRef porque el POS lo setea automáticamente
-        if (debito && parseFloat(debito) > 0 && sucursaldata?.pinpad && !forzarReferenciaManual) {
-            abrirModalPosDebito(callback);
-            return;
+        // Verificar si hay débitos en el array
+        const debitosValidos = debitos.filter(d => parseFloat(d.monto) > 0);
+        
+        // Si hay débitos y la sucursal tiene PINPAD activo (y NO está forzando manual)
+        if (debitosValidos.length > 0 && sucursaldata?.pinpad && !forzarReferenciaManual) {
+            // Buscar el primer débito sin referencia o no bloqueado
+            const debitoSinProcesar = debitosValidos.find(d => !d.bloqueado || !d.referencia || d.referencia.length !== 4);
+            
+            if (debitoSinProcesar) {
+                // Encontrar el índice del débito sin procesar
+                const index = debitos.findIndex(d => d === debitoSinProcesar);
+                // Abrir modal POS para este débito específico
+                abrirModalPosDebitoConMonto(debitoSinProcesar.monto, index);
+                return;
+            }
         }
         
-        // Validar referencia de débito obligatoria (si NO hay PINPAD o si está forzando manual)
-        if (debito && parseFloat(debito) > 0 && !debitoRef) {
-            // Mostrar error visual y hacer foco en el campo de referencia
-            setDebitoRefError(true);
-            setTimeout(() => {
-                const debitoRefInput = document.querySelector('[data-ref-input="true"]');
-                if (debitoRefInput) {
-                    debitoRefInput.focus();
-                    debitoRefInput.select();
+        // Validar referencias de débitos obligatorias (si NO hay PINPAD o si está forzando manual)
+        if (debitosValidos.length > 0) {
+            for (let i = 0; i < debitosValidos.length; i++) {
+                const debito = debitosValidos[i];
+                if (!debito.referencia) {
+                    alert(`Error: Debe ingresar la referencia para la tarjeta #${debitos.indexOf(debito) + 1}`);
+                    return;
                 }
-            }, 100);
-            return;
-        }
-        // Validar que la referencia de débito tenga exactamente 4 dígitos (solo si NO hay PINPAD)
-        if (debito && parseFloat(debito) > 0 && debitoRef && debitoRef.length !== 4) {
-            alert("Error: La referencia de débito debe tener exactamente 4 dígitos.");
-            setDebitoRefError(true);
-            setTimeout(() => {
-                const debitoRefInput = document.querySelector('[data-ref-input="true"]');
-                if (debitoRefInput) {
-                    debitoRefInput.focus();
-                    debitoRefInput.select();
+                if (debito.referencia.length !== 4) {
+                    alert(`Error: La referencia de la tarjeta #${debitos.indexOf(debito) + 1} debe tener exactamente 4 dígitos.`);
+                    return;
                 }
-            }, 100);
-            return;
+            }
         }
         
         if (
@@ -3859,10 +3948,28 @@ export default function Facturar({
         // Usar refOverride si viene del POS, sino usar el estado debitoRef
         const refFinal = refOverride !== null ? refOverride : debitoRef;
         
+        // Preparar débitos: siempre usar el array de débitos
+        let debitoParam = null;
+        let debitoRefParam = null;
+        let debitosParam = null;
+        let posDataParam = null;
+        
+        // Filtrar débitos válidos (con monto)
+        const debitosValidos = debitos.filter(d => parseFloat(d.monto) > 0);
+        if (debitosValidos.length > 0) {
+            debitosParam = debitosValidos.map(d => ({
+                monto: parseFloat(d.monto),
+                referencia: d.referencia,
+                posData: d.posData || null // Incluir posData individual de cada débito
+            }));
+        }
+        
         let params = {
             id: pedidoData.id,
-            debito: debitoBs != 0 ? debitoBs : null,
-            debitoRef: refFinal,
+            debito: debitoParam,
+            debitoRef: debitoRefParam,
+            debitos: debitosParam,
+            posData: posDataParam, // Este ya no se usa para múltiples débitos
             efectivo: efectivoDolarVal != 0 ? efectivoDolarVal : null,
             transferencia,
             biopago,
@@ -3875,6 +3982,12 @@ export default function Facturar({
             notificar(res);
             setLoading(false);
             if (res.data.estado) {
+                // Limpiar datos de localStorage para este pedido procesado
+                const pedidoId = params.id;
+                if (pedidoId) {
+                    limpiarTransaccionesPedido(pedidoId);
+                }
+                
                 getPedidosFast();
                 setPedidoData({});
                 setSelectItem(null);
@@ -3911,11 +4024,16 @@ export default function Facturar({
         // Convertir monto: 12.36 -> 1236 (sin decimales, multiplicado por 100)
         const montoEntero = Math.round(montoActual * 100);
         
+        // Construir numeroOrden con formato: codigoSucursal-usuario-pedidoId
+        const codigoSucursal = sucursaldata?.codigo || "SUC";
+        const nombreUsuario = user?.usuario || user?.nombre || "user";
+        const numeroOrdenCompleto = `${codigoSucursal}-${nombreUsuario}-${pedidoData.id}`;
+        
         const payload = {
             operacion: "COMPRA",
             monto: montoEntero,
             cedula: posCedulaTitular,
-            numeroOrden: pedidoData.id.toString(),
+            numeroOrden: numeroOrdenCompleto,
             mensaje: "PowerBy:Ospino",
             tipoCuenta: posTipoCuenta
         };
@@ -3939,7 +4057,16 @@ export default function Facturar({
                     cedula: posCedulaTitular,
                     referencia: posReference,
                     refCorta: refUltimos4,
-                    tipoCuenta: posTipoCuenta
+                    tipoCuenta: posTipoCuenta,
+                    // Guardar datos POS para enviar al backend
+                    posData: {
+                        message: posData.message,
+                        lote: posData.lote,
+                        responsecode: posData.responsecode,
+                        amount: posData.amount,
+                        terminal: posData.terminal,
+                        json_response: JSON.stringify(posData)
+                    }
                 };
                 
                 const nuevasTransacciones = [...posTransaccionesAprobadas, nuevaTransaccion];
@@ -3950,7 +4077,54 @@ export default function Facturar({
                     guardarTransaccionPorPedido(pedidoData.id, nuevasTransacciones);
                 }
                 
-                // Calcular monto restante
+                // Si hay un índice guardado, actualizar ese débito específico
+                if (typeof window.currentDebitoIndex === 'number') {
+                    const index = window.currentDebitoIndex;
+                    const nuevosDebitos = [...debitos];
+                    
+                    // Preparar datos POS para este débito
+                    const posDataParaDebito = {
+                        message: posData.message || null,
+                        lote: posData.lote || null,
+                        responsecode: posData.responsecode || null,
+                        amount: posData.amount || null,
+                        terminal: posData.terminal || null,
+                        json_response: JSON.stringify(posData)
+                    };
+                    
+                    nuevosDebitos[index] = {
+                        monto: montoActual.toFixed(2),
+                        referencia: refUltimos4,
+                        bloqueado: true, // Bloquear la fila después de aprobar por POS
+                        posData: posDataParaDebito // Guardar datos POS en este débito
+                    };
+                    setDebitos(nuevosDebitos);
+                    
+                    // Guardar en el mapa por pedido
+                    if (pedidoData?.id) {
+                        guardarDebitosPorPedido(pedidoData.id, nuevosDebitos);
+                    }
+                    
+                    delete window.currentDebitoIndex; // Limpiar el índice
+                    
+                    // Cerrar modal inmediatamente
+                    setPosRespuesta({ mensaje: `✓ APROBADO - Ref: ${posReference}`, exito: true });
+                    notificar({ data: { msj: `POS APROBADO - Ref: ${posReference} - Bs ${montoActual.toFixed(2)}`, estado: true } });
+                    
+                    setTimeout(() => {
+                        setShowModalPosDebito(false);
+                        setPosCedulaTitular("");
+                        setPosTipoCuenta("CORRIENTE");
+                        setPosMontoDebito("");
+                        setPosMontoTotalOriginal("");
+                        setPosTransaccionesAprobadas([]);
+                        setPosRespuesta(null);
+                    }, 500);
+                    
+                    return; // Salir temprano para no ejecutar la lógica de modo simple
+                }
+                
+                // Calcular monto restante (solo para modo simple)
                 const totalAprobado = nuevasTransacciones.reduce((sum, t) => sum + t.monto, 0);
                 const montoOriginal = parseFloat(posMontoTotalOriginal) || 0;
                 const restante = montoOriginal - totalAprobado;
@@ -4001,9 +4175,18 @@ export default function Facturar({
                     setPosPendingCallback(null);
                 }
             } else {
-                // Error del POS - mostrar mensaje en el modal (no cerrar)
+                // Error del POS - mostrar mensaje en el modal (no cerrar) y registrar en BD
                 const errorMsg = posData.message || response.data.error || "Error en transacción POS";
                 setPosRespuesta({ mensaje: `✗ ${errorMsg}`, exito: false });
+                
+                // Registrar operación rechazada en el backend
+                if (posData && Object.keys(posData).length > 0) {
+                    db.registrarPosRechazado({
+                        ...posData,
+                        json_response: JSON.stringify(posData),
+                        id_pedido: pedidoData?.id || null
+                    }).catch(err => console.error("Error al registrar POS rechazado:", err));
+                }
             }
         } catch (error) {
             console.error("Error POS:", error);
@@ -4103,6 +4286,25 @@ export default function Facturar({
         setShowModalPosDebito(true);
     };
     
+    // Función para abrir modal POS con monto específico (para múltiples débitos)
+    const abrirModalPosDebitoConMonto = (monto, index) => {
+        if (!sucursaldata?.pinpad || forzarReferenciaManual) {
+            return; // No abrir modal si no hay PINPAD o está en modo manual
+        }
+        
+        const montoInicial = monto || "0";
+        setPosMontoTotalOriginal(montoInicial);
+        setPosMontoDebito(montoInicial);
+        setPosTransaccionesAprobadas([]); // Limpiar transacciones previas
+        setPosPendingCallback(null);
+        setPosRespuesta(null);
+        setPosCedulaTitular("");
+        setShowModalPosDebito(true);
+        
+        // Guardar el índice del débito que se está procesando
+        window.currentDebitoIndex = index;
+    };
+    
     // useEffect para hacer foco en el input de cédula cuando se abre el modal POS
     useEffect(() => {
         if (showModalPosDebito) {
@@ -4136,10 +4338,19 @@ export default function Facturar({
     
     // Función para guardar transacciones en el mapa por pedido
     const guardarTransaccionPorPedido = (pedidoId, transacciones) => {
-        setPosTransaccionesPorPedido(prev => ({
-            ...prev,
-            [pedidoId]: transacciones
-        }));
+        setPosTransaccionesPorPedido(prev => {
+            const nuevo = {
+                ...prev,
+                [pedidoId]: transacciones
+            };
+            // Guardar en localStorage
+            try {
+                localStorage.setItem('posTransaccionesPorPedido', JSON.stringify(nuevo));
+            } catch (error) {
+                console.error('Error guardando transacciones POS en localStorage:', error);
+            }
+            return nuevo;
+        });
     };
     
     // Función para limpiar transacciones de un pedido específico
@@ -4147,6 +4358,25 @@ export default function Facturar({
         setPosTransaccionesPorPedido(prev => {
             const nuevo = { ...prev };
             delete nuevo[pedidoId];
+            // Actualizar localStorage
+            try {
+                localStorage.setItem('posTransaccionesPorPedido', JSON.stringify(nuevo));
+            } catch (error) {
+                console.error('Error actualizando localStorage al limpiar transacciones:', error);
+            }
+            return nuevo;
+        });
+        
+        // También limpiar débitos del pedido
+        setDebitosPorPedido(prev => {
+            const nuevo = { ...prev };
+            delete nuevo[pedidoId];
+            // Actualizar localStorage
+            try {
+                localStorage.setItem('debitosPorPedido', JSON.stringify(nuevo));
+            } catch (error) {
+                console.error('Error actualizando localStorage al limpiar débitos:', error);
+            }
             return nuevo;
         });
     };
@@ -4240,12 +4470,93 @@ export default function Facturar({
     const [cierreefecadiccajafeuro, setcierreefecadiccajafeuro] = useState("");
 
     const reversarCierre = () => {
-        if (confirm("Por favor, confirme reverso")) {
+        if (confirm("⚠️ ADVERTENCIA ⚠️\n\n¿Está seguro que desea REVERSAR (ELIMINAR) el cierre?\n\nEsta acción eliminará el cierre del día y no se puede deshacer.\n\n¿Desea continuar?")) {
             db.reversarCierre({}).then((res) => {
                 location.reload();
             });
         }
     };
+    // Función para mostrar mensaje detallado de faltante
+    const mostrarMensajeFaltante = (data) => {
+        const mensaje = data.msj || 'Error al guardar el cierre';
+        
+        // Crear un div para mostrar el mensaje formateado
+        const mensajeDiv = document.createElement('div');
+        mensajeDiv.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border: 3px solid #dc3545;
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            z-index: 10000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            font-family: monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        `;
+        
+        // Agregar título
+        const titulo = document.createElement('div');
+        titulo.style.cssText = 'font-weight: bold; font-size: 16px; color: #dc3545; margin-bottom: 15px; text-align: center;';
+        titulo.textContent = '⚠️ FALTANTE EN CIERRE';
+        mensajeDiv.appendChild(titulo);
+        
+        // Agregar mensaje
+        const contenido = document.createElement('div');
+        contenido.textContent = mensaje;
+        mensajeDiv.appendChild(contenido);
+        
+        // Agregar botón de cerrar
+        const botonCerrar = document.createElement('button');
+        botonCerrar.textContent = 'Cerrar';
+        botonCerrar.style.cssText = `
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 14px;
+            font-weight: bold;
+        `;
+        botonCerrar.onclick = () => {
+            document.body.removeChild(mensajeDiv);
+            document.body.removeChild(overlay);
+        };
+        mensajeDiv.appendChild(botonCerrar);
+        
+        // Crear overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+        `;
+        overlay.onclick = () => {
+            document.body.removeChild(mensajeDiv);
+            document.body.removeChild(overlay);
+        };
+        
+        document.body.appendChild(overlay);
+        document.body.appendChild(mensajeDiv);
+        
+        // También mostrar en notificar para que quede en el log
+        notificar({ data: { msj: mensaje, estado: false } }, false);
+    };
+
     const guardar_cierre = (e, callback = null) => {
         if (caja_biopago && !totalizarcierre) {
             if (!serialbiopago) {
@@ -4254,95 +4565,68 @@ export default function Facturar({
             }
         }
 
-        let valCajaFuerteEntradaCierreDolar = CajaFuerteEntradaCierreDolar
-            ? CajaFuerteEntradaCierreDolar
-            : 0;
-        let valCajaChicaEntradaCierreDolar = CajaChicaEntradaCierreDolar
-            ? CajaChicaEntradaCierreDolar
-            : 0;
-        let valCajaFuerteEntradaCierreCop = CajaFuerteEntradaCierreCop
-            ? CajaFuerteEntradaCierreCop
-            : 0;
-        let valCajaChicaEntradaCierreCop = CajaChicaEntradaCierreCop
-            ? CajaChicaEntradaCierreCop
-            : 0;
-        let valCajaFuerteEntradaCierreBs = CajaFuerteEntradaCierreBs
-            ? CajaFuerteEntradaCierreBs
-            : 0;
-        let valCajaChicaEntradaCierreBs = CajaChicaEntradaCierreBs
-            ? CajaChicaEntradaCierreBs
-            : 0;
-
-        let sumcajaDolar =
-            parseFloat(valCajaFuerteEntradaCierreDolar) +
-            parseFloat(valCajaChicaEntradaCierreDolar);
-        if (Math.trunc(parseFloat(guardar_usd)) != Math.trunc(sumcajaDolar)) {
-            alert("Error en suma de cajas (FUERTE)(CHICA): <sumcajaDolar> ");
-            return;
+        // Validar que todos los lotes Pinpad tengan banco seleccionado
+        if (lotesPinpad && lotesPinpad.length > 0) {
+            const lotesSinBanco = lotesPinpad.filter(lote => {
+                // Verificar si el lote tiene banco seleccionado (puede venir como 'banco' o 'bancoSeleccionado')
+                const banco = lote.banco || lote.bancoSeleccionado;
+                return !banco || banco === '' || banco === null || banco === undefined;
+            });
+            
+            if (lotesSinBanco.length > 0) {
+                const numerosLotes = lotesSinBanco.map((_, index) => {
+                    // Encontrar el índice real del lote en el array original
+                    const indiceReal = lotesPinpad.indexOf(lotesSinBanco[index]);
+                    return indiceReal + 1; // +1 para mostrar número de lote (1-indexed)
+                });
+                
+                alert(`Error: Debe seleccionar un banco para todos los lotes Pinpad antes de guardar el cierre.\n\nLotes sin banco: ${numerosLotes.join(", ")}`);
+                return;
+            }
         }
 
-        let sumcajaCop =
-            parseFloat(valCajaFuerteEntradaCierreCop) +
-            parseFloat(valCajaChicaEntradaCierreCop);
-        if (Math.trunc(parseFloat(guardar_cop)) != Math.trunc(sumcajaCop)) {
-            alert("Error en suma de cajas (FUERTE)(CHICA): <sumcajaCop> ");
-            return;
-        }
-
-        let sumcajaBs =
-            parseFloat(valCajaFuerteEntradaCierreBs) +
-            parseFloat(valCajaChicaEntradaCierreBs);
-        if (Math.trunc(parseFloat(guardar_bs)) != Math.trunc(sumcajaBs)) {
-            alert("Error en suma de cajas (FUERTE)(CHICA): <sumcajaBs> ");
-            return;
-        }
+        
         if (window.confirm("¿Realmente desea Guardar/Editar?")) {
             setLoading(true);
             console.log(tipo_accionCierre);
+            
+            // Preparar dataPuntosAdicionales incluyendo lotesPinpad
+            const dataPuntosAdicionalesConLotes = {
+                puntos: dataPuntosAdicionales,
+                lotes_pinpad: lotesPinpad
+            };
+            
+            // SOLO enviar valores ORIGINALES ingresados por el usuario
+            // El backend recalculará TODO internamente en guardarCierre
             db.guardarCierre({
                 fechaCierre,
-
-                total_caja_neto,
-
-                dejar_usd,
-                dejar_cop,
-                dejar_bs,
-
-                total_dejar_caja_neto,
-                total_punto,
-                total_biopago,
-
-                guardar_usd,
-                guardar_cop,
-                guardar_bs,
-
+                
+                // Valores originales de efectivo contado
                 caja_usd,
                 caja_cop,
                 caja_bs,
+                
+                // Valores originales de punto de venta y biopago
                 caja_punto,
+                total_punto,
                 caja_biopago,
-
-                efectivo: cierre["total_caja"],
-                transferencia: cierre[1],
-                entregadomenospend: cierre["entregadomenospend"],
-                caja_inicial: cierre["caja_inicial"],
-
-                precio: cierre["precio"],
-                precio_base: cierre["precio_base"],
-                ganancia: cierre["ganancia"],
-                porcentaje: cierre["porcentaje"],
-                desc_total: cierre["desc_total"],
-                numventas: cierre["numventas"],
-
-                debito_digital: cierre["debito_digital"],
-                efectivo_digital: cierre["efectivo_digital"],
-                transferencia_digital: cierre["transferencia_digital"],
-                biopago_digital: cierre["biopago_digital"],
-                descuadre: cierre["descuadre"],
-
+                total_biopago,
+                
+                // Valores de lo que se deja en caja
+                dejar_usd,
+                dejar_cop,
+                dejar_bs,
+                
+                // Otros puntos de venta y lotes pinpad
+                dataPuntosAdicionales: dataPuntosAdicionalesConLotes,
+                
+                // Datos complementarios
+                serialbiopago,
                 notaCierre,
                 totalizarcierre,
-
+                tipo_accionCierre,
+                
+                // Datos de reportes Z (si aplica)
                 numreportez: cierrenumreportez,
                 ventaexcento: cierreventaexcento,
                 ventagravadas: cierreventagravadas,
@@ -4353,33 +4637,27 @@ export default function Facturar({
                 efecadiccajafcop: cierreefecadiccajafcop,
                 efecadiccajafdolar: cierreefecadiccajafdolar,
                 efecadiccajafeuro: cierreefecadiccajafeuro,
-
-                inventariobase: cierre["total_inventario_base"],
-                inventarioventa: cierre["total_inventario"],
-                creditoporcobrartotal: cierre["cred_total"],
-                credito: cierre["4"],
-                vueltostotales: cierre["vueltos_totales"],
-                abonosdeldia: cierre["abonosdeldia"],
-
+                
+                // Datos de cajas fuertes (si aplica)
                 CajaFuerteEntradaCierreDolar,
                 CajaFuerteEntradaCierreCop,
                 CajaFuerteEntradaCierreBs,
                 CajaChicaEntradaCierreDolar,
                 CajaChicaEntradaCierreCop,
                 CajaChicaEntradaCierreBs,
-
-                montolote1punto,
-                montolote2punto,
-                lote1punto,
-                lote2punto,
-                serialbiopago,
-                puntolote1banco,
-                puntolote2banco,
-                tipo_accionCierre,
-                dataPuntosAdicionales,
+                
             }).then((res) => {
                 setLoading(false);
-                notificar(res, false);
+                
+                // Si hay un error de faltante, mostrar mensaje detallado
+                // El backend retorna total_diferencia cuando hay un faltante
+                if (!res.data.estado && res.data.msj && (res.data.total_diferencia !== undefined || res.data.descuadre_general !== undefined)) {
+                    // Mostrar mensaje detallado del faltante
+                    mostrarMensajeFaltante(res.data);
+                } else {
+                    notificar(res, false);
+                }
+                
                 if (res.data.estado) {
                     db.getStatusCierre({ fechaCierre }).then((res) => {
                         settipo_accionCierre(res.data.tipo_accionCierre);
@@ -4405,7 +4683,9 @@ export default function Facturar({
             let type = e.currentTarget.attributes["data-type"].value;
 
             if (type == "ver") {
-                verCierreReq(fechaCierre, type);
+                // Usar fechaCierre o fecha del cierre guardado como fallback
+                const fechaParaVer = fechaCierre || cierre?.fecha || "";
+                verCierreReq(fechaParaVer, type);
             } else if (type == "enviar" || type == "sync") {
                 // Primero obtener estado de pendientes, luego abrir modal y sincronizar
                 setLoading(true);
@@ -4508,10 +4788,15 @@ export default function Facturar({
         }
     };
     const verCierreReq = (fechaCierre, type = "ver", usuario = "") => {
-        // console.log(fecha)
-        // if (window.confirm("Confirme envio")) {
-        db.openVerCierre({ fechaCierre, type, totalizarcierre, usuario });
-        // }
+        // Validar que fechaCierre tenga valor
+        const fecha = fechaCierre || cierre?.fecha || "";
+        
+        if (!fecha) {
+            alert('Error: No se puede determinar la fecha del cierre');
+            return;
+        }
+        
+        db.openVerCierre({ fechaCierre: fecha, type, usuario });
     };
     const setPagoCredito = (e) => {
         e.preventDefault();
@@ -7016,18 +7301,6 @@ export default function Facturar({
                                 addTuplasPuntosAdicionales
                             }
                             reversarCierre={reversarCierre}
-                            puntolote1banco={puntolote1banco}
-                            puntolote2banco={puntolote2banco}
-                            setpuntolote1banco={setpuntolote1banco}
-                            setpuntolote2banco={setpuntolote2banco}
-                            lote1punto={lote1punto}
-                            setlote1punto={setlote1punto}
-                            montolote1punto={montolote1punto}
-                            setmontolote1punto={setmontolote1punto}
-                            lote2punto={lote2punto}
-                            setlote2punto={setlote2punto}
-                            montolote2punto={montolote2punto}
-                            setmontolote2punto={setmontolote2punto}
                             serialbiopago={serialbiopago}
                             setserialbiopago={setserialbiopago}
                             setCajaFuerteEntradaCierreDolar={
@@ -7097,6 +7370,7 @@ export default function Facturar({
                             setTotalizarcierre={setTotalizarcierre}
                             moneda={moneda}
                             auth={auth}
+                            user={user}
                             sendCuentasporCobrar={sendCuentasporCobrar}
                             fechaGetCierre2={fechaGetCierre2}
                             setfechaGetCierre2={setfechaGetCierre2}
@@ -7133,6 +7407,8 @@ export default function Facturar({
                             lotespuntototalizar={lotespuntototalizar}
                             biopagostotalizar={biopagostotalizar}
                             cierre={cierre}
+                            lotesPinpad={lotesPinpad}
+                            setLotesPinpad={setLotesPinpad}
                             cerrar_dia={cerrar_dia}
                             fun_setguardar={fun_setguardar}
                             setcajaFuerteFun={setcajaFuerteFun}
@@ -7963,6 +8239,14 @@ export default function Facturar({
                                     setDebitoRef={setDebitoRef}
                                     debitoRefError={debitoRefError}
                                     setDebitoRefError={setDebitoRefError}
+                                    debitos={debitos}
+                                    setDebitos={setDebitos}
+                                    usarMultiplesDebitos={usarMultiplesDebitos}
+                                    setUsarMultiplesDebitos={setUsarMultiplesDebitos}
+                                    abrirModalPosDebitoConMonto={abrirModalPosDebitoConMonto}
+                                    sucursaldata={sucursaldata}
+                                    forzarReferenciaManual={forzarReferenciaManual}
+                                    guardarDebitosPorPedido={guardarDebitosPorPedido}
                                     efectivo={efectivo}
                                     setEfectivo={setEfectivo}
                                     efectivo_bs={efectivo_bs}
@@ -8538,7 +8822,8 @@ export default function Facturar({
                                                         value={posMontoDebito}
                                                         onChange={(e) => setPosMontoDebito(e.target.value.replace(/[^0-9.,]/g, ''))}
                                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 font-semibold text-lg"
-                                                        disabled={posLoading}
+                                                        disabled={true}
+                                                        readOnly={true}
                                                     />
                                                 </div>
                                             </div>

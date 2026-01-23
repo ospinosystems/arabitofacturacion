@@ -117,13 +117,9 @@
 				</tr>
 				<tr>
 					<td>
-						@if (isset($message))
-							<img src="{{$message->embed('images/logo-small.jpg')}}" width="100px" >
-						@else
-							<img src="{{asset('images/logo-small.jpg')}}" width="100px" >
-						@endif
+						<img src="{{asset('images/logo-titanio.png')}}" width="100px" >
 						
-
+<!-- 
 						<h5>
 							{{$sucursal->nombre_registro}}
 							<br>
@@ -133,109 +129,757 @@
 						<hr>
 						<span>
 							Domicilio Fiscal: {{$sucursal->direccion_registro}}
-						</span>
+						</span> -->
 
 					</td>
-					<td colspan="2">
-						<h2>CAJA</h2>
-						$ = <b>{{($cierre->dejar_dolar)}}</b> /
-						
-						
-						COP = <b>{{($cierre->dejar_peso)}}</b> /
-						
-						
-						BSS = <b>{{($cierre->dejar_bss)}}</b>
+				
+					<td style="font-size: 18px;">
+						<span style="font-weight: bold;">TASA</span><br>
+						<span>{{($cierre->tasa)}}</span>
 					</td>
-					<td>
-						<h2>TASA</h2>
-						{{($cierre->tasa)}}
+					<td style="font-size: 18px;">
+						<span style="font-weight: bold;">{{$cierre->fecha}}</span><br>
+						@if($totalizarcierre ?? false)
+							<span style="font-size: 16px; font-weight: 600;">ADMINISTRADOR - TOTAL DE {{$numero_cajas ?? 0}} CAJA(S)</span>
+						@else
+							<span style="font-size: 16px; font-weight: 600;">CAJERO: {{$cierre->usuario->usuario}}</span>
+						@endif
 					</td>
-					<td>
-						<h2>{{$cierre->fecha}}</h2>
-						<h4>CAJERO: {{$cierre->usuario->usuario}}</h4>
-					</td>
-				</tr>
-				<tr class="">
-					<th class="right">
-						VENTAS DEL DÍA
-					</th>
-					<td class=""><span class="text-success-only fs-3">{{($facturado["numventas"])}}</span></td>
-					<th class="right">
-						INVENTARIO
-					</th>
-					<td colspan="" class="left">Venta: {{$total_inventario_format}}<br>Base: {{$total_inventario_base_format}}</td>
 
-					{{-- <td>
-						<b>VUELTOS TOTALES</b> <hr>
-						{{($vueltos_totales)}}
-					</td> --}}
-					<th class="@if($cierre->descuadre<-1 || $cierre->descuadre > 10) bg-danger-light @else bg-success-light @endif" rowspan="7">
-						
-						@if($cierre->descuadre<-1 || $cierre->descuadre > 10) <h3>DESCUADRADO</h3> @else <h3>CUADRADO</h3> @endif
-						<h1>{{$cierre->descuadre}}</h1>
+					<th class="center" colspan="2" style="font-size: 18px;">
+						<span style="font-weight:bold;">VENTAS DEL DÍA</span> <br>
+						<span class="text-success-only" style="font-size: 24px; font-weight: bold;">{{($facturado["numventas"])}}</span>
 					</th>
-
-					<th class="d-flex" rowspan="7">
-						<h3>EFECTIVO GUARDADO:</h3>
-						<span class="">$ <span class="fs-3">{{($cierre->efectivo_guardado)}}</span></span><br>
-						<span class="">COP <span class="fs-3">{{($cierre->efectivo_guardado_cop)}}</span></span><br>
-						<span class="">BS <span class="fs-3">{{($cierre->efectivo_guardado_bs)}}</span></span><br>
-						
-					</th>
+					
 				</tr>
 				
-				
+				{{-- CUADRE CONSOLIDADO CON MONEDAS ORIGINALES --}}
+				@if(isset($cuadre_consolidado) && $cuadre_consolidado)
 				<tr>
-					<th>DÉBITO</th>
-					<th>EFECTIVO</th>
-					<th>TRANSFERENCIA</th>
-					<th>BIOPAGO</th>
-					
-
+					<td colspan="6">
+						<h2 class="text-center">CUADRE CONSOLIDADO - TOTAL DE {{$numero_cajas ?? 1}} CAJA(S)</h2>
+						<table class="table" style="margin-top: 20px;">
+							<thead>
+								<tr class="table-dark">
+									<th>Tipo</th>
+									<th class="text-right">Saldo Inicial</th>
+									<th class="text-right">Real</th>
+									<th class="text-right">Digital</th>
+									<th class="text-right">Diferencia</th>
+									<th class="text-center">Estado</th>
+								</tr>
+							</thead>
+							<tbody>
+								{{-- EFECTIVO --}}
+								<tr>
+									<td colspan="6" style="background-color: #e3f2fd; font-weight: bold;">EFECTIVO</td>
+								</tr>
+								{{-- Efectivo USD --}}
+								@if(isset($cuadre_consolidado['efectivo_usd']))
+								<tr>
+									<td class="left"><strong>Dólares (USD)</strong></td>
+									<td class="text-right">{{number_format(floatval($cuadre_consolidado['efectivo_usd']['inicial'] ?? 0), 2)}}</td>
+									<td class="text-right"><strong>${{number_format(floatval($cuadre_consolidado['efectivo_usd']['real'] ?? 0), 2)}}</strong></td>
+									<td class="text-right">${{number_format(floatval($cuadre_consolidado['efectivo_usd']['digital'] ?? 0), 2)}}</td>
+									<td class="text-right {{($cuadre_consolidado['efectivo_usd']['estado'] ?? '') == 'cuadrado' ? 'text-success' : (($cuadre_consolidado['efectivo_usd']['diferencia'] ?? 0) > 0 ? 'text-warning' : 'text-danger')}}">
+										<strong>${{number_format(floatval($cuadre_consolidado['efectivo_usd']['diferencia'] ?? 0), 2)}}</strong>
+					</td>
+									<td class="text-center" style="@if(($cuadre_consolidado['efectivo_usd']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_consolidado['efectivo_usd']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
+										@if(($cuadre_consolidado['efectivo_usd']['estado'] ?? '') == 'cuadrado')
+											<span class="badge bg-success">CUADRADO</span>
+										@elseif(($cuadre_consolidado['efectivo_usd']['diferencia'] ?? 0) > 0)
+											<span class="badge bg-warning text-dark">SOBRAN</span>
+										@else
+											<span class="badge bg-danger">FALTAN</span>
+										@endif
+					</td>
+								</tr>
+								@endif
+								{{-- Efectivo BS --}}
+								@if(isset($cuadre_consolidado['efectivo_bs']))
+								<tr>
+									<td class="left"><strong>Bolívares (Bs)</strong></td>
+									<td class="text-right">{{number_format(floatval($cuadre_consolidado['efectivo_bs']['inicial'] ?? 0), 2)}}</td>
+									<td class="text-right"><strong>Bs {{number_format(floatval($cuadre_consolidado['efectivo_bs']['real'] ?? 0), 2)}}</strong></td>
+									<td class="text-right">Bs {{number_format(floatval($cuadre_consolidado['efectivo_bs']['digital'] ?? 0), 2)}}</td>
+									<td class="text-right {{($cuadre_consolidado['efectivo_bs']['estado'] ?? '') == 'cuadrado' ? 'text-success' : (($cuadre_consolidado['efectivo_bs']['diferencia'] ?? 0) > 0 ? 'text-warning' : 'text-danger')}}">
+										<strong>Bs {{number_format(floatval($cuadre_consolidado['efectivo_bs']['diferencia'] ?? 0), 2)}}</strong>
+									</td>
+									<td class="text-center" style="@if(($cuadre_consolidado['efectivo_bs']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_consolidado['efectivo_bs']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
+										@if(($cuadre_consolidado['efectivo_bs']['estado'] ?? '') == 'cuadrado')
+											<span class="badge bg-success">CUADRADO</span>
+										@elseif(($cuadre_consolidado['efectivo_bs']['diferencia'] ?? 0) > 0)
+											<span class="badge bg-warning text-dark">SOBRAN</span>
+										@else
+											<span class="badge bg-danger">FALTAN</span>
+										@endif
+					</td>
 				</tr>
-				<tr>
-					<td>{{($facturado[2])}}</td>
-					<td>{{($facturado[3])}}</td>
-					<td>{{($facturado[1])}}</td>
-					<td>{{($facturado[5])}}</td>
+								@endif
+								{{-- Efectivo COP --}}
+								@if(isset($cuadre_consolidado['efectivo_cop']))
+								<tr>
+									<td class="left"><strong>Pesos (COP)</strong></td>
+									<td class="text-right">{{number_format(floatval($cuadre_consolidado['efectivo_cop']['inicial'] ?? 0), 2)}}</td>
+									<td class="text-right"><strong>$ {{number_format(floatval($cuadre_consolidado['efectivo_cop']['real'] ?? 0), 2)}}</strong></td>
+									<td class="text-right">$ {{number_format(floatval($cuadre_consolidado['efectivo_cop']['digital'] ?? 0), 2)}}</td>
+									<td class="text-right {{($cuadre_consolidado['efectivo_cop']['estado'] ?? '') == 'cuadrado' ? 'text-success' : (($cuadre_consolidado['efectivo_cop']['diferencia'] ?? 0) > 0 ? 'text-warning' : 'text-danger')}}">
+										<strong>$ {{number_format(floatval($cuadre_consolidado['efectivo_cop']['diferencia'] ?? 0), 2)}}</strong>
+									</td>
+									<td class="text-center" style="@if(($cuadre_consolidado['efectivo_cop']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_consolidado['efectivo_cop']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
+										@if(($cuadre_consolidado['efectivo_cop']['estado'] ?? '') == 'cuadrado')
+											<span class="badge bg-success">CUADRADO</span>
+										@elseif(($cuadre_consolidado['efectivo_cop']['diferencia'] ?? 0) > 0)
+											<span class="badge bg-warning text-dark">SOBRAN</span>
+										@else
+											<span class="badge bg-danger">FALTAN</span>
+										@endif
+									</td>
+								</tr>
+								@endif
+								
+								{{-- DÉBITO --}}
+								<tr>
+									<td colspan="6" style="background-color: #fff3cd; font-weight: bold;">DÉBITO</td>
+								</tr>
+								{{-- Débito Pinpad --}}
+								@if(isset($cuadre_consolidado['debito_pinpad']))
+								<tr>
+									<td class="left"><strong>Pinpad</strong></td>
+									<td class="text-right">-</td>
+									<td class="text-right"><strong>Bs {{number_format(floatval($cuadre_consolidado['debito_pinpad']['real'] ?? 0), 2)}}</strong></td>
+									<td class="text-right">Bs {{number_format(floatval($cuadre_consolidado['debito_pinpad']['digital'] ?? 0), 2)}}</td>
+									<td class="text-right {{($cuadre_consolidado['debito_pinpad']['estado'] ?? '') == 'cuadrado' ? 'text-success' : (($cuadre_consolidado['debito_pinpad']['diferencia'] ?? 0) > 0 ? 'text-warning' : 'text-danger')}}">
+										<strong>Bs {{number_format(floatval($cuadre_consolidado['debito_pinpad']['diferencia'] ?? 0), 2)}}</strong>
+									</td>
+									<td class="text-center" style="@if(($cuadre_consolidado['debito_pinpad']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_consolidado['debito_pinpad']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
+										@if(($cuadre_consolidado['debito_pinpad']['estado'] ?? '') == 'cuadrado')
+											<span class="badge bg-success">CUADRADO</span>
+										@elseif(($cuadre_consolidado['debito_pinpad']['diferencia'] ?? 0) > 0)
+											<span class="badge bg-warning text-dark">SOBRAN</span>
+										@else
+											<span class="badge bg-danger">FALTAN</span>
+										@endif
+									</td>
+								</tr>
+								@endif
+								{{-- Débito Otros Puntos --}}
+								@if(isset($cuadre_consolidado['debito_otros']))
+								<tr>
+									<td class="left"><strong>Otros Puntos</strong></td>
+									<td class="text-right">-</td>
+									<td class="text-right"><strong>Bs {{number_format(floatval($cuadre_consolidado['debito_otros']['real'] ?? 0), 2)}}</strong></td>
+									<td class="text-right">Bs {{number_format(floatval($cuadre_consolidado['debito_otros']['digital'] ?? 0), 2)}}</td>
+									<td class="text-right {{($cuadre_consolidado['debito_otros']['estado'] ?? '') == 'cuadrado' ? 'text-success' : (($cuadre_consolidado['debito_otros']['diferencia'] ?? 0) > 0 ? 'text-warning' : 'text-danger')}}">
+										<strong>Bs {{number_format(floatval($cuadre_consolidado['debito_otros']['diferencia'] ?? 0), 2)}}</strong>
+									</td>
+									<td class="text-center" style="@if(($cuadre_consolidado['debito_otros']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_consolidado['debito_otros']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
+										@if(($cuadre_consolidado['debito_otros']['estado'] ?? '') == 'cuadrado')
+											<span class="badge bg-success">CUADRADO</span>
+										@elseif(($cuadre_consolidado['debito_otros']['diferencia'] ?? 0) > 0)
+											<span class="badge bg-warning text-dark">SOBRAN</span>
+										@else
+											<span class="badge bg-danger">FALTAN</span>
+										@endif
+									</td>
+								</tr>
+								@endif
+								
+								{{-- TRANSFERENCIA --}}
+								@if(isset($cuadre_consolidado['transferencia']))
+								<tr>
+									<td colspan="6" style="background-color: #d1ecf1; font-weight: bold;">TRANSFERENCIA</td>
+								</tr>
+								<tr>
+									<td class="left"><strong>Transferencia</strong></td>
+									<td class="text-right">-</td>
+									<td class="text-right"><strong>${{number_format(floatval($cuadre_consolidado['transferencia']['real'] ?? 0), 2)}}</strong></td>
+									<td class="text-right">${{number_format(floatval($cuadre_consolidado['transferencia']['digital'] ?? 0), 2)}}</td>
+									<td class="text-right text-success">
+										<strong>${{number_format(floatval($cuadre_consolidado['transferencia']['diferencia'] ?? 0), 2)}}</strong>
+									</td>
+									<td class="text-center" style="background-color: #d4edda; font-weight: bold;">
+										<span class="badge bg-success">CUADRADO</span>
+									</td>
+								</tr>
+								@endif
+							</tbody>
+						</table>
+						
+						{{-- DATOS INTRODUCIDOS TOTAL --}}
+						<div style="margin-top: 20px; margin-bottom: 20px;">
+							<h5 style="color: #1e3a8a; font-weight: bold; margin-bottom: 15px; text-align: center;">
+								<i class="fa fa-calculator"></i> Datos Introducidos Total
+							</h5>
+							<div style="display: flex; gap: 15px; justify-content: space-between;">
+								{{-- Tabla 1: Efectivo Real Contado --}}
+								<table class="table" style="width: 33.33%; margin: 0; border: 2px solid #90caf9;">
+									<thead style="background-color: #e3f2fd;">
+										<tr>
+											<th colspan="2" style="text-align: center; color: #1565c0; font-weight: bold; border-bottom: 2px solid #90caf9;">
+												<i class="fa fa-money-bill-wave"></i> Efectivo Real Contado
+					</th>
+										</tr>
+									</thead>
+									<tbody>
+										<tr>
+											<td style="font-weight: bold;">USD:</td>
+											<td class="text-right"><strong>${{number_format(floatval($cierre->efectivo_actual ?? 0), 2)}}</strong></td>
+										</tr>
+										<tr>
+											<td style="font-weight: bold;">Bs:</td>
+											<td class="text-right"><strong>Bs {{number_format(floatval($cierre->efectivo_actual_bs ?? 0), 2)}}</strong></td>
+										</tr>
+										<tr>
+											<td style="font-weight: bold;">COP:</td>
+											<td class="text-right"><strong>$ {{number_format(floatval($cierre->efectivo_actual_cop ?? 0), 2)}}</strong></td>
+										</tr>
+									</tbody>
+								</table>
+								
+								{{-- Tabla 2: Dejar en Caja --}}
+								<table class="table" style="width: 33.33%; margin: 0; border: 2px solid #ffc107;">
+									<thead style="background-color: #fff3cd;">
+										<tr>
+											<th colspan="2" style="text-align: center; color: #856404; font-weight: bold; border-bottom: 2px solid #ffc107;">
+												<i class="fa fa-archive"></i> Dejar en Caja
+											</th>
+										</tr>
+									</thead>
+									<tbody>
+										<tr>
+											<td style="font-weight: bold;">USD:</td>
+											<td class="text-right"><strong>${{number_format(floatval($cierre->dejar_dolar ?? 0), 2)}}</strong></td>
+										</tr>
+										<tr>
+											<td style="font-weight: bold;">Bs:</td>
+											<td class="text-right"><strong>Bs {{number_format(floatval($cierre->dejar_bss ?? 0), 2)}}</strong></td>
+										</tr>
+										<tr>
+											<td style="font-weight: bold;">COP:</td>
+											<td class="text-right"><strong>$ {{number_format(floatval($cierre->dejar_peso ?? 0), 2)}}</strong></td>
+										</tr>
+									</tbody>
+								</table>
+								
+								{{-- Tabla 3: Efectivo Guardado --}}
+								<table class="table" style="width: 33.33%; margin: 0; border: 2px solid #28a745;">
+									<thead style="background-color: #d4edda;">
+										<tr>
+											<th colspan="2" style="text-align: center; color: #155724; font-weight: bold; border-bottom: 2px solid #28a745;">
+												<i class="fa fa-piggy-bank"></i> Efectivo Guardado
+					</th>
 				</tr>
+									</thead>
+									<tbody>
+										<tr>
+											<td style="font-weight: bold;">USD:</td>
+											<td class="text-right"><strong>${{moneda($cierre->efectivo_guardado)}}</strong></td>
+										</tr>
+										<tr>
+											<td style="font-weight: bold;">Bs:</td>
+											<td class="text-right"><strong>Bs {{moneda($cierre->efectivo_guardado_bs)}}</strong></td>
+										</tr>
+										<tr>
+											<td style="font-weight: bold;">COP:</td>
+											<td class="text-right"><strong>$ {{moneda($cierre->efectivo_guardado_cop)}}</strong></td>
+										</tr>
+									</tbody>
+								</table>
+							</div>
+						</div>
+						
+						{{-- TABLA CONSOLIDADA SOLO EN DÓLARES --}}
+						<table class="table" style="margin-top: 30px;">
+							<thead>
+								<tr class="table-dark">
+									<th colspan="6" style="background-color: #343a40; color: white;">
+										<h3>CUADRE CONSOLIDADO EN DÓLARES (TODOS LOS TIPOS GLOBALES)</h3>
+									</th>
+								</tr>
+								<tr class="table-dark">
+									<th>Tipo</th>
+									<th class="text-right">Saldo Inicial</th>
+									<th class="text-right">Real</th>
+									<th class="text-right">Digital</th>
+									<th class="text-right">Diferencia</th>
+									<th class="text-center">Estado</th>
+								</tr>
+							</thead>
+							<tbody>
+								{{-- EFECTIVO TOTAL (USD + BS convertido + COP convertido) --}}
+								@php
+									$tasa_bs = floatval($cierre->tasa ?? 0);
+									$tasa_cop = floatval($cierre->tasacop ?? 0);
+									// Evitar división por cero
+									$tasa_bs = $tasa_bs > 0 ? $tasa_bs : 1;
+									$tasa_cop = $tasa_cop > 0 ? $tasa_cop : 1;
+								@endphp
+								<tr>
+									<td class="left"><strong>EFECTIVO TOTAL</strong></td>
+									<td class="text-right">
+										${{number_format(
+											floatval($cuadre_consolidado['efectivo_usd']['inicial'] ?? 0) + 
+											(floatval($cuadre_consolidado['efectivo_bs']['inicial'] ?? 0) / $tasa_bs) + 
+											(floatval($cuadre_consolidado['efectivo_cop']['inicial'] ?? 0) / $tasa_cop)
+										, 2)}}
+									</td>
+									<td class="text-right">
+										<strong>${{number_format(
+											floatval($cuadre_consolidado['efectivo_usd']['real'] ?? 0) + 
+											(floatval($cuadre_consolidado['efectivo_bs']['real'] ?? 0) / $tasa_bs) + 
+											(floatval($cuadre_consolidado['efectivo_cop']['real'] ?? 0) / $tasa_cop)
+										, 2)}}</strong>
+									</td>
+									<td class="text-right">
+										${{number_format(
+											floatval($cuadre_consolidado['efectivo_usd']['digital'] ?? 0) + 
+											(floatval($cuadre_consolidado['efectivo_bs']['digital'] ?? 0) / $tasa_bs) + 
+											(floatval($cuadre_consolidado['efectivo_cop']['digital'] ?? 0) / $tasa_cop)
+										, 2)}}
+									</td>
+									<td class="text-right">
+										@php
+											$efectivo_real_usd = floatval($cuadre_consolidado['efectivo_usd']['real'] ?? 0) + 
+												(floatval($cuadre_consolidado['efectivo_bs']['real'] ?? 0) / $tasa_bs) + 
+												(floatval($cuadre_consolidado['efectivo_cop']['real'] ?? 0) / $tasa_cop);
+											$efectivo_digital_usd = floatval($cuadre_consolidado['efectivo_usd']['digital'] ?? 0) + 
+												(floatval($cuadre_consolidado['efectivo_bs']['digital'] ?? 0) / $tasa_bs) + 
+												(floatval($cuadre_consolidado['efectivo_cop']['digital'] ?? 0) / $tasa_cop);
+											$efectivo_inicial_usd = floatval($cuadre_consolidado['efectivo_usd']['inicial'] ?? 0) + 
+												(floatval($cuadre_consolidado['efectivo_bs']['inicial'] ?? 0) / $tasa_bs) + 
+												(floatval($cuadre_consolidado['efectivo_cop']['inicial'] ?? 0) / $tasa_cop);
+											$efectivo_diff_usd = $efectivo_real_usd - $efectivo_digital_usd - $efectivo_inicial_usd;
+										@endphp
+										<strong class="{{abs($efectivo_diff_usd) <= 5 ? 'text-success' : ($efectivo_diff_usd > 0 ? 'text-warning' : 'text-danger')}}">
+											${{number_format($efectivo_diff_usd, 2)}}
+										</strong>
+									</td>
+									<td class="text-center" style="@if(abs($efectivo_diff_usd) <= 5) background-color: #d4edda; @elseif($efectivo_diff_usd > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
+										@if(abs($efectivo_diff_usd) <= 5)
+											<span class="badge bg-success">CUADRADO</span>
+										@elseif($efectivo_diff_usd > 0)
+											<span class="badge bg-warning text-dark">SOBRAN</span>
+										@else
+											<span class="badge bg-danger">FALTAN</span>
+										@endif
+									</td>
+								</tr>
+								
+								{{-- DÉBITO TOTAL (Pinpad + Otros Puntos convertidos a USD) --}}
+								<tr>
+									<td class="left"><strong>DÉBITO TOTAL</strong></td>
+									<td class="text-right">-</td>
+									<td class="text-right">
+										<strong>${{number_format(
+											(floatval($cuadre_consolidado['debito_pinpad']['real'] ?? 0) / $tasa_bs) + 
+											(floatval($cuadre_consolidado['debito_otros']['real'] ?? 0) / $tasa_bs)
+										, 2)}}</strong>
+									</td>
+									<td class="text-right">
+										${{number_format(
+											(floatval($cuadre_consolidado['debito_pinpad']['digital'] ?? 0) / $tasa_bs) + 
+											(floatval($cuadre_consolidado['debito_otros']['digital'] ?? 0) / $tasa_bs)
+										, 2)}}
+									</td>
+									<td class="text-right">
+										@php
+											$debito_real_usd = (floatval($cuadre_consolidado['debito_pinpad']['real'] ?? 0) / $tasa_bs) + 
+												(floatval($cuadre_consolidado['debito_otros']['real'] ?? 0) / $tasa_bs);
+											$debito_digital_usd = (floatval($cuadre_consolidado['debito_pinpad']['digital'] ?? 0) / $tasa_bs) + 
+												(floatval($cuadre_consolidado['debito_otros']['digital'] ?? 0) / $tasa_bs);
+											$debito_diff_usd = $debito_real_usd - $debito_digital_usd;
+										@endphp
+										<strong class="{{abs($debito_diff_usd) <= 5 ? 'text-success' : ($debito_diff_usd > 0 ? 'text-warning' : 'text-danger')}}">
+											${{number_format($debito_diff_usd, 2)}}
+										</strong>
+									</td>
+									<td class="text-center">
+										@if(abs($debito_diff_usd) <= 5)
+											<span class="badge bg-success">CUADRADO</span>
+										@elseif($debito_diff_usd > 0)
+											<span class="badge bg-warning text-dark">SOBRAN</span>
+										@else
+											<span class="badge bg-danger">FALTAN</span>
+										@endif
+									</td>
+								</tr>
+								
+								{{-- TRANSFERENCIA --}}
+								@if(isset($cuadre_consolidado['transferencia']))
+								<tr>
+									<td class="left"><strong>TRANSFERENCIA</strong></td>
+									<td class="text-right">-</td>
+									<td class="text-right"><strong>${{number_format(floatval($cuadre_consolidado['transferencia']['real'] ?? 0), 2)}}</strong></td>
+									<td class="text-right">${{number_format(floatval($cuadre_consolidado['transferencia']['digital'] ?? 0), 2)}}</td>
+									<td class="text-right text-success">
+										<strong>${{number_format(floatval($cuadre_consolidado['transferencia']['diferencia'] ?? 0), 2)}}</strong>
+									</td>
+									<td class="text-center" style="background-color: #d4edda; font-weight: bold;">
+										<span class="badge bg-success">CUADRADO</span>
+									</td>
+								</tr>
+								@endif
+								
+								{{-- FILA DE TOTALES --}}
+								@php
+									// Calcular totales
+									$total_inicial = $efectivo_inicial_usd; // Efectivo tiene inicial, débito y transferencia no
+									
+									$total_real = $efectivo_real_usd + $debito_real_usd + floatval($cuadre_consolidado['transferencia']['real'] ?? 0);
+									
+									$total_digital = $efectivo_digital_usd + $debito_digital_usd + floatval($cuadre_consolidado['transferencia']['digital'] ?? 0);
+									
+									$total_diferencia = $total_real - $total_digital - $total_inicial;
+								@endphp
+								<tr style="background-color: #e9ecef; font-weight: bold; border-top: 3px solid #343a40;">
+									<td class="left"><strong>TOTAL</strong></td>
+									<td class="text-right"><strong>${{(moneda($total_inicial))}}</strong></td>
+									<td class="text-right"><strong>${{(moneda($total_real))}}</strong></td>
+									<td class="text-right"><strong>${{(moneda($total_digital))}}</strong></td>
+									<td class="text-right">
+										<strong class="{{abs($total_diferencia) <= 5 ? 'text-success' : ($total_diferencia > 0 ? 'text-warning' : 'text-danger')}}">
+											${{(moneda($total_diferencia))}}
+										</strong>
+									</td>
+									<td class="text-center" style="@if(abs($total_diferencia) <= 5) background-color: #d4edda; @elseif($total_diferencia > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
+										@if(abs($total_diferencia) <= 5)
+											<span class="badge bg-success">CUADRADO</span>
+										@elseif($total_diferencia > 0)
+											<span class="badge bg-warning text-dark">SOBRAN</span>
+										@else
+											<span class="badge bg-danger">FALTAN</span>
+										@endif
+									</td>
+				</tr>
+							</tbody>
+						</table>
+						
+						{{-- INFORMACIÓN DE DESCUENTOS --}}
+						@php
+							$precio_total = floatval($cierre->precio ?? 0); // Venta bruta (sin descuentos)
+							$desc_total = floatval($cierre->desc_total ?? 0); // Venta neta (con descuentos)
+							$monto_descuento = $precio_total - $desc_total; // Monto total de descuento
+							$porcentaje_descuento = $precio_total > 0 ? ($monto_descuento / $precio_total) * 100 : 0; // Porcentaje de descuento
+						@endphp
+						<div style="margin-top: 30px; margin-bottom: 20px;">
+							<h5 style="color: #1e3a8a; font-weight: bold; margin-bottom: 15px; text-align: center;">
+								<i class="fa fa-percent"></i> Información de Descuentos
+							</h5>
+							<div style="display: flex; gap: 15px; justify-content: space-between;">
+								{{-- Tabla 1: Venta Bruta --}}
+								<table class="table" style="width: 25%; margin: 0; border: 2px solid #4a90e2;">
+									<thead style="background-color: #e3f2fd;">
+										<tr>
+											<th colspan="2" style="text-align: center; color: #1565c0; font-weight: bold; border-bottom: 2px solid #4a90e2;">
+												Venta Bruta
+											</th>
+				</tr>
+									</thead>
+									<tbody>
+										<tr>
+											<td class="text-center" style="font-weight: bold; padding: 8px;">
+												<strong style="font-size: 18px;">${{number_format($precio_total, 2)}}</strong>
+											</td>
+										</tr>
+									</tbody>
+								</table>
+								
+								{{-- Tabla 2: Monto de Descuento --}}
+								<table class="table" style="width: 25%; margin: 0; border: 2px solid #ff9800;">
+									<thead style="background-color: #fff3e0;">
+										<tr>
+											<th colspan="2" style="text-align: center; color: #e65100; font-weight: bold; border-bottom: 2px solid #ff9800;">
+												Monto de Descuento
+											</th>
+										</tr>
+									</thead>
+									<tbody>
+										<tr>
+											<td class="text-center" style="font-weight: bold; padding: 8px;">
+												<strong style="font-size: 18px; color: #e65100;">${{number_format($monto_descuento, 2)}}</strong>
+											</td>
+										</tr>
+									</tbody>
+								</table>
+								
+								{{-- Tabla 3: Porcentaje de Descuento --}}
+								<table class="table" style="width: 25%; margin: 0; border: 2px solid #9c27b0;">
+									<thead style="background-color: #f3e5f5;">
+										<tr>
+											<th colspan="2" style="text-align: center; color: #6a1b9a; font-weight: bold; border-bottom: 2px solid #9c27b0;">
+												% de Descuento
+					</th>
+										</tr>
+									</thead>
+									<tbody>
+										<tr>
+											<td class="text-center" style="font-weight: bold; padding: 8px;">
+												<strong style="font-size: 18px; color: #6a1b9a;">{{number_format($porcentaje_descuento, 2)}}%</strong>
+											</td>
+										</tr>
+									</tbody>
+								</table>
+								
+								{{-- Tabla 4: Venta Neta --}}
+								<table class="table" style="width: 25%; margin: 0; border: 2px solid #28a745;">
+									<thead style="background-color: #d4edda;">
+										<tr>
+											<th colspan="2" style="text-align: center; color: #155724; font-weight: bold; border-bottom: 2px solid #28a745;">
+												Venta Neta
+					</th>
+										</tr>
+									</thead>
+									<tbody>
+										<tr>
+											<td class="text-center" style="font-weight: bold; padding: 8px;">
+												<strong style="font-size: 18px; color: #155724;">${{number_format($desc_total, 2)}}</strong>
+											</td>
+										</tr>
+									</tbody>
+								</table>
+							</div>
+						</div>
+					</td>
+				</tr>
+				@endif
 				
-
-				<tr class="text-success">
-					<th colspan="2">
-						<h3>FACTURADO DIGITAL</h3>
-					</th>
-					<th colspan="2">
-						<h1 class="">{{($facturado_tot)}}</h1>
-					</th>
-					
+				{{-- CUADRES INDIVIDUALES POR USUARIO (solo si es totalizar) --}}
+				@if(($totalizarcierre ?? false) && isset($cuadres_individuales) && count($cuadres_individuales) > 0)
+					@foreach($cuadres_individuales as $cuadre_individual)
+					<tr>
+						<td colspan="6">
+							<h3 class="text-center">CUADRE INDIVIDUAL - {{$cuadre_individual['usuario']->usuario ?? 'N/A'}} ({{$cuadre_individual['usuario']->nombre ?? 'N/A'}})</h3>
+							@if(isset($cuadre_individual['cuadre_detallado']) && $cuadre_individual['cuadre_detallado'])
+								<table class="table" style="margin-top: 15px;">
+									<thead>
+										<tr class="table-dark">
+											<th>Tipo</th>
+											<th class="text-right">Saldo Inicial</th>
+											<th class="text-right">Real</th>
+											<th class="text-right">Digital</th>
+											<th class="text-right">Diferencia</th>
+											<th class="text-center">Estado</th>
 				</tr>
+									</thead>
+									<tbody>
+										{{-- EFECTIVO --}}
+										<tr>
+											<td colspan="6" style="background-color: #e3f2fd; font-weight: bold;">EFECTIVO</td>
+										</tr>
+										@if(isset($cuadre_individual['cuadre_detallado']['efectivo_usd']))
+										<tr>
+											<td class="left"><strong>Dólares (USD)</strong></td>
+											<td class="text-right">{{number_format(floatval($cuadre_individual['cuadre_detallado']['efectivo_usd']['inicial'] ?? 0), 2)}}</td>
+											<td class="text-right"><strong>${{number_format(floatval($cuadre_individual['cuadre_detallado']['efectivo_usd']['real'] ?? 0), 2)}}</strong></td>
+											<td class="text-right">${{number_format(floatval($cuadre_individual['cuadre_detallado']['efectivo_usd']['digital'] ?? 0), 2)}}</td>
+											<td class="text-right {{($cuadre_individual['cuadre_detallado']['efectivo_usd']['estado'] ?? '') == 'cuadrado' ? 'text-success' : (($cuadre_individual['cuadre_detallado']['efectivo_usd']['diferencia'] ?? 0) > 0 ? 'text-warning' : 'text-danger')}}">
+												<strong>${{number_format(floatval($cuadre_individual['cuadre_detallado']['efectivo_usd']['diferencia'] ?? 0), 2)}}</strong>
+											</td>
+											<td class="text-center" style="@if(($cuadre_individual['cuadre_detallado']['efectivo_usd']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_individual['cuadre_detallado']['efectivo_usd']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
+												@if(($cuadre_individual['cuadre_detallado']['efectivo_usd']['estado'] ?? '') == 'cuadrado')
+													<span class="badge bg-success">CUADRADO</span>
+												@elseif(($cuadre_individual['cuadre_detallado']['efectivo_usd']['diferencia'] ?? 0) > 0)
+													<span class="badge bg-warning text-dark">SOBRAN</span>
+												@else
+													<span class="badge bg-danger">FALTAN</span>
+												@endif
+											</td>
+										</tr>
+										@endif
+										@if(isset($cuadre_individual['cuadre_detallado']['efectivo_bs']))
+										<tr>
+											<td class="left"><strong>Bolívares (Bs)</strong></td>
+											<td class="text-right">{{moneda($cuadre_individual['cuadre_detallado']['efectivo_bs']['inicial'])}}</td>
+											<td class="text-right"><strong>Bs {{moneda($cuadre_individual['cuadre_detallado']['efectivo_bs']['real'])}}</strong></td>
+											<td class="text-right">Bs {{moneda($cuadre_individual['cuadre_detallado']['efectivo_bs']['digital'])}}</td>
+											<td class="text-right {{($cuadre_individual['cuadre_detallado']['efectivo_bs']['estado'] ?? '') == 'cuadrado' ? 'text-success' : (($cuadre_individual['cuadre_detallado']['efectivo_bs']['diferencia'] ?? 0) > 0 ? 'text-warning' : 'text-danger')}}">
+												<strong>Bs {{moneda($cuadre_individual['cuadre_detallado']['efectivo_bs']['diferencia'])}}</strong>
+											</td>
+											<td class="text-center" style="@if(($cuadre_individual['cuadre_detallado']['efectivo_bs']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_individual['cuadre_detallado']['efectivo_bs']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
+												@if(($cuadre_individual['cuadre_detallado']['efectivo_bs']['estado'] ?? '') == 'cuadrado')
+													<span class="badge bg-success">CUADRADO</span>
+												@elseif(($cuadre_individual['cuadre_detallado']['efectivo_bs']['diferencia'] ?? 0) > 0)
+													<span class="badge bg-warning text-dark">SOBRAN</span>
+												@else
+													<span class="badge bg-danger">FALTAN</span>
+												@endif
+											</td>
+										</tr>
+										@endif
+										@if(isset($cuadre_individual['cuadre_detallado']['efectivo_cop']))
+										<tr>
+											<td class="left"><strong>Pesos (COP)</strong></td>
+											<td class="text-right">{{moneda($cuadre_individual['cuadre_detallado']['efectivo_cop']['inicial'])}}</td>
+											<td class="text-right"><strong>$ {{moneda($cuadre_individual['cuadre_detallado']['efectivo_cop']['real'])}}</strong></td>
+											<td class="text-right">$ {{moneda($cuadre_individual['cuadre_detallado']['efectivo_cop']['digital'])}}</td>
+											<td class="text-right {{($cuadre_individual['cuadre_detallado']['efectivo_cop']['estado'] ?? '') == 'cuadrado' ? 'text-success' : (($cuadre_individual['cuadre_detallado']['efectivo_cop']['diferencia'] ?? 0) > 0 ? 'text-warning' : 'text-danger')}}">
+												<strong>$ {{moneda($cuadre_individual['cuadre_detallado']['efectivo_cop']['diferencia'])}}</strong>
+											</td>
+											<td class="text-center" style="@if(($cuadre_individual['cuadre_detallado']['efectivo_cop']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_individual['cuadre_detallado']['efectivo_cop']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
+												@if(($cuadre_individual['cuadre_detallado']['efectivo_cop']['estado'] ?? '') == 'cuadrado')
+													<span class="badge bg-success">CUADRADO</span>
+												@elseif(($cuadre_individual['cuadre_detallado']['efectivo_cop']['diferencia'] ?? 0) > 0)
+													<span class="badge bg-warning text-dark">SOBRAN</span>
+												@else
+													<span class="badge bg-danger">FALTAN</span>
+												@endif
+											</td>
+										</tr>
+										@endif
+										
+										{{-- DÉBITO --}}
+										<tr>
+											<td colspan="6" style="background-color: #fff3cd; font-weight: bold;">DÉBITO</td>
+										</tr>
+										@if(isset($cuadre_individual['cuadre_detallado']['debito_pinpad']))
+										<tr>
+											<td class="left"><strong>Pinpad</strong></td>
+											<td class="text-right">-</td>
+											<td class="text-right"><strong>Bs {{moneda($cuadre_individual['cuadre_detallado']['debito_pinpad']['real'])}}</strong></td>
+											<td class="text-right">Bs {{moneda($cuadre_individual['cuadre_detallado']['debito_pinpad']['digital'])}}</td>
+											<td class="text-right text-success">
+												<strong>Bs {{moneda($cuadre_individual['cuadre_detallado']['debito_pinpad']['diferencia'])}}</strong>
+											</td>
+											<td class="text-center" style="background-color: #d4edda; font-weight: bold;">
+												<span class="badge bg-success">CUADRADO</span>
+											</td>
+										</tr>
+										@endif
+										@if(isset($cuadre_individual['cuadre_detallado']['debito_otros']))
+										<tr>
+											<td class="left"><strong>Otros Puntos</strong></td>
+											<td class="text-right">-</td>
+											<td class="text-right"><strong>Bs {{moneda($cuadre_individual['cuadre_detallado']['debito_otros']['real'])}}</strong></td>
+											<td class="text-right">Bs {{moneda($cuadre_individual['cuadre_detallado']['debito_otros']['digital'])}}</td>
+											<td class="text-right {{($cuadre_individual['cuadre_detallado']['debito_otros']['estado'] ?? '') == 'cuadrado' ? 'text-success' : (($cuadre_individual['cuadre_detallado']['debito_otros']['diferencia'] ?? 0) > 0 ? 'text-warning' : 'text-danger')}}">
+												<strong>Bs {{moneda($cuadre_individual['cuadre_detallado']['debito_otros']['diferencia'])}}</strong>
+											</td>
+											<td class="text-center" style="@if(($cuadre_individual['cuadre_detallado']['debito_otros']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_individual['cuadre_detallado']['debito_otros']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
+												@if(($cuadre_individual['cuadre_detallado']['debito_otros']['estado'] ?? '') == 'cuadrado')
+													<span class="badge bg-success">CUADRADO</span>
+												@elseif(($cuadre_individual['cuadre_detallado']['debito_otros']['diferencia'] ?? 0) > 0)
+													<span class="badge bg-warning text-dark">SOBRAN</span>
+												@else
+													<span class="badge bg-danger">FALTAN</span>
+												@endif
+											</td>
+										</tr>
+										@endif
+										
+										{{-- TRANSFERENCIA --}}
+										@if(isset($cuadre_individual['cuadre_detallado']['transferencia']))
+										<tr>
+											<td colspan="6" style="background-color: #d1ecf1; font-weight: bold;">TRANSFERENCIA</td>
+				</tr>
+										<tr>
+											<td class="left"><strong>Transferencia</strong></td>
+											<td class="text-right">-</td>
+											<td class="text-right"><strong>${{moneda($cuadre_individual['cuadre_detallado']['transferencia']['real'])}}</strong></td>
+											<td class="text-right">${{moneda($cuadre_individual['cuadre_detallado']['transferencia']['digital'])}}</td>
+											<td class="text-right text-success">
+												<strong>${{moneda($cuadre_individual['cuadre_detallado']['transferencia']['diferencia'])}}</strong>
+											</td>
+											<td class="text-center" style="background-color: #d4edda; font-weight: bold;">
+												<span class="badge bg-success">CUADRADO</span>
+											</td>
+										</tr>
+										@endif
+									</tbody>
+								</table>
+								
+								{{-- Datos Introducidos por Usuario --}}
+								<div style="margin-top: 15px; margin-bottom: 15px;">
+									<h6 style="color: #495057; font-weight: bold; margin-bottom: 10px; text-align: center;">
+										<i class="fa fa-keyboard"></i> Datos Introducidos
+									</h6>
+									<div style="display: flex; gap: 10px; justify-content: space-between;">
+										{{-- Tabla 1: Efectivo Real Contado --}}
+										<table class="table" style="width: 33.33%; margin: 0; border: 2px solid #90caf9; font-size: 12px;">
+											<thead style="background-color: #e3f2fd;">
+												<tr>
+													<th colspan="2" style="text-align: center; color: #1565c0; font-weight: bold; border-bottom: 2px solid #90caf9; padding: 6px;">
+														Efectivo Real
+													</th>
+				</tr>
+											</thead>
+											<tbody>
+												<tr>
+													<td style="font-weight: bold; padding: 4px;">USD:</td>
+													<td class="text-right" style="padding: 4px;"><strong>${{moneda($cuadre_individual['cierre']->efectivo_actual)}}</strong></td>
+												</tr>
+												<tr>
+													<td style="font-weight: bold; padding: 4px;">Bs:</td>
+													<td class="text-right" style="padding: 4px;"><strong>Bs {{moneda($cuadre_individual['cierre']->efectivo_actual_bs)}}</strong></td>
+												</tr>
+												<tr>
+													<td style="font-weight: bold; padding: 4px;">COP:</td>
+													<td class="text-right" style="padding: 4px;"><strong>$ {{moneda($cuadre_individual['cierre']->efectivo_actual_cop)}}</strong></td>
+												</tr>
+											</tbody>
+										</table>
+										
+										{{-- Tabla 2: Dejar en Caja --}}
+										<table class="table" style="width: 33.33%; margin: 0; border: 2px solid #ffc107; font-size: 12px;">
+											<thead style="background-color: #fff3cd;">
+												<tr>
+													<th colspan="2" style="text-align: center; color: #856404; font-weight: bold; border-bottom: 2px solid #ffc107; padding: 6px;">
+														Dejar en Caja
+					</th>
+												</tr>
+											</thead>
+											<tbody>
+												<tr>
+													<td style="font-weight: bold; padding: 4px;">USD:</td>
+													<td class="text-right" style="padding: 4px;"><strong>${{number_format(floatval($cuadre_individual['cierre']->dejar_dolar ?? 0), 2)}}</strong></td>
+												</tr>
+												<tr>
+													<td style="font-weight: bold; padding: 4px;">Bs:</td>
+													<td class="text-right" style="padding: 4px;"><strong>Bs {{number_format(floatval($cuadre_individual['cierre']->dejar_bss ?? 0), 2)}}</strong></td>
+												</tr>
+												<tr>
+													<td style="font-weight: bold; padding: 4px;">COP:</td>
+													<td class="text-right" style="padding: 4px;"><strong>$ {{number_format(floatval($cuadre_individual['cierre']->dejar_peso ?? 0), 2)}}</strong></td>
+												</tr>
+											</tbody>
+										</table>
+										
+										{{-- Tabla 3: Efectivo Guardado --}}
+										<table class="table" style="width: 33.33%; margin: 0; border: 2px solid #28a745; font-size: 12px;">
+											<thead style="background-color: #d4edda;">
+												<tr>
+													<th colspan="2" style="text-align: center; color: #155724; font-weight: bold; border-bottom: 2px solid #28a745; padding: 6px;">
+														Efectivo Guardado
+													</th>
+				</tr>
+											</thead>
+											<tbody>
+												<tr>
+													<td style="font-weight: bold; padding: 4px;">USD:</td>
+													<td class="text-right" style="padding: 4px;"><strong>${{moneda($cuadre_individual['cierre']->efectivo_guardado)}}</strong></td>
+												</tr>
+												<tr>
+													<td style="font-weight: bold; padding: 4px;">Bs:</td>
+													<td class="text-right" style="padding: 4px;"><strong>Bs {{moneda($cuadre_individual['cierre']->efectivo_guardado_bs)}}</strong></td>
+												</tr>
+												<tr>
+													<td style="font-weight: bold; padding: 4px;">COP:</td>
+													<td class="text-right" style="padding: 4px;"><strong>$ {{moneda($cuadre_individual['cierre']->efectivo_guardado_cop)}}</strong></td>
+												</tr>
+											</tbody>
+										</table>
+									</div>
+								</div>
+							@endif
+						</td>
+					</tr>
+					@endforeach
+				@endif
 				
-				<tr class="border-top">
-					<th class="">DÉBITO</th>
-					<th class="">EFECTIVO</th>
-					<th class="">TRANSFERENCIA</th>
-					<th class="">BIOPAGO</th>
-					
-				</tr>
-				<tr >
-					<td class="">{{($cierre->debito)}}</td>
-					<td class="">{{($cierre->efectivo)}}</td>
-					<td class="">{{($cierre->transferencia)}}</td>
-					<td class="">{{($cierre->caja_biopago)}}</td>
-					
-					
-				</tr>
+			
 				
-				<tr class="text-success">
-					<th colspan="2">
-						<h3>FACTURADO REAL</h3>
-					</th>
-					<th colspan="2">
-						<h1 class="">{{($cierre_tot)}}</h1>
-					</th>
-					
-				</tr>
+				
+				
 				<tr>
 					<th colspan="5">
 						<h2>
@@ -244,60 +888,50 @@
 						{{ ($cierre->nota) }}
 					</th>
 				</tr>
+				<!-- Créditos y Abonos del Día -->
 				<tr>
-					<th>
-						CRÉDITOS DEL DÍA
-					</th>
-					<td>
-						{{($facturado[4])}}
-					</td>
-					<th>
-						CRÉDITO POR COBRAR TOTAL
-					</th>
-					<td><span class="h2">{{number_format($cred_total,2)}}</span></td>
+					<th>CRÉDITOS DEL DÍA</th>
+					<td>{{ $facturado[4] }}</td>
+					<th>CRÉDITO POR COBRAR TOTAL</th>
+					<td><span class="h2">{{ number_format($cred_total, 2) }}</span></td>
 				</tr>
 				<tr>
-					<td colspan="5"><b>ABONOS DEL DÍA</b> <br> <span class="h2">{{number_format($abonosdeldia,2)}}</span></td>
+					<th colspan="2">ABONOS DEL DÍA</th>
+					<td colspan="2"><span class="h2">{{ number_format($abonosdeldia, 2) }}</span></td>
 				</tr>
 				
+				@if(count($pedidos_abonos) > 0)
+					<tr style="background: #e9ecef;">
+						<th colspan="5" class="text-center">DETALLE DE ABONOS</th>
+					</tr>
+					<tr>
+						<th style="width: 10%;"># Abono</th>
+						<th style="width: 40%;">Cliente</th>
+						<th style="width: 40%;">Detalle Pago</th>
+						<th style="width: 10%;" colspan="2"></th>
+					</tr>
+				@endif
 				@foreach ($pedidos_abonos as $e)
 					<tr>
-						<td>
-							Abono. #{{$e->id}}
-						</td>
+						<td>Abono #{{ $e->id }}</td>
+						<td>{{ $e->cliente->nombre }}<br><small>{{ $e->cliente->identificacion }}</small></td>
 						<td colspan="3">
-							Cliente: {{$e->cliente->nombre}}. {{$e->cliente->identificacion}}
-						</td>
-						<td>
 							@foreach ($e->pagos as $ee)
-								
 								<span> 
 									<b>
 										@switch($ee->tipo)
-											@case(1)
-											Transferencia
-											@break
-											@case(2)
-											Debito
-											@break
-											
-											@case(3)
-											Efectivo
-											@break
-											@case(4)
-											Credito
-											@break
-											@case(5)
-											Otros
-											@break
-											@case(6)
-											Vuelto
-											@break
+											@case(1) Transferencia @break
+											@case(2) Débito @break
+											@case(3) Efectivo @break
+											@case(4) Crédito @break
+											@case(5) Otros @break
+											@case(6) Vuelto @break
+											@default {{ $ee->tipo }} @break
 										@endswitch  
 									</b>
-									{{$ee->monto}}
+									{{ number_format($ee->monto, 2) }}
 								</span>
-								<br>
+								@if (!$loop->last) <br> @endif
 							@endforeach
 						</td>
 					</tr>
@@ -311,8 +945,7 @@
 					<th>BANCO</th>
 					<th>CONCEPTO</th>
 					<th>MONTO</th>
-					<th></th>
-					<th>HORA</th>
+					<th>PEDIDO</th>
 				</tr>
 				@foreach ($referencias as $e)
 					<tr>
@@ -326,9 +959,11 @@
 							@endif
 						</td>
 						<th>{{$e->descripcion}}</th>
-						<td>{{$e->monto}}</td>
-						<td>Pedido #{{$e->id_pedido}}</td>
-						<th>{{$e->created_at}}</th>
+						<td>{{moneda($e->monto)}}</td>
+						<td>Pedido #{{$e->id_pedido}} 
+							<br>
+							{{$e->created_at}}
+						</td>
 					</tr>
 				@endforeach
 
@@ -349,13 +984,7 @@
 					</tr>
 				@endforeach
 
-				@foreach ($facturado["puntosAdicional"] as $e)
-					<tr>
-						<td>{{$e["banco"]}}</td>
-						<th>{{$e["descripcion"]}} ({{$e["categoria"]}})</th>
-						<td colspan="2">{{$e["monto"]}}</td>
-					</tr>
-				@endforeach
+				
 
 				
 
@@ -379,7 +1008,7 @@
 						<table class="font-cuaderno">
 							<tr>
 								<td>
-									<table class="text-left">
+									<!-- <table class="text-left">
 										<thead>
 											<tr>
 												<td colspan="2"><h4>RESUMEN</h4></td>
@@ -426,7 +1055,7 @@
 												</td>
 											</tr>
 										</tbody>
-									</table>
+									</table> -->
 								</td>
 								<td>
 									@php

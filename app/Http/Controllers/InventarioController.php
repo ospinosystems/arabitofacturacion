@@ -536,7 +536,8 @@ class InventarioController extends Controller
                 if ($checkPedidoPago !== true) {
                     return $checkPedidoPago;
                 }
-                $producto = inventario::select(['precio', 'cantidad'])->where('id', $checkIfExits->id_producto)->lockForUpdate()->first();
+                $producto = inventario::select(['precio', 'cantidad'])->where('id', $checkIfExits->id_producto)
+                ->lockForUpdate()->first();
                 $precio = $producto->precio;
 
                 if ($precio > 20 && (floor($cantidad) != $cantidad)) {
@@ -1561,7 +1562,7 @@ class InventarioController extends Controller
                 $ctNew = $ctInsert;
                 $tipo = 'Nuevo';
             } else {
-                $before = $req_id === 'id_vinculacion' ? inventario::where('id_vinculacion', $id_vinculacion)->first() : inventario::find($req_id);
+                $before = inventario::where('id', $req_id)->lockForUpdate()->first();
                 if ($before) {
                     $beforecantidad = $before->cantidad;
                     $ctNew = $ctInsert - $beforecantidad;
@@ -1653,7 +1654,7 @@ class InventarioController extends Controller
             }
 
             if (!$this->enInventario()) {
-                $ifexist = inventario::find($req_id);
+                $ifexist = inventario::where('id', $req_id)->lockForUpdate()->first();
                 if ($ifexist) {
                     if ($origen == 'local') {
                         if ($ifexist->push == 1) {
@@ -1679,14 +1680,14 @@ class InventarioController extends Controller
                 if (!$req_inpInvalterno) {
                     throw new \Exception('Error: Falta Alterno.', 1);
                 }
-                $checkpro = inventario::where('codigo_proveedor', $req_inpInvalterno)->first();
+                $checkpro = inventario::where('codigo_proveedor', $req_inpInvalterno)->lockForUpdate()->first();
                 if ($checkpro) {
                     throw new \Exception('Error: Alterno ya existe. ' . $req_inpInvalterno, 1);
                 }
 
                 // Validar si el código de barras ya existe
                 if ($req_inpInvbarras) {
-                    $checkbarras = inventario::where('codigo_barras', $req_inpInvbarras)->first();
+                    $checkbarras = inventario::where('codigo_barras', $req_inpInvbarras)->lockForUpdate()->first();
                     if ($checkbarras) {
                         throw new \Exception('Error: Código de barras ya existe. ' . $req_inpInvbarras, 1);
                     }
@@ -1700,17 +1701,23 @@ class InventarioController extends Controller
             }
 
             
+            // Buscar con lock y actualizar/crear
             if ($req_id) {
-                $existeInventario = inventario::find($req_id);
-                if (!$existeInventario) {
-                    $arr_produc['push'] = 1;
-                }
+                $insertOrUpdateInv = inventario::where('id', $req_id)->lockForUpdate()->first();
+            } else {
+                $insertOrUpdateInv = null;
             }
 
-            $insertOrUpdateInv = inventario::updateOrCreate(
-                ($req_id === 'id_vinculacion') ? ['id_vinculacion' => $id_vinculacion] : ['id' => $req_id],
-                $arr_produc
-            );
+            if ($insertOrUpdateInv) {
+                // Actualizar registro existente
+                $insertOrUpdateInv->update($arr_produc);
+            } else {
+                // Crear nuevo registro
+                if (!$req_id) {
+                    $arr_produc['push'] = 1;
+                }
+                $insertOrUpdateInv = inventario::create($arr_produc);
+            }
 
             $this->checkFalla($insertOrUpdateInv->id, $ctInsert);
             $this->insertItemFact($id_factura, $insertOrUpdateInv, $ctInsert, $beforecantidad, $ctNew, $tipo);

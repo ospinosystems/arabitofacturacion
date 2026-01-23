@@ -17,7 +17,6 @@ use App\Models\pedidos;
 use App\Models\pago_pedidos;
 use App\Models\items_pedidos;
 use App\Models\cierres;
-use App\Models\cierres_puntos;
 use App\Models\pagos_referencias;
 use App\Models\cajas;
 use App\Models\movimientosinventariounitario;
@@ -424,46 +423,16 @@ class SyncProgressController extends Controller
                     'numreportez', 'ventaexcento', 'ventagravadas', 'ivaventa', 
                     'totalventa', 'ultimafactura',
                     // Créditos
-                    'credito', 'creditoporcobrartotal', 'vueltostotales', 'abonosdeldia',
+                    'credito', 'creditoporcobrartotal', 'abonosdeldia',
                     // Efectivo adicional caja fuerte
                     'efecadiccajafbs', 'efecadiccajafcop', 'efecadiccajafdolar', 'efecadiccajafeuro',
-                    // Puntos de venta
-                    'puntolote1', 'puntolote2', 'puntolote1montobs', 'puntolote2montobs',
-                    'puntolote1banco', 'puntolote2banco',
+                    // Biopago
                     'biopagoserial', 'biopagoserialmontobs',
                     // Descuadre
                     'descuadre',
                     // Control
                     'push', 'created_at', 'updated_at'
                 ],
-            ],
-            'cierres_puntos' => [
-                'nombre' => 'Cierres Puntos',
-                'model' => cierres_puntos::class,
-                'tabla_destino' => 'puntosybiopagos',
-                'orden' => 6,
-                'grupo' => 'tercero',
-                'campo_sync' => 'push',
-                'campo_fecha' => 'fecha',
-                'tipo_origen' => 'PUNTO', // Prefijo para idinsucursal
-                // Campos que se leen del modelo
-                'campos' => ['id', 'fecha', 'categoria', 'descripcion', 'banco', 'monto', 
-                            'id_usuario', 'created_at', 'updated_at'],
-                // Transformación para formato puntosybiopagos
-                'transformar' => function($registro, $index) {
-                    return [
-                        'idinsucursal' => 'PUNTO-' . $registro['id'],
-                        'monto' => $registro['monto'],
-                        'banco' => $registro['banco'],
-                        'loteserial' => $registro['descripcion'], // descripcion = número de lote
-                        'fecha' => $registro['fecha'],
-                        'id_usuario' => $registro['id_usuario'],
-                        'debito_credito' => $registro['categoria'], // DEBITO o CREDITO
-                        'tipo' => 'PUNTO ' . $index,
-                        'origen' => 1, // 1 = viene de sucursal
-                        'created_at' => $registro['created_at'],
-                    ];
-                },
             ],
             'pagos_referencias' => [
                 'nombre' => 'Pagos Referencias',

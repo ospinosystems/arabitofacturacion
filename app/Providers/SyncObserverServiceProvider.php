@@ -11,7 +11,6 @@ use App\Models\pedidos;
 use App\Models\pago_pedidos;
 use App\Models\items_pedidos;
 use App\Models\cierres;
-use App\Models\cierres_puntos;
 use App\Models\pagos_referencias;
 use App\Models\cajas;
 use App\Models\movimientos;
@@ -27,7 +26,6 @@ class SyncObserverServiceProvider extends ServiceProvider
         pago_pedidos::class,
         items_pedidos::class,
         cierres::class,
-        cierres_puntos::class,
         pagos_referencias::class,
         cajas::class,
         movimientos::class,

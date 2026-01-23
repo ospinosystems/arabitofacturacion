@@ -878,7 +878,7 @@ export default function ModalRefPago({
                                 ) : (
                                     <>
                                         <i className="mr-3 text-xl fa fa-shield"></i>
-                                        <span>Validar y Autovalidar Transferencia</span>
+                                        <span>Autovalidar Transferencia</span>
                                     </>
                                 )}
                             </button>

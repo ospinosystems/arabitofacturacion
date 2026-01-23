@@ -31,12 +31,7 @@
 	    </a>
 	  </li>
 
-	  <li className="pointer list-group-item d-flex justify-content-between align-items-center">
-	    Enviar Ventas
-	    <a href="/setVentas" target="_blank" className="badge bg-sinapsis badge-pill"> 
-	    	<i class="fa fa-send"></i> 
-	    </a>
-	  </li>
+	 
 	</ul>
 </body>
 </html>

@@ -1,7 +1,6 @@
-import logo from "../../images/logo-blanco.png"
+import logo from "../../images/logo-titanio.png"
 
 import React, {Component} from 'react';
-import Cargando from './cargando';
 // import {handleNotification,Notification} from './handleNotification';
 
 class Login extends Component{
@@ -344,10 +343,10 @@ class Login extends Component{
 		const currentQuote = this.state.quotes[this.state.currentQuoteIndex] || { content: "", author: "" };
 
 		return(
-			<div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-900 to-sinapsis/20 p-4 relative overflow-hidden">
+			<div className="min-h-screen flex items-center justify-center bg-gray-900 p-4 relative overflow-hidden">
 				{/* Floating Stars Background */}
 				<div className="absolute inset-0 overflow-hidden">
-					{[...Array(50)].map((_, i) => (
+					{/* {[...Array(50)].map((_, i) => (
 						<div
 							key={i}
 							className="absolute w-1 h-1 bg-white rounded-full animate-float"
@@ -359,14 +358,23 @@ class Login extends Component{
 								opacity: Math.random() * 0.5 + 0.3
 							}}
 						/>
-					))}
+					))} */}
 				</div>
 
 				{/* Login Box */}
 				<div className="w-full max-w-md backdrop-blur-sm rounded-2xl overflow-hidden relative z-10">
 					{/* Logo Section */}
 					<div className="p-8 text-center">
-						<img src={logo} alt="logo ao" className="h-28 w-auto mx-auto mb-6 object-contain" />
+						<div className="relative flex items-center justify-center mx-auto mb-6">
+							{/* Fondo de resplandor ondulado */}
+							
+							<img
+								src={logo}
+								alt="logo ao"
+								className="relative h-28 w-auto z-10 object-contain"
+								
+							/>
+						</div>
 					</div>
 
 					{/* Form Section */}
@@ -454,7 +462,7 @@ class Login extends Component{
 
 						{/* Submit Button */}
 						<button 
-							className="w-full py-4 px-4 bg-sinapsis/90 text-white font-medium rounded-lg hover:bg-sinapsis transform hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-sinapsis/20"
+							className="w-full py-4 px-4 text-white font-medium rounded-lg hover:bg-sinapsis transform hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-sinapsis/20"
 							type="submit"
 						>
 							{this.state.activeLoading ? (

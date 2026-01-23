@@ -18,6 +18,14 @@ class cierres extends Model
     public function usuario() { 
         return $this->hasOne(\App\Models\usuarios::class,"id","id_usuario"); 
     }
+    
+    /**
+     * Relación con métodos de pago detallados
+     */
+    public function metodosPago()
+    {
+        return $this->hasMany(CierresMetodosPago::class, 'id_cierre', 'id');
+    }
 
 
     protected $fillable = [
@@ -59,23 +67,23 @@ class cierres extends Model
         "ultimafactura",
         "credito",
         "creditoporcobrartotal",
-        "vueltostotales",
         "abonosdeldia",
         "efecadiccajafbs",
         "efecadiccajafcop",
         "efecadiccajafdolar",
         "efecadiccajafeuro",
 
-        "puntolote1",
-        "puntolote2",
-        "puntolote1montobs",
-        "puntolote2montobs",
         "biopagoserial",
         "biopagoserialmontobs",
 
-        "puntolote1banco",
-        "puntolote2banco",
         "descuadre",
+        
+        // Campo JSON flexible para cuadres detallados (evita redundancia)
+        "cuadre_detallado",
 
+    ];
+    
+    protected $casts = [
+        'cuadre_detallado' => 'array',
     ];
 }

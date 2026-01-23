@@ -31,6 +31,9 @@ const db = {
   
   guardarCierre: data=>axios.post(host+"guardarCierre",data),
   reversarCierre: data=>axios.get(host+"reversarCierre",{params:data}),
+  eliminarCierreUsuario: data=>axios.post(host+"eliminarCierreUsuario",data),
+  getTotalizarCierre: data=>axios.post(host+"getTotalizarCierre",data),
+  verCierre: data=>axios.get(host+"verCierre",{params:data}),
   
   getNomina: data=>axios.post(host+"getNomina",data),
   getAlquileres: data=>axios.post(host+"getAlquileres",data),
@@ -56,6 +59,7 @@ const db = {
   setPagoPedido: data=>axios.post(host+"setPagoPedido",data),
   setPagoPedidoTrans: data=>axios.post(host+"setPagoPedidoTrans",data),
   enviarTransaccionPOS: data=>axios.post(host+"enviarTransaccionPOS",data),
+  registrarPosRechazado: data=>axios.post(host+"registrarPosRechazado",data),
   ejecutarPostSync: data=>axios.post(host+"ejecutarPostSync",data),
   
   createDevolucion: data=>axios.post(host+"createDevolucion",data),
@@ -158,7 +162,6 @@ const db = {
   setFalla: data=>axios.post(host+"setFalla",data),
   delFalla: data=>axios.post(host+"delFalla",data),
   imprimirTicked: data=>axios.post(host+"imprimirTicked",data),
-  getTotalizarCierre: data=>axios.post(host+"getTotalizarCierre",data),
   changepedidouser: data=>axios.post(host+"changepedidouser",data),
   
 
@@ -366,7 +369,15 @@ const db = {
   openVerFactura: ({ id }) => window.open(host + "verFactura?id=" + id, "targed=blank"),
   
   openPrintCreditos: (param) => window.open(host + "verCreditos?"+param,"targed=blank"),
-  openVerCierre: ({ type,fechaCierre,totalizarcierre,usuario }) => window.open(host + "verCierre?type=" + type + "&fecha=" + fechaCierre+ "&totalizarcierre=" + totalizarcierre + "&usuario=" + usuario,"targed=blank"),
+  openVerCierre: ({ type,fechaCierre,usuario }) => {
+    if (!fechaCierre) {
+      console.error('Error: fechaCierre está vacío');
+      alert('Error: No se puede determinar la fecha del cierre');
+      return;
+    }
+    const url = host + "verCierre?type=" + type + "&fecha=" + fechaCierre + (usuario ? "&usuario=" + usuario : "");
+    window.open(url, "_blank");
+  },
   openNotaentregapedido: ({ id }) => window.open(host + "/notaentregapedido?id=" + id, "targed=blank"),
   
   openReporteInventario: () => window.open(host + "reporteInventario", "targed=blank"),

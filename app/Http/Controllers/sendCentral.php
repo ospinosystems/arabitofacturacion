@@ -6,7 +6,6 @@ set_time_limit(600000);
 ini_set('memory_limit', '4095M');
 use App\Models\cajas;
 use App\Models\catcajas;
-use App\Models\cierres_puntos;
 use App\Models\inventarios_novedades;
 use App\Models\pagos_referencias;
 use App\Models\usuarios;
@@ -1448,7 +1447,6 @@ class sendCentral extends Controller
         
         pedidos::where("id_vendedor",$id)->update(["id_vendedor"=>$newid]);
         cierres::where("id_usuario",$id)->update(["id_usuario"=>$newid]);
-        cierres_puntos::where("id_usuario",$id)->update(["id_usuario"=>$newid]);
         factura::where("id_usuario",$id)->update(["id_usuario"=>$newid]);
         tareaslocal::where("id_usuario",$id)->update(["id_usuario"=>$newid]);
         movimientosinventariounitario::where("id_usuario",$id)->update(["id_usuario"=>$newid]);
@@ -1749,7 +1747,12 @@ class sendCentral extends Controller
 
         $codigo_origen = $this->getOrigen();
 
-        $comovamos = (new PedidosController)->cerrarFun($today, 0, 0, 0, [], true, (true), false);
+        $comovamos = (new PedidosController)->cerrarFun($today, [], [
+            'grafica' => true,
+            'totalizarcierre' => true,
+            'check_pendiente' => false,
+            'usuario' => null
+        ]);
         if ($today) {
             if (isset($comovamos["total"])) {
                 $comovamos["total"] = floatval($comovamos["total"]);
@@ -1937,10 +1940,15 @@ class sendCentral extends Controller
 
             foreach ($cierres as $key => $cierre) {
                 $today = $cierre->fecha;
-                $c = cierres::where("tipo_cierre", 0)->where("fecha", $today)->get();
+                $c = cierres::where("tipo_cierre", 0)
+                    ->where("fecha", $today)
+                    ->with('puntos')
+                    ->get();
 
                 $pagos_referencias_dia = pagos_referencias::where("created_at", "LIKE", $today."%")->get();
-                $puntosAdicionales = cierres_puntos::where("fecha", $today)->get();
+                
+                // Obtener puntos desde la relación
+                $puntosAdicionales = $c->pluck('puntos')->flatten();
                 $lotes = [];
 
                 foreach ($puntosAdicionales as $key => $punto) {
@@ -1969,28 +1977,7 @@ class sendCentral extends Controller
                     ]);
                 }
                 foreach ($c as $key => $e) {
-                    /* if ($e->puntolote1montobs && $e->puntolote1) {
-                        array_push($lotes, [
-                            "monto" => $e->puntolote1montobs,
-                            "lote" => $e->puntolote1,
-                            "banco" => $e->puntolote1banco,
-                            "fecha" => $today,
-                            "id_usuario" => $e->id_usuario,
-                            "tipo" => "PUNTO 1"
-                        ]);
-                    }
-                    if ($e->puntolote2montobs && $e->puntolote2) {
-                        array_push($lotes, [
-                            "monto" => $e->puntolote2montobs,
-                            "lote" => $e->puntolote2,
-                            "banco" => $e->puntolote2banco,
-                            "fecha" => $today,
-                            "id_usuario" => $e->id_usuario,
-                            "tipo" => "PUNTO 2"
-    
-    
-                        ]);
-                    } */
+                    
                     if ($e->biopagoserial && $e->biopagoserialmontobs) {
                         array_push($lotes, [
                             "id" => "BIO-".$e->id,
@@ -2962,55 +2949,7 @@ class sendCentral extends Controller
 
     ////////////////////////////////////////////////77
 
-
-    public function getDataEspecifica($type, $url)
-    {
-        $sucursal = $this->getOrigen();
-        $arr = [];
-        switch ($type) {
-            case 'inventarioSucursalFromCentral':
-
-                $arr = [
-                    //"categorias" => categorias::all(),
-                    //"proveedores" => proveedores::all(),
-                    "inventario" => inventario::all(),
-                ];
-
-                break;
-            case 'fallaspanelcentroacopio':
-                $arr = ["fallas" => fallas::all()];
-
-                break;
-            case 'estadisticaspanelcentroacopio':
-                $arr = [];
-                break;
-            case 'gastospanelcentroacopio':
-                $arr = [];
-                break;
-            case 'cierrespanelcentroacopio':
-                $arr = [];
-                break;
-            case 'diadeventapanelcentroacopio':
-                $arr = (new PedidosController)->getDiaVentaFun((new PedidosController)->today());
-                break;
-        }
-        $arr["sucursal"] = $sucursal;
-
-
-        $response = Http::post($this->path() . "/" . $url, $arr);
-
-        if ($response->ok()) {
-            $res = $response->json();
-            return $res;
-        } else {
-            return "Error: " . $response->body();
-        }
-        return $arr;
-    }
-    public function setInventarioFromSucursal()
-    {
-        return $this->getDataEspecifica("inventarioSucursalFromCentral", "setInventarioFromSucursal");
-    }
+    
 
     public function setNuevaTareaCentral(Request $req)
     {
@@ -3327,55 +3266,7 @@ class sendCentral extends Controller
 
     }
 
-    public function setVentas()
-    {
-        try {
-            $PedidosController = new PedidosController;
-            $sucursal = $this->getOrigen();
-            $fecha = $PedidosController->today();
-            $bs = $PedidosController->get_moneda()["bs"];
-
-            $cierre_fun = $PedidosController->cerrarFun($fecha, 0, 0, 0);
-
-            // 1 Transferencia
-            // 2 Debito 
-            // 3 Efectivo 
-            // 4 Credito  
-            // 5 Otros
-            // 6 vuelto
-
-            $ventas = [
-                "debito" => $cierre_fun[2],
-                "efectivo" => $cierre_fun[3],
-                "transferencia" => $cierre_fun[1],
-                "biopago" => $cierre_fun[5],
-                "tasa" => $bs,
-                "fecha" => $cierre_fun["fecha"],
-                "num_ventas" => $cierre_fun["numventas"],
-            ];
-
-
-            $response = Http::post($this->path . '/setVentas', [
-                "sucursal_code" => $sucursal->codigo,
-                "ventas" => $ventas
-            ]);
-
-            //ids_ok => id de movimiento 
-
-            if ($response->ok()) {
-                $res = $response->json();
-                if ($res["estado"]) {
-                    return $res["msj"];
-                }
-            } else {
-                return $response->body();
-            }
-        } catch (\Exception $e) {
-            return Response::json(["estado" => false, "msj" => "Error de sucursal: " . $e->getMessage()]);
-
-        }
-
-    }
+    
     public function updatetasasfromCentral()
     {
         try {

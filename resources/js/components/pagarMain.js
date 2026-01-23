@@ -83,6 +83,14 @@ export default function PagarMain({
     setDebitoRef,
     debitoRefError,
     setDebitoRefError,
+    debitos,
+    setDebitos,
+    usarMultiplesDebitos,
+    setUsarMultiplesDebitos,
+    abrirModalPosDebitoConMonto,
+    sucursaldata,
+    forzarReferenciaManual,
+    guardarDebitosPorPedido,
     efectivo,
     setEfectivo,
     efectivo_bs,
@@ -184,6 +192,7 @@ export default function PagarMain({
 
     // Refs para los inputs de pago
     const debitoInputRef = useRef(null);
+    const debitosInputRefs = useRef([]); // Array de refs para múltiples débitos
     const efectivoInputRef = useRef(null);
     const transferenciaInputRef = useRef(null);
     const biopagoInputRef = useRef(null);
@@ -247,6 +256,63 @@ export default function PagarMain({
             e.stopPropagation();
             facturar_e_imprimir();
         }
+    };
+    
+    // Handler específico para inputs de débito que soporta tecla D
+    const handleDebitoInputKeyDown = (e, index) => {
+        if (e.key === 'Enter' && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            facturar_e_imprimir();
+        } else if (e.key === 'd' || e.key === 'D') {
+            e.preventDefault();
+            e.stopPropagation();
+            // Si solo hay un débito, usar getDebitoLocal (comportamiento original)
+            // Si hay múltiples débitos, usar getDebitoLocalParaIndex
+            if (debitos.length === 1) {
+                getDebitoLocal();
+            } else {
+                getDebitoLocalParaIndex(index);
+            }
+        }
+    };
+    
+    // Función para calcular débito local y asignarlo a un índice específico
+    const getDebitoLocalParaIndex = (index) => {
+        const tasaBsPedido = getTasaPromedioCarrito();
+        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+        
+        // Calcular total de débitos BLOQUEADOS (ya aprobados) - CRÍTICO: restar del total
+        const debitosBloqueados = debitos.filter(d => d.bloqueado);
+        const totalDebitosBloqueadosBs = debitosBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+        const totalDebitosBloqueadosUSD = totalDebitosBloqueadosBs / tasaBsPedido;
+        
+        // Calcular el total base EXCLUYENDO débitos bloqueados (ya aprobados)
+        const totalBaseUSD = parseFloat(pedidoData.clean_total) - totalDebitosBloqueadosUSD;
+        
+        // Calcular total de otros débitos NO bloqueados (excluyendo el actual y los aprobados)
+        const totalOtrosDebitos = debitos.reduce((sum, d, i) => {
+            if (i !== index && !d.bloqueado) {
+                return sum + (parseFloat(d.monto) || 0);
+            }
+            return sum;
+        }, 0);
+        
+        const otrosTotal =
+            parseFloat(efectivo_dolar || 0) +
+            (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
+            (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
+            parseFloat(transferencia || 0) +
+            parseFloat(credito || 0) +
+            parseFloat(biopago || 0);
+
+        const restanteUSD = Math.max(0, totalBaseUSD - otrosTotal);
+        const restanteBs = restanteUSD * tasaBsPedido;
+        const montoDebitoBs = Math.max(0, restanteBs - totalOtrosDebitos).toFixed(2);
+        
+        // Actualizar el débito en el índice específico
+        actualizarMontoDebito(index, montoDebitoBs);
+        setLastPaymentMethodCalled('debito');
     };
 
     // Funciones de calculadora/vueltos
@@ -482,8 +548,11 @@ export default function PagarMain({
         const tasaCop = getTasaCopCalc();
         const totalPedidoUsd = parseFloat(pedidoData?.clean_total) || 0;
         
+        // Calcular total de débitos (simple o múltiples)
+        const totalDebitosBs = usarMultiplesDebitos ? calcularTotalDebitos() : parseFloat(debito || 0);
+        
         // Calcular lo que ya está cargado en pagos (en USD)
-        const yaDebitoUsd = (parseFloat(debito || 0) / tasaBs);
+        const yaDebitoUsd = (totalDebitosBs / tasaBs);
         const yaEfectivoUsd = parseFloat(efectivo_dolar || 0);
         const yaEfectivoBsUsd = (parseFloat(efectivo_bs || 0) / tasaBs);
         const yaEfectivoCopUsd = (parseFloat(efectivo_peso || 0) / tasaCop);
@@ -830,10 +899,141 @@ export default function PagarMain({
         }
     };
 
+    // Funciones para manejar múltiples débitos
+    const agregarFilaDebito = () => {
+        // Calcular monto restante en Bs
+        let montoRestante = "";
+        
+        if (pedidoData?.clean_total) {
+            const totalPedidoBs = parseFloat(pedidoData.clean_total) * parseFloat(dolar);
+            
+            // Calcular total ya pagado
+            const totalDebitos = debitos.reduce((sum, d) => sum + (parseFloat(d.monto) || 0), 0);
+            const efectivoUsd = parseFloat(efectivo) || 0;
+            const efectivoBsUsd = (parseFloat(efectivo_bs) || 0) / parseFloat(dolar);
+            const efectivoPesoUsd = (parseFloat(efectivo_peso) || 0) / parseFloat(peso);
+            const transferenciaUsd = parseFloat(transferencia) || 0;
+            const creditoUsd = parseFloat(credito) || 0;
+            const biopagoUsd = parseFloat(biopago) || 0;
+            
+            const totalPagadoUsd = efectivoUsd + efectivoBsUsd + efectivoPesoUsd + transferenciaUsd + creditoUsd + biopagoUsd;
+            const totalPagadoBs = totalPagadoUsd * parseFloat(dolar);
+            
+            // Calcular restante
+            const restanteBs = totalPedidoBs - totalDebitos - totalPagadoBs;
+            
+            if (restanteBs > 0) {
+                montoRestante = restanteBs.toFixed(2);
+            }
+        }
+        
+        const nuevosDebitos = [...debitos, { monto: montoRestante, referencia: "", bloqueado: false, posData: null }];
+        setDebitos(nuevosDebitos);
+        if (pedidoData?.id && guardarDebitosPorPedido) {
+            guardarDebitosPorPedido(pedidoData.id, nuevosDebitos);
+        }
+    };
+
+    const eliminarFilaDebito = (index) => {
+        // No permitir eliminar filas bloqueadas
+        if (debitos[index]?.bloqueado) {
+            return;
+        }
+        if (debitos.length > 1) {
+            const nuevosDebitos = debitos.filter((_, i) => i !== index);
+            setDebitos(nuevosDebitos);
+            if (pedidoData?.id && guardarDebitosPorPedido) {
+                guardarDebitosPorPedido(pedidoData.id, nuevosDebitos);
+            }
+        }
+    };
+
+    const actualizarMontoDebito = (index, valor, skipSync = false) => {
+        // No permitir modificar filas bloqueadas
+        if (debitos[index]?.bloqueado) {
+            return;
+        }
+        
+        const nuevosDebitos = [...debitos];
+        nuevosDebitos[index].monto = valor;
+        setDebitos(nuevosDebitos);
+        
+        if (pedidoData?.id && guardarDebitosPorPedido) {
+            guardarDebitosPorPedido(pedidoData.id, nuevosDebitos);
+        }
+        
+        // Disparar el auto-corrector para redistribuir otros métodos de pago
+        // Solo si no se está limpiando intencionalmente (skipSync = false)
+        if (!skipSync && autoCorrector) {
+            // Calcular el nuevo total de débitos después del cambio
+            const nuevoTotalDebitos = nuevosDebitos.reduce((sum, d) => sum + (parseFloat(d.monto) || 0), 0);
+            
+            // Llamar a syncPago con el nuevo total de débitos para que redistribuya
+            // Esto permitirá que el auto-corrector ajuste los otros métodos de pago
+            syncPago(nuevoTotalDebitos.toString(), "Debito");
+        }
+    };
+
+    const actualizarReferenciaDebito = (index, valor) => {
+        // No permitir modificar filas bloqueadas
+        if (debitos[index]?.bloqueado) {
+            return;
+        }
+        const nuevosDebitos = [...debitos];
+        nuevosDebitos[index].referencia = valor.replace(/[^0-9]/g, '');
+        setDebitos(nuevosDebitos);
+        if (pedidoData?.id && guardarDebitosPorPedido) {
+            guardarDebitosPorPedido(pedidoData.id, nuevosDebitos);
+        }
+    };
+
+    const calcularTotalDebitos = () => {
+        return debitos.reduce((total, d) => total + (parseFloat(d.monto) || 0), 0);
+    };
+
+    const toggleModoDebito = () => {
+        if (!usarMultiplesDebitos) {
+            // Cambiar a modo múltiple: migrar débito actual si existe
+            if (debito || debitoRef) {
+                setDebitos([{ monto: debito || "", referencia: debitoRef || "" }]);
+            } else {
+                setDebitos([{ monto: "", referencia: "" }]);
+            }
+            setUsarMultiplesDebitos(true);
+        } else {
+            // Cambiar a modo simple: consolidar todos los débitos en uno
+            const totalMonto = calcularTotalDebitos();
+            const primeraRef = debitos.find(d => d.referencia)?.referencia || "";
+            setDebito(totalMonto > 0 ? totalMonto.toFixed(2) : "");
+            setDebitoRef(primeraRef);
+            setUsarMultiplesDebitos(false);
+        }
+    };
+
     // Funciones locales para calcular pagos con tasas del pedido
     const getDebitoLocal = () => {
+        // Solo funciona cuando hay un único débito (sin adicionales)
+        if (debitos.length !== 1) {
+            return;
+        }
+        
         const tasaBsPedido = getTasaPromedioCarrito();
         const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+        
+        // Verificar si el débito actual está bloqueado (aprobado)
+        const debitoActual = debitos[0];
+        if (debitoActual.bloqueado) {
+            // Si el débito está bloqueado, no permitir modificarlo
+            return;
+        }
+        
+        // Calcular total de débitos BLOQUEADOS (ya aprobados) - CRÍTICO: restar del total
+        const debitosBloqueados = debitos.filter(d => d.bloqueado);
+        const totalDebitosBloqueadosBs = debitosBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+        const totalDebitosBloqueadosUSD = totalDebitosBloqueadosBs / tasaBsPedido;
+        
+        // Calcular el total base EXCLUYENDO débitos bloqueados (ya aprobados)
+        const totalBaseUSD = parseFloat(pedidoData.clean_total) - totalDebitosBloqueadosUSD;
         
         const otrosTotal =
             parseFloat(efectivo_dolar || 0) +
@@ -844,14 +1044,20 @@ export default function PagarMain({
             parseFloat(biopago || 0);
 
         const restanteUSD = otrosTotal === 0
-            ? parseFloat(pedidoData.clean_total)
-            : Math.max(0, pedidoData.clean_total - otrosTotal);
+            ? totalBaseUSD
+            : Math.max(0, totalBaseUSD - otrosTotal);
         
         const montoDebitoBs = (restanteUSD * tasaBsPedido).toFixed(2);
         
+        // Obtener el monto actual del primer (y único) débito
+        const montoActual = parseFloat(debitoActual.monto || 0).toFixed(2);
+        
         // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
-        if (lastPaymentMethodCalled === 'debito' && parseFloat(debito || 0).toFixed(2) === montoDebitoBs) {
-            setDebito((parseFloat(pedidoData.clean_total) * tasaBsPedido).toFixed(2));
+        // IMPORTANTE: totalBaseUSD ya tiene restados los débitos bloqueados
+        if (lastPaymentMethodCalled === 'debito' && montoActual === montoDebitoBs) {
+            const montoTotal = (totalBaseUSD * tasaBsPedido).toFixed(2);
+            // Usar skipSync=true para evitar que syncPago redistribuya después de limpiar
+            actualizarMontoDebito(0, montoTotal, true);
             setEfectivo_dolar("");
             setEfectivo_bs("");
             setEfectivo_peso("");
@@ -859,19 +1065,39 @@ export default function PagarMain({
             setCredito("");
             setBiopago("");
         } else {
-            setDebito(montoDebitoBs);
+            actualizarMontoDebito(0, montoDebitoBs);
         }
         
         setLastPaymentMethodCalled('debito');
+        
+        // Hacer foco y seleccionar el texto del input de débito
+        setTimeout(() => {
+            if (debitosInputRefs.current[0]) {
+                debitosInputRefs.current[0].focus();
+                debitosInputRefs.current[0].select();
+            }
+        }, 0);
     };
 
     const getEfectivoLocal = () => {
         const tasaBsPedido = getTasaPromedioCarrito();
         const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
         
+        // Calcular total de débitos NO bloqueados (excluir aprobados)
+        const debitosNoBloqueados = debitos.filter(d => !d.bloqueado);
+        const totalDebitosNoBloqueadosBs = debitosNoBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+        
+        // Calcular débitos BLOQUEADOS
+        const debitosBloqueados = debitos.filter(d => d.bloqueado);
+        const totalDebitosBloqueadosBs = debitosBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+        const totalDebitosBloqueadosUSD = totalDebitosBloqueadosBs / tasaBsPedido;
+        
+        // Calcular el total base excluyendo débitos bloqueados
+        const totalBaseUSD = parseFloat(pedidoData.clean_total) - totalDebitosBloqueadosUSD;
+        
         // Calcular total de otros pagos (excluyendo efectivo_dolar)
         const otrosTotal =
-            (parseFloat(debito || 0) / tasaBsPedido) +
+            (totalDebitosNoBloqueadosBs / tasaBsPedido) +
             (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
             (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
             parseFloat(transferencia || 0) +
@@ -879,17 +1105,19 @@ export default function PagarMain({
             parseFloat(biopago || 0);
 
         const restanteUSD = otrosTotal === 0
-            ? parseFloat(pedidoData.clean_total)
-            : Math.max(0, pedidoData.clean_total - otrosTotal);
+            ? totalBaseUSD
+            : Math.max(0, totalBaseUSD - otrosTotal);
         
         const montoEfectivo = restanteUSD.toFixed(2);
 
         // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
         if (lastPaymentMethodCalled === 'efectivo' && parseFloat(efectivo_dolar || 0).toFixed(2) === montoEfectivo) {
-            setEfectivo_dolar(parseFloat(pedidoData.clean_total).toFixed(2));
+            setEfectivo_dolar(totalBaseUSD.toFixed(2));
             setEfectivo_bs("");
             setEfectivo_peso("");
             setDebito("");
+            // Mantener solo los débitos bloqueados
+            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "" }]);
             setTransferencia("");
             setCredito("");
             setBiopago("");
@@ -904,27 +1132,43 @@ export default function PagarMain({
         const tasaBsPedido = getTasaPromedioCarrito();
         const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
         
+        // Calcular total de débitos NO bloqueados (excluir aprobados)
+        const debitosNoBloqueados = debitos.filter(d => !d.bloqueado);
+        const totalDebitosNoBloqueadosBs = debitosNoBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+        
+        // Calcular débitos BLOQUEADOS
+        const debitosBloqueados = debitos.filter(d => d.bloqueado);
+        const totalDebitosBloqueadosBs = debitosBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+        
         // Calcular total de otros pagos (excluyendo efectivo_bs)
         const otrosTotal =
-            (parseFloat(debito || 0) / tasaBsPedido) +
+            (totalDebitosNoBloqueadosBs / tasaBsPedido) +
             parseFloat(efectivo_dolar || 0) +
             (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
             parseFloat(transferencia || 0) +
             parseFloat(credito || 0) +
             parseFloat(biopago || 0);
 
+        // Calcular el total base excluyendo débitos bloqueados
+        const totalDebitosBloqueadosUSD = totalDebitosBloqueadosBs / tasaBsPedido;
+        const totalBaseUSD = parseFloat(pedidoData.clean_total) - totalDebitosBloqueadosUSD;
+        
         const restanteUSD = otrosTotal === 0
-            ? parseFloat(pedidoData.clean_total)
-            : Math.max(0, pedidoData.clean_total - otrosTotal);
+            ? totalBaseUSD
+            : Math.max(0, totalBaseUSD - otrosTotal);
         
         const montoEfectivoBs = (restanteUSD * tasaBsPedido).toFixed(2);
         
         // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
         if (lastPaymentMethodCalled === 'efectivo_bs' && parseFloat(efectivo_bs || 0).toFixed(2) === montoEfectivoBs) {
-            setEfectivo_bs((parseFloat(pedidoData.clean_total) * tasaBsPedido).toFixed(2));
+            // El monto ya está calculado correctamente en montoEfectivoBs (totalBaseUSD * tasa)
+            const montoFinal = (totalBaseUSD * tasaBsPedido).toFixed(2);
+            setEfectivo_bs(montoFinal);
             setEfectivo_dolar("");
             setEfectivo_peso("");
             setDebito("");
+            // Mantener solo los débitos bloqueados
+            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "" }]);
             setTransferencia("");
             setCredito("");
             setBiopago("");
@@ -939,25 +1183,39 @@ export default function PagarMain({
         const tasaBsPedido = getTasaPromedioCarrito();
         const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
         
+        // Calcular total de débitos NO bloqueados (excluir aprobados)
+        const debitosNoBloqueados = debitos.filter(d => !d.bloqueado);
+        const totalDebitosNoBloqueadosBs = debitosNoBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+        
+        // Calcular débitos BLOQUEADOS
+        const debitosBloqueados = debitos.filter(d => d.bloqueado);
+        const totalDebitosBloqueadosBs = debitosBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+        const totalDebitosBloqueadosUSD = totalDebitosBloqueadosBs / tasaBsPedido;
+        
+        // Calcular el total base excluyendo débitos bloqueados
+        const totalBaseUSD = parseFloat(pedidoData.clean_total) - totalDebitosBloqueadosUSD;
+        
         const otrosTotal =
             parseFloat(efectivo_dolar || 0) +
             (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
             (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
-            (parseFloat(debito || 0) / tasaBsPedido) +
+            (totalDebitosNoBloqueadosBs / tasaBsPedido) +
             parseFloat(credito || 0) +
             parseFloat(biopago || 0);
 
         const montoTransferencia = otrosTotal === 0
-            ? parseFloat(pedidoData.clean_total).toFixed(2)
-            : Math.max(0, pedidoData.clean_total - otrosTotal).toFixed(2);
+            ? totalBaseUSD.toFixed(2)
+            : Math.max(0, totalBaseUSD - otrosTotal).toFixed(2);
 
         // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
         if (lastPaymentMethodCalled === 'transferencia' && parseFloat(transferencia || 0).toFixed(2) === montoTransferencia) {
-            setTransferencia(parseFloat(pedidoData.clean_total).toFixed(2));
+            setTransferencia(totalBaseUSD.toFixed(2));
             setEfectivo_dolar("");
             setEfectivo_bs("");
             setEfectivo_peso("");
             setDebito("");
+            // Mantener solo los débitos bloqueados
+            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "" }]);
             setCredito("");
             setBiopago("");
         } else {
@@ -972,26 +1230,40 @@ export default function PagarMain({
         const tasaBsPedido = getTasaPromedioCarrito();
         const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
         
+        // Calcular total de débitos NO bloqueados (excluir aprobados)
+        const debitosNoBloqueados = debitos.filter(d => !d.bloqueado);
+        const totalDebitosNoBloqueadosBs = debitosNoBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+        
+        // Calcular débitos BLOQUEADOS
+        const debitosBloqueados = debitos.filter(d => d.bloqueado);
+        const totalDebitosBloqueadosBs = debitosBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+        const totalDebitosBloqueadosUSD = totalDebitosBloqueadosBs / tasaBsPedido;
+        
+        // Calcular el total base excluyendo débitos bloqueados
+        const totalBaseUSD = parseFloat(pedidoData.clean_total) - totalDebitosBloqueadosUSD;
+        
         const otrosTotal =
             parseFloat(efectivo_dolar || 0) +
             (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
             (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
             parseFloat(transferencia || 0) +
-            (parseFloat(debito || 0) / tasaBsPedido) +
+            (totalDebitosNoBloqueadosBs / tasaBsPedido) +
             parseFloat(credito || 0);
 
         const montoBiopago = otrosTotal === 0
-            ? parseFloat(pedidoData.clean_total).toFixed(2)
-            : Math.max(0, pedidoData.clean_total - otrosTotal).toFixed(2);
+            ? totalBaseUSD.toFixed(2)
+            : Math.max(0, totalBaseUSD - otrosTotal).toFixed(2);
 
         // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
         if (lastPaymentMethodCalled === 'biopago' && parseFloat(biopago || 0).toFixed(2) === montoBiopago) {
-            setBiopago(parseFloat(pedidoData.clean_total).toFixed(2));
+            setBiopago(totalBaseUSD.toFixed(2));
             setEfectivo_dolar("");
             setEfectivo_bs("");
             setEfectivo_peso("");
             setTransferencia("");
             setDebito("");
+            // Mantener solo los débitos bloqueados
+            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "" }]);
             setCredito("");
         } else {
             setBiopago(montoBiopago);
@@ -1031,7 +1303,6 @@ export default function PagarMain({
             }
         } catch (err) {
             return "";
-            console.log();
         }
     };
     const syncPago = (val, type) => {
@@ -1063,11 +1334,32 @@ export default function PagarMain({
         const totalPedido = pedidoData.clean_total;
         const esDevolucion = totalPedido < 0;
 
+        // Calcular total de débitos NO bloqueados (excluir aprobados)
+        // IMPORTANTE: Siempre revisar el array debitos, incluso si usarMultiplesDebitos es false
+        // porque puede haber débitos en el array aunque el modo simple esté activo
+        const debitosNoBloqueados = debitos && debitos.length > 0
+            ? debitos.filter(d => !d.bloqueado)
+            : [];
+        const totalDebitosNoBloqueadosBs = debitos && debitos.length > 0
+            ? debitosNoBloqueados.reduce((sum, d) => sum + (parseFloat(d.monto) || 0), 0)
+            : parseFloat(debito || 0);
+        
+        // Calcular total de débitos BLOQUEADOS (ya aprobados) - CRÍTICO: restar del total
+        // IMPORTANTE: Siempre revisar el array debitos para débitos bloqueados
+        const debitosBloqueados = debitos && debitos.length > 0
+            ? debitos.filter(d => d.bloqueado)
+            : [];
+        const totalDebitosBloqueadosBs = debitosBloqueados.reduce((sum, d) => sum + (parseFloat(d.monto) || 0), 0);
+        const totalDebitosBloqueadosUSD = tasaBsPedido > 0 ? (totalDebitosBloqueadosBs / tasaBsPedido) : 0;
+        
+        // Calcular el total base EXCLUYENDO débitos bloqueados (ya aprobados)
+        const totalPedidoAjustado = totalPedido - totalDebitosBloqueadosUSD;
+        
         // Todos los campos de pago con su valor actual en USD y su moneda
         // IMPORTANTE: Usar el nuevo valor (val) para el campo que se está editando
-        // Débito ahora es en Bs
+        // Débito ahora es en Bs - usar totalDebitosNoBloqueadosBs para considerar solo débitos no bloqueados
         const allInputs = [
-            { key: "Debito", val: type === "Debito" ? val : debito, set: setDebito, moneda: "bs", esEfectivo: false },
+            { key: "Debito", val: type === "Debito" ? val : totalDebitosNoBloqueadosBs, set: setDebito, moneda: "bs", esEfectivo: false },
             { key: "EfectivoUSD", val: type === "EfectivoUSD" ? val : efectivo_dolar, set: setEfectivo_dolar, moneda: "usd", esEfectivo: true },
             { key: "EfectivoBs", val: type === "EfectivoBs" ? val : efectivo_bs, set: setEfectivo_bs, moneda: "bs", esEfectivo: true },
             { key: "EfectivoCOP", val: type === "EfectivoCOP" ? val : efectivo_peso, set: setEfectivo_peso, moneda: "cop", esEfectivo: true },
@@ -1093,8 +1385,8 @@ export default function PagarMain({
             .filter(e => e.key !== type && parseFloat(e.val) > 0)
             .reduce((sum, e) => sum + toUSD(e.val, e.moneda), 0);
 
-        // Calcular máximo permitido para este campo
-        const maxPermitidoUSD = totalPedido - totalOtrosPagosUSD;
+        // Calcular máximo permitido para este campo (usar totalPedidoAjustado)
+        const maxPermitidoUSD = totalPedidoAjustado - totalOtrosPagosUSD;
 
         // Si autoCorrector está DESACTIVADO, limitar el valor si excede
         if (!autoCorrector) {
@@ -1142,8 +1434,8 @@ export default function PagarMain({
             : allInputs;
 
         // Si estamos editando efectivo Y hay otros efectivos, calcular el total disponible para efectivos
-        // (total del pedido menos los otros métodos de pago)
-        let totalParaDistribuir = totalPedido;
+        // (total del pedido ajustado menos los otros métodos de pago)
+        let totalParaDistribuir = totalPedidoAjustado;
         if (esEfectivoActual && otrosEfectivosConValor > 0) {
             const otrosPagos = allInputs
                 .filter(e => !e.esEfectivo && esValorValido(e.val))
@@ -1153,18 +1445,30 @@ export default function PagarMain({
                     else if (e.moneda === "cop") valEnUSD = valEnUSD / tasaCopPedido;
                     return sum + valEnUSD;
                 }, 0);
-            totalParaDistribuir = totalPedido - otrosPagos;
+            totalParaDistribuir = totalPedidoAjustado - otrosPagos;
         }
 
         // Contar cuántos campos tienen valor válido (excluyendo el actual)
+        // IMPORTANTE: Si estamos editando efectivo y hay débito, el débito DEBE estar en el divisor
+        // para que se reste automáticamente, incluso si no tiene "valor válido" según esValorValido
         let divisor = 0;
+        const camposConValor = [];
         inputs.forEach((e) => {
-            if (e.key !== type && esValorValido(e.val)) {
-                divisor++;
+            if (e.key !== type) {
+                // Para débito, considerar si hay débitos no bloqueados (incluso si el valor en allInputs es 0)
+                if (e.key === "Debito" && totalDebitosNoBloqueadosBs > 0) {
+                    divisor++;
+                    camposConValor.push(e.key);
+                } else if (esValorValido(e.val)) {
+                    divisor++;
+                    camposConValor.push(e.key);
+                }
             }
         });
 
-        if (divisor === 0) return;
+        if (divisor === 0) {
+            return;
+        }
 
         // Calcular restante y distribuir
         const restanteUSD = (totalParaDistribuir - valUSD) / divisor;
@@ -1179,7 +1483,12 @@ export default function PagarMain({
         }
 
         inputs.forEach((e) => {
-            if (e.key !== type && esValorValido(e.val)) {
+            // IMPORTANTE: Para Debito, verificar si hay débitos no bloqueados (misma condición que el divisor)
+            // Para otros campos, verificar si tienen valor válido
+            const debeRedistribuir = e.key !== type && 
+                (e.key === "Debito" ? totalDebitosNoBloqueadosBs > 0 : esValorValido(e.val));
+            
+            if (debeRedistribuir) {
                 // Convertir el restante a la moneda del campo usando tasa del pedido
                 let nuevoVal = restanteUSD;
                 if (e.moneda === "bs") {
@@ -1187,7 +1496,27 @@ export default function PagarMain({
                 } else if (e.moneda === "cop") {
                     nuevoVal = restanteUSD * tasaCopPedido;
                 }
-                e.set(nuevoVal.toFixed(e.moneda === "cop" ? 0 : 2));
+                
+                const nuevoValFormateado = nuevoVal.toFixed(e.moneda === "cop" ? 0 : 2);
+                
+                // Si es Débito, actualizar según el modo (simple o múltiple)
+                if (e.key === "Debito") {
+                    // Si hay débitos en el array (incluso si usarMultiplesDebitos es false), actualizar el primero no bloqueado
+                    if (debitos && debitos.length > 0) {
+                        // Encontrar el primer débito no bloqueado
+                        const primerDebitoNoBloqueado = debitos.findIndex(d => !d.bloqueado);
+                        if (primerDebitoNoBloqueado !== -1) {
+                            actualizarMontoDebito(primerDebitoNoBloqueado, nuevoValFormateado, true);
+                        } else {
+                            e.set(nuevoValFormateado);
+                        }
+                    } else {
+                        // No hay débitos en el array, usar el débito simple
+                        e.set(nuevoValFormateado);
+                    }
+                } else {
+                    e.set(nuevoValFormateado);
+                }
             }
         });
     };
@@ -1201,9 +1530,7 @@ export default function PagarMain({
     const [currentRefId, setCurrentRefId] = useState(null);
 
     const sendRefToMerchant = (id_ref) => {
-        console.log(id_ref, "id_ref BEFORE");
         setValidatingRef(id_ref);
-        console.log(id_ref, "id_ref");
         db.sendRefToMerchant({
             id_ref: id_ref,
         })
@@ -2436,7 +2763,8 @@ export default function PagarMain({
                                         </div>
                                         <div className="p-3 space-y-2">
                                             {pedidoData.pagos.map((pago) => {
-                                                if (parseFloat(pago.monto) === 0) return null;
+                                                // Mostrar todos los pagos sin importar el monto
+                                                // Esto es importante para débitos pequeños en Bs que resultan en montos muy pequeños en USD
                                                 
                                                 const getTipoPago = (tipo) => {
                                                     // Convertir a string para comparar con el enum de la BD
@@ -2510,81 +2838,142 @@ export default function PagarMain({
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="flex flex-1 gap-2">
-                                            {/* Monto Débito (en Bs) */}
-                                            <div className={`flex-1 flex border rounded ${debito != "" ? "bg-white border-orange-300" : "bg-white border-gray-200"}`}>
-                                                <label
-                                                    className="flex items-center justify-center w-8 text-orange-500 border-r border-gray-200 rounded-l cursor-pointer bg-orange-100"
-                                                    onClick={getDebitoLocal}
-                                                    title="Débito - Calcular restante en Bs"
-                                                >
-                                                    <span className="text-[10px] font-bold">Bs</span>
-                                                </label>
-                                                <div className="flex-1 flex flex-col h-full">
-                                                    <div className="flex items-center h-full">
-                                                        <div className="relative flex items-center w-full h-full">
-                                                            {debito && (
-                                                                <span className="absolute left-2 text-xs font-semibold text-orange-500">
-                                                                    ≈${moneda(parseFloat(debito || 0) / getTasaPromedioCarrito())}
+                                        
+                                        {/* Siempre modo múltiples débitos */}
+                                        <div className="flex flex-col gap-1.5">
+                                                {debitos.map((debito, index) => (
+                                                    <div key={index} className={`flex gap-2 items-stretch ${debito.bloqueado ? 'opacity-75' : ''}`}>
+                                                        <span className="text-[10px] text-orange-600 font-medium w-4 flex items-center">#{index + 1}</span>
+                                                        {/* Monto */}
+                                                        <div className={`flex-1 flex border rounded ${debito.bloqueado ? "bg-green-50 border-green-300" : debito.monto ? "bg-white border-orange-300" : "bg-white border-gray-200"}`}>
+                                                            <label className={`flex items-center justify-center w-8 border-r border-gray-200 rounded-l ${debito.bloqueado ? "text-green-600 bg-green-100" : "text-orange-500 bg-orange-100"}`}>
+                                                                {debito.bloqueado ? (
+                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                ) : (
+                                                                    <span className="text-[10px] font-bold">Bs</span>
+                                                                )}
+                                                            </label>
+                                                            <div className="flex-1 flex flex-col h-full">
+                                                                <div className="flex items-center h-full">
+                                                                    {/* Botón POS integrado - lado izquierdo */}
+                                                                    {sucursaldata?.pinpad && !forzarReferenciaManual && !debito.bloqueado && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => abrirModalPosDebitoConMonto && abrirModalPosDebitoConMonto(debito.monto, index)}
+                                                                            className="w-6 h-6 flex items-center justify-center text-orange-600 hover:text-orange-800 hover:bg-orange-100 rounded transition-colors flex-shrink-0"
+                                                                            title="Abrir POS"
+                                                                        >
+                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                                                            </svg>
+                                                                        </button>
+                                                                    )}
+                                                                    <input
+                                                                        ref={(el) => (debitosInputRefs.current[index] = el)}
+                                                                        type="text"
+                                                                        className={`flex-1 min-w-0 h-full px-2 py-1 text-lg font-bold bg-transparent border-0 focus:ring-0 focus:outline-none text-right ${debito.bloqueado ? "text-green-700 cursor-not-allowed" : "text-orange-700"}`}
+                                                                        value={displayMonedaLive(debito.monto)}
+                                                                        onChange={(e) => actualizarMontoDebito(index, formatMonedaLive(e.target.value))}
+                                                                        onKeyDown={(e) => handleDebitoInputKeyDown(e, index)}
+                                                                        placeholder="0"
+                                                                        disabled={debito.bloqueado}
+                                                                        readOnly={debito.bloqueado}
+                                                                    />
+                                                                    <span className={`px-1 text-sm font-bold ${debito.bloqueado ? "text-green-700" : "text-orange-700"}`}>Bs</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        {/* Referencia */}
+                                                        <div className="relative w-28">
+                                                            <div className={`h-full border rounded ${debito.bloqueado ? "bg-green-50 border-green-300" : debito.referencia.length === 4 ? "bg-white border-orange-300" : debito.monto && debito.referencia.length > 0 && debito.referencia.length < 4 ? "bg-yellow-50 border-yellow-400" : "bg-white border-gray-200"}`}>
+                                                                <input
+                                                                    type="text"
+                                                                    className={`w-full h-full px-2 text-lg font-bold text-center bg-transparent border-0 focus:ring-0 focus:outline-none ${debito.bloqueado ? "text-green-700 cursor-not-allowed" : "placeholder-gray-400"}`}
+                                                                    value={debito.referencia}
+                                                                    onChange={(e) => actualizarReferenciaDebito(index, e.target.value)}
+                                                                    onKeyDown={handlePaymentInputKeyDown}
+                                                                    placeholder="Ref.*"
+                                                                    maxLength={4}
+                                                                    disabled={debito.bloqueado}
+                                                                    readOnly={debito.bloqueado}
+                                                                />
+                                                            </div>
+                                                            {debito.monto && debito.referencia.length > 0 && debito.referencia.length < 4 && !debito.bloqueado && (
+                                                                <span className="absolute -bottom-3 left-0 right-0 text-[8px] text-yellow-600 text-center">
+                                                                    Faltan {4 - debito.referencia.length} díg.
                                                                 </span>
                                                             )}
-                                                            <input
-                                                                ref={debitoInputRef}
-                                                                type="text"
-                                                                className="flex-1 min-w-0 h-full px-2 py-1 text-lg font-bold text-orange-700 bg-transparent border-0 focus:ring-0 focus:outline-none text-right pl-10"
-                                                                value={displayMonedaLive(debito)}
-                                                                onChange={(e) => syncPago(formatMonedaLive(e.target.value), "Debito")}
-                                                                onKeyDown={handlePaymentInputKeyDown}
-                                                                onBlur={(e) => {
-                                                                    if (debito && parseFloat(debito) > 0) {
-                                                                        setTimeout(() => {
-                                                                            const activeEl = document.activeElement;
-                                                                            // No mover foco si está en el modal POS (input de cédula)
-                                                                            const isInPosModal = activeEl?.id === 'pos-cedula-input' || 
-                                                                                                 activeEl?.closest?.('.fixed.inset-0');
-                                                                            if (isInPosModal) return;
-                                                                            
-                                                                            const isPaymentInput = activeEl?.getAttribute("data-efectivo") || 
-                                                                                          activeEl === debitoRefInputRef.current;
-                                                                            if (!isPaymentInput && debitoRefInputRef.current) {
-                                                                                debitoRefInputRef.current.focus();
-                                                                            }
-                                                                        }, 100);
-                                                                    }
-                                                                }}
-                                                                placeholder="0"
-                                                            />
+                                                           
                                                         </div>
-                                                        <span className="px-1 text-sm font-bold text-orange-700">Bs</span>
+                                                        {/* Botón eliminar */}
+                                                        {debitos.length > 1 && !debito.bloqueado && (
+                                                            <button
+                                                                onClick={() => eliminarFilaDebito(index)}
+                                                                className="w-6 h-full flex items-center justify-center text-red-600 hover:bg-red-100 rounded transition-colors"
+                                                                title="Eliminar esta tarjeta"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                                </svg>
+                                                            </button>
+                                                        )}
+                                                        {debitos.length > 1 && debito.bloqueado && (
+                                                            <div className="w-6 h-full flex items-center justify-center">
+                                                                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                                </svg>
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                </div>
-                                            </div>
-                                            {/* Referencia Débito (obligatoria, exactamente 4 dígitos) */}
-                                            <div className="relative w-28">
-                                                <div className={`h-full border rounded ${debitoRefError ? "bg-red-50 border-red-500 ring-2 ring-red-300" : debitoRef.length === 4 ? "bg-white border-orange-300" : debito && debitoRef.length > 0 && debitoRef.length < 4 ? "bg-yellow-50 border-yellow-400" : "bg-white border-red-200"}`}>
-                                                    <input
-                                                        ref={debitoRefInputRef}
-                                                        type="text"
-                                                        className={`w-full h-full px-2 text-lg font-bold text-center bg-transparent border-0 focus:ring-0 focus:outline-none ${debitoRefError ? "placeholder-red-400" : "placeholder-gray-400"}`}
-                                                        value={debitoRef}
-                                                        onChange={(e) => {
-                                                            setDebitoRef(e.target.value.replace(/[^0-9]/g, ''));
-                                                            if (debitoRefError) setDebitoRefError(false); // Limpiar error al escribir
-                                                        }}
-                                                        onKeyDown={handlePaymentInputKeyDown}
-                                                        placeholder={debitoRefError ? "Falta Ref." : "Ref. Déb.*"}
-                                                        maxLength={4}
-                                                        minLength={4}
-                                                        data-ref-input="true"
-                                                    />
-                                                </div>
-                                                {debito && debitoRef.length > 0 && debitoRef.length < 4 && (
-                                                    <span className="absolute -bottom-3 left-0 right-0 text-[8px] text-yellow-600 text-center">
-                                                        Faltan {4 - debitoRef.length} díg.
-                                                    </span>
+                                                ))}
+                                                {(() => {
+                                                    // Calcular si se puede agregar más débitos
+                                                    const tasaBsPedido = getTasaPromedioCarrito();
+                                                    const totalPedidoBs = parseFloat(pedidoData?.clean_total || 0) * tasaBsPedido;
+                                                    
+                                                    // Calcular total de otros métodos de pago en Bs
+                                                    const efectivoUsd = parseFloat(efectivo) || 0;
+                                                    const efectivoBsVal = parseFloat(efectivo_bs) || 0;
+                                                    const efectivoPesoUsd = (parseFloat(efectivo_peso) || 0) / parseFloat(peso);
+                                                    const transferenciaUsd = parseFloat(transferencia) || 0;
+                                                    const creditoUsd = parseFloat(credito) || 0;
+                                                    const biopagoUsd = parseFloat(biopago) || 0;
+                                                    
+                                                    const otrosPagosBs = (efectivoUsd + efectivoPesoUsd + transferenciaUsd + creditoUsd + biopagoUsd) * tasaBsPedido + efectivoBsVal;
+                                                    const totalDebitosBs = calcularTotalDebitos();
+                                                    const disponibleBs = totalPedidoBs - otrosPagosBs - totalDebitosBs;
+                                                    
+                                                    const puedeAgregarDebito = disponibleBs > 0.01; // Permitir si queda al menos 0.01 Bs
+                                                    
+                                                    return (
+                                                        <button
+                                                            onClick={agregarFilaDebito}
+                                                            disabled={!puedeAgregarDebito}
+                                                            className={`flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-semibold border border-dashed rounded transition-colors ${
+                                                                puedeAgregarDebito 
+                                                                    ? 'text-orange-700 bg-orange-50 border-orange-300 hover:bg-orange-100 cursor-pointer' 
+                                                                    : 'text-gray-400 bg-gray-50 border-gray-300 cursor-not-allowed opacity-50'
+                                                            }`}
+                                                            title={puedeAgregarDebito ? 'Agregar otra tarjeta' : 'No se pueden agregar más débitos (total alcanzado)'}
+                                                        >
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                                            </svg>
+                                                            Agregar otra tarjeta
+                                                        </button>
+                                                    );
+                                                })()}
+                                                {/* Total */}
+                                                {debitos.length > 1 && calcularTotalDebitos() > 0 && (
+                                                    <div className="flex justify-end items-center gap-2 px-2 py-1 bg-orange-50 border border-orange-200 rounded">
+                                                        <span className="text-[10px] font-medium text-orange-600">Total:</span>
+                                                        <span className="text-sm font-bold text-orange-700">{moneda(calcularTotalDebitos())} Bs</span>
+                                                        <span className="text-[10px] text-orange-500">≈${moneda(calcularTotalDebitos() / getTasaPromedioCarrito())}</span>
+                                                    </div>
                                                 )}
                                             </div>
-                                        </div>
                                     </div>
 
                                     {/* ══════════ GRUPO EFECTIVO ══════════ */}
@@ -2644,7 +3033,10 @@ export default function PagarMain({
                                                         onClick={() => {
                                                             const tasaBs = getTasaPromedioCarrito();
                                                             const tasaCop = pedidoData?.items?.[0]?.tasa_cop || peso;
-                                                            const totalPagos = (parseFloat(debito || 0) / tasaBs) + parseFloat(efectivo_dolar || 0) + (parseFloat(efectivo_bs || 0) / tasaBs) + (parseFloat(efectivo_peso || 0) / tasaCop) + parseFloat(transferencia || 0);
+                                                            // Calcular solo débitos NO bloqueados
+                                                            const debitosNoBloqueados = debitos.filter(d => !d.bloqueado);
+                                                            const totalDebitosNoBloqueadosBs = debitosNoBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+                                                            const totalPagos = (totalDebitosNoBloqueadosBs / tasaBs) + parseFloat(efectivo_dolar || 0) + (parseFloat(efectivo_bs || 0) / tasaBs) + (parseFloat(efectivo_peso || 0) / tasaCop) + parseFloat(transferencia || 0);
                                                             const restanteUSD = parseFloat(pedidoData?.clean_total || 0) - totalPagos;
                                                             if (restanteUSD > 0) setEfectivo_peso((restanteUSD * tasaCop).toFixed(0));
                                                         }}

@@ -120,626 +120,721 @@ class PagoPedidosController extends Controller
 
         try {
             $metodos_pago = [];
-        if ($req->efectivo && floatval($req->efectivo)) {
-            $metodos_pago[] = ['tipo' => 'efectivo', 'monto' => floatval($req->efectivo)];
-        }
-        if ($req->debito && floatval($req->debito)) {
-            $metodos_pago[] = ['tipo' => 'debito', 'monto' => floatval($req->debito)];
-        }
-        if ($req->transferencia && floatval($req->transferencia)) {
-            $metodos_pago[] = ['tipo' => 'transferencia', 'monto' => floatval($req->transferencia)];
-        }
-        if ($req->biopago && floatval($req->biopago)) {
-            $req->biopago = 0; //Biopago no se registra
-            $metodos_pago[] = ['tipo' => 'biopago', 'monto' => 0]; //Biopago no se registra
-        }
-        if ($req->credito && floatval($req->credito)) {
-            $metodos_pago[] = ['tipo' => 'credito', 'monto' => floatval($req->credito)];
-        }
+            if ($req->efectivo && floatval($req->efectivo)) {
+                $metodos_pago[] = ['tipo' => 'efectivo', 'monto' => floatval($req->efectivo)];
+            }
+            if ($req->debito && floatval($req->debito)) {
+                $metodos_pago[] = ['tipo' => 'debito', 'monto' => floatval($req->debito)];
+            }
+            // Verificar múltiples débitos
+            if ($req->debitos && is_array($req->debitos)) {
+                foreach ($req->debitos as $debitoItem) {
+                    if (floatval($debitoItem['monto']) > 0) {
+                        $metodos_pago[] = ['tipo' => 'debito', 'monto' => floatval($debitoItem['monto'])];
+                    }
+                }
+            }
+            if ($req->transferencia && floatval($req->transferencia)) {
+                $metodos_pago[] = ['tipo' => 'transferencia', 'monto' => floatval($req->transferencia)];
+            }
+            if ($req->biopago && floatval($req->biopago)) {
+                $req->biopago = 0; //Biopago no se registra
+                $metodos_pago[] = ['tipo' => 'biopago', 'monto' => 0]; //Biopago no se registra
+            }
+            if ($req->credito && floatval($req->credito)) {
+                $metodos_pago[] = ['tipo' => 'credito', 'monto' => floatval($req->credito)];
+            }
+            // Verificar pagos adicionales
+            if ($req->pagosAdicionales && is_array($req->pagosAdicionales)) {
+                foreach ($req->pagosAdicionales as $pagoAdicional) {
+                    $metodos_pago[] = ['tipo' => 'adicional', 'monto' => floatval($pagoAdicional['monto_original'])];
+                }
+            }
 
-
-        if (count($metodos_pago) > 1) {
-            $montos = array_column($metodos_pago, 'monto');
-            $tienePositivos = count(array_filter($montos, function($monto) { return $monto > 0; })) > 0;
-            $tieneNegativos = count(array_filter($montos, function($monto) { return $monto < 0; })) > 0;
-
+            // VALIDACION: Verificar que haya al menos un método de pago válido
+            $tieneMetodosPago = false;
+            foreach ($metodos_pago as $metodo) {
+                if (abs(floatval($metodo['monto'])) > 0) {
+                    $tieneMetodosPago = true;
+                    break;
+                }
+            }
             
-            if ($tienePositivos && $tieneNegativos) {
+            if (!$tieneMetodosPago) {
                 \DB::rollback();
                 return Response::json([
-                    "msj" => "Error: No se pueden mezclar métodos de pago positivos y negativos en la misma transacción",
+                    "msj" => "Error: Debe ingresar al menos un método de pago válido",
                     "estado" => false
                 ]);
             }
-        }
-        // Si el usuario es admin, no permitir el pago
-        if (session('tipo_usuario')==1) {
-            \DB::rollback();
-            return Response::json([
-                "msj" => "Error: Los usuarios administradores no pueden procesar pagos de pedidos. Actualmente estás logueado como administrador.",
-                "estado" => false
-            ]);
-        }
 
-        // Validar que todos los métodos de pago tengan el mismo signo (todos positivos o todos negativos)
+            // VALIDACION "Error: No se pueden mezclar métodos de pago positivos y negativos en la misma transacción"
+            if (count($metodos_pago) > 1) {
+                $montos = array_column($metodos_pago, 'monto');
+                $tienePositivos = count(array_filter($montos, function($monto) { return $monto > 0; })) > 0;
+                $tieneNegativos = count(array_filter($montos, function($monto) { return $monto < 0; })) > 0;
 
-       
+                
+                if ($tienePositivos && $tieneNegativos) {
+                    \DB::rollback();
+                    return Response::json([
+                        "msj" => "Error: No se pueden mezclar métodos de pago positivos y negativos en la misma transacción",
+                        "estado" => false
+                    ]);
+                }
+            }
 
-
+            // VALIDACION Si el usuario es admin, no permitir el pago
+            if (session('tipo_usuario')==1) {
+                \DB::rollback();
+                return Response::json([
+                    "msj" => "Error: Los usuarios administradores no pueden procesar pagos de pedidos. Actualmente estás logueado como administrador.",
+                    "estado" => false
+                ]);
+            }
 
         
-        $ped = (new PedidosController)->getPedido($req);
+            $ped = (new PedidosController)->getPedido($req);
 
-        if (!isset($ped->items) || $ped->items->count()==0) {
-            \DB::rollback();
-            return Response::json([
-                "msj" => "Error: El pedido no tiene items, no se puede procesar el pago",
-                "estado" => false
-            ]);
-        }
+            // VALIDACION "Error: El pedido no tiene items, no se puede procesar el pago"
+            if (!isset($ped->items) || $ped->items->count()==0) {
+                \DB::rollback();
+                return Response::json([
+                    "msj" => "Error: El pedido no tiene items, no se puede procesar el pago",
+                    "estado" => false
+                ]);
+            }
 
-        // NUEVA LÓGICA: Verificar si hay items con cantidad negativa (garantías/devoluciones)
-        $itemsConCantidadNegativa = items_pedidos::where("id_pedido", $req->id)
-            ->where("cantidad", "<", 0)
-            ->get();
+            // NUEVA LÓGICA: Verificar si hay items con cantidad negativa (garantías/devoluciones)
+            $itemsConCantidadNegativa = items_pedidos::where("id_pedido", $req->id)
+                ->where("cantidad", "<", 0)
+                ->get();
 
-        if ($itemsConCantidadNegativa->count() > 0) {
-            // Hay items con cantidad negativa, buscar solicitudes de garantía en arabito central
-            /* try {
-                $solicitudesGarantia = (new sendCentral)->buscarSolicitudesGarantiaPorPedido($req->id);
-                
-                if (isset($solicitudesGarantia['success']) && $solicitudesGarantia['success']) {
-                    $solicitudes = $solicitudesGarantia['solicitudes'] ?? [];
-                    
-                    if (count($solicitudes) > 0) {
-                        // Encontrar la solicitud aprobada
-                        $solicitudAprobada = collect($solicitudes)->firstWhere('estatus', 'FINALIZADA');
-                        
-                        if ($solicitudAprobada) {
-                            $facturaOriginal = $solicitudAprobada['factura_venta_id'] ?? null;
-                            $modo_traslado_interno = $solicitudAprobada['modo_traslado_interno'] ?? null;
-                            
-                            if ($facturaOriginal) {
-                                // Verificar que algún pago de la factura original esté en la factura final
-                                if (!$this->validarPagoGarantia($facturaOriginal, $req->id, $req)) {
-                                    \DB::rollback();
-                                    return Response::json([
-                                        "msj" => "Error: Para procesar garantías/devoluciones, debe incluir al menos un método de pago de la factura original #{$facturaOriginal}",
-                                        "estado" => false
-                                    ]);
-                                }
-                                
-                                \Log::info("Validación de pago de garantía exitosa", [
-                                    'pedido_garantia' => $req->id,
-                                    'factura_original' => $facturaOriginal,
-                                    'solicitud_id' => $solicitudAprobada['id']
-                                ]);
-                            } else {
-                                if ($modo_traslado_interno==0) {
-                                    \DB::rollback();
-                                    return Response::json([
-                                        "msj" => "Error: No se encontró la factura original en la solicitud de garantía",
-                                        "estado" => false
-                                    ]);
-                                }
-                            }
-                        } else {
-                            \DB::rollback();
-                            return Response::json([
-                                "msj" => "Error: No se encontró una solicitud de garantía FINALIZADA para este pedido",
-                                "estado" => false
-                            ]);
-                        }
-                    } else {
+            
+
+            //VALIDACION Verificar productos duplicados en el pedido
+            $items = items_pedidos::where("id_pedido", $req->id)
+                ->whereNotNull("id_producto")
+                ->get();
+        
+            $productos = [];
+            $todosCondicionCero = true;
+            foreach ($items as $itm) {
+                if ($itm->condicion != 0) {
+                    $todosCondicionCero = false;
+                    break;
+                }
+            }
+            if ($todosCondicionCero) {
+                foreach ($items as $item) {
+                    if (isset($productos[$item->id_producto])) {
                         \DB::rollback();
                         return Response::json([
-                            "msj" => "Error: No se encontraron solicitudes de garantía para este pedido en arabito central",
+                            "msj" => "Error: El producto ID " . $item->id_producto . " está duplicado en el pedido",
                             "estado" => false
                         ]);
                     }
-                } else {
-                    $error = $solicitudesGarantia['error'] ?? 'Error desconocido';
-                    \DB::rollback();
-                    return Response::json([
-                        "msj" => "Error al consultar solicitudes de garantía: {$error}",
-                        "estado" => false
-                    ]);
+                    $productos[$item->id_producto] = true;
                 }
-            } catch (\Exception $e) {
-                \Log::error("Error al validar solicitudes de garantía", [
-                    'pedido_id' => $req->id,
-                    'error' => $e->getMessage()
-                ]);
-                
-                \DB::rollback();
-                return Response::json([
-                    "msj" => "Error al validar solicitudes de garantía: " . $e->getMessage(),
-                    "estado" => false
-                ]);
-            } */
-        }
+            } 
 
-        // Verificar productos duplicados en el pedido
-        $items = items_pedidos::where("id_pedido", $req->id)
-            ->whereNotNull("id_producto")
-            ->get();
-        
-        $productos = [];
 
-        $todosCondicionCero = true;
-        foreach ($items as $itm) {
-            if ($itm->condicion != 0) {
-                $todosCondicionCero = false;
-                break;
+            $total_real = $ped->clean_total;
+            
+            // Obtener tasas del primer ítem del pedido (tasa histórica al momento de facturar)
+            $primerItem = items_pedidos::where("id_pedido", $req->id)->first();
+            $tasaDolar = $primerItem ? floatval($primerItem->tasa) : 1;
+            $tasaPeso = $primerItem ? floatval($primerItem->tasa_cop) : 1;
+            if ($tasaDolar <= 0) $tasaDolar = 1;
+            if ($tasaPeso <= 0) $tasaPeso = 1;
+            
+            // Calcular total de métodos de pago principales
+            // NOTA: debito viene en Bs, hay que convertirlo a USD
+            // Soporta débito simple o múltiples débitos
+            $debitoUSD = 0;
+            if ($req->debitos && is_array($req->debitos)) {
+                // Múltiples débitos: sumar todos y convertir a USD
+                foreach ($req->debitos as $debitoItem) {
+                    $debitoUSD += floatval($debitoItem['monto']) / $tasaDolar;
+                }
+            } else {
+                // Débito simple
+                $debitoUSD = $req->debito ? floatval($req->debito) / $tasaDolar : 0;
             }
-        }
-        if ($todosCondicionCero) {
-            foreach ($items as $item) {
-                if (isset($productos[$item->id_producto])) {
-                    \DB::rollback();
-                    return Response::json([
-                        "msj" => "Error: El producto ID " . $item->id_producto . " está duplicado en el pedido",
-                        "estado" => false
-                    ]);
-                }
-                $productos[$item->id_producto] = true;
-            }
-        } 
-
-
-
-        $total_real = $ped->clean_total;
-        
-        // Obtener tasas del primer ítem del pedido (tasa histórica al momento de facturar)
-        $primerItem = items_pedidos::where("id_pedido", $req->id)->first();
-        $tasaDolar = $primerItem ? floatval($primerItem->tasa) : 1;
-        $tasaPeso = $primerItem ? floatval($primerItem->tasa_cop) : 1;
-        if ($tasaDolar <= 0) $tasaDolar = 1;
-        if ($tasaPeso <= 0) $tasaPeso = 1;
-        
-        // Calcular total de métodos de pago principales
-        // NOTA: debito viene en Bs, hay que convertirlo a USD
-        $debitoUSD = $req->debito ? floatval($req->debito) / $tasaDolar : 0;
-        $total_ins = $debitoUSD + floatval($req->efectivo) + floatval($req->transferencia) + floatval($req->biopago) + floatval($req->credito);
-        
-        // Agregar pagos adicionales de efectivo (Bs y Pesos) convertidos a dólares
-        $totalAdicUsdBs = 0;
-        $totalAdicUsdCop = 0;
-        $totalAdicUsdDolar = 0;
-        if ($req->pagosAdicionales && is_array($req->pagosAdicionales)) {
-            foreach ($req->pagosAdicionales as $pagoAdicional) {
-                if (isset($pagoAdicional['moneda']) && isset($pagoAdicional['monto_original'])) {
-                    $monto = floatval($pagoAdicional['monto_original']);
-                    
-                    if ($pagoAdicional['moneda'] === 'bs' && $tasaDolar > 0) {
-                        // Convertir Bs a dólares usando tasa del pedido
-                        $total_ins += $monto / $tasaDolar;
-                        $totalAdicUsdBs += $monto / $tasaDolar;
-                    } elseif ($pagoAdicional['moneda'] === 'peso' && $tasaPeso > 0) {
-                        // Convertir Pesos a dólares usando tasa del pedido
-                        $total_ins += $monto / $tasaPeso;
-                        $totalAdicUsdCop += $monto / $tasaPeso;
-                    } elseif ($pagoAdicional['moneda'] === 'dolar') {
-                        // Ya está en dólares
-                        $total_ins += $monto;
-                        $totalAdicUsdDolar += $monto;
-                    }
-                }
-            }
-        }
-
-       
-        
-        /* if ($total_ins < 0 || itemsConCantidadNegativa->count() > 0) {
-            $isPermiso = (new TareaslocalController)->checkIsResolveTarea([
-                "id_pedido" => $req->id,
-                "tipo" => "devolucion",
-            ]);
-            if($isPermiso["permiso"]){
-                if ($isPermiso["valoraprobado"]==round($total_ins,0)) {
-                    // Avanza
-                }else{
-                    \DB::rollback();
-                    return Response::json(["msj"=>"Error: Valor no aprobado","estado"=>false]);
-                }
-            }else{
-                $nuevatarea = (new TareaslocalController)->createTareaLocal([
-                    "id_pedido" =>  $req->id,
-                    "valoraprobado" => round($total_ins,0),
-                    "tipo" => "devolucion",
-                    "descripcion" => "Solicitud de Devolucion: ".round($total_ins,0)." $",
-                ]);
-                if ($nuevatarea) {
-                    \DB::commit();
-                    return Response::json(["id_tarea"=>$nuevatarea->id,"msj"=>"Debe esperar aprobacion del Administrador","estado"=>false]);
-                }
-            }
-        } */
-
-        if ($req->credito!=0) {
-            $isPermiso = (new TareaslocalController)->checkIsResolveTarea([
-                "id_pedido" => $req->id,
-                "tipo" => "credito",
-            ]);
-            if ((new UsuariosController)->isAdmin()) {
-                // Avanza
-            }elseif($isPermiso["permiso"]){
-                if ($isPermiso["valoraprobado"]==round($req->credito,0)) {
-                    // Avanza
-                }else{
-                    \DB::rollback();
-                    return Response::json(["msj"=>"Error: Valor no aprobado","estado"=>false]);
-                }
-            }else{
-                $nuevatarea = (new TareaslocalController)->createTareaLocal([
-                    "id_pedido" =>  $req->id,
-                    "valoraprobado" => round($req->credito,0),
-                    "tipo" => "credito",
-                    "descripcion" => "Solicitud de Crédito: ".round($req->credito,0)." $",
-                ]);
-                if ($nuevatarea) {
-                    \DB::commit();
-                    return Response::json(["id_tarea"=>$nuevatarea->id,"msj"=>"Debe esperar aprobacion del Administrador","estado"=>false]);
-                }
-            }
-        }
-        if ($req->credito!=0&&$ped->id_cliente==1) {
-            \DB::rollback();
-            return Response::json(["msj"=>"Error: En caso de crédito, debe registrar los datos del cliente","estado"=>false]);
-        }
-       
-        $res = $total_real-$total_ins;
-        if ($res > -0.2 && $res < 0.2) {
-               // 1 Transferencia
-               // 2 Debito 
-               // 3 Efectivo 
-               // 4 Credito  
-               // 5 Biopago
-               // 6 vuelto
-            try {
-                (new PedidosController)->checkPedidoAuth($req->id);
-                $checkPedidoPago = (new PedidosController)->checkPedidoPago($req->id);
-                if ($checkPedidoPago!==true) {
-                    return $checkPedidoPago;
-                }
-                // Validación de transferencias
-                if ($req->transferencia) {
-                    $monto_tra = floatval($req->transferencia);
-                    $montodolares = 0.0;
-                    $bs = (new PedidosController)->get_moneda()["bs"];
-                    
-                    // Obtener todas las referencias del pedido
-                    $referencias = pagos_referencias::where("id_pedido", $req->id)->get();
-                    
-                    // Verificar que existan referencias si se está procesando una transferencia
-                    if ($referencias->count()==0) {
-                        throw new \Exception("Error: Para procesar una transferencia debe cargar al menos una referencia de pago.", 1);
-                    }
-                    
-                    // Calcular el monto total en dólares de las referencias
-                    foreach ($referencias as $referencia) {
-                        $monto_ref = floatval($referencia->monto);
+            
+            $total_ins = $debitoUSD + floatval($req->efectivo) + floatval($req->transferencia) + floatval($req->biopago) + floatval($req->credito);
+            
+            // Agregar pagos adicionales de efectivo (Bs y Pesos) convertidos a dólares
+            $totalAdicUsdBs = 0;
+            $totalAdicUsdCop = 0;
+            $totalAdicUsdDolar = 0;
+            if ($req->pagosAdicionales && is_array($req->pagosAdicionales)) {
+                foreach ($req->pagosAdicionales as $pagoAdicional) {
+                    if (isset($pagoAdicional['moneda']) && isset($pagoAdicional['monto_original'])) {
+                        $monto = floatval($pagoAdicional['monto_original']);
                         
-                        if (
-                            $referencia->banco == "ZELLE" ||
-                            $referencia->banco == "BINANCE" ||
-                            $referencia->banco == "AirTM"
-                        ) {
-                            // Bancos en dólares - usar monto directo
-                            $montodolares += $monto_ref;
-                        } else {
-                            // Bancos en bolívares - convertir a dólares
-                            if ($bs > 0) {
-                                $montodolares += ($monto_ref / $bs);
-                            } else {
-                                throw new \Exception("Error: Tasa de cambio (BS) no válida para conversión.", 1);
+                        if ($pagoAdicional['moneda'] === 'bs' && $tasaDolar > 0) {
+                            // Convertir Bs a dólares usando tasa del pedido
+                            $total_ins += $monto / $tasaDolar;
+                            $totalAdicUsdBs += $monto / $tasaDolar;
+                        } elseif ($pagoAdicional['moneda'] === 'peso' && $tasaPeso > 0) {
+                            // Convertir Pesos a dólares usando tasa del pedido
+                            $total_ins += $monto / $tasaPeso;
+                            $totalAdicUsdCop += $monto / $tasaPeso;
+                        } elseif ($pagoAdicional['moneda'] === 'dolar') {
+                            // Ya está en dólares
+                            $total_ins += $monto;
+                            $totalAdicUsdDolar += $monto;
+                        }
+                    }
+                }
+            }
+
+
+            if ($req->credito!=0) {
+                $isPermiso = (new TareaslocalController)->checkIsResolveTarea([
+                    "id_pedido" => $req->id,
+                    "tipo" => "credito",
+                ]);
+                if ((new UsuariosController)->isAdmin()) {
+                    // Avanza
+                }elseif($isPermiso["permiso"]){
+                    if ($isPermiso["valoraprobado"]==round($req->credito,0)) {
+                        // Avanza
+                    }else{
+                        \DB::rollback();
+                        return Response::json(["msj"=>"Error: Valor no aprobado","estado"=>false]);
+                    }
+                }else{
+                    $nuevatarea = (new TareaslocalController)->createTareaLocal([
+                        "id_pedido" =>  $req->id,
+                        "valoraprobado" => round($req->credito,0),
+                        "tipo" => "credito",
+                        "descripcion" => "Solicitud de Crédito: ".round($req->credito,0)." $",
+                    ]);
+                    if ($nuevatarea) {
+                        \DB::commit();
+                        return Response::json(["id_tarea"=>$nuevatarea->id,"msj"=>"Debe esperar aprobacion del Administrador","estado"=>false]);
+                    }
+                }
+            }
+            // VALIDACION "Error: En caso de crédito, debe registrar los datos del cliente"
+            if ($req->credito!=0&&$ped->id_cliente==1) {
+                \DB::rollback();
+                return Response::json(["msj"=>"Error: En caso de crédito, debe registrar los datos del cliente","estado"=>false]);
+            }
+        
+            $res = $total_real-$total_ins;
+            
+            // Validación adicional en bolívares cuando hay débito (simple o múltiple)
+            $validacionBolivaresOk = true;
+            $tieneDebito = ($req->debito && floatval($req->debito) > 0) || ($req->debitos && is_array($req->debitos) && count($req->debitos) > 0);
+            
+            if ($tieneDebito) {
+                // Usar el total del pedido en bolívares ya calculado por getPedido
+                $totalPedidoBs = $ped->bs_clean;
+                
+                // Calcular total de pagos en bolívares
+                $totalPagosBs = 0;
+                
+                // Débito: puede ser simple o múltiple
+                if ($req->debitos && is_array($req->debitos)) {
+                    // Múltiples débitos: sumar todos
+                    foreach ($req->debitos as $debitoItem) {
+                        $totalPagosBs += floatval($debitoItem['monto']);
+                    }
+                } else {
+                    // Débito simple
+                    $totalPagosBs += floatval($req->debito);
+                }
+                
+                // Efectivo en dólares convertido a Bs
+                $totalPagosBs += floatval($req->efectivo) * $tasaDolar;
+                
+                // Transferencia en dólares convertida a Bs
+                $totalPagosBs += floatval($req->transferencia) * $tasaDolar;
+                
+                // Biopago en dólares convertido a Bs
+                $totalPagosBs += floatval($req->biopago) * $tasaDolar;
+                
+                // Crédito en dólares convertido a Bs
+                $totalPagosBs += floatval($req->credito) * $tasaDolar;
+                
+                // Pagos adicionales
+                if ($req->pagosAdicionales && is_array($req->pagosAdicionales)) {
+                    foreach ($req->pagosAdicionales as $pagoAdicional) {
+                        if (isset($pagoAdicional['moneda']) && isset($pagoAdicional['monto_original'])) {
+                            $monto = floatval($pagoAdicional['monto_original']);
+                            
+                            if ($pagoAdicional['moneda'] === 'bs') {
+                                $totalPagosBs += $monto;
+                            } elseif ($pagoAdicional['moneda'] === 'peso') {
+                                // Convertir peso a dólares y luego a Bs
+                                $totalPagosBs += ($monto / $tasaPeso) * $tasaDolar;
+                            } elseif ($pagoAdicional['moneda'] === 'dolar') {
+                                $totalPagosBs += $monto * $tasaDolar;
                             }
                         }
                     }
-                    
-                    // Calcular diferencia con precisión de 6 decimales para mayor precisión
-                    $diff = round($monto_tra - $montodolares, 6);
-                    $tolerancia = 0.05; // Tolerancia de 5 centavos para casos de redondeo
-                    
-                    // Log para debugging
-                    \Log::info("Validación transferencia - Pedido: {$req->id}", [
-                        'monto_transferencia' => $monto_tra,
-                        'monto_referencias_dolares' => $montodolares,
-                        'diferencia' => $diff,
-                        'tolerancia' => $tolerancia,
-                        'referencias_count' => $referencias->count(),
-                        'diferencia_absoluta' => abs($diff)
-                    ]);
-                    
-                    // Validar que la diferencia esté dentro de la tolerancia
-                    if (abs($diff) > $tolerancia) {
-                        // Log adicional para casos que fallan
-                        \Log::warning("Validación transferencia falló - Pedido: {$req->id}", [
+                }
+                
+                $resBs = $totalPedidoBs - $totalPagosBs;
+                
+                // Tolerancia en Bs: 1 Bs (ajustable según necesidad)
+                if ($resBs < -1 || $resBs > 1) {
+                    $validacionBolivaresOk = false;
+                }
+                
+                \Log::info("Validación en bolívares - Pedido: {$req->id}", [
+                    'total_pedido_bs' => round($totalPedidoBs, 2),
+                    'total_pagos_bs' => round($totalPagosBs, 2),
+                    'diferencia_bs' => round($resBs, 2),
+                    'validacion_ok' => $validacionBolivaresOk
+                ]);
+            }
+        
+            if (($res > -0.2 && $res < 0.2) && $validacionBolivaresOk) {
+                // 1 Transferencia
+                // 2 Debito 
+                // 3 Efectivo 
+                // 4 Credito  
+                // 5 Biopago
+                // 6 vuelto
+                try {
+                    (new PedidosController)->checkPedidoAuth($req->id);
+                    $checkPedidoPago = (new PedidosController)->checkPedidoPago($req->id);
+                    if ($checkPedidoPago!==true) {
+                        return $checkPedidoPago;
+                    }
+                    // Validación de transferencias
+                    if ($req->transferencia) {
+                        $monto_tra = floatval($req->transferencia);
+                        $montodolares = 0.0;
+                        $bs = (new PedidosController)->get_moneda()["bs"];
+                        
+                        // Obtener todas las referencias del pedido
+                        $referencias = pagos_referencias::where("id_pedido", $req->id)->get();
+                        
+                        // Verificar que existan referencias si se está procesando una transferencia
+                        if ($referencias->count()==0) {
+                            throw new \Exception("Error: Para procesar una transferencia debe cargar al menos una referencia de pago.", 1);
+                        }
+                        
+                        // Calcular el monto total en dólares de las referencias
+                        foreach ($referencias as $referencia) {
+                            $monto_ref = floatval($referencia->monto);
+                            
+                            if (
+                                $referencia->banco == "ZELLE" ||
+                                $referencia->banco == "BINANCE" ||
+                                $referencia->banco == "AirTM"
+                            ) {
+                                // Bancos en dólares - usar monto directo
+                                $montodolares += $monto_ref;
+                            } else {
+                                // Bancos en bolívares - convertir a dólares
+                                if ($bs > 0) {
+                                    $montodolares += ($monto_ref / $bs);
+                                } else {
+                                    throw new \Exception("Error: Tasa de cambio (BS) no válida para conversión.", 1);
+                                }
+                            }
+                        }
+                        
+                        // Calcular diferencia con precisión de 6 decimales para mayor precisión
+                        $diff = round($monto_tra - $montodolares, 6);
+                        $tolerancia = 0.05; // Tolerancia de 5 centavos para casos de redondeo
+                        
+                        // Log para debugging
+                        \Log::info("Validación transferencia - Pedido: {$req->id}", [
                             'monto_transferencia' => $monto_tra,
                             'monto_referencias_dolares' => $montodolares,
                             'diferencia' => $diff,
-                            'diferencia_absoluta' => abs($diff),
-                            'tolerancia' => $tolerancia
+                            'tolerancia' => $tolerancia,
+                            'referencias_count' => $referencias->count(),
+                            'diferencia_absoluta' => abs($diff)
                         ]);
-                        $monto_tra = moneda($monto_tra);
-                        $montodolares = moneda($montodolares);
-                        $diff = moneda($diff);
-                        throw new \Exception(
-                            "Error: El monto de transferencia ($monto_tra) no coincide con las referencias cargadas ($montodolares). " .
-                            "Diferencia: ($diff). " .
-                            "Debe pagar exactamente lo que indica el sistema.",
-                            1
-                        );
-                    }
-                    
-                    \Log::info("Transferencia validada correctamente - Pedido: {$req->id}");
-                    
-                } else {
-                    // Si no es transferencia, verificar que no haya referencias cargadas
-                    $check_ref = pagos_referencias::where("id_pedido", $req->id)->first();
-                    if ($check_ref) {
-                        throw new \Exception("Error: Tiene referencias de pago cargadas pero no está procesando una transferencia. " .
-                                           "Debe seleccionar 'Transferencia' como método de pago.", 1);
-                    }
-                }
-
-
-                $cuenta = 1;
-                $checkIfAbono = items_pedidos::where("id_producto",NULL)->where("id_pedido",$req->id)->get()->count();
-                if ($checkIfAbono && !$req->credito) {
-                    //Es Abono
-                    $cuenta = 0;
-                }else{
-                    //No es abono
-                }
-                pago_pedidos::where("id_pedido",$req->id)->delete();
-                if($req->transferencia) {
-                    // Validar descuentos antes de procesar transferencia
-                    
-
-                    $refs = pagos_referencias::where("id_pedido",$req->id)->get();
-                    $retenciones = retenciones::where("id_pedido",$req->id)->get();
-                    
-                    $dataTransfe = [
-                        "refs" => $refs,
-                        "retenciones" => $retenciones,
-                    ];
-
-                    // Verificar que todas las referencias de este pedido tengan estatus "aprobada"
-                    $todasAprobadas = true;
-                    foreach ($refs as $ref) {
-                        if (strtolower($ref->estatus) !== "aprobada") {
-                            $todasAprobadas = false;
-                            break;
+                        
+                        // Validar que la diferencia esté dentro de la tolerancia
+                        if (abs($diff) > $tolerancia) {
+                            // Log adicional para casos que fallan
+                            \Log::warning("Validación transferencia falló - Pedido: {$req->id}", [
+                                'monto_transferencia' => $monto_tra,
+                                'monto_referencias_dolares' => $montodolares,
+                                'diferencia' => $diff,
+                                'diferencia_absoluta' => abs($diff),
+                                'tolerancia' => $tolerancia
+                            ]);
+                            $monto_tra = moneda($monto_tra);
+                            $montodolares = moneda($montodolares);
+                            $diff = moneda($diff);
+                            throw new \Exception(
+                                "Error: El monto de transferencia ($monto_tra) no coincide con las referencias cargadas ($montodolares). " .
+                                "Diferencia: ($diff). " .
+                                "Debe pagar exactamente lo que indica el sistema.",
+                                1
+                            );
+                        }
+                        
+                        \Log::info("Transferencia validada correctamente - Pedido: {$req->id}");
+                        
+                    } else {
+                        // Si no es transferencia, verificar que no haya referencias cargadas
+                        $check_ref = pagos_referencias::where("id_pedido", $req->id)->first();
+                        if ($check_ref) {
+                            throw new \Exception("Error: Tiene referencias de pago cargadas pero no está procesando una transferencia. " .
+                                            "Debe seleccionar 'Transferencia' como método de pago.", 1);
                         }
                     }
-                    if (!$todasAprobadas) {
-                        return Response::json([
-                            "msj" => "Error: Todas las referencias de pago deben estar en estatus 'aprobada' para procesar la transferencia.",
-                            "estado" => false
-                        ]);
+
+
+                    $cuenta = 1;
+                    $checkIfAbono = items_pedidos::where("id_producto",NULL)->where("id_pedido",$req->id)->get()->count();
+                    if ($checkIfAbono && !$req->credito) {
+                        //Es Abono
+                        $cuenta = 0;
                     }else{
-                        $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $req->transferencia, $metodos_pago, $cuenta, 1);
-                        if ($resultadoValidacion !== true) {
-                            return $resultadoValidacion;
-                        }
+                        //No es abono
                     }
+                    pago_pedidos::where("id_pedido",$req->id)->delete();
+                    if($req->transferencia) {
+                        // Validar descuentos antes de procesar transferencia
+                        
+
+                        $refs = pagos_referencias::where("id_pedido",$req->id)->get();
+                        $retenciones = retenciones::where("id_pedido",$req->id)->get();
+                        
+                        $dataTransfe = [
+                            "refs" => $refs,
+                            "retenciones" => $retenciones,
+                        ];
+
+                        // Verificar que todas las referencias de este pedido tengan estatus "aprobada"
+                        $todasAprobadas = true;
+                        foreach ($refs as $ref) {
+                            if (strtolower($ref->estatus) !== "aprobada") {
+                                $todasAprobadas = false;
+                                break;
+                            }
+                        }
+                        if (!$todasAprobadas) {
+                            return Response::json([
+                                "msj" => "Error: Todas las referencias de pago deben estar en estatus 'aprobada' para procesar la transferencia.",
+                                "estado" => false
+                            ]);
+                        }else{
+                            $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $req->transferencia, $metodos_pago, $cuenta, 1);
+                            if ($resultadoValidacion !== true) {
+                                return $resultadoValidacion;
+                            }
+                        }
 
 
-                    /* try {
-                        $transfResult = (new sendCentral)->createTranferenciaAprobacion($dataTransfe);
-                        if (isset($transfResult["estado"])) {
-                            if ($transfResult["estado"]==true && $transfResult["msj"]=="APROBADO") {
-                            //if (true) {
-                                
+                        /* try {
+                            $transfResult = (new sendCentral)->createTranferenciaAprobacion($dataTransfe);
+                            if (isset($transfResult["estado"])) {
+                                if ($transfResult["estado"]==true && $transfResult["msj"]=="APROBADO") {
+                                //if (true) {
+                                    
+                                }else{
+                                    return $transfResult;
+                                }
                             }else{
                                 return $transfResult;
                             }
-                        }else{
-                            return $transfResult;
-                        }
-                    } catch (\Exception $e) {
-                        return Response::json(["msj" => "Error: " . $e->getMessage(), "estado" => false]);
-                    } */
+                        } catch (\Exception $e) {
+                            return Response::json(["msj" => "Error: " . $e->getMessage(), "estado" => false]);
+                        } */
 
-                }
-                // Obtener tasas del pedido (del primer item)
-                $itemPedido = \App\Models\items_pedidos::where('id_pedido', $req->id)->first();
-                $tasaDolar = $itemPedido ? floatval($itemPedido->tasa) : 1;
-                $tasaPeso = $itemPedido ? floatval($itemPedido->tasa_cop) : 1;
-                
-                // Asegurar tasas válidas
-                if ($tasaDolar <= 0) $tasaDolar = 1;
-                if ($tasaPeso <= 0) $tasaPeso = 1;
-                
-                if($req->debito) {
-                    $montoOriginalBs = floatval($req->debito); // Viene en Bs
-                    $montoDebito = $montoOriginalBs / $tasaDolar; // Convertir a USD
-                    
-                    // Validar referencia obligatoria para débito SOLO si es positivo (no devolución)
-                    if ($montoOriginalBs > 0 && !$req->debitoRef) {
-                        \DB::rollback();
-                        return Response::json([
-                            "msj" => "Error: Debe ingresar la referencia del pago con débito",
-                            "estado" => false
-                        ]);
                     }
+                    // Obtener tasas del pedido (del primer item)
+                    $itemPedido = \App\Models\items_pedidos::where('id_pedido', $req->id)->first();
+                    $tasaDolar = $itemPedido ? floatval($itemPedido->tasa) : 1;
+                    $tasaPeso = $itemPedido ? floatval($itemPedido->tasa_cop) : 1;
                     
-                   
+                    // Asegurar tasas válidas
+                    if ($tasaDolar <= 0) $tasaDolar = 1;
+                    if ($tasaPeso <= 0) $tasaPeso = 1;
                     
-                    // Validar que la referencia sea única para este usuario en el día actual
-                  /*   if ($req->debitoRef) {
-                        $idUsuario = session('id_usuario');
-                        $hoy = now()->toDateString();
+                    // Procesar débitos: soporta modo simple (debito) o múltiple (debitos array)
+                    if($req->debitos && is_array($req->debitos)) {
+                        // Modo múltiples débitos
+                        $totalDebitoUSD = 0;
                         
-                        $referenciaExistente = pago_pedidos::where('referencia', $req->debitoRef)
-                            ->where('tipo', 2) // tipo 2 = débito
-                            ->where('id_pedido', '!=', $req->id) // excluir el pedido actual
-                            ->whereDate('created_at', $hoy)
-                            ->whereHas('pedido', function($query) use ($idUsuario) {
-                                $query->where('id_vendedor', $idUsuario);
-                            })
-
-                            ->exists();
+                        foreach($req->debitos as $index => $debitoItem) {
+                            $montoOriginalBs = floatval($debitoItem['monto']); // Viene en Bs
+                            $montoDebito = $montoOriginalBs / $tasaDolar; // Convertir a USD
+                            $referencia = $debitoItem['referencia'] ?? null;
+                            
+                            // Validar referencia obligatoria para cada débito positivo
+                            if ($montoOriginalBs > 0 && !$referencia) {
+                                \DB::rollback();
+                                return Response::json([
+                                    "msj" => "Error: Debe ingresar la referencia para la tarjeta #" . ($index + 1),
+                                    "estado" => false
+                                ]);
+                            }
+                            
+                            // Validar que la referencia tenga 4 dígitos
+                            if ($montoOriginalBs > 0 && strlen($referencia) !== 4) {
+                                \DB::rollback();
+                                return Response::json([
+                                    "msj" => "Error: La referencia de la tarjeta #" . ($index + 1) . " debe tener exactamente 4 dígitos",
+                                    "estado" => false
+                                ]);
+                            }
+                            
+                            $totalDebitoUSD += $montoDebito;
+                            
+                            // Preparar datos para guardar
+                            $datosPagoDebito = [
+                                "id_pedido" => $req->id,
+                                "tipo" => 2, // Débito
+                                "cuenta" => $cuenta,
+                                "monto" => $montoDebito, // Convertido a USD
+                                "monto_original" => $montoOriginalBs, // Valor original en Bs
+                                "moneda" => "bs",
+                                "referencia" => $referencia
+                            ];
+                            
+                            // Si vienen datos POS individuales para este débito, agregarlos
+                            if (isset($debitoItem['posData']) && is_array($debitoItem['posData'])) {
+                                $posData = $debitoItem['posData'];
+                                $datosPagoDebito["pos_message"] = $posData['message'] ?? null;
+                                $datosPagoDebito["pos_lote"] = $posData['lote'] ?? null;
+                                $datosPagoDebito["pos_responsecode"] = $posData['responsecode'] ?? null;
+                                $datosPagoDebito["pos_amount"] = $posData['amount'] ?? null;
+                                $datosPagoDebito["pos_terminal"] = $posData['terminal'] ?? null;
+                                $datosPagoDebito["pos_json_response"] = $posData['json_response'] ?? null;
+                            }
+                            
+                            // Guardar cada débito como un registro separado
+                            pago_pedidos::create($datosPagoDebito);
+                        }
                         
-                        if ($referenciaExistente) {
+                        // Validar descuentos con el total de débitos
+                        if ($totalDebitoUSD > 0) {
+                            $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $totalDebitoUSD, $metodos_pago, $cuenta, 2);
+                            if ($resultadoValidacion !== true) {
+                                return $resultadoValidacion;
+                            }
+                        }
+                        
+                    } elseif($req->debito) {
+                        // Modo débito simple (original)
+                        $montoOriginalBs = floatval($req->debito); // Viene en Bs
+                        $montoDebito = $montoOriginalBs / $tasaDolar; // Convertir a USD
+                        
+                        // Validar referencia obligatoria para débito SOLO si es positivo (no devolución)
+                        if ($montoOriginalBs > 0 && !$req->debitoRef) {
                             \DB::rollback();
                             return Response::json([
-                                "msj" => "Error: La referencia de débito '{$req->debitoRef}' ya fue utilizada hoy. Por favor ingrese una referencia diferente.",
+                                "msj" => "Error: Debe ingresar la referencia del pago con débito",
                                 "estado" => false
                             ]);
                         }
-                    }  */
-                    
-                    $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $montoDebito, $metodos_pago, $cuenta, 2);
-                    if ($resultadoValidacion !== true) {
-                        return $resultadoValidacion;
-                    }
-                    
-                    // Guardar pago de débito con referencia
-                    // monto = USD (convertido), monto_original = Bs, moneda = bs (siempre)
-                    pago_pedidos::updateOrCreate(
-                        ["id_pedido" => $req->id, "tipo" => 2],
-                        [
+                        
+                        // Validar que la referencia sea única para este usuario en el día actual
+                        
+                        $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $montoDebito, $metodos_pago, $cuenta, 2);
+                        if ($resultadoValidacion !== true) {
+                            return $resultadoValidacion;
+                        }
+                        
+                        // Preparar datos para guardar
+                        $datosPago = [
                             "cuenta" => $cuenta, 
                             "monto" => $montoDebito, // Convertido a USD
                             "monto_original" => $montoOriginalBs, // Valor original en Bs
                             "moneda" => "bs", // Débito siempre es en Bs
                             "referencia" => $req->debitoRef ?? null
-                        ]
-                    );
-                }
-                // Función para recopilar todos los métodos de pago
-               
-
-                if($req->efectivo) {
-                    // Efectivo en dólares: monto ya está en USD, moneda = dolar
-                    pago_pedidos::updateOrCreate(
-                        ["id_pedido"=>$req->id, "tipo"=>3, "moneda"=>"dolar"],
-                        ["cuenta"=>$cuenta, "monto"=>floatval($req->efectivo), "moneda"=>"dolar"]
-                    );
-                }
-                
-                // Procesar pagos adicionales de efectivo por moneda
-                // Recibe monto_original en moneda original, convierte a USD usando tasas del pedido
-                if($req->pagosAdicionales && is_array($req->pagosAdicionales)) {
-                    foreach($req->pagosAdicionales as $pagoAdicional) {
-                        if(isset($pagoAdicional['moneda']) && isset($pagoAdicional['monto_original']) && floatval($pagoAdicional['monto_original']) != 0) {
-                            $montoOriginal = floatval($pagoAdicional['monto_original']);
-                            $moneda = $pagoAdicional['moneda'];
-                            
-                            // Convertir a USD según la moneda
-                            $montoUSD = $montoOriginal;
-                            if ($moneda === 'bs') {
-                                $montoUSD = $montoOriginal / $tasaDolar;
-                            } elseif ($moneda === 'peso') {
-                                $montoUSD = $montoOriginal / $tasaPeso;
-                            }
-                            
-                            pago_pedidos::create([
-                                "id_pedido" => $req->id,
-                                "tipo" => 3, // Tipo efectivo
-                                "cuenta" => $cuenta,
-                                "monto" => $montoUSD, // Convertido a USD
-                                "moneda" => $moneda, // bs, peso
-                                "monto_original" => $montoOriginal // Valor en moneda original
-                            ]);
-                        }
-                    }
-                }
-                
-                if($req->credito) {
-                    $pedido = pedidos::with("cliente")->find($req->id);
-                    if ($pedido->cliente) {
-                        
-                        $id_cliente = $pedido->cliente["id"];
-
-                        $dataCredito = [
-                            "cliente" => $pedido->cliente,
-                            "idinsucursal" => $req->id,
-                            "saldo" => floatval($req->credito),
-                            "deuda" => $this->getDeudaFun(false,$id_cliente),
-                            "fecha_ultimopago" => $this->getDeudaFechaPago($id_cliente)
                         ];
-
-                        $creditoResult = (new sendCentral)->createCreditoAprobacion($dataCredito);
-    
-                        if ($creditoResult === "APROBADO") {
-                            pago_pedidos::updateOrCreate(["id_pedido"=>$req->id,"tipo"=>4],["cuenta"=>$cuenta,"monto"=>floatval($req->credito)]);
-                        }else{
-                            return $creditoResult;
+                        
+                        // Si vienen datos POS, agregarlos
+                        if ($req->posData && is_array($req->posData)) {
+                            $posData = $req->posData;
+                            $datosPago["pos_message"] = $posData['message'] ?? null;
+                            $datosPago["pos_lote"] = $posData['lote'] ?? null;
+                            $datosPago["pos_responsecode"] = $posData['responsecode'] ?? null;
+                            $datosPago["pos_amount"] = $posData['amount'] ?? null;
+                            $datosPago["pos_terminal"] = $posData['terminal'] ?? null;
+                            $datosPago["pos_json_response"] = $posData['json_response'] ?? null;
                         }
-                    }else{
-                        return Response::json(["msj"=>"Error: Sin Cliente","estado"=>false]);
+                        
+                        // Guardar pago de débito con referencia y datos POS
+                        pago_pedidos::updateOrCreate(
+                            ["id_pedido" => $req->id, "tipo" => 2],
+                            $datosPago
+                        );
                     }
-
-                }
-                if($req->biopago) {
-                    $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $req->biopago, $metodos_pago, $cuenta, 5);
-                    if ($resultadoValidacion !== true) {
-                        return $resultadoValidacion;
-                    }
-                }
+                    // Función para recopilar todos los métodos de pago
                 
-                $pedido = pedidos::find($req->id);
 
-                if ($pedido->estado==0) {
-                    $pedido->estado = 1;
-                    $pedido->save();
-
-                    // Commit de transacción solo cuando cambie el estado del pedido
-                    \DB::commit();
-                    $isFullFiscal = (new SucursalController)->isFullFiscal();
-
-                    if ($isFullFiscal) {
-                        try {
-                            (new tickera)->sendReciboFiscalFun($req->id);
-                        } catch (\Exception $e) {
-                            \Log::error('Error al enviar recibo fiscal: ' . $e->getMessage());
+                    if($req->efectivo) {
+                        // Efectivo en dólares: monto ya está en USD, moneda = dolar
+                        pago_pedidos::updateOrCreate(
+                            ["id_pedido"=>$req->id, "tipo"=>3, "moneda"=>"dolar"],
+                            ["cuenta"=>$cuenta, "monto"=>floatval($req->efectivo), "moneda"=>"dolar"]
+                        );
+                    }
+                    
+                    // Procesar pagos adicionales de efectivo por moneda
+                    // Recibe monto_original en moneda original, convierte a USD usando tasas del pedido
+                    if($req->pagosAdicionales && is_array($req->pagosAdicionales)) {
+                        foreach($req->pagosAdicionales as $pagoAdicional) {
+                            if(isset($pagoAdicional['moneda']) && isset($pagoAdicional['monto_original']) && floatval($pagoAdicional['monto_original']) != 0) {
+                                $montoOriginal = floatval($pagoAdicional['monto_original']);
+                                $moneda = $pagoAdicional['moneda'];
+                                
+                                // Convertir a USD según la moneda
+                                $montoUSD = $montoOriginal;
+                                if ($moneda === 'bs') {
+                                    $montoUSD = $montoOriginal / $tasaDolar;
+                                } elseif ($moneda === 'peso') {
+                                    $montoUSD = $montoOriginal / $tasaPeso;
+                                }
+                                
+                                pago_pedidos::create([
+                                    "id_pedido" => $req->id,
+                                    "tipo" => 3, // Tipo efectivo
+                                    "cuenta" => $cuenta,
+                                    "monto" => $montoUSD, // Convertido a USD
+                                    "moneda" => $moneda, // bs, peso
+                                    "monto_original" => $montoOriginal // Valor en moneda original
+                                ]);
+                            }
                         }
-                    } else {
-                        if ($req->debito && !$req->efectivo && !$req->transferencia) {
+                    }
+                    
+                    if($req->credito) {
+                        $pedido = pedidos::with("cliente")->find($req->id);
+                        if ($pedido->cliente) {
+                            
+                            $id_cliente = $pedido->cliente["id"];
+
+                            $dataCredito = [
+                                "cliente" => $pedido->cliente,
+                                "idinsucursal" => $req->id,
+                                "saldo" => floatval($req->credito),
+                                "deuda" => $this->getDeudaFun(false,$id_cliente),
+                                "fecha_ultimopago" => $this->getDeudaFechaPago($id_cliente)
+                            ];
+
+                            $creditoResult = (new sendCentral)->createCreditoAprobacion($dataCredito);
+        
+                            if ($creditoResult === "APROBADO") {
+                                pago_pedidos::updateOrCreate(["id_pedido"=>$req->id,"tipo"=>4],["cuenta"=>$cuenta,"monto"=>floatval($req->credito)]);
+                            }else{
+                                return $creditoResult;
+                            }
+                        }else{
+                            return Response::json(["msj"=>"Error: Sin Cliente","estado"=>false]);
+                        }
+
+                    }
+                    if($req->biopago) {
+                        $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $req->biopago, $metodos_pago, $cuenta, 5);
+                        if ($resultadoValidacion !== true) {
+                            return $resultadoValidacion;
+                        }
+                    }
+                    
+                    $pedido = pedidos::find($req->id);
+
+                    if ($pedido->estado==0) {
+                        $pedido->estado = 1;
+                        $pedido->save();
+
+                        // Commit de transacción solo cuando cambie el estado del pedido
+                        \DB::commit();
+                        $isFullFiscal = (new SucursalController)->isFullFiscal();
+
+                        if ($isFullFiscal) {
                             try {
                                 (new tickera)->sendReciboFiscalFun($req->id);
                             } catch (\Exception $e) {
                                 \Log::error('Error al enviar recibo fiscal: ' . $e->getMessage());
                             }
+                        } else {
+                            if ($req->debito && !$req->efectivo && !$req->transferencia) {
+                                try {
+                                    (new tickera)->sendReciboFiscalFun($req->id);
+                                } catch (\Exception $e) {
+                                    \Log::error('Error al enviar recibo fiscal: ' . $e->getMessage());
+                                }
+                            }
                         }
                     }
+
+                    return Response::json(["msj"=>"Éxito","estado"=>true]);
+                } catch (\Exception $e) {
+                    \DB::rollback();
+                    return Response::json(["msj"=>"Error: ".$e->getMessage(),"estado"=>false]);
                 }
 
-                return Response::json(["msj"=>"Éxito","estado"=>true]);
-            } catch (\Exception $e) {
+            }else{
                 \DB::rollback();
-                return Response::json(["msj"=>"Error: ".$e->getMessage(),"estado"=>false]);
+
+                // Detalle explícito de los montos para ayudar al usuario a corregir
+                $detalle = [];
+                $detalle[] = "Pedido: ".round($total_real,4)." $";
+                $detalle[] = "Pagos principales en $: Debito=".round($debitoUSD,4)." (Bs ".round(floatval($req->debito),2)."), Efectivo=".round(floatval($req->efectivo),4).", Transf=".round(floatval($req->transferencia),4).", Biopago=".round(floatval($req->biopago),4).", Credito=".round(floatval($req->credito),4);
+
+                if ($totalAdicUsdBs || $totalAdicUsdCop || $totalAdicUsdDolar) {
+                    $detalleAdic = [];
+                    if ($totalAdicUsdBs)   $detalleAdic[] = "Bs->".round($totalAdicUsdBs,4)." $";
+                    if ($totalAdicUsdCop)  $detalleAdic[] = "COP->".round($totalAdicUsdCop,4)." $";
+                    if ($totalAdicUsdDolar)$detalleAdic[] = "USD Adic->".round($totalAdicUsdDolar,4)." $";
+                    $detalle[] = "Pagos adicionales en $: ".implode(" | ", $detalleAdic);
+                }
+
+                $detalle[] = "Total pagos: ".round($total_ins,4)." $";
+                $detalle[] = "Diferencia: ".round($res,4)." $ (Pedido - Pagos)";
+                
+                // Agregar detalle de validación en bolívares si aplica
+                if (!$validacionBolivaresOk && $tieneDebito) {
+                    $totalPedidoBs = $ped->bs_clean;
+                    $totalPagosBs = 0;
+                    
+                    // Débito: simple o múltiple
+                    if ($req->debitos && is_array($req->debitos)) {
+                        foreach ($req->debitos as $debitoItem) {
+                            $totalPagosBs += floatval($debitoItem['monto']);
+                        }
+                    } else {
+                        $totalPagosBs += floatval($req->debito);
+                    }
+                    $totalPagosBs += floatval($req->efectivo) * $tasaDolar;
+                    $totalPagosBs += floatval($req->transferencia) * $tasaDolar;
+                    $totalPagosBs += floatval($req->biopago) * $tasaDolar;
+                    $totalPagosBs += floatval($req->credito) * $tasaDolar;
+                    
+                    if ($req->pagosAdicionales && is_array($req->pagosAdicionales)) {
+                        foreach ($req->pagosAdicionales as $pagoAdicional) {
+                            if (isset($pagoAdicional['moneda']) && isset($pagoAdicional['monto_original'])) {
+                                $monto = floatval($pagoAdicional['monto_original']);
+                                if ($pagoAdicional['moneda'] === 'bs') {
+                                    $totalPagosBs += $monto;
+                                } elseif ($pagoAdicional['moneda'] === 'peso') {
+                                    $totalPagosBs += ($monto / $tasaPeso) * $tasaDolar;
+                                } elseif ($pagoAdicional['moneda'] === 'dolar') {
+                                    $totalPagosBs += $monto * $tasaDolar;
+                                }
+                            }
+                        }
+                    }
+                    
+                    $resBs = $totalPedidoBs - $totalPagosBs;
+                    $detalle[] = "VALIDACIÓN Bs: Pedido=".round($totalPedidoBs,2)." Bs, Pagos=".round($totalPagosBs,2)." Bs, Diferencia=".round($resBs,2)." Bs";
+                }
+
+                $msj = "Error. Montos no coinciden. ".implode(" || ", $detalle);
+
+                return Response::json(["msj"=>$msj,"estado"=>false]);
             }
-
-        }else{
-            \DB::rollback();
-
-            // Detalle explícito de los montos para ayudar al usuario a corregir
-            $detalle = [];
-            $detalle[] = "Pedido: ".round($total_real,4)." $";
-            $detalle[] = "Pagos principales en $: Debito=".round($debitoUSD,4)." (Bs ".round(floatval($req->debito),2)."), Efectivo=".round(floatval($req->efectivo),4).", Transf=".round(floatval($req->transferencia),4).", Biopago=".round(floatval($req->biopago),4).", Credito=".round(floatval($req->credito),4);
-
-            if ($totalAdicUsdBs || $totalAdicUsdCop || $totalAdicUsdDolar) {
-                $detalleAdic = [];
-                if ($totalAdicUsdBs)   $detalleAdic[] = "Bs->".round($totalAdicUsdBs,4)." $";
-                if ($totalAdicUsdCop)  $detalleAdic[] = "COP->".round($totalAdicUsdCop,4)." $";
-                if ($totalAdicUsdDolar)$detalleAdic[] = "USD Adic->".round($totalAdicUsdDolar,4)." $";
-                $detalle[] = "Pagos adicionales en $: ".implode(" | ", $detalleAdic);
-            }
-
-            $detalle[] = "Total pagos: ".round($total_ins,4)." $";
-            $detalle[] = "Diferencia: ".round($res,4)." $ (Pedido - Pagos)";
-
-            $msj = "Error. Montos no coinciden. ".implode(" || ", $detalle);
-
-            return Response::json(["msj"=>$msj,"estado"=>false]);
-        }
         } catch (\Exception $e) {
             \DB::rollback();
-            return Response::json(["msj"=>"Error: ".$e->getMessage(),"estado"=>false]);
+            return Response::json(["msj"=>"Error: ".$e->getMessage()." LINEA ".$e->getLine(),"estado"=>false]);
         }
     }
 

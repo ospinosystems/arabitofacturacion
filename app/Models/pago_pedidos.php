@@ -23,7 +23,13 @@ class pago_pedidos extends Model
         "cuenta",
         "id_pedido",
         "moneda",
-        "referencia"
+        "referencia",
+        "pos_message",
+        "pos_lote",
+        "pos_responsecode",
+        "pos_amount",
+        "pos_terminal",
+        "pos_json_response"
     ];
 
     /**

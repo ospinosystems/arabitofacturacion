@@ -121,6 +121,8 @@ Route::post('setMoneda', [MonedasController::class,"setMoneda"]);
 Route::group(['middleware' => ['auth.user:login']], function () {
 	
 	Route::group(['middleware' => ['auth.user:caja']], function () {
+		Route::post('eliminarCierreUsuario', [CierresController::class,"eliminarCierreUsuario"]);
+
 		Route::post('sendReciboFiscal', [tickera::class,"sendReciboFiscal"]);
 		Route::post('sendNotaCredito', [tickera::class,"sendNotaCredito"]);
 		
@@ -163,6 +165,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		
 		Route::post('setPagoPedido', [PagoPedidosController::class,"setPagoPedido"]);
 		Route::post('enviarTransaccionPOS', [sendCentral::class,"enviarTransaccionPOS"]);
+		Route::post('registrarPosRechazado', [sendCentral::class,"registrarPosRechazado"]);
 		Route::post('ejecutarPostSync', [sendCentral::class,"ejecutarPostSync"]);
 		Route::get('printBultos', [PedidosController::class,"printBultos"]);
 		
@@ -213,6 +216,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('guardarCierre', [PedidosController::class,"guardarCierre"]);
 		Route::get('verCierre', [PedidosController::class,"verCierre"]);
 		Route::post('cerrar', [PedidosController::class,"cerrar"]);
+		Route::post('getTotalizarCierre', [PedidosController::class,"getTotalizarCierre"]);
 		Route::post('getPermisoCierre', [TareaslocalController::class,"getPermisoCierre"]);
 		Route::get('sendCuentasporCobrar', [PedidosController::class,"sendCuentasporCobrar"]);
 		
@@ -501,7 +505,6 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('delMovCaja', [MovimientosCajaController::class,"delMovCaja"]);
 		
 		Route::get('printTickedPrecio', [tickeprecioController::class,"tickedPrecio"]);
-		Route::post('getTotalizarCierre', [CierresController::class,"getTotalizarCierre"]);
 
 		Route::post('printPrecios', [tickera::class,"precio"]);
 		
@@ -517,8 +520,6 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 
 		
 		
-		Route::get('setVentas', [sendCentral::class,"setVentas"]);
-		Route::get('setGastos', [sendCentral::class,"setGastos"]);
 		Route::get('setCentralData', [sendCentral::class,"setCentralData"]);
 		Route::get('central', [sendCentral::class,"index"]);
 		Route::get('getMonedaCentral', [sendCentral::class,"getMonedaCentral"]);
