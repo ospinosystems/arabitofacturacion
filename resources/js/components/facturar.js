@@ -195,14 +195,6 @@ export default function Facturar({
         }
     });
     
-    // Estado para modal de confirmación personalizado (no bloqueable por navegador)
-    const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [confirmModalData, setConfirmModalData] = useState({
-        message: "",
-        onConfirm: null,
-        onCancel: null
-    });
-    
     // useEffect para guardar y restaurar débitos al cambiar de pedido
     useEffect(() => {
         if (pedidoData?.id) {
@@ -223,53 +215,6 @@ export default function Facturar({
             setDebitos([{ monto: "", referencia: "", bloqueado: false, posData: null }]);
         }
     }, [pedidoData?.id]);
-    
-    // Efecto para manejar el foco cuando se muestra el modal de confirmación
-    useEffect(() => {
-        if (showConfirmModal) {
-            // Prevenir scroll del body cuando el modal está abierto
-            document.body.style.overflow = 'hidden';
-            
-            // Enfocar el botón de confirmar después de un pequeño delay
-            setTimeout(() => {
-                const confirmButton = document.querySelector('[data-confirm-button="true"]');
-                if (confirmButton) {
-                    confirmButton.focus();
-                }
-            }, 100);
-            
-            // Manejar teclas globalmente cuando el modal está abierto
-            const handleKeyDown = (e) => {
-                // Enter para confirmar
-                if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (confirmModalData.onConfirm) {
-                        confirmModalData.onConfirm();
-                    } else {
-                        setShowConfirmModal(false);
-                    }
-                }
-                // Escape para cancelar
-                if (e.key === 'Escape') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (confirmModalData.onCancel) {
-                        confirmModalData.onCancel();
-                    } else {
-                        setShowConfirmModal(false);
-                    }
-                }
-            };
-            
-            window.addEventListener('keydown', handleKeyDown);
-            
-            return () => {
-                document.body.style.overflow = '';
-                window.removeEventListener('keydown', handleKeyDown);
-            };
-        }
-    }, [showConfirmModal, confirmModalData]);
     
     // Función para guardar débitos del pedido actual
     const guardarDebitosPorPedido = (pedidoId, debitosActuales) => {
@@ -3959,26 +3904,15 @@ export default function Facturar({
             }
         }
         
-        // Usar modal de confirmación personalizado en lugar de confirm nativo
-        setConfirmModalData({
-            message: "¿Realmente desea guardar e imprimir pedido (" + pedidoData.id + ")?",
-            onConfirm: () => {
-                setShowConfirmModal(false);
-                // Limpiar error si la referencia está cargada
-                setDebitoRefError(false);
-                if (transferencia && !refPago.filter((e) => e.tipo == 1).length) {
-                    alert(
-                        "Error: Debe cargar referencia de transferencia electrónica."
-                    );
-                } else {
-                    procesarPagoInterno(callback);
-                }
-            },
-            onCancel: () => {
-                setShowConfirmModal(false);
-            }
-        });
-        setShowConfirmModal(true);
+        // Limpiar error si la referencia está cargada
+        setDebitoRefError(false);
+        if (transferencia && !refPago.filter((e) => e.tipo == 1).length) {
+            alert(
+                "Error: Debe cargar referencia de transferencia electrónica."
+            );
+        } else {
+            procesarPagoInterno(callback);
+        }
     };
     
     // Función interna para procesar el pago (llamada después de POS exitoso o sin débito)
@@ -9030,69 +8964,6 @@ export default function Facturar({
                         </div>
                     )}
                 </>
-            )}
-            
-            {/* Modal de Confirmación Personalizado (no bloqueable por navegador) */}
-            {showConfirmModal && (
-                <div 
-                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
-                    style={{ 
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        zIndex: 9999
-                    }}
-                    onClick={(e) => {
-                        // Prevenir cierre al hacer clic fuera del modal
-                        e.stopPropagation();
-                    }}
-                >
-                    <div 
-                        className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="mb-4">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                                Confirmar Acción
-                            </h3>
-                            <p className="text-gray-700">
-                                {confirmModalData.message}
-                            </p>
-                        </div>
-                        <div className="flex justify-end gap-3">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (confirmModalData.onCancel) {
-                                        confirmModalData.onCancel();
-                                    } else {
-                                        setShowConfirmModal(false);
-                                    }
-                                }}
-                                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
-                            >
-                                Cancelar (Esc)
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (confirmModalData.onConfirm) {
-                                        confirmModalData.onConfirm();
-                                    } else {
-                                        setShowConfirmModal(false);
-                                    }
-                                }}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                                autoFocus
-                                data-confirm-button="true"
-                            >
-                                Confirmar (Enter)
-                            </button>
-                        </div>
-                    </div>
-                </div>
             )}
         </div>
     );
