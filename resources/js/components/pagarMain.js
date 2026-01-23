@@ -2158,42 +2158,8 @@ export default function PagarMain({
     useHotkeys(
         "ctrl+enter",
         (event) => {
-            console.log('[CTRL+ENTER] Hook activado', {
-                timestamp: new Date().toISOString(),
-                target: event.target?.tagName,
-                targetId: event.target?.id,
-                targetName: event.target?.name,
-                showModalPosDebito,
-                togglereferenciapago,
-                facturar_e_imprimir_exists: typeof facturar_e_imprimir === 'function'
-            });
             
-            // Verificar si hay modales abiertos que bloqueen la acción
-            if (showModalPosDebito) {
-                console.warn('[CTRL+ENTER] Bloqueado: showModalPosDebito está activo');
-                return;
-            }
-            if (togglereferenciapago) {
-                console.warn('[CTRL+ENTER] Bloqueado: togglereferenciapago está activo');
-                return;
-            }
-            
-            // Verificar que la función existe
-            if (typeof facturar_e_imprimir !== 'function') {
-                console.error('[CTRL+ENTER] ERROR: facturar_e_imprimir no es una función', {
-                    type: typeof facturar_e_imprimir,
-                    value: facturar_e_imprimir
-                });
-                return;
-            }
-            
-            console.log('[CTRL+ENTER] Ejecutando facturar_e_imprimir()');
-            try {
                 facturar_e_imprimir();
-                console.log('[CTRL+ENTER] facturar_e_imprimir() ejecutado exitosamente');
-            } catch (error) {
-                console.error('[CTRL+ENTER] ERROR al ejecutar facturar_e_imprimir():', error);
-            }
         },
         {
             keydown: true,
