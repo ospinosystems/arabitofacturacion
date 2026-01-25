@@ -886,7 +886,6 @@ class PedidosController extends Controller
                         if ($condicion!=1) {
                             //Si no es garantia
                             (new InventarioController)->descontarInventario($id_producto,$ctSeter, $producto->cantidad, $pedido_id, "ELI.VENTA");
-                            (new InventarioController)->checkFalla($id_producto,$ctSeter);
                         }else{
                             //Si es garantia - NUEVO FLUJO con reversión en central
                             $garantiaController = new \App\Http\Controllers\GarantiaController();
@@ -922,7 +921,6 @@ class PedidosController extends Controller
                             if ($condicion!=1) {
                                 //Si no es garantia
                                 (new InventarioController)->descontarInventario($id_producto,$ctSeter, ($producto? $producto->cantidad:0), $pedido_id, "ELI.VENTA");
-                                (new InventarioController)->checkFalla($id_producto,$ctSeter);
                             }else{
                                 //Si es garantia - NUEVO FLUJO con reversión en central
                                 $garantiaController = new \App\Http\Controllers\GarantiaController();

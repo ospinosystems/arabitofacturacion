@@ -1251,27 +1251,72 @@ export default function Facturar({
     );
 
     const [refPago, setrefPago] = useState([]);
+    
+    // Ref para debouncing de addNewPedido
+    const addNewPedidoTimeoutRef = useRef(null);
+    const addNewPedidoProcessingRef = useRef(false);
 
     const addNewPedido = () => {
-        db.addNewPedido({})
-            .then((res) => {
-                // Si la respuesta tiene estado false (hay cierre guardado)
-                if (res.data && res.data.estado === false) {
-                    notificar(res);
-                    return;
-                }
-                // Si es exitoso, abrir el pedido
-                onClickEditPedido(null, res.data);
-            })
-            .catch((error) => {
-                // Manejar errores de red u otros
-                const errorMsg = error.response?.data?.msj || 'Error al crear el pedido';
-                notificar({
-                    msj: errorMsg,
-                    estado: false
-                });
-            });
+        // Evitar ejecuciones múltiples
+        if (addNewPedidoProcessingRef.current) {
+            return;
+        }
+        
+        // Limpiar timeout anterior si existe
+        if (addNewPedidoTimeoutRef.current) {
+            clearTimeout(addNewPedidoTimeoutRef.current);
+            addNewPedidoTimeoutRef.current = null;
+        }
+        
+        // Marcar como procesando
+        addNewPedidoProcessingRef.current = true;
+        
+        // Ejecutar después de un pequeño delay (debouncing)
+        addNewPedidoTimeoutRef.current = setTimeout(() => {
+            // Limpiar el ref del timeout
+            addNewPedidoTimeoutRef.current = null;
+            
+            db.addNewPedido({})
+                .then((res) => {
+                    // Liberar el flag de procesamiento
+                    addNewPedidoProcessingRef.current = false;
+                    
+                    // Si la respuesta tiene estado false (hay cierre guardado)
+                    if (res.data && res.data.estado === false) {
+                        notificar(res);
+                        return;
+                    }
+                    // Si es exitoso, abrir el pedido
+                    onClickEditPedido(null, res.data);
+                })
+                .catch((error) => {
+                    // Liberar el flag de procesamiento en caso de error
+                    addNewPedidoProcessingRef.current = false;
+                    
+                    // Manejar errores de red u otros
+                    const errorMsg = error.response?.data?.msj || 'Error al crear el pedido';
+                    notificar({
+                        msj: errorMsg,
+                        estado: false
+                    });
+                    });
+        }, 300); // Delay de 300ms para el debouncing
     };
+    
+    // Limpiar timeouts al desmontar el componente
+    useEffect(() => {
+        return () => {
+            if (addNewPedidoTimeoutRef.current) {
+                clearTimeout(addNewPedidoTimeoutRef.current);
+                addNewPedidoTimeoutRef.current = null;
+            }
+            if (setPagoPedidoTimeoutRef.current) {
+                clearTimeout(setPagoPedidoTimeoutRef.current);
+                setPagoPedidoTimeoutRef.current = null;
+            }
+        };
+    }, []);
+    
     const [categoriasCajas, setcategoriasCajas] = useState([]);
     const [departamentosCajas, setdepartamentosCajas] = useState([]);
 
@@ -1710,17 +1755,9 @@ export default function Facturar({
     const getSucursalFun = () => {
         db.getSucursal({}).then((res) => {
             if (res.data.codigo) {
-                console.log('[PINPAD DEBUG] Sucursal cargada:', {
-                    codigo: res.data.codigo,
-                    pinpad: res.data.pinpad,
-                    timestamp: new Date().toISOString()
-                });
                 setSucursaldata(res.data);
-            } else {
-                console.warn('[PINPAD DEBUG] getSucursal sin código:', res.data);
             }
         }).catch((err) => {
-            console.error('[PINPAD DEBUG] Error al cargar sucursal:', err);
         });
     };
     const openReporteFalla = (id) => {
@@ -2137,42 +2174,8 @@ export default function Facturar({
         setLastPaymentMethodCalled('transferencia');
     };
     const getBio = () => {
-        // Usar tasas del pedido
-        const tasaBsPedido = pedidoData?.items?.[0]?.tasa || dolar;
-        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+        return;
         
-        // Calcular la suma de los otros métodos de pago en USD
-        const otrosTotal =
-            parseFloat(efectivo || 0) +
-            parseFloat(efectivo_dolar || 0) +
-            (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
-            (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
-            parseFloat(transferencia || 0) +
-            (parseFloat(debito || 0) / tasaBsPedido) +
-            parseFloat(credito || 0);
-
-        // Si los demás están en blanco, setear el total completo
-        // Si hay otros montos, setear la diferencia
-        const montoBiopago =
-            otrosTotal === 0
-                ? parseFloat(pedidoData.clean_total).toFixed(2)
-                : Math.max(0, pedidoData.clean_total - otrosTotal).toFixed(2);
-
-        // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
-        if (lastPaymentMethodCalled === 'biopago' && parseFloat(biopago || 0).toFixed(2) === montoBiopago) {
-            setBiopago(parseFloat(pedidoData.clean_total).toFixed(2));
-            setEfectivo("");
-            setEfectivo_bs("");
-            setEfectivo_dolar("");
-            setEfectivo_peso("");
-            setTransferencia("");
-            setDebito("");
-            setCredito("");
-        } else {
-            setBiopago(montoBiopago);
-        }
-        
-        setLastPaymentMethodCalled('biopago');
     };
     const getEfectivo = () => {
         // Usar tasas del pedido
@@ -3185,7 +3188,6 @@ export default function Facturar({
                     setEfectivo_dolar("");
                     setEfectivo_peso("");
                     setCredito("");
-                    setVuelto("");
                     setBiopago("");
                 }
                 setrefPago([]);
@@ -3845,160 +3847,113 @@ export default function Facturar({
         useState(null);
     // Ref para evitar ejecuciones múltiples de setPagoPedido
     const procesandoPagoRef = useRef(false);
+    const posTimeoutRef = useRef(null);
+    const posProcesandoRef = useRef(false);
+    const setPagoPedidoTimeoutRef = useRef(null);
     
     const setPagoPedido = (callback = null) => {
-        // Log detallado de la llamada
-        const timestamp = new Date().toISOString();
-        const stackTrace = new Error().stack;
-        const callerInfo = stackTrace ? stackTrace.split('\n').slice(1, 4).join(' -> ') : 'Stack trace no disponible';
-        
-        console.log('=== SETPAGOPEDIDO LLAMADO ===', {
-            timestamp,
-            pedidoId: pedidoData?.id,
-            callback: callback ? 'Sí' : 'No',
-            procesando: procesandoPagoRef.current,
-            caller: callerInfo,
-            stackTrace: stackTrace?.split('\n').slice(1, 6)
-        });
-        
         // Evitar ejecuciones múltiples
         if (procesandoPagoRef.current) {
-            console.warn('⚠️ SETPAGOPEDIDO BLOQUEADO - Ya está en proceso', {
-                timestamp,
-                pedidoId: pedidoData?.id,
-                caller: callerInfo
-            });
             return;
         }
         
-        console.log('✅ SETPAGOPEDIDO INICIANDO PROCESO', {
-            timestamp,
-            pedidoId: pedidoData?.id
-        });
-        
-        // Validar que si hay descuentos en algún ítem, debe haber un cliente registrado (distinto al por defecto id=1)
-        const tieneDescuentos = pedidoData?.items?.some(item => item.descuento && parseFloat(item.descuento) > 0);
-        const clientePorDefecto = !pedidoData?.id_cliente || pedidoData.id_cliente == 1;
-        
-        if (tieneDescuentos && clientePorDefecto) {
-            console.log('❌ SETPAGOPEDIDO CANCELADO - Descuentos sin cliente', {
-                timestamp: new Date().toISOString(),
-                pedidoId: pedidoData?.id
-            });
-            alert("Error: El pedido tiene descuentos aplicados. Debe registrar un cliente antes de procesar el pago.");
-            procesandoPagoRef.current = false;
-            return;
+        // Limpiar timeout anterior si existe (debouncing)
+        if (setPagoPedidoTimeoutRef.current) {
+            clearTimeout(setPagoPedidoTimeoutRef.current);
+            setPagoPedidoTimeoutRef.current = null;
         }
         
-        // DEBUG: Log para diagnosticar problema intermitente con PINPAD
-        // Si hay débito pero sucursaldata está vacío o sin pinpad, loguear para diagnóstico
-        if (debito && parseFloat(debito) > 0) {
-            console.log('[PINPAD DEBUG]', {
-                debito,
-                sucursaldata_exists: !!sucursaldata,
-                sucursaldata_pinpad: sucursaldata?.pinpad,
-                sucursaldata_codigo: sucursaldata?.codigo,
-                forzarReferenciaManual,
-                timestamp: new Date().toISOString()
-            });
+        // Ejecutar después de un pequeño delay (debouncing)
+        setPagoPedidoTimeoutRef.current = setTimeout(() => {
+            // Limpiar el ref del timeout
+            setPagoPedidoTimeoutRef.current = null;
             
-            // Si sucursaldata está vacío o es string, intentar recargar datos de sucursal
-            if (!sucursaldata || typeof sucursaldata === 'string') {
-                console.warn('[PINPAD DEBUG] sucursaldata perdido, recargando...');
-                getSucursalFun();
-            }
-        }
-        
-        // Verificar si hay débitos en el array
-        const debitosValidos = debitos.filter(d => parseFloat(d.monto) > 0);
-        
-        // Si hay débitos y la sucursal tiene PINPAD activo (y NO está forzando manual)
-        if (debitosValidos.length > 0 && sucursaldata?.pinpad && !forzarReferenciaManual) {
-            // Buscar el primer débito sin referencia o no bloqueado
-            const debitoSinProcesar = debitosValidos.find(d => !d.bloqueado || !d.referencia || d.referencia.length !== 4);
-            
-            if (debitoSinProcesar) {
-                // Encontrar el índice del débito sin procesar
-                const index = debitos.findIndex(d => d === debitoSinProcesar);
-                console.log('🔄 SETPAGOPEDIDO - Abriendo modal POS', {
-                    timestamp: new Date().toISOString(),
-                    pedidoId: pedidoData?.id,
-                    monto: debitoSinProcesar.monto,
-                    index
-                });
-                // Abrir modal POS para este débito específico
-                // Nota: El flag se mantiene activo porque el pago continuará después del POS
-                abrirModalPosDebitoConMonto(debitoSinProcesar.monto, index);
+            // Verificar nuevamente que no esté procesando (por si cambió durante el delay)
+            if (procesandoPagoRef.current) {
                 return;
             }
-        }
-        
-        // Validar referencias de débitos obligatorias (si NO hay PINPAD o si está forzando manual)
-        if (debitosValidos.length > 0) {
-            for (let i = 0; i < debitosValidos.length; i++) {
-                const debito = debitosValidos[i];
-                if (!debito.referencia) {
-                    console.log('❌ SETPAGOPEDIDO CANCELADO - Referencia faltante', {
-                        timestamp: new Date().toISOString(),
-                        pedidoId: pedidoData?.id,
-                        tarjetaNum: debitos.indexOf(debito) + 1
-                    });
-                    alert(`Error: Debe ingresar la referencia para la tarjeta #${debitos.indexOf(debito) + 1}`);
-                    procesandoPagoRef.current = false;
-                    return;
+            
+            // Validar que si hay descuentos en algún ítem, debe haber un cliente registrado (distinto al por defecto id=1)
+            const tieneDescuentos = pedidoData?.items?.some(item => item.descuento && parseFloat(item.descuento) > 0);
+            const clientePorDefecto = !pedidoData?.id_cliente || pedidoData.id_cliente == 1;
+            
+            if (tieneDescuentos && clientePorDefecto) {
+                alert("Error: El pedido tiene descuentos aplicados. Debe registrar un cliente antes de procesar el pago.");
+                procesandoPagoRef.current = false;
+                return;
+            }
+            
+            // DEBUG: Log para diagnosticar problema intermitente con PINPAD
+            // Si hay débito pero sucursaldata está vacío o sin pinpad, loguear para diagnóstico
+            if (debito && parseFloat(debito) > 0) {
+                console.log('[PINPAD DEBUG]', {
+                    debito,
+                    sucursaldata_exists: !!sucursaldata,
+                    sucursaldata_pinpad: sucursaldata?.pinpad,
+                    sucursaldata_codigo: sucursaldata?.codigo,
+                    forzarReferenciaManual,
+                    timestamp: new Date().toISOString()
+                });
+                
+                // Si sucursaldata está vacío o es string, intentar recargar datos de sucursal
+                if (!sucursaldata || typeof sucursaldata === 'string') {
+                    console.warn('[PINPAD DEBUG] sucursaldata perdido, recargando...');
+                    getSucursalFun();
                 }
-                if (debito.referencia.length !== 4) {
-                    console.log('❌ SETPAGOPEDIDO CANCELADO - Referencia inválida', {
-                        timestamp: new Date().toISOString(),
-                        pedidoId: pedidoData?.id,
-                        tarjetaNum: debitos.indexOf(debito) + 1,
-                        referenciaLength: debito.referencia.length
-                    });
-                    alert(`Error: La referencia de la tarjeta #${debitos.indexOf(debito) + 1} debe tener exactamente 4 dígitos.`);
-                    procesandoPagoRef.current = false;
+            }
+            
+            // Verificar si hay débitos en el array
+            const debitosValidos = debitos.filter(d => parseFloat(d.monto) > 0);
+            
+            // Si hay débitos y la sucursal tiene PINPAD activo (y NO está forzando manual)
+            if (debitosValidos.length > 0 && sucursaldata?.pinpad && !forzarReferenciaManual) {
+                // Buscar el primer débito sin referencia o no bloqueado
+                const debitoSinProcesar = debitosValidos.find(d => !d.bloqueado || !d.referencia || d.referencia.length !== 4);
+                
+                if (debitoSinProcesar) {
+                    // Encontrar el índice del débito sin procesar
+                    const index = debitos.findIndex(d => d === debitoSinProcesar);
+                    // Abrir modal POS para este débito específico
+                    // Nota: El flag se mantiene activo porque el pago continuará después del POS
+                    abrirModalPosDebitoConMonto(debitoSinProcesar.monto, index);
                     return;
                 }
             }
-        }
-        
-        // Limpiar error si la referencia está cargada
-        setDebitoRefError(false);
-        if (transferencia && !refPago.filter((e) => e.tipo == 1).length) {
-            console.log('❌ SETPAGOPEDIDO CANCELADO - Referencia transferencia faltante', {
-                timestamp: new Date().toISOString(),
-                pedidoId: pedidoData?.id
-            });
-            alert(
-                "Error: Debe cargar referencia de transferencia electrónica."
-            );
-            // Liberar el flag si hay error de validación
-            procesandoPagoRef.current = false;
-        } else {
-            console.log('🚀 SETPAGOPEDIDO - Llamando a procesarPagoInterno', {
-                timestamp: new Date().toISOString(),
-                pedidoId: pedidoData?.id,
-                tieneCallback: !!callback
-            });
-            procesarPagoInterno(callback);
-        }
+            
+            // Validar referencias de débitos obligatorias (si NO hay PINPAD o si está forzando manual)
+            if (debitosValidos.length > 0) {
+                for (let i = 0; i < debitosValidos.length; i++) {
+                    const debito = debitosValidos[i];
+                    if (!debito.referencia) {
+                        alert(`Error: Debe ingresar la referencia para la tarjeta #${debitos.indexOf(debito) + 1}`);
+                        procesandoPagoRef.current = false;
+                        return;
+                    }
+                    if (debito.referencia.length !== 4) {
+                        alert(`Error: La referencia de la tarjeta #${debitos.indexOf(debito) + 1} debe tener exactamente 4 dígitos.`);
+                        procesandoPagoRef.current = false;
+                        return;
+                    }
+                }
+            }
+            
+            // Limpiar error si la referencia está cargada
+            setDebitoRefError(false);
+            if (transferencia && !refPago.filter((e) => e.tipo == 1).length) {
+                alert(
+                    "Error: Debe cargar referencia de transferencia electrónica."
+                );
+                // Liberar el flag si hay error de validación
+                procesandoPagoRef.current = false;
+            } else {
+                procesarPagoInterno(callback);
+            }
+        }, 300); // Delay de 0.3 segundos (300ms) para el debouncing
     };
     
     // Función interna para procesar el pago (llamada después de POS exitoso o sin débito)
     // refOverride: permite pasar la referencia directamente (para cuando viene del POS)
     const procesarPagoInterno = (callback = null, refOverride = null) => {
-        const timestamp = new Date().toISOString();
-        const stackTrace = new Error().stack;
-        const callerInfo = stackTrace ? stackTrace.split('\n').slice(1, 4).join(' -> ') : 'Stack trace no disponible';
-        
-        console.log('=== PROCESARPAGOINTERNO LLAMADO ===', {
-            timestamp,
-            pedidoId: pedidoData?.id,
-            callback: callback ? 'Sí' : 'No',
-            refOverride: refOverride ? 'Sí' : 'No',
-            caller: callerInfo,
-            stackTrace: stackTrace?.split('\n').slice(1, 6)
-        });
-        
         // Marcar como procesando
         procesandoPagoRef.current = true;
         setLoading(true);
@@ -4053,34 +4008,13 @@ export default function Facturar({
             pagosAdicionales: pagosAdicionales.length > 0 ? pagosAdicionales : null,
         };
         
-        console.log('📤 PROCESARPAGOINTERNO - Enviando petición al backend', {
-            timestamp: new Date().toISOString(),
-            pedidoId: params.id,
-            params: {
-                ...params,
-                debitos: params.debitos ? `${params.debitos.length} débitos` : null
-            }
-        });
-        
         db.setPagoPedido(params).then((res) => {
-            const timestamp = new Date().toISOString();
-            console.log('📥 PROCESARPAGOINTERNO - Respuesta recibida', {
-                timestamp,
-                pedidoId: params.id,
-                estado: res.data?.estado,
-                msj: res.data?.msj
-            });
-            
             notificar(res);
             setLoading(false);
             // Liberar el flag de procesamiento
             procesandoPagoRef.current = false;
             
             if (res.data.estado) {
-                console.log('✅ PROCESARPAGOINTERNO - Pago exitoso', {
-                    timestamp,
-                    pedidoId: params.id
-                });
                 // Limpiar datos de localStorage para este pedido procesado
                 const pedidoId = params.id;
                 if (pedidoId) {
@@ -4103,14 +4037,7 @@ export default function Facturar({
                 openValidationTarea(res.data.id_tarea);
             }
         }).catch((error) => {
-            const timestamp = new Date().toISOString();
             // En caso de error, también liberar el flag
-            console.error('❌ PROCESARPAGOINTERNO - Error en petición', {
-                timestamp,
-                pedidoId: params.id,
-                error: error.message || error,
-                stack: error.stack
-            });
             procesandoPagoRef.current = false;
             setLoading(false);
         });
@@ -4120,10 +4047,6 @@ export default function Facturar({
     const enviarSolicitudPosDebito = async () => {
         // Evitar ejecuciones múltiples mientras se procesa
         if (posLoading) {
-            console.warn('⚠️ ENVIAR POS - Ya está procesando, ignorando llamada duplicada', {
-                timestamp: new Date().toISOString(),
-                pedidoId: pedidoData?.id
-            });
             return;
         }
         
@@ -4137,13 +4060,6 @@ export default function Facturar({
             alert("Debe ingresar un monto válido");
             return;
         }
-        
-        console.log('📤 ENVIAR POS - Iniciando transacción', {
-            timestamp: new Date().toISOString(),
-            pedidoId: pedidoData?.id,
-            monto: montoActual,
-            cedula: posCedulaTitular
-        });
         
         setPosLoading(true);
         
@@ -4169,21 +4085,11 @@ export default function Facturar({
         try {
             // Enviar a través del backend para evitar CORS
             const response = await db.enviarTransaccionPOS(payload);
-            console.log("📥 ENVIAR POS - Respuesta recibida", {
-                timestamp: new Date().toISOString(),
-                pedidoId: pedidoData?.id,
-                success: response.data.success,
-                posData: response.data.data
-            });
+            console.log("Respuesta POS:", response.data);
             
             const posData = response.data.data || {};
             
             if (response.data.success && posData.success) {
-                console.log('✅ ENVIAR POS - Transacción exitosa', {
-                    timestamp: new Date().toISOString(),
-                    pedidoId: pedidoData?.id,
-                    referencia: posData.reference || posData.approval
-                });
                 // Éxito: agregar transacción al array
                 const posReference = posData.reference || posData.approval || "";
                 const refUltimos4 = posReference.slice(-4).padStart(4, '0');
@@ -4316,50 +4222,40 @@ export default function Facturar({
                     if (diferencia < 0.01) { // Tolerancia de 0.01 para comparación de decimales
                         // El monto aprobado coincide exactamente con el total de la factura
                         // Procesar e imprimir automáticamente
-                        console.log('🔄 POS COMPLETO - Llamando a facturar_e_imprimir', {
-                            timestamp: new Date().toISOString(),
-                            pedidoId: pedidoData?.id,
-                            totalAprobado: totalAprobadoFinal,
-                            totalFactura: totalFacturaBs
-                        });
-                        setTimeout(() => {
+                        
+                        // Cancelar timeout anterior si existe
+                        if (posTimeoutRef.current) {
+                            clearTimeout(posTimeoutRef.current);
+                            posTimeoutRef.current = null;
+                        }
+                        
+                        // Verificar que no esté ya procesando antes de crear el timeout
+                        if (procesandoPagoRef.current) {
+                            posProcesandoRef.current = false;
+                            return;
+                        }
+                        
+                        posTimeoutRef.current = setTimeout(() => {
+                            // Limpiar el ref del timeout
+                            posTimeoutRef.current = null;
+                            // Liberar el flag de procesamiento
+                            posProcesandoRef.current = false;
+                            
                             // Verificar que no esté ya procesando antes de llamar
                             if (!procesandoPagoRef.current && facturar_e_imprimir) {
-                                console.log('✅ POS COMPLETO - Ejecutando facturar_e_imprimir', {
-                                    timestamp: new Date().toISOString(),
-                                    pedidoId: pedidoData?.id
-                                });
                                 facturar_e_imprimir();
-                            } else {
-                                console.warn('⚠️ POS COMPLETO - Ya está procesando, ignorando facturar_e_imprimir', {
-                                    timestamp: new Date().toISOString(),
-                                    pedidoId: pedidoData?.id,
-                                    procesando: procesandoPagoRef.current
-                                });
                             }
                         }, 100); // Pequeño delay para asegurar que el débito se haya actualizado
                     } else {
                         // Solo procesar el pago sin facturar
-                        console.log('🔄 POS PARCIAL - Llamando a procesarPagoInterno', {
-                            timestamp: new Date().toISOString(),
-                            pedidoId: pedidoData?.id,
-                            totalAprobado: totalAprobadoFinal,
-                            totalFactura: totalFacturaBs,
-                            diferencia: diferencia
-                        });
                         // Verificar que no esté ya procesando antes de llamar
                         if (!procesandoPagoRef.current) {
-                            console.log('✅ POS PARCIAL - Ejecutando procesarPagoInterno', {
-                                timestamp: new Date().toISOString(),
-                                pedidoId: pedidoData?.id
-                            });
+                            // Liberar el flag de procesamiento antes de llamar
+                            posProcesandoRef.current = false;
                             procesarPagoInterno(posPendingCallback, refFinal);
                         } else {
-                            console.warn('⚠️ POS PARCIAL - Ya está procesando, ignorando procesarPagoInterno', {
-                                timestamp: new Date().toISOString(),
-                                pedidoId: pedidoData?.id,
-                                procesando: procesandoPagoRef.current
-                            });
+                            // Liberar el flag si no se va a procesar
+                            posProcesandoRef.current = false;
                         }
                     }
                     setPosPendingCallback(null);
@@ -4367,11 +4263,6 @@ export default function Facturar({
             } else {
                 // Error del POS - mostrar mensaje en el modal (no cerrar) y registrar en BD
                 const errorMsg = posData.message || response.data.error || "Error en transacción POS";
-                console.log('❌ ENVIAR POS - Transacción rechazada', {
-                    timestamp: new Date().toISOString(),
-                    pedidoId: pedidoData?.id,
-                    error: errorMsg
-                });
                 setPosRespuesta({ mensaje: `✗ ${errorMsg}`, exito: false });
                 
                 // Registrar operación rechazada en el backend
@@ -4384,12 +4275,7 @@ export default function Facturar({
                 }
             }
         } catch (error) {
-            console.error("❌ ENVIAR POS - Error en petición", {
-                timestamp: new Date().toISOString(),
-                pedidoId: pedidoData?.id,
-                error: error.message || error,
-                stack: error.stack
-            });
+            console.error("Error POS:", error);
             const errorMsg = error.response?.data?.error || error.message || "Error de conexión";
             setPosRespuesta({ mensaje: `✗ ${errorMsg}`, exito: false });
         } finally {
@@ -4402,10 +4288,6 @@ export default function Facturar({
     const finalizarTransaccionesPOS = (forzarSinProcesar = false) => {
         // Evitar ejecuciones múltiples
         if (procesandoPagoRef.current) {
-            console.warn('⚠️ FINALIZAR POS - Ya está procesando, ignorando llamada duplicada', {
-                timestamp: new Date().toISOString(),
-                pedidoId: pedidoData?.id
-            });
             return;
         }
         
@@ -4413,13 +4295,6 @@ export default function Facturar({
             alert("No hay transacciones aprobadas");
             return;
         }
-        
-        console.log('🔄 FINALIZAR POS - Iniciando finalización', {
-            timestamp: new Date().toISOString(),
-            pedidoId: pedidoData?.id,
-            numTransacciones: posTransaccionesAprobadas.length,
-            forzarSinProcesar
-        });
         
         // Usar la referencia de la última transacción como referencia principal
         const ultimaTransaccion = posTransaccionesAprobadas[posTransaccionesAprobadas.length - 1];
@@ -4461,50 +4336,40 @@ export default function Facturar({
             if (diferencia < 0.01) { // Tolerancia de 0.01 para comparación de decimales
                 // El monto aprobado coincide exactamente con el total de la factura
                 // Procesar e imprimir automáticamente
-                console.log('🔄 FINALIZAR POS - Llamando a facturar_e_imprimir', {
-                    timestamp: new Date().toISOString(),
-                    pedidoId: pedidoData?.id,
-                    totalAprobado: totalAprobado,
-                    totalFactura: totalFacturaBs
-                });
-                setTimeout(() => {
+                
+                // Cancelar timeout anterior si existe
+                if (posTimeoutRef.current) {
+                    clearTimeout(posTimeoutRef.current);
+                    posTimeoutRef.current = null;
+                }
+                
+                // Verificar que no esté ya procesando antes de crear el timeout
+                if (procesandoPagoRef.current) {
+                    posProcesandoRef.current = false;
+                    return;
+                }
+                
+                posTimeoutRef.current = setTimeout(() => {
+                    // Limpiar el ref del timeout
+                    posTimeoutRef.current = null;
+                    // Liberar el flag de procesamiento
+                    posProcesandoRef.current = false;
+                    
                     // Verificar que no esté ya procesando antes de llamar
                     if (!procesandoPagoRef.current && facturar_e_imprimir) {
-                        console.log('✅ FINALIZAR POS - Ejecutando facturar_e_imprimir', {
-                            timestamp: new Date().toISOString(),
-                            pedidoId: pedidoData?.id
-                        });
                         facturar_e_imprimir();
-                    } else {
-                        console.warn('⚠️ FINALIZAR POS - Ya está procesando, ignorando facturar_e_imprimir', {
-                            timestamp: new Date().toISOString(),
-                            pedidoId: pedidoData?.id,
-                            procesando: procesandoPagoRef.current
-                        });
                     }
                 }, 500); // Pequeño delay para asegurar que el débito se haya actualizado
             } else {
                 // Solo procesar el pago sin facturar
-                console.log('🔄 FINALIZAR POS - Llamando a procesarPagoInterno', {
-                    timestamp: new Date().toISOString(),
-                    pedidoId: pedidoData?.id,
-                    totalAprobado: totalAprobado,
-                    totalFactura: totalFacturaBs,
-                    diferencia: diferencia
-                });
                 // Verificar que no esté ya procesando antes de llamar
                 if (!procesandoPagoRef.current) {
-                    console.log('✅ FINALIZAR POS - Ejecutando procesarPagoInterno', {
-                        timestamp: new Date().toISOString(),
-                        pedidoId: pedidoData?.id
-                    });
+                    // Liberar el flag de procesamiento antes de llamar
+                    posProcesandoRef.current = false;
                     procesarPagoInterno(posPendingCallback, refFinal);
                 } else {
-                    console.warn('⚠️ FINALIZAR POS - Ya está procesando, ignorando procesarPagoInterno', {
-                        timestamp: new Date().toISOString(),
-                        pedidoId: pedidoData?.id,
-                        procesando: procesandoPagoRef.current
-                    });
+                    // Liberar el flag si no se va a procesar
+                    posProcesandoRef.current = false;
                 }
             }
         } else {
@@ -4539,7 +4404,16 @@ export default function Facturar({
     const abrirModalPosDebito = (callback = null) => {
         // Precarga el monto del débito en Bs
         const montoInicial = debito || "0";
-        setPosMontoTotalOriginal(montoInicial); // Guardar monto total original
+        
+        // Obtener el total del pedido en bolívares
+        const totalPedidoBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
+        const montoNumerico = parseFloat(montoInicial) || 0;
+        
+        // Nunca permitir que el monto sea mayor al total del pedido
+        const montoLimitado = Math.min(montoNumerico, totalPedidoBs);
+        const montoFinal = montoLimitado.toFixed(2);
+        
+        setPosMontoTotalOriginal(montoFinal); // Guardar monto total original
         
         // Cargar transacciones existentes del pedido actual
         const transaccionesExistentes = pedidoData?.id ? (posTransaccionesPorPedido[pedidoData.id] || []) : [];
@@ -4547,7 +4421,7 @@ export default function Facturar({
         
         // Calcular monto restante considerando transacciones ya aprobadas
         const totalAprobado = transaccionesExistentes.reduce((sum, t) => sum + t.monto, 0);
-        const montoRestante = Math.max(0, parseFloat(montoInicial) - totalAprobado);
+        const montoRestante = Math.max(0, parseFloat(montoFinal) - totalAprobado);
         setPosMontoDebito(montoRestante.toFixed(2));
         
         setPosPendingCallback(() => callback);
@@ -4562,9 +4436,17 @@ export default function Facturar({
             return; // No abrir modal si no hay PINPAD o está en modo manual
         }
         
+        // Obtener el total del pedido en bolívares
+        const totalPedidoBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
         const montoInicial = monto || "0";
-        setPosMontoTotalOriginal(montoInicial);
-        setPosMontoDebito(montoInicial);
+        const montoNumerico = parseFloat(montoInicial) || 0;
+        
+        // Nunca permitir que el monto sea mayor al total del pedido
+        const montoLimitado = Math.min(montoNumerico, totalPedidoBs);
+        const montoFinal = montoLimitado.toFixed(2);
+        
+        setPosMontoTotalOriginal(montoFinal);
+        setPosMontoDebito(montoFinal);
         setPosTransaccionesAprobadas([]); // Limpiar transacciones previas
         setPosPendingCallback(null);
         setPosRespuesta(null);
@@ -9090,7 +8972,15 @@ export default function Facturar({
                                                     <input
                                                         type="text"
                                                         value={posMontoDebito}
-                                                        onChange={(e) => setPosMontoDebito(e.target.value.replace(/[^0-9.,]/g, ''))}
+                                                        onChange={(e) => {
+                                                            const valorLimpio = e.target.value.replace(/[^0-9.,]/g, '');
+                                                            const valorNumerico = parseFloat(valorLimpio) || 0;
+                                                            // Obtener el total del pedido en bolívares
+                                                            const totalPedidoBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
+                                                            // Nunca permitir que el monto sea mayor al total del pedido
+                                                            const montoLimitado = Math.min(valorNumerico, totalPedidoBs);
+                                                            setPosMontoDebito(montoLimitado > 0 ? montoLimitado.toFixed(2) : valorLimpio);
+                                                        }}
                                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 font-semibold text-lg"
                                                         disabled={true}
                                                         readOnly={true}
@@ -9132,11 +9022,13 @@ export default function Facturar({
                                             setPosRespuesta(null);
                                             setPosTransaccionesAprobadas([]);
                                             setPosMontoTotalOriginal("");
-                                            // Liberar el flag si se cancela el modal
-                                            console.log('🚫 MODAL POS - Cancelado por usuario', {
-                                                timestamp: new Date().toISOString(),
-                                                pedidoId: pedidoData?.id
-                                            });
+                                            // Cancelar timeout si existe
+                                            if (posTimeoutRef.current) {
+                                                clearTimeout(posTimeoutRef.current);
+                                                posTimeoutRef.current = null;
+                                            }
+                                            // Liberar flags
+                                            posProcesandoRef.current = false;
                                             procesandoPagoRef.current = false;
                                         }}
                                         disabled={posLoading}
@@ -9155,11 +9047,13 @@ export default function Facturar({
                                             setPosTransaccionesAprobadas([]);
                                             setPosMontoTotalOriginal("");
                                             setForzarReferenciaManual(true);
-                                            // Liberar el flag si se cancela el modal
-                                            console.log('🚫 MODAL POS - Cambiando a referencia manual', {
-                                                timestamp: new Date().toISOString(),
-                                                pedidoId: pedidoData?.id
-                                            });
+                                            // Cancelar timeout si existe
+                                            if (posTimeoutRef.current) {
+                                                clearTimeout(posTimeoutRef.current);
+                                                posTimeoutRef.current = null;
+                                            }
+                                            // Liberar flags
+                                            posProcesandoRef.current = false;
                                             procesandoPagoRef.current = false;
                                             // Hacer foco en el campo de referencia después de cerrar el modal
                                             setTimeout(() => {

@@ -32,7 +32,6 @@ use App\Models\cierres;
 use App\Models\inventario;
 
 use App\Models\clientes;
-use App\Models\fallas;
 use App\Models\garantia;
 use App\Models\vinculosucursales;
 use App\Models\transferencias_inventario_items;
@@ -64,7 +63,7 @@ class sendCentral extends Controller
     public function sends()
     {
         return [
-            /* */  "admon.arabito@gmail.com",   
+            /**/   "admon.arabito@gmail.com",   
             "omarelhenaoui@hotmail.com",           
             "yeisersalah2@gmail.com",           
             "amerelhenaoui@outlook.com",           
@@ -298,7 +297,6 @@ class sendCentral extends Controller
                                         $updates = [
                                             'items_pedidos' => DB::table('items_pedidos')->where("id_producto", $task["verde_idinsucursal"])->update(["id_producto" => $task["id_producto_verde"]]),
                                             'garantias' => DB::table('garantias')->where("id_producto", $task["verde_idinsucursal"])->update(["id_producto" => $task["id_producto_verde"]]),
-                                            'fallas' => DB::table('fallas')->where("id_producto", $task["verde_idinsucursal"])->update(["id_producto" => $task["id_producto_verde"]]),
                                             'movimientos_inventario' => DB::table('movimientos_inventarios')->where("id_producto", $task["verde_idinsucursal"])->update(["id_producto" => $task["id_producto_verde"]]),
                                             'movimientos_inventario_unitario' => DB::table('movimientos_inventariounitarios')->where("id_producto", $task["verde_idinsucursal"])->update(["id_producto" => $task["id_producto_verde"]]),
                                             'vinculo_sucursales' => DB::table('vinculosucursales')->where("id_producto", $task["verde_idinsucursal"])->update(["id_producto" => $task["id_producto_verde"]]),
@@ -332,7 +330,6 @@ class sendCentral extends Controller
                                     $updates = [
                                        'items_pedidos' => DB::table('items_pedidos')->where("id_producto", $task["id_producto_rojo"])->update(["id_producto" => $task["id_producto_verde"]]),
                                        'garantias' => DB::table('garantias')->where("id_producto", $task["id_producto_rojo"])->update(["id_producto" => $task["id_producto_verde"]]),
-                                       'fallas' => DB::table('fallas')->where("id_producto", $task["id_producto_rojo"])->update(["id_producto" => $task["id_producto_verde"]]),
                                        'movimientos_inventario' => DB::table('movimientos_inventarios')->where("id_producto", $task["id_producto_rojo"])->update(["id_producto" => $task["id_producto_verde"]]),
                                        'movimientos_inventario_unitario' => DB::table('movimientos_inventariounitarios')->where("id_producto", $task["id_producto_rojo"])->update(["id_producto" => $task["id_producto_verde"]]),
                                        'vinculo_sucursales' => DB::table('vinculosucursales')->where("id_producto", $task["id_producto_rojo"])->update(["id_producto" => $task["id_producto_verde"]]),
@@ -1204,7 +1201,6 @@ class sendCentral extends Controller
                             items_pedidos::where("id_producto",$este)->update(["id_producto" => $poreste]);
 
                             garantia::where("id_producto",$este)->update(["id_producto" => $poreste]);
-                            fallas::where("id_producto",$este)->update(["id_producto" => $poreste]);
                             movimientosInventario::where("id_producto",$este)->update(["id_producto" => $poreste]);
                             movimientosInventariounitario::where("id_producto",$este)->update(["id_producto" => $poreste]);
                             vinculosucursales::where("id_producto",$este)->update(["id_producto" => $poreste]);
@@ -1870,12 +1866,7 @@ class sendCentral extends Controller
     {
         return garantia::with(["producto"])->where("id",">",$lastid)->get();
     }
-    function sendFallas($lastid)
-    {
-       /*  return fallas::with(["producto" => function ($q) {$q->select(["id", "stockmin","stockmax", "cantidad"]);}])
-        ->where("id",">",$lastid)->get(); */
-        return [];
-    }
+  
     function sendInventario($all = false,$fecha)
     {
        /*  $today = (new PedidosController)->today();
@@ -3228,43 +3219,7 @@ class sendCentral extends Controller
 
         }
     }
-    public function setCentralData()
-    {
-        try {
-            $sucursal = $this->getOrigen();
-            $fallas = fallas::all();
-
-            if (!$fallas->count()) {
-                return Response::json(["msj" => "Nada que enviar", "estado" => false]);
-            }
-
-
-            $response = Http::post($this->path . '/setFalla', [
-                "sucursal_code" => $sucursal->codigo,
-                "fallas" => $fallas
-            ]);
-
-            //ids_ok => id de productos 
-
-            if ($response->ok()) {
-                $res = $response->json();
-                // code...
-
-                if ($res["estado"]) {
-
-                    return $res["msj"];
-                }
-            } else {
-
-                return $response;
-            }
-        } catch (\Exception $e) {
-            return Response::json(["estado" => false, "msj" => "Error de sucursal: " . $e->getMessage()]);
-
-        }
-
-
-    }
+   
 
     
     public function updatetasasfromCentral()
@@ -4302,12 +4257,7 @@ class sendCentral extends Controller
         $tiempos['sendGarantias'] = round(microtime(true) - $t3, 2) . 's';
         \Log::info('<<< Completado: Garantías - ' . $tiempos['sendGarantias']);
         
-        // 4. Fallas
-        \Log::info('>>> Iniciando: Fallas...');
-        $t4 = microtime(true);
-        $sendFallas = $this->sendFallas(0);
-        $tiempos['sendFallas'] = round(microtime(true) - $t4, 2) . 's';
-        \Log::info('<<< Completado: Fallas - ' . $tiempos['sendFallas']);
+        
         
         // 5. Cierres
         \Log::info('>>> Iniciando: Cierres...');
@@ -4345,7 +4295,6 @@ class sendCentral extends Controller
             "numitemspedidos" => $numitemspedidos,
             "sendInventarioCt" => $sendInventarioCt,
             "sendGarantias" => $sendGarantias,
-            "sendFallas" => $sendFallas,
             "setCierreFromSucursalToCentral" => $setCierreFromSucursalToCentral,
             "setEfecFromSucursalToCentral" => $setEfecFromSucursalToCentral,
             "sendCreditos" => $sendCreditos,

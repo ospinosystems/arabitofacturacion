@@ -18,6 +18,7 @@ mix
 .sass('resources/sass/table.scss', 'public/css')
 .css('resources/css/modal.css', 'public/css')
 .css('resources/css/app.css', 'public/css')
+.copy('resources/css/nunito-fonts.css', 'public/css')
 .options({
     processCssUrls: true,
     postCss: [

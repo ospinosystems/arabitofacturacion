@@ -41,7 +41,7 @@ function Notificacion({ msj, notificar }) {
 					{msj}
 				</div>
 			</div>
-			<style jsx>{`
+			<style>{`
 				.notification-container {
 					position: fixed;
 					bottom: 20px;

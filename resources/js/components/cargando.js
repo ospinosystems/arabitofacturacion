@@ -13,7 +13,7 @@ function Cargando({ active = true, message = "Cargando..." }) {
 				</div>
 				<div className="loading-message">{message}</div>
 			</div>
-			<style jsx>{`
+			<style>{`
 				.loading-overlay {
 					position: fixed;
 					bottom: 20px;

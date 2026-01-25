@@ -56,7 +56,6 @@ return [
                     "devoluciones",
                     "items_devoluciones",
                     'movimientos_inventariounitarios',
-                    'fallas',
                     "movimientos_inventarios",
                     "categorias",
                     "tareaslocals",

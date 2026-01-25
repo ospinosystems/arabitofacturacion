@@ -7,7 +7,6 @@ use App\Models\cierres;
 use App\Models\clientes;
 use App\Models\depositos;
 use App\Models\factura;
-use App\Models\fallas;
 use App\Models\garantia;
 use App\Models\inventario;
 use App\Models\inventarios_novedades;
@@ -480,7 +479,6 @@ class InventarioController extends Controller
                     );
                 } else {
                     $this->descontarInventario($id, $ctSeter, $ctquehabia, $id_pedido, 'VENTA');
-                    $this->checkFalla($id, $ctSeter);
                 }
                 
                 // Obtener tasa: SIEMPRE usar la tasa actual del día (incluso para devoluciones)
@@ -549,7 +547,6 @@ class InventarioController extends Controller
                 $ctSeter = (($producto->cantidad + $old_ct) - $cantidad);
 
                 $this->descontarInventario($checkIfExits->id_producto, $ctSeter, ($producto->cantidad), items_pedidos::find($id)->id_pedido ?? null, 'ACT.VENTA');
-                $this->checkFalla($checkIfExits->id_producto, $ctSeter);
 
                 // Obtener tasa actual
                 $tasaActual = Cache::get('bs');
@@ -604,7 +601,6 @@ class InventarioController extends Controller
                     if ($condicion != 1) {
                         // Si no es garantia
                         $this->descontarInventario($id_producto, $ctSeter, $producto->cantidad, $pedido_id, 'ELI.VENTA');
-                        $this->checkFalla($id_producto, $ctSeter);
                     } else {
                         // Si es garantia
                         garantia::where('id_pedido', $pedido_id)->delete();
@@ -1024,25 +1020,7 @@ class InventarioController extends Controller
         return response()->json($archivos);
     }
 
-    public function reporteFalla(Request $req)
-    {
-        $id_proveedor = $req->id;
-
-        $sucursal = sucursal::all()->first();
-        $proveedor = proveedores::find($id_proveedor);
-
-        if ($proveedor && $id_proveedor) {
-            $fallas = fallas::With('producto')->whereIn('id_producto', function ($q) use ($id_proveedor) {
-                $q->from('inventarios')->where('id_proveedor', $id_proveedor)->select('id');
-            })->get();
-
-            return view('reportes.fallas', [
-                'fallas' => $fallas,
-                'sucursal' => $sucursal,
-                'proveedor' => $proveedor,
-            ]);
-        }
-    }
+    
 
     public function getUniqueProductoById(Request $req)
     {
@@ -1719,7 +1697,6 @@ class InventarioController extends Controller
                 $insertOrUpdateInv = inventario::create($arr_produc);
             }
 
-            $this->checkFalla($insertOrUpdateInv->id, $ctInsert);
             $this->insertItemFact($id_factura, $insertOrUpdateInv, $ctInsert, $beforecantidad, $ctNew, $tipo);
             if ($insertOrUpdateInv) {
                 // Registrar moviento de producto
@@ -1837,79 +1814,13 @@ class InventarioController extends Controller
         }
     }
 
-    public function getFallas(Request $req)
-    {
-        $qFallas = $req->qFallas;
-        $orderCatFallas = $req->orderCatFallas;
-        $orderSubCatFallas = $req->orderSubCatFallas;
-        $ascdescFallas = $req->ascdescFallas;
+   
 
-        // $query_frecuencia = items_pedidos::with("producto")->select(['id_producto'])
-        //     ->selectRaw('COUNT(id_producto) as en_pedidos, SUM(cantidad) as cantidad')
-        //     ->groupBy(['id_producto']);
+   
 
-        // if ($orderSubCatFallas=="todos") {
-        //     // $query_frecuencia->having('cantidad', '>', )
-        // }else if ($orderSubCatFallas=="alta") {
-        //     $query_frecuencia->having('cantidad', '>', )
-        // }else if ($orderSubCatFallas=="media") {
-        //     $query_frecuencia->having('cantidad', '>', )
-        // }else if ($orderSubCatFallas=="baja") {
-        //     $query_frecuencia->having('cantidad', '>', )
-        // }
+   
 
-        // return $query_frecuencia->get();
-        if ($orderCatFallas == 'categoria') {
-            return fallas::with(['producto' => function ($q) {
-                $q->with(['proveedor', 'categoria']);
-            }])->get()->groupBy('producto.categoria.descripcion');
-        } else if ($orderCatFallas == 'proveedor') {
-            return fallas::with(['producto' => function ($q) {
-                $q->with(['proveedor', 'categoria']);
-            }])->get()->groupBy('producto.proveedor.descripcion');
-        }
-    }
-
-    public function setFalla(Request $req)
-    {
-        try {
-            fallas::updateOrCreate(['id_producto' => $req->id_producto], ['id_producto' => $req->id_producto]);
-
-            return Response::json(['msj' => 'Falla enviada con Éxito', 'estado' => true]);
-        } catch (\Exception $e) {
-            return Response::json(['msj' => 'Error: ' . $e->getMessage(), 'estado' => false]);
-        }
-    }
-
-    public function delFalla(Request $req)
-    {
-        try {
-            fallas::find($req->id)->delete();
-
-            return Response::json(['msj' => 'Falla Eliminada', 'estado' => true]);
-        } catch (\Exception $e) {
-            return Response::json(['msj' => 'Error: ' . $e->getMessage(), 'estado' => false]);
-        }
-    }
-
-    public function checkFalla($id, $ct)
-    {
-        if ($id) {
-            $stockmin = 0;
-            $stockminquery = inventario::find($id)->first(['id', 'stockmin']);
-            if ($stockminquery) {
-                $stockmin = $stockminquery->stockmin ? $stockminquery->stockmin : 0;
-            }
-            if ($ct >= $stockmin) {
-                $f = fallas::where('id_producto', $id)->first();
-                if ($f) {
-                    $f->delete();
-                }
-            } else if ($ct < $stockmin) {
-                fallas::updateOrCreate(['id_producto' => $id], ['id_producto' => $id]);
-            }
-        }
-    }
+  
 
     public function reporteInventario(Request $req)
     {

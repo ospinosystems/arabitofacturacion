@@ -6,8 +6,8 @@
 
         <title>Laravel</title>
 
-        <!-- Fonts -->
-        <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+        <!-- Fonts - Local Nunito -->
+        <link href="{{ asset('css/nunito-fonts.css') }}" rel="stylesheet">
 
         <!-- Styles -->
         <style>

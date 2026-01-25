@@ -4133,21 +4133,7 @@ export default function PagarMain({
                                                 </span>
                                             </div>
                                         </div>
-                                        <div className="col-6">
-                                            <div className="d-flex align-items-start mb-2">
-                                                <kbd
-                                                    className="me-2"
-                                                    style={{
-                                                        fontSize: "0.75rem",
-                                                    }}
-                                                >
-                                                    B
-                                                </kbd>
-                                                <span className="text-muted">
-                                                    Biopago
-                                                </span>
-                                            </div>
-                                        </div>
+                                        
                                     </div>
                                 </div>
                             </div>
