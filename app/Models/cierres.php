@@ -78,6 +78,12 @@ class cierres extends Model
 
         "descuadre",
         
+        // Campos digitales
+        "debito_digital",
+        "efectivo_digital",
+        "transferencia_digital",
+        "biopago_digital",
+        
         // Campo JSON flexible para cuadres detallados (evita redundancia)
         "cuadre_detallado",
 

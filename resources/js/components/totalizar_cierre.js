@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import db from "../database/database";
+import axios from 'axios';
 
 const formatNumber = (num) => {
 	if (num === null || num === undefined) return '0.00';
@@ -176,8 +177,21 @@ function TotalizarCierre({
 			const response = await db.guardarCierre(datosGuardar);
 			
 			if (response.data && response.data.estado) {
-				alert('Cierre de administrador guardado exitosamente');
+				// Mostrar notificación en lugar de alert
+				if (window.notificar) {
+					window.notificar('✓ Cierre de administrador guardado exitosamente', false);
+				}
 				setCierreAdminGuardado(true);
+				
+				// Abrir modal de envío de cierre inmediatamente
+				try {
+					enviarCierreConModal();
+				} catch (syncError) {
+					console.error('Error al abrir modal de envío:', syncError);
+					if (window.notificar) {
+						window.notificar('Error al abrir modal de envío', false);
+					}
+				}
 			} else {
 				// Si hay un faltante, mostrar mensaje detallado
 				// El backend retorna total_diferencia cuando hay un faltante
@@ -219,13 +233,121 @@ function TotalizarCierre({
 		const fecha = fechaCierreBackend || "";
 		
 		if (!fecha) {
-			alert('No hay fecha de cierre disponible para enviar');
+			if (window.notificar) {
+				window.notificar('No hay fecha de cierre disponible para enviar', false);
+			}
 			return;
 		}
 		
 		// Abrir endpoint de enviar cierre en nueva pestaña
 		const url = `${db.getHost()}verCierre?type=enviar&fecha=${fecha}`;
 		window.open(url, '_blank');
+	};
+
+	// Función para abrir modal de envío de cierre (similar a veryenviarcierrefun)
+	const enviarCierreConModal = async () => {
+		const fecha = fechaCierreBackend || fechaCierre || "";
+		
+		if (!fecha) {
+			if (window.notificar) {
+				window.notificar('No hay fecha de cierre disponible para enviar', false);
+			}
+			return;
+		}
+
+		try {
+			// Obtener estado actual de sincronización
+			const statusRes = await axios.get(db.getHost() + "sync/status");
+			
+			// Preparar datos de pendientes para el modal
+			const pendientesData = {};
+			if (statusRes.data) {
+				Object.keys(statusRes.data).forEach(key => {
+					const tabla = statusRes.data[key];
+					pendientesData[key] = {
+						pendientes: tabla.pendientes || 0,
+						total: tabla.total || 0,
+						sincronizados: tabla.sincronizados || 0
+					};
+				});
+			}
+			
+			// Abrir modal con datos de pendientes
+			if (window.SyncModal) {
+				window.SyncModal.open(pendientesData);
+				window.SyncModal.addLog('Obtenido estado de sincronización');
+				window.SyncModal.addLog('Iniciando envío de cierre...');
+			}
+			
+			// Ejecutar sincronización
+			const res = await db.sendCierre({
+				type: "enviar",
+				fecha: fecha,
+				totalizarcierre: true,
+			});
+			
+			// Procesar respuesta del nuevo sistema de sincronización
+			if (res.data && res.data.estado) {
+				const registros = res.data.registros_totales || 0;
+				const tiempo = res.data.tiempo_sync || '0s';
+				const tablas = res.data.tablas || {};
+				
+				// Actualizar modal con resultados
+				if (window.SyncModal) {
+					window.SyncModal.addLog(`Registros procesados: ${registros}`);
+					window.SyncModal.addLog(`Tiempo total: ${tiempo}`);
+					window.SyncModal.complete(true, `Sincronización completada: ${registros} registros en ${tiempo}`, res.data);
+				}
+				
+				if (window.notificar) {
+					window.notificar(`✓ Sincronización completada: ${registros} registros`, false);
+				}
+				
+				// Ejecutar post-procesamiento (correo, backup) en segundo plano
+				db.ejecutarPostSync({ fecha: fecha }).catch(err => {
+					console.log('Post-sync en background:', err?.message || 'completado');
+				});
+			} else {
+				// Manejar otros formatos de respuesta
+				let mensaje = "Proceso completado";
+				
+				if (typeof res.data === "string") {
+					mensaje = res.data;
+				} else if (res.data && res.data.mensaje) {
+					mensaje = res.data.mensaje;
+				} else if (Array.isArray(res.data)) {
+					mensaje = res.data.join("\n");
+				}
+				
+				if (window.SyncModal) {
+					if (res.data && res.data.error) {
+						window.SyncModal.complete(false, mensaje);
+					} else {
+						window.SyncModal.complete(true, mensaje, res.data);
+					}
+				}
+				
+				if (window.notificar) {
+					window.notificar(mensaje, false);
+				}
+			}
+		} catch (error) {
+			const errorMsg = "Error: " + (error.message || "Error desconocido");
+			
+			// Si el modal no se abrió aún (error en obtener status), abrirlo ahora
+			if (window.SyncModal && !window.SyncModal.state.isOpen) {
+				window.SyncModal.open();
+			}
+			
+			if (window.SyncModal) {
+				window.SyncModal.addLog(errorMsg, 'error');
+				window.SyncModal.complete(false, errorMsg);
+			}
+			
+			if (window.notificar) {
+				window.notificar(errorMsg, false);
+			}
+		}
 	};
 
 	const reversarCierreAdmin = async () => {
@@ -271,6 +393,18 @@ function TotalizarCierre({
 	}
 
 	if (error) {
+		const cerrarError = () => {
+			setError(null);
+			if (onClose) {
+				onClose();
+			}
+		};
+		
+		const reintentar = () => {
+			setError(null);
+			cargarCierreConsolidado();
+		};
+		
 		return (
 			<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
 				<div className="bg-white rounded-lg p-8 max-w-md">
@@ -279,18 +413,72 @@ function TotalizarCierre({
 					</div>
 					<h3 className="text-xl font-bold mb-2">Error</h3>
 					<p className="text-gray-700 mb-4">{error}</p>
-					<button 
-						onClick={onClose}
-						className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
-					>
-						Cerrar
-					</button>
+					<div className="flex gap-3 justify-end">
+						<button 
+							onClick={cerrarError}
+							className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+						>
+							Cerrar
+						</button>
+						<button 
+							onClick={reintentar}
+							className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+						>
+							<i className="fa fa-refresh mr-2"></i>
+							Reintentar
+						</button>
+					</div>
 				</div>
 			</div>
 		);
 	}
 
 	if (!cierreConsolidado || !cierreConsolidado.cuadre_detallado) {
+		// Si no hay datos pero tampoco hay error ni está cargando, mostrar estado vacío con opción de recargar
+		if (!loading && !error) {
+			const cerrarModal = (e) => {
+				if (e) {
+					e.preventDefault();
+					e.stopPropagation();
+				}
+				if (onClose) {
+					onClose();
+				}
+			};
+			
+			return (
+				<div 
+					className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+					onClick={cerrarModal}
+				>
+					<div 
+						className="bg-white rounded-lg p-8 max-w-md"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="text-gray-600 mb-4">
+							<i className="fa fa-info-circle text-4xl"></i>
+						</div>
+						<h3 className="text-xl font-bold mb-2">No hay datos disponibles</h3>
+						<p className="text-gray-700 mb-4">No se encontraron datos de cierre para mostrar.</p>
+						<div className="flex gap-3 justify-end">
+							<button 
+								onClick={cerrarModal}
+								className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+							>
+								Cerrar
+							</button>
+							<button 
+								onClick={cargarCierreConsolidado}
+								className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+							>
+								<i className="fa fa-refresh mr-2"></i>
+								Recargar
+							</button>
+						</div>
+					</div>
+				</div>
+			);
+		}
 		return null;
 	}
 
@@ -571,14 +759,7 @@ function TotalizarCierre({
 											</>
 										)}
 									</button>
-									<button 
-										onClick={enviarCierre}
-										disabled={guardandoCierre}
-										className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold transition disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-									>
-										<i className="fa fa-paper-plane"></i>
-										Enviar Cierre
-									</button>
+								
 								</>
 							) : (
 								<>

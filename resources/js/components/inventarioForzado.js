@@ -82,6 +82,7 @@ export default function InventarioForzado({
         []
     );
     const getPorGanacia = (precio,base) => {
+        return 0;
         try{
             let por = 0
 

@@ -63,7 +63,7 @@ class sendCentral extends Controller
     public function sends()
     {
         return [
-            /**/   "admon.arabito@gmail.com",   
+            /*  */ "admon.arabito@gmail.com",   
             "omarelhenaoui@hotmail.com",           
             "yeisersalah2@gmail.com",           
             "amerelhenaoui@outlook.com",           
@@ -1931,34 +1931,64 @@ class sendCentral extends Controller
 
             foreach ($cierres as $key => $cierre) {
                 $today = $cierre->fecha;
-                $c = cierres::where("tipo_cierre", 0)
-                    ->where("fecha", $today)
-                    ->with('puntos')
-                    ->get();
-
-                $pagos_referencias_dia = pagos_referencias::where("created_at", "LIKE", $today."%")->get();
                 
-                // Obtener puntos desde la relación
-                $puntosAdicionales = $c->pluck('puntos')->flatten();
+                // Cargar métodos de pago del cierre administrador
+                $cierre->load('metodosPago');
+                
                 $lotes = [];
-
-                foreach ($puntosAdicionales as $key => $punto) {
-                    array_push($lotes, [
-                        "id" => "PUNTO-".$punto->id,
-                        "monto" => $punto["monto"],
-                        "banco" => $punto["banco"],
-                        "lote" => $punto["descripcion"],
-                        "fecha" => $punto["fecha"],
-                        "id_usuario" => $punto["id_usuario"],
-                        "categoria" => $punto["categoria"],
-                        "tipo" => "PUNTO ".$key,
-                    ]);
+                
+                // Extraer lotes desde CierresMetodosPago con subtipo 'otros_puntos' y 'pinpad'
+                foreach ($cierre->metodosPago as $metodo_pago) {
+                    $metadatos = is_string($metodo_pago->metadatos) 
+                        ? json_decode($metodo_pago->metadatos, true) 
+                        : $metodo_pago->metadatos;
+                    
+                    if ($metodo_pago->subtipo == 'pinpad') {
+                        // Procesar lotes pinpad
+                        $lotes_pinpad = $metadatos['lotes'] ?? [];
+                        \Log::info("SENDCIERRES - Lotes PINPAD encontrados: " . count($lotes_pinpad));
+                        foreach ($lotes_pinpad as $index => $lote) {
+                            $loteData = [
+                                "idinsucursal" => "PINPAD-".$cierre->id."-".$index,
+                                "monto" => floatval($lote['monto_bs'] ?? $lote['monto'] ?? 0),
+                                "banco" => $lote['banco_nombre'] ?? $lote['banco'] ?? '',
+                                "loteserial" => $lote['terminal'] ?? $lote['lote'] ?? '',
+                                "fecha" => $today,
+                                "id_usuario" => $cierre->id_usuario,
+                                "categoria" => 1, // Categoría 1 para puntosybiopagos
+                                "tipo" => "PINPAD",
+                                "debito_credito" => null,
+                                "origen" => 1,
+                            ];
+                            array_push($lotes, $loteData);
+                        }
+                    } else if ($metodo_pago->subtipo == 'otros_puntos') {
+                        // Procesar otros puntos
+                        $puntos = $metadatos['puntos'] ?? [];
+                        \Log::info("SENDCIERRES - Puntos encontrados: " . count($puntos));
+                        foreach ($puntos as $index => $punto) {
+                            $puntoData = [
+                                "idinsucursal" => "PUNTO-".$cierre->id."-".$index,
+                                "monto" => floatval($punto['monto_real'] ?? $punto['monto'] ?? 0),
+                                "banco" => $punto['banco'] ?? '',
+                                "loteserial" => $punto['descripcion'] ?? $punto['lote'] ?? '',
+                                "fecha" => $punto['fecha'] ?? $today,
+                                "id_usuario" => $punto['id_usuario'] ?? $cierre->id_usuario,
+                                "categoria" => 1, // Categoría 1 para puntosybiopagos
+                                "tipo" => "PUNTO X",
+                                "debito_credito" => null,
+                                "origen" => 1,
+                            ];
+                            array_push($lotes, $puntoData);
+                        }
+                    }
                 }
-
+                
+                // Mantener compatibilidad con pagos_referencias (transferencias)
+                $pagos_referencias_dia = pagos_referencias::where("created_at", "LIKE", $today."%")->get();
                 foreach ($pagos_referencias_dia as $ref) {
                     array_push($lotes, [
                         "id" => "TRANS-".$ref->id,
-
                         "monto" => $ref["monto"],
                         "lote" => $ref["descripcion"],
                         "banco" => $ref["banco"],
@@ -1967,26 +1997,85 @@ class sendCentral extends Controller
                         "tipo" => $this->retpago($ref["tipo"])
                     ]);
                 }
-                foreach ($c as $key => $e) {
+                
+                // Mantener compatibilidad con biopagos desde cierres de cajeros
+                $c = cierres::where("tipo_cierre", 0)
+                    ->where("fecha", $today)
+                    ->get();
                     
+                foreach ($c as $key => $e) {
                     if ($e->biopagoserial && $e->biopagoserialmontobs) {
                         array_push($lotes, [
                             "id" => "BIO-".$e->id,
-
                             "monto" => $e->biopagoserialmontobs,
                             "lote" => $e->biopagoserial,
                             "banco" => "0102",
                             "fecha" => $today,
                             "id_usuario" => $e->id_usuario,
                             "tipo" => "BIOPAGO 1"
-    
                         ]);
                     }
                 }
                  
+                // Enviar todos los campos del cierre explícitamente
+                // Lista completa de campos que se deben enviar
+                $camposRequeridos = [
+                    'id', 'fecha', 'tasa', 'tasacop', 'nota', 'id_usuario',
+                    // Métodos de pago
+                    'debito', 'efectivo', 'transferencia', 'caja_biopago',
+                    // Dejar en caja
+                    'dejar_dolar', 'dejar_peso', 'dejar_bss',
+                    // Efectivo guardado
+                    'efectivo_guardado', 'efectivo_guardado_cop', 'efectivo_guardado_bs',
+                    // Efectivo actual
+                    'efectivo_actual', 'efectivo_actual_cop', 'efectivo_actual_bs',
+                    'puntodeventa_actual_bs',
+                    // Ventas
+                    'numventas', 'precio', 'precio_base', 'ganancia', 'porcentaje', 'desc_total',
+                    // Inventario
+                    'inventariobase', 'inventarioventa',
+                    // Fiscales
+                    'numreportez', 'ventaexcento', 'ventagravadas', 'ivaventa', 
+                    'totalventa', 'ultimafactura',
+                    // Créditos
+                    'credito', 'creditoporcobrartotal', 'abonosdeldia',
+                    // Efectivo adicional caja fuerte
+                    'efecadiccajafbs', 'efecadiccajafcop', 'efecadiccajafdolar', 'efecadiccajafeuro',
+                    // Biopago
+                    'biopagoserial', 'biopagoserialmontobs',
+                    // Puntos
+                    'puntolote1', 'puntolote1montobs', 'puntolote2', 'puntolote2montobs',
+                    // Vueltos
+                    'vueltostotales',
+                    // Descuadre
+                    'descuadre',
+                    // Campos digitales
+                    'debito_digital', 'efectivo_digital', 'transferencia_digital', 'biopago_digital',
+                ];
+                
+                // Obtener todos los atributos del modelo y filtrar solo los campos requeridos
+                $cierreData = [];
+                // Obtener atributos de múltiples formas para asegurar que se capturen todos los campos
+                $atributos = array_merge(
+                    $cierre->getAttributes(),  // Atributos en $fillable
+                    $cierre->getOriginal()    // Valores originales de la BD
+                );
+                
+                foreach ($camposRequeridos as $campo) {
+                    // Intentar obtener desde atributos primero
+                    if (array_key_exists($campo, $atributos)) {
+                        $cierreData[$campo] = $atributos[$campo];
+                    } else {
+                        // Si no está en atributos, intentar obtenerlo directamente del modelo
+                        // Usar getAttribute() que puede acceder a atributos incluso si no están en $fillable
+                        $valor = $cierre->getAttribute($campo);
+                        $cierreData[$campo] = $valor !== null ? $valor : null;
+                    }
+                }
+                
                 
                 array_push($data,[
-                    "cierre" => $cierre,
+                    "cierre" => $cierreData,
                     "lotes" => $lotes,
                 ]);
             }

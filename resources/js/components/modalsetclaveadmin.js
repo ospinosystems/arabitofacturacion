@@ -165,7 +165,7 @@ export default function Modalsetclaveadmin({
                 </div>
             </section>
             <div className="overlay"></div>
-            <style jsx>{`
+            <style>{`
                 .modal-custom {
                     position: fixed;
                     top: 50%;

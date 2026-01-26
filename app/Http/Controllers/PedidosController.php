@@ -2606,36 +2606,12 @@ class PedidosController extends Controller
             
             // RECALCULAR TODO usando cerrarFun con datos originales
             // NOTA: total_punto se calcula automáticamente dentro de cerrarFun
-            \Log::info('=== GUARDAR CIERRE - ANTES DE CERRARFUN ===');
-            \Log::info('GUARDAR CIERRE - Tipo cierre: ' . $tipo_cierre . ', Totalizar: ' . ($totalizarcierre ? 'true' : 'false'));
-            \Log::info('GUARDAR CIERRE - Fecha: ' . $today);
-            \Log::info('GUARDAR CIERRE - ID Usuario: ' . $id_usuario);
-            \Log::info('GUARDAR CIERRE - Datos enviados a cerrarFun:');
-            \Log::info('GUARDAR CIERRE - caja_usd: ' . ($req->caja_usd ?? 0));
-            \Log::info('GUARDAR CIERRE - caja_bs: ' . ($req->caja_bs ?? 0));
-            \Log::info('GUARDAR CIERRE - caja_cop: ' . ($req->caja_cop ?? 0));
-            \Log::info('GUARDAR CIERRE - total_biopago: ' . ($req->total_biopago ?? 0));
-            \Log::info('GUARDAR CIERRE - dejar_usd: ' . ($dejar['dejar_usd'] ?? 0));
-            \Log::info('GUARDAR CIERRE - dejar_bs: ' . ($dejar['dejar_bs'] ?? 0));
-            \Log::info('GUARDAR CIERRE - dejar_cop: ' . ($dejar['dejar_cop'] ?? 0));
-            \Log::info('GUARDAR CIERRE - Puntos adicionales recibidos del request: ' . json_encode($puntos_adicionales_request, JSON_PRETTY_PRINT));
-            \Log::info('GUARDAR CIERRE - Cantidad puntos en request: ' . (is_array($puntos_adicionales_request['puntos'] ?? []) ? count($puntos_adicionales_request['puntos']) : 'N/A'));
-            \Log::info('GUARDAR CIERRE - Cantidad lotes pinpad en request: ' . (is_array($puntos_adicionales_request['lotes_pinpad'] ?? []) ? count($puntos_adicionales_request['lotes_pinpad']) : 'N/A'));
             
             // Para consolidados, verificar qué cierres de cajeros existen
             if ($tipo_cierre == 1) {
                 $cierres_cajeros_antes = cierres::where('fecha', $today)
                     ->where('tipo_cierre', 0)
                     ->get();
-                
-                \Log::info('GUARDAR CIERRE - CONSOLIDADO - Cierres de cajeros encontrados antes de cerrarFun: ' . $cierres_cajeros_antes->count());
-                foreach ($cierres_cajeros_antes as $cierre_cajero_antes) {
-                    \Log::info('GUARDAR CIERRE - CONSOLIDADO - Cierre Cajero ID: ' . $cierre_cajero_antes->id . 
-                        ', Usuario: ' . $cierre_cajero_antes->id_usuario . 
-                        ', Efectivo USD: ' . ($cierre_cajero_antes->efectivo_actual ?? 0) . 
-                        ', Efectivo BS: ' . ($cierre_cajero_antes->efectivo_actual_bs ?? 0) . 
-                        ', Efectivo COP: ' . ($cierre_cajero_antes->efectivo_actual_cop ?? 0));
-                }
             }
             
             $resultado_cierre = $this->cerrarFun(
@@ -2676,42 +2652,6 @@ class PedidosController extends Controller
             // Extraer datos calculados para usar en guardado
             $cuadre_detallado = $calculos['cuadre_detallado'] ?? [];
             
-            \Log::info('=== GUARDAR CIERRE - DESPUÉS DE CERRARFUN ===');
-            \Log::info('GUARDAR CIERRE - Tipo cierre: ' . $tipo_cierre . ', Totalizar: ' . ($totalizarcierre ? 'true' : 'false'));
-            \Log::info('GUARDAR CIERRE - Tipo de resultado: ' . gettype($resultado_cierre));
-            \Log::info('GUARDAR CIERRE - Tipo de calculos: ' . gettype($calculos));
-            \Log::info('GUARDAR CIERRE - Tiene cuadre_detallado: ' . (isset($calculos['cuadre_detallado']) ? 'SI' : 'NO'));
-            
-            // Logs de valores principales de calculos
-            \Log::info('GUARDAR CIERRE - Valores principales de calculos:');
-            \Log::info('GUARDAR CIERRE - efectivo_guardado_usd: ' . ($calculos['efectivo_guardado_usd'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - efectivo_guardado_bs: ' . ($calculos['efectivo_guardado_bs'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - efectivo_guardado_cop: ' . ($calculos['efectivo_guardado_cop'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - total_punto: ' . ($calculos['total_punto'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - debito_digital: ' . ($calculos['debito_digital'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - efectivo_digital: ' . ($calculos['efectivo_digital'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - transferencia_digital: ' . ($calculos['transferencia_digital'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - biopago_digital: ' . ($calculos['biopago_digital'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - descuadre: ' . ($calculos['descuadre'] ?? 'NO EXISTE'));
-            
-            // Logs detallados del cuadre_detallado
-            \Log::info('GUARDAR CIERRE - Cuadre detallado completo desde cerrarFun: ' . json_encode($cuadre_detallado, JSON_PRETTY_PRINT));
-            \Log::info('GUARDAR CIERRE - Debito otros real desde cerrarFun: ' . ($cuadre_detallado['debito_otros']['real'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - Debito otros digital desde cerrarFun: ' . ($cuadre_detallado['debito_otros']['digital'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - Debito pinpad real desde cerrarFun: ' . ($cuadre_detallado['debito_pinpad']['real'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - Debito pinpad digital desde cerrarFun: ' . ($cuadre_detallado['debito_pinpad']['digital'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - Efectivo USD real desde cerrarFun: ' . ($cuadre_detallado['efectivo_usd']['real'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - Efectivo USD digital desde cerrarFun: ' . ($cuadre_detallado['efectivo_usd']['digital'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - Efectivo USD inicial desde cerrarFun: ' . ($cuadre_detallado['efectivo_usd']['inicial'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - Efectivo BS real desde cerrarFun: ' . ($cuadre_detallado['efectivo_bs']['real'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - Efectivo BS digital desde cerrarFun: ' . ($cuadre_detallado['efectivo_bs']['digital'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - Efectivo BS inicial desde cerrarFun: ' . ($cuadre_detallado['efectivo_bs']['inicial'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - Efectivo COP real desde cerrarFun: ' . ($cuadre_detallado['efectivo_cop']['real'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - Efectivo COP digital desde cerrarFun: ' . ($cuadre_detallado['efectivo_cop']['digital'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - Efectivo COP inicial desde cerrarFun: ' . ($cuadre_detallado['efectivo_cop']['inicial'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - Transferencia real desde cerrarFun: ' . ($cuadre_detallado['transferencia']['real'] ?? 'NO EXISTE'));
-            \Log::info('GUARDAR CIERRE - Transferencia digital desde cerrarFun: ' . ($cuadre_detallado['transferencia']['digital'] ?? 'NO EXISTE'));
-            
             // Si es consolidado, verificar que el valor sea la suma de todas las cajas
             if ($tipo_cierre == 1) {
                 $cierres_cajeros_para_verificar = cierres::where('fecha', $today)
@@ -2729,10 +2669,6 @@ class PedidosController extends Controller
                         $suma_verificacion += floatval($registro_otros_ver->monto_real ?? 0);
                     }
                 }
-                
-                \Log::info('GUARDAR CIERRE - Verificación: Suma real de todas las cajas: ' . $suma_verificacion . ' Bs');
-                \Log::info('GUARDAR CIERRE - Verificación: Valor que se va a guardar: ' . ($cuadre_detallado['debito_otros']['real'] ?? 'NO EXISTE') . ' Bs');
-                \Log::info('GUARDAR CIERRE - Verificación: Diferencia: ' . ($suma_verificacion - floatval($cuadre_detallado['debito_otros']['real'] ?? 0)) . ' Bs');
             }
             
             $efectivo_guardado_usd = $calculos['efectivo_guardado_usd'] ?? $calculos['efectivo_guardado'] ?? 0;
@@ -2930,10 +2866,13 @@ class PedidosController extends Controller
             // Fórmula exacta del reporte: total_diferencia = total_real - total_digital - total_inicial
             $total_diferencia = $total_real - $total_digital - $total_inicial;
             
+            // Asignar descuadre total en dólares a calculos
+            $calculos['descuadre'] = round($total_diferencia, 2);
+            
             \Log::info("VALIDACION FALTANTE - Total Inicial: " . $total_inicial . " USD");
             \Log::info("VALIDACION FALTANTE - Total Real: " . $efectivo_real_usd . " + " . $debito_real_usd . " + " . $transferencia_real_usd . " + " . $biopago_real_usd . " = " . $total_real . " USD");
             \Log::info("VALIDACION FALTANTE - Total Digital: " . $efectivo_digital_usd . " + " . $debito_digital_usd . " + " . $transferencia_digital_usd . " + " . $biopago_digital_usd . " = " . $total_digital . " USD");
-            \Log::info("VALIDACION FALTANTE - Total Diferencia: " . $total_real . " - " . $total_digital . " - " . $total_inicial . " = " . $total_diferencia . " USD");
+            \Log::info("VALIDACION FALTANTE - Total Diferencia (descuadre): " . $total_real . " - " . $total_digital . " - " . $total_inicial . " = " . $total_diferencia . " USD");
             
             // ========== PARA CONSOLIDADOS: VERIFICAR VALORES DESDE CIERRES GUARDADOS ==========
             if ($tipo_cierre == 1) {
@@ -3230,9 +3169,6 @@ class PedidosController extends Controller
                 $debito_pinpad_real = floatval($cuadre_detallado['debito_pinpad']['real'] ?? 0);
                 $debito_otros_real = floatval($cuadre_detallado['debito_otros']['real'] ?? 0);
                 
-                \Log::info('GUARDAR CIERRE - Tipo: ' . $tipo_cierre . ', Debito Pinpad Real: ' . $debito_pinpad_real . ' Bs, Debito Otros Real: ' . $debito_otros_real . ' Bs');
-                \Log::info('GUARDAR CIERRE - Cuadre detallado debito_otros completo: ' . json_encode($cuadre_detallado['debito_otros'] ?? []));
-                
                 // Sumar ambos débitos convertidos a USD
                 $objcierres->debito = ($debito_pinpad_real / $tasa_bs_safe) + 
                     ($debito_otros_real / $tasa_bs_safe);
@@ -3323,13 +3259,8 @@ class PedidosController extends Controller
                         }
                     }
                     
-                    \Log::info('GUARDAR CIERRE - ANTES DE GUARDAR - Debito otros en cuadre_detallado: ' . $debito_otros_calculado);
-                    \Log::info('GUARDAR CIERRE - ANTES DE GUARDAR - Suma desde CierresMetodosPago: ' . $suma_verificacion_otros);
-                    
                     // Si hay discrepancia, corregir el cuadre_detallado
                     if (abs($debito_otros_calculado - $suma_verificacion_otros) > 0.01) {
-                        \Log::warning('GUARDAR CIERRE - CORRIGIENDO: Debito otros incorrecto. Calculado: ' . $debito_otros_calculado . ', Correcto: ' . $suma_verificacion_otros);
-                        
                         // Corregir el valor en cuadre_detallado
                         $cuadre_detallado['debito_otros']['real'] = $suma_verificacion_otros;
                         $cuadre_detallado['debito_otros']['diferencia'] = 
@@ -3346,26 +3277,19 @@ class PedidosController extends Controller
                             $cuadre_detallado['debito_otros']['estado'] = 'falta';
                             $cuadre_detallado['debito_otros']['mensaje'] = 'FALTAN';
                         }
-                        
-                        \Log::info('GUARDAR CIERRE - CORREGIDO - Nuevo cuadre debito_otros: ' . json_encode($cuadre_detallado['debito_otros']));
                     }
                 }
                 
                 $objcierres->cuadre_detallado = $cuadre_detallado;
                 
-                \Log::info('GUARDAR CIERRE - Guardando cuadre_detallado. Debito otros real: ' . ($cuadre_detallado['debito_otros']['real'] ?? 'NO EXISTE'));
-                \Log::info('GUARDAR CIERRE - Cuadre completo debito_otros: ' . json_encode($cuadre_detallado['debito_otros'] ?? []));
-                
                 $objcierres->save();
                 
                 // Verificar qué se guardó realmente
                 $cierre_guardado = cierres::find($objcierres->id);
+                
                 $cuadre_guardado = is_string($cierre_guardado->cuadre_detallado) 
                     ? json_decode($cierre_guardado->cuadre_detallado, true) 
                     : $cierre_guardado->cuadre_detallado;
-                
-                \Log::info('GUARDAR CIERRE - DESPUÉS DE GUARDAR - Debito otros real en BD: ' . ($cuadre_guardado['debito_otros']['real'] ?? 'NO EXISTE'));
-                \Log::info('GUARDAR CIERRE - Cierre guardado ID: ' . $objcierres->id . ', Tipo: ' . $objcierres->tipo_cierre);
                 
                 // Invalidar caché de addNewPedido para este usuario y fecha
                 $cache_key = "cierre_guardado_usuario_{$id_usuario}_fecha_{$today}";
@@ -3616,6 +3540,9 @@ class PedidosController extends Controller
      */
     public function getTotalizarCierre(Request $req)
     {
+        // Aumentar tiempo de ejecución para operaciones pesadas
+        set_time_limit(300); // 5 minutos
+        
         try {
             $fecha = $req->fechaCierre ?? $this->today();
             
@@ -3635,6 +3562,33 @@ class PedidosController extends Controller
                     }
                 ])
                 ->get();
+            
+            // Verificar que todas las cajas que tuvieron pedidos hoy hayan hecho cierre
+            // Solo considerar usuarios tipo caja (tipo_usuario = 4)
+            $usuarios_con_pedidos = pedidos::whereBetween('fecha_factura', ["$fecha 00:00:00", "$fecha 23:59:59"])
+                ->whereNotNull('id_vendedor')
+                ->join('usuarios', 'pedidos.id_vendedor', '=', 'usuarios.id')
+                ->where('usuarios.tipo_usuario', 4)
+                ->distinct()
+                ->pluck('pedidos.id_vendedor')
+                ->toArray();
+            
+            if (!empty($usuarios_con_pedidos)) {
+                $usuarios_con_cierre = $cierres_cajeros->pluck('id_usuario')->toArray();
+                $usuarios_sin_cierre = array_diff($usuarios_con_pedidos, $usuarios_con_cierre);
+                
+                if (!empty($usuarios_sin_cierre)) {
+                    // Obtener nombres de los usuarios sin cierre
+                    $nombres_usuarios_sin_cierre = usuarios::whereIn('id', $usuarios_sin_cierre)
+                        ->pluck('nombre')
+                        ->toArray();
+                    
+                    return Response::json([
+                        'estado' => false,
+                        'msj' => 'Las siguientes cajas tuvieron pedidos hoy pero no realizaron cierre: ' . implode(', ', $nombres_usuarios_sin_cierre)
+                    ], 200);
+                }
+            }
             
             if ($cierres_cajeros->isEmpty()) {
                 return Response::json([

@@ -644,6 +644,7 @@ Route::post('sync/all', [SyncProgressController::class, 'sincronizarTodo'])->nam
 Route::post('sync/tabla', [SyncProgressController::class, 'sincronizarTablaIndividual'])->name('sync.tabla');
 Route::post('sync/reset', [SyncProgressController::class, 'resetearSincronizacion'])->name('sync.reset');
 Route::post('sync/marcar', [SyncProgressController::class, 'marcarSincronizados'])->name('sync.marcar');
+Route::post('sync/desmarcar', [SyncProgressController::class, 'desmarcarSincronizados'])->name('sync.desmarcar');
 
 // SSE para progreso en tiempo real
 Route::get('sync/stream', [SyncProgressController::class, 'streamProgress'])->name('sync.stream');

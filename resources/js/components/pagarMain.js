@@ -954,8 +954,52 @@ export default function PagarMain({
             return;
         }
         
+        // Validar que el monto no supere el total del pedido
+        const tasaBsPedido = getTasaPromedioCarrito();
+        const totalPedidoBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
+        
+        // Calcular débitos bloqueados (ya aprobados) - estos se restan del total
+        const debitosBloqueados = debitos.filter(d => d.bloqueado);
+        const totalDebitosBloqueadosBs = debitosBloqueados.reduce((sum, d) => sum + (parseFloat(d.monto) || 0), 0);
+        
+        // Calcular el total base EXCLUYENDO débitos bloqueados (ya aprobados)
+        const totalPedidoAjustadoBs = totalPedidoBs - totalDebitosBloqueadosBs;
+        
+        // Calcular el total de débitos NO bloqueados con el nuevo valor
         const nuevosDebitos = [...debitos];
         nuevosDebitos[index].monto = valor;
+        const debitosNoBloqueados = nuevosDebitos.filter(d => !d.bloqueado);
+        const nuevoTotalDebitosNoBloqueadosBs = debitosNoBloqueados.reduce((sum, d) => sum + (parseFloat(d.monto) || 0), 0);
+        
+        // Calcular otros pagos en Bs (excluyendo débitos)
+        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+        const otrosPagosUSD = parseFloat(efectivo_dolar || 0) + 
+                              (parseFloat(efectivo_bs || 0) / tasaBsPedido) + 
+                              (parseFloat(efectivo_peso || 0) / tasaCopPedido) + 
+                              parseFloat(transferencia || 0) + 
+                              parseFloat(credito || 0) + 
+                              parseFloat(biopago || 0);
+        const otrosPagosBs = otrosPagosUSD * tasaBsPedido;
+        
+        // Calcular total pagado en Bs (solo débitos no bloqueados + otros pagos)
+        const totalPagadoBs = nuevoTotalDebitosNoBloqueadosBs + otrosPagosBs;
+        
+        // Si el total pagado supera el total del pedido ajustado, limpiar el campo
+        const esDevolucion = totalPedidoBs < 0;
+        const excedeTotal = esDevolucion 
+            ? totalPagadoBs < totalPedidoAjustadoBs - 0.01
+            : totalPagadoBs > totalPedidoAjustadoBs + 0.01;
+        
+        if (excedeTotal) {
+            // Limpiar el campo del débito
+            nuevosDebitos[index].monto = "";
+            setDebitos(nuevosDebitos);
+            if (pedidoData?.id && guardarDebitosPorPedido) {
+                guardarDebitosPorPedido(pedidoData.id, nuevosDebitos);
+            }
+            return;
+        }
+        
         setDebitos(nuevosDebitos);
         
         if (pedidoData?.id && guardarDebitosPorPedido) {
@@ -965,12 +1009,9 @@ export default function PagarMain({
         // Disparar el auto-corrector para redistribuir otros métodos de pago
         // Solo si no se está limpiando intencionalmente (skipSync = false)
         if (!skipSync && autoCorrector) {
-            // Calcular el nuevo total de débitos después del cambio
-            const nuevoTotalDebitos = nuevosDebitos.reduce((sum, d) => sum + (parseFloat(d.monto) || 0), 0);
-            
-            // Llamar a syncPago con el nuevo total de débitos para que redistribuya
+            // Llamar a syncPago con el nuevo total de débitos no bloqueados para que redistribuya
             // Esto permitirá que el auto-corrector ajuste los otros métodos de pago
-            syncPago(nuevoTotalDebitos.toString(), "Debito");
+            syncPago(nuevoTotalDebitosNoBloqueadosBs.toString(), "Debito");
         }
     };
 
@@ -1387,6 +1428,32 @@ export default function PagarMain({
 
         // Calcular máximo permitido para este campo (usar totalPedidoAjustado)
         const maxPermitidoUSD = totalPedidoAjustado - totalOtrosPagosUSD;
+
+        // Calcular el total pagado con el nuevo valor en USD
+        const totalPagadoConNuevoValorUSD = totalOtrosPagosUSD + valUSD;
+        
+        // Convertir a Bs para comparar con bs_clean
+        // totalDebitosBloqueadosBs ya está calculado arriba (línea 1393)
+        const totalPedidoBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
+        const totalPedidoAjustadoBs = totalPedidoBs - totalDebitosBloqueadosBs;
+        const totalPagadoConNuevoValorBs = totalPagadoConNuevoValorUSD * tasaBsPedido;
+        
+        // Si el total pagado supera el total del pedido, limpiar el campo
+        const excedeTotal = esDevolucion 
+            ? totalPagadoConNuevoValorBs < totalPedidoAjustadoBs - 0.01
+            : totalPagadoConNuevoValorBs > totalPedidoAjustadoBs + 0.01;
+
+        if (excedeTotal) {
+            // Limpiar el campo que se está editando
+            if (type === "Debito") setDebito("");
+            else if (type === "EfectivoUSD") setEfectivo_dolar("");
+            else if (type === "EfectivoBs") setEfectivo_bs("");
+            else if (type === "EfectivoCOP") setEfectivo_peso("");
+            else if (type === "Transferencia") setTransferencia("");
+            else if (type === "Credito") setCredito("");
+            else if (type === "Biopago") setBiopago("");
+            return;
+        }
 
         // Si autoCorrector está DESACTIVADO, limitar el valor si excede
         if (!autoCorrector) {

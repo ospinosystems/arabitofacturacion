@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Http;
 use Response;
 
@@ -114,8 +115,29 @@ class SyncProgressController extends Controller
                 $model = $config['model'];
                 $campoSync = $config['campo_sync'] ?? 'sincronizado';
                 
-                $total = $model::count();
-                $pendientes = $model::where($campoSync, 0)->count();
+                // Validar que el modelo existe y es válido
+                if (is_null($model) || (!is_string($model) && !is_object($model)) || (is_string($model) && !class_exists($model))) {
+                    continue;
+                }
+                
+                // Validar que la tabla existe en la base de datos
+                try {
+                    $tableName = (new $model)->getTable();
+                    if (!Schema::hasTable($tableName)) {
+                        continue;
+                    }
+                } catch (\Exception $e) {
+                    continue;
+                }
+                
+                // Para CIERRES: solo contar cierres de tipo administrador (tipo_cierre = 1)
+                if ($key === 'cierres') {
+                    $total = $model::where('tipo_cierre', 1)->count();
+                    $pendientes = $model::where('tipo_cierre', 1)->where($campoSync, 0)->count();
+                } else {
+                    $total = $model::count();
+                    $pendientes = $model::where($campoSync, 0)->count();
+                }
                 $sincronizados = $total - $pendientes;
                 
                 $status[$key] = [
@@ -158,7 +180,28 @@ class SyncProgressController extends Controller
         foreach ($tables as $key => $config) {
             $model = $config['model'];
             $campoSync = $config['campo_sync'] ?? 'sincronizado';
-            $pendientes = $model::where($campoSync, 0)->count();
+            
+            // Validar que el modelo existe y es válido
+            if (is_null($model) || (!is_string($model) && !is_object($model)) || (is_string($model) && !class_exists($model))) {
+                continue;
+            }
+            
+            // Validar que la tabla existe en la base de datos
+            try {
+                $tableName = (new $model)->getTable();
+                if (!Schema::hasTable($tableName)) {
+                    continue;
+                }
+            } catch (\Exception $e) {
+                continue;
+            }
+            
+            // Para CIERRES: solo contar cierres de tipo administrador (tipo_cierre = 1)
+            if ($key === 'cierres') {
+                $pendientes = $model::where('tipo_cierre', 1)->where($campoSync, 0)->count();
+            } else {
+                $pendientes = $model::where($campoSync, 0)->count();
+            }
             $pendientesTotales += $pendientes;
             
             if ($pendientes > 0) {
@@ -201,7 +244,28 @@ class SyncProgressController extends Controller
         foreach ($tables as $key => $config) {
             $model = $config['model'];
             $campoSync = $config['campo_sync'] ?? 'sincronizado';
-            $sincronizados = $model::where($campoSync, 1)->count();
+            
+            // Validar que el modelo existe y es válido
+            if (is_null($model) || (!is_string($model) && !is_object($model)) || (is_string($model) && !class_exists($model))) {
+                continue;
+            }
+            
+            // Validar que la tabla existe en la base de datos
+            try {
+                $tableName = (new $model)->getTable();
+                if (!Schema::hasTable($tableName)) {
+                    continue;
+                }
+            } catch (\Exception $e) {
+                continue;
+            }
+            
+            // Para CIERRES: solo contar cierres de tipo administrador (tipo_cierre = 1)
+            if ($key === 'cierres') {
+                $sincronizados = $model::where('tipo_cierre', 1)->where($campoSync, 1)->count();
+            } else {
+                $sincronizados = $model::where($campoSync, 1)->count();
+            }
             $totalSincronizados += $sincronizados;
         }
         
@@ -254,24 +318,47 @@ class SyncProgressController extends Controller
             $campoSync = $config['campo_sync'] ?? 'sincronizado';
             $campoFecha = $config['campo_fecha'] ?? 'created_at';
             
+            // Validar que el modelo existe y es válido
+            if (is_null($model)) {
+                continue;
+            }
+            
+            if (!is_string($model) && !is_object($model)) {
+                continue;
+            }
+            
+            if (is_string($model) && !class_exists($model)) {
+                continue;
+            }
+            
+            // Validar que la tabla existe en la base de datos
             try {
+                $tableName = (new $model)->getTable();
+                if (!Schema::hasTable($tableName)) {
+                    continue;
+                }
+            } catch (\Exception $e) {
+                continue;
+            }
+            
+            try {
+                // Para CIERRES: solo procesar cierres de tipo administrador (tipo_cierre = 1)
+                $queryAntiguos = $model::where($campoSync, 0)->where($campoFecha, '<', $fechaCorte);
+                if ($key === 'cierres') {
+                    $queryAntiguos->where('tipo_cierre', 1);
+                }
+                
                 // Contar registros antiguos no sincronizados
-                $antiguosNoSync = $model::where($campoSync, 0)
-                    ->where($campoFecha, '<', $fechaCorte)
-                    ->count();
+                $antiguosNoSync = $queryAntiguos->count();
                 
                 if ($antiguosNoSync > 0) {
                     // Marcar como sincronizados
-                    $actualizados = $model::where($campoSync, 0)
-                        ->where($campoFecha, '<', $fechaCorte)
-                        ->update([$campoSync => 1]);
+                    $actualizados = $queryAntiguos->update([$campoSync => 1]);
                     
                     $resultados[$key] = [
                         'tabla' => $config['nombre'],
                         'marcados' => $actualizados,
                     ];
-                    
-                    Log::info("  [{$key}] Marcados {$actualizados} registros antiguos");
                 } else {
                     $resultados[$key] = [
                         'tabla' => $config['nombre'],
@@ -279,7 +366,6 @@ class SyncProgressController extends Controller
                     ];
                 }
             } catch (\Exception $e) {
-                Log::error("  [{$key}] Error: " . $e->getMessage());
                 $resultados[$key] = [
                     'tabla' => $config['nombre'],
                     'error' => $e->getMessage(),
@@ -317,10 +403,28 @@ class SyncProgressController extends Controller
             $campoSync = $config['campo_sync'] ?? 'sincronizado';
             $campoFecha = $config['campo_fecha'] ?? 'created_at';
             
+            // Validar que el modelo existe y no es null
+            if (is_null($model)) {
+                continue;
+            }
+            
+            // Validar que el modelo es una clase válida
+            if (!is_string($model) && !is_object($model)) {
+                continue;
+            }
+            
+            // Validar que la clase existe
+            if (is_string($model) && !class_exists($model)) {
+                continue;
+            }
+            
             try {
-                $pendientesAntiguos += $model::where($campoSync, 0)
-                    ->where($campoFecha, '<', $fechaCorte)
-                    ->count();
+                // Para CIERRES: solo contar cierres de tipo administrador (tipo_cierre = 1)
+                $queryPendientes = $model::where($campoSync, 0)->where($campoFecha, '<', $fechaCorte);
+                if ($key === 'cierres') {
+                    $queryPendientes->where('tipo_cierre', 1);
+                }
+                $pendientesAntiguos += $queryPendientes->count();
             } catch (\Exception $e) {
                 // Ignorar errores
             }
@@ -380,7 +484,8 @@ class SyncProgressController extends Controller
                 'campo_fecha' => 'created_at',
                 // TODOS los campos del pago
                 'campos' => ['id', 'tipo', 'monto', 'monto_original', 'moneda', 'referencia',
-                            'cuenta', 'id_pedido', 'created_at', 'updated_at'],
+                            'cuenta', 'id_pedido', 'pos_message', 'pos_lote', 'pos_responsecode',
+                            'pos_amount', 'pos_terminal', 'pos_json_response', 'created_at', 'updated_at'],
             ],
             'items_pedidos' => [
                 'nombre' => 'Items de Pedidos (Estadísticas)',
@@ -428,8 +533,14 @@ class SyncProgressController extends Controller
                     'efecadiccajafbs', 'efecadiccajafcop', 'efecadiccajafdolar', 'efecadiccajafeuro',
                     // Biopago
                     'biopagoserial', 'biopagoserialmontobs',
+                    // Puntos
+                    'puntolote1', 'puntolote1montobs', 'puntolote2', 'puntolote2montobs',
+                    // Vueltos
+                    'vueltostotales',
                     // Descuadre
                     'descuadre',
+                    // Campos digitales
+                    'debito_digital', 'efectivo_digital', 'transferencia_digital', 'biopago_digital',
                     // Control
                     'push', 'created_at', 'updated_at'
                 ],
@@ -484,22 +595,24 @@ class SyncProgressController extends Controller
                     ];
                 },
             ],
-            'cajas' => [
-                'nombre' => 'Cajas',
-                'model' => cajas::class,
-                'tabla_destino' => 'cajas',
-                'orden' => 8,
-                'grupo' => 'tercero',
-                'campo_sync' => 'push',
-                'campo_fecha' => 'fecha',
-                // TODOS los campos
-                'campos' => ['id', 'concepto', 'categoria', 'montodolar', 'dolarbalance', 
-                            'montobs', 'bsbalance', 'montopeso', 'pesobalance', 
-                            'montoeuro', 'eurobalance', 'estatus', 'id_sucursal_destino',
-                            'id_sucursal_emisora', 'idincentralrecepcion', 'sucursal_destino_aprobacion',
-                            'id_beneficiario', 'id_departamento', 'fecha', 'tipo', 
-                            'created_at', 'updated_at'],
-            ],
+            // 'cajas' => [
+            //     'nombre' => 'Cajas',
+            //     'model' => cajas::class,
+            //     'tabla_destino' => 'cajas',
+            //     'orden' => 8,
+            //     'grupo' => 'tercero',
+            //     'campo_sync' => 'push',
+            //     'campo_fecha' => 'fecha',
+            //     // TODOS los campos
+            //     'campos' => ['id', 'concepto', 'categoria', 'montodolar', 'dolarbalance', 
+            //                 'montobs', 'bsbalance', 'montopeso', 'pesobalance', 
+            //                 'montoeuro', 'eurobalance', 'estatus', 'id_sucursal_destino',
+            //                 'id_sucursal_emisora', 'idincentralrecepcion', 'sucursal_destino_aprobacion',
+            //                 'id_beneficiario', 'id_departamento', 'fecha', 'tipo', 
+            //                 'created_at', 'updated_at'],
+            // ],
+            // NOTA: La tabla 'cajas' fue eliminada en arabitofacturacion.
+            // Los movimientos de caja ahora se crean en arabitocentral desde el efectivo_guardado del cierre.
             'movimientos_inventariounitarios' => [
                 'nombre' => 'Movimientos Inventario',
                 'model' => movimientosinventariounitario::class,
@@ -682,6 +795,16 @@ class SyncProgressController extends Controller
                     $campoSync = $tablaConfig['campo_sync'] ?? 'sincronizado';
                     $campoFecha = $tablaConfig['campo_fecha'] ?? 'created_at';
                     
+                    // Validar que la tabla existe en la base de datos
+                    try {
+                        $tableName = (new $model)->getTable();
+                        if (!Schema::hasTable($tableName)) {
+                            continue;
+                        }
+                    } catch (\Exception $e) {
+                        continue;
+                    }
+                    
                     $query = $model::query();
                     
                     // Para INVENTARIOS: contar TODO sin ningún filtro
@@ -693,6 +816,11 @@ class SyncProgressController extends Controller
                             $query->where($campoSync, 0);
                         }
                         $query->where($campoFecha, '>=', $fechaInicio);
+                        
+                        // Para CIERRES: solo contar cierres de tipo administrador (tipo_cierre = 1)
+                        if ($tabla === 'cierres') {
+                            $query->where('tipo_cierre', 1);
+                        }
                     }
                     
                     $count = $query->count();
@@ -787,6 +915,19 @@ class SyncProgressController extends Controller
         $campoFecha = $config['campo_fecha'] ?? 'created_at';
         
         // Construir query base
+        // Validar que la tabla existe en la base de datos
+        try {
+            $tableName = (new $model)->getTable();
+            if (!Schema::hasTable($tableName)) {
+                throw new \Exception("La tabla '{$tableName}' no existe en la base de datos");
+            }
+        } catch (\Exception $e) {
+            if (strpos($e->getMessage(), 'no existe') !== false) {
+                throw $e;
+            }
+            throw new \Exception("Error validando tabla: " . $e->getMessage());
+        }
+        
         $query = $model::query();
         
         Log::info(">>> sincronizarTabla() - nombreTabla: {$nombreTabla}, soloNuevos: " . ($soloNuevos ? 'true' : 'false'));
@@ -804,6 +945,12 @@ class SyncProgressController extends Controller
             $fechaInicio = $this->getFechaInicioSync();
             $query->where($campoFecha, '>=', $fechaInicio);
             Log::info("    [{$nombreTabla}] Filtrando desde: {$fechaInicio}");
+            
+            // Para CIERRES: solo sincronizar cierres de tipo administrador (tipo_cierre = 1)
+            if ($nombreTabla === 'cierres') {
+                $query->where('tipo_cierre', 1);
+                Log::info("    [{$nombreTabla}] Filtrando solo cierres tipo administrador (tipo_cierre = 1)");
+            }
         }
         
         $total = $query->count();
@@ -822,8 +969,129 @@ class SyncProgressController extends Controller
             // Si hay función de transformación, aplicarla
             $transformar = $config['transformar'] ?? null;
             
-            $data = $registros->map(function($r, $index) use ($config, $transformar) {
-                $registro = $r->only($config['campos']);
+            $data = $registros->map(function($r, $index) use ($config, $transformar, $nombreTabla) {
+                // Obtener todos los campos requeridos, asegurando que se incluyan incluso si son null o 0
+                $registro = [];
+                $atributos = array_merge(
+                    $r->getAttributes(),  // Atributos en $fillable
+                    $r->getOriginal()    // Valores originales de la BD
+                );
+                
+                // Log para cierres y campos digitales
+                $esCierre = ($nombreTabla === 'cierres');
+                if ($esCierre && $index === 0) {
+                    Log::info("SYNCPROGRESS - Procesando cierre ID: " . ($r->id ?? 'N/A'));
+                    Log::info("SYNCPROGRESS - debito_digital en getAttributes: " . var_export($r->getAttributes()['debito_digital'] ?? 'NO EXISTE', true));
+                    Log::info("SYNCPROGRESS - efectivo_digital en getAttributes: " . var_export($r->getAttributes()['efectivo_digital'] ?? 'NO EXISTE', true));
+                    Log::info("SYNCPROGRESS - transferencia_digital en getAttributes: " . var_export($r->getAttributes()['transferencia_digital'] ?? 'NO EXISTE', true));
+                    Log::info("SYNCPROGRESS - debito_digital en getOriginal: " . var_export($r->getOriginal()['debito_digital'] ?? 'NO EXISTE', true));
+                    Log::info("SYNCPROGRESS - efectivo_digital en getOriginal: " . var_export($r->getOriginal()['efectivo_digital'] ?? 'NO EXISTE', true));
+                    Log::info("SYNCPROGRESS - transferencia_digital en getOriginal: " . var_export($r->getOriginal()['transferencia_digital'] ?? 'NO EXISTE', true));
+                    Log::info("SYNCPROGRESS - debito_digital desde getAttribute: " . var_export($r->getAttribute('debito_digital'), true));
+                    Log::info("SYNCPROGRESS - efectivo_digital desde getAttribute: " . var_export($r->getAttribute('efectivo_digital'), true));
+                    Log::info("SYNCPROGRESS - transferencia_digital desde getAttribute: " . var_export($r->getAttribute('transferencia_digital'), true));
+                }
+                
+                // Log para pago_pedidos y monto_original
+                $esPagoPedidos = ($nombreTabla === 'pago_pedidos');
+                if ($esPagoPedidos && $index === 0) {
+                    Log::info("SYNCPROGRESS - Procesando pago_pedidos ID: " . ($r->id ?? 'N/A'));
+                    Log::info("SYNCPROGRESS - monto_original en getAttributes: " . var_export($r->getAttributes()['monto_original'] ?? 'NO EXISTE', true));
+                    Log::info("SYNCPROGRESS - monto_original en getOriginal: " . var_export($r->getOriginal()['monto_original'] ?? 'NO EXISTE', true));
+                    Log::info("SYNCPROGRESS - monto_original desde getAttribute: " . var_export($r->getAttribute('monto_original'), true));
+                    Log::info("SYNCPROGRESS - monto en getAttributes: " . var_export($r->getAttributes()['monto'] ?? 'NO EXISTE', true));
+                }
+                
+                foreach ($config['campos'] as $campo) {
+                    // Intentar obtener desde atributos primero
+                    if (array_key_exists($campo, $atributos)) {
+                        $registro[$campo] = $atributos[$campo];
+                    } else {
+                        // Si no está en atributos, intentar obtenerlo directamente del modelo
+                        $valor = $r->getAttribute($campo);
+                        $registro[$campo] = $valor !== null ? $valor : null;
+                    }
+                }
+                
+                // Log para cierres después de procesar
+                if ($esCierre && $index === 0) {
+                    Log::info("SYNCPROGRESS - debito_digital en registro final: " . var_export($registro['debito_digital'] ?? 'NO EXISTE', true));
+                    Log::info("SYNCPROGRESS - efectivo_digital en registro final: " . var_export($registro['efectivo_digital'] ?? 'NO EXISTE', true));
+                    Log::info("SYNCPROGRESS - transferencia_digital en registro final: " . var_export($registro['transferencia_digital'] ?? 'NO EXISTE', true));
+                }
+                
+                // Log para pago_pedidos después de procesar
+                if ($esPagoPedidos && $index === 0) {
+                    Log::info("SYNCPROGRESS - monto_original en registro final: " . var_export($registro['monto_original'] ?? 'NO EXISTE', true));
+                    Log::info("SYNCPROGRESS - monto en registro final: " . var_export($registro['monto'] ?? 'NO EXISTE', true));
+                }
+                
+                // Para CIERRES: extraer lotes de métodos de pago y anclarlos al cierre
+                if ($esCierre) {
+                    $lotes = [];
+                    
+                    // Cargar métodos de pago del cierre
+                    $r->load('metodosPago');
+                    $today = $r->fecha;
+                    
+                    Log::info("SYNCPROGRESS - Cierre ID: {$r->id}, Total métodos de pago: " . count($r->metodosPago));
+                    
+                    // Extraer lotes desde CierresMetodosPago con subtipo 'otros_puntos' y 'pinpad'
+                    foreach ($r->metodosPago as $metodo_pago) {
+                        $metadatos = is_string($metodo_pago->metadatos) 
+                            ? json_decode($metodo_pago->metadatos, true) 
+                            : $metodo_pago->metadatos;
+                        
+                        Log::info("SYNCPROGRESS - Método de pago ID: {$metodo_pago->id}, Subtipo: {$metodo_pago->subtipo}");
+                        
+                        if ($metodo_pago->subtipo == 'pinpad') {
+                            // Procesar lotes pinpad
+                            $lotes_pinpad = $metadatos['lotes'] ?? [];
+                            Log::info("SYNCPROGRESS - Lotes PINPAD encontrados: " . count($lotes_pinpad));
+                            foreach ($lotes_pinpad as $loteIndex => $lote) {
+                                $loteData = [
+                                    "idinsucursal" => "PINPAD-".$r->id."-".$loteIndex,
+                                    "monto" => floatval($lote['monto_bs'] ?? $lote['monto'] ?? 0),
+                                    "banco" => $lote['banco_nombre'] ?? $lote['banco'] ?? '',
+                                    "loteserial" => $lote['terminal'] ?? $lote['lote'] ?? '',
+                                    "fecha" => $today,
+                                    "id_usuario" => $r->id_usuario,
+                                    "categoria" => 1,
+                                    "tipo" => "PINPAD",
+                                    "debito_credito" => null,
+                                    "origen" => 1,
+                                ];
+                                array_push($lotes, $loteData);
+                                Log::info("SYNCPROGRESS - Lote PINPAD agregado: " . json_encode($loteData));
+                            }
+                        } else if ($metodo_pago->subtipo == 'otros_puntos') {
+                            // Procesar otros puntos
+                            $puntos = $metadatos['puntos'] ?? [];
+                            Log::info("SYNCPROGRESS - Puntos encontrados: " . count($puntos));
+                            foreach ($puntos as $puntoIndex => $punto) {
+                                $puntoData = [
+                                    "idinsucursal" => "PUNTO-".$r->id."-".$puntoIndex,
+                                    "monto" => floatval($punto['monto_real'] ?? $punto['monto'] ?? 0),
+                                    "banco" => $punto['banco'] ?? '',
+                                    "loteserial" => $punto['descripcion'] ?? $punto['lote'] ?? '',
+                                    "fecha" => $punto['fecha'] ?? $today,
+                                    "id_usuario" => $punto['id_usuario'] ?? $r->id_usuario,
+                                    "categoria" => 1,
+                                    "tipo" => "PUNTO X",
+                                    "debito_credito" => null,
+                                    "origen" => 1,
+                                ];
+                                array_push($lotes, $puntoData);
+                                Log::info("SYNCPROGRESS - Punto agregado: " . json_encode($puntoData));
+                            }
+                        }
+                    }
+                    
+                    Log::info("SYNCPROGRESS - Total lotes generados para cierre {$r->id}: " . count($lotes));
+                    
+                    // Anclar lotes al registro del cierre
+                    $registro['lotes'] = $lotes;
+                }
                 
                 // Aplicar transformación si existe (para puntosybiopagos)
                 if ($transformar && is_callable($transformar)) {
@@ -1202,13 +1470,14 @@ class SyncProgressController extends Controller
         
         $tablaConfig = $config[$tabla];
         $campoSync = $tablaConfig['campo_sync'] ?? 'sincronizado';
+        $campoFecha = $tablaConfig['campo_fecha'] ?? 'created_at';
         $model = $tablaConfig['model'];
         $query = $model::query();
         
         if ($desde && $hasta) {
             // Si son fechas
             if (strtotime($desde)) {
-                $query->whereBetween('created_at', [$desde, $hasta]);
+                $query->whereBetween($campoFecha, [$desde, $hasta]);
             } else {
                 // Si son IDs
                 $query->whereBetween('id', [$desde, $hasta]);
@@ -1225,6 +1494,118 @@ class SyncProgressController extends Controller
         return Response::json([
             'estado' => true,
             'registros_actualizados' => $actualizados,
+        ]);
+    }
+    
+    /**
+     * Desmarcar registros como sincronizados (marcar como no sincronizados)
+     * Útil para re-sincronizar registros de un día específico
+     * Si no se proporciona 'tabla', procesa todas las tablas
+     */
+    public function desmarcarSincronizados(Request $request)
+    {
+        $tabla = $request->input('tabla'); // Opcional: si no se proporciona, procesa todas
+        $fecha = $request->input('fecha'); // Fecha específica (formato: Y-m-d)
+        $desde = $request->input('desde'); // fecha o ID (opcional, para rango)
+        $hasta = $request->input('hasta'); // fecha o ID (opcional, para rango)
+        
+        if (!$fecha && !$desde && !$hasta) {
+            return Response::json([
+                'estado' => false,
+                'mensaje' => 'Debe proporcionar una fecha o un rango (desde/hasta)',
+            ], 400);
+        }
+        
+        $config = $this->getTablesConfig();
+        $resultados = [];
+        $totalActualizados = 0;
+        
+        // Si se proporciona tabla, procesar solo esa. Si no, procesar todas
+        $tablasAProcesar = $tabla ? [$tabla => $config[$tabla]] : $config;
+        
+        foreach ($tablasAProcesar as $key => $tablaConfig) {
+            // Validar que el modelo existe y es válido
+            if (is_null($tablaConfig['model']) || 
+                (!is_string($tablaConfig['model']) && !is_object($tablaConfig['model'])) || 
+                (is_string($tablaConfig['model']) && !class_exists($tablaConfig['model']))) {
+                continue;
+            }
+            
+            // Validar que la tabla existe en la base de datos
+            try {
+                $tableName = (new $tablaConfig['model'])->getTable();
+                if (!Schema::hasTable($tableName)) {
+                    continue;
+                }
+            } catch (\Exception $e) {
+                continue;
+            }
+            
+            try {
+                $campoSync = $tablaConfig['campo_sync'] ?? 'sincronizado';
+                $campoFecha = $tablaConfig['campo_fecha'] ?? 'created_at';
+                $model = $tablaConfig['model'];
+                $query = $model::query();
+                
+                // Si se proporciona una fecha específica, usar esa
+                if ($fecha) {
+                    // Para cierres, usar campo 'fecha', para otros usar 'created_at' o el campo configurado
+                    if ($key === 'cierres') {
+                        $query->where('fecha', $fecha);
+                        // Para cierres, también filtrar solo tipo administrador
+                        $query->where('tipo_cierre', 1);
+                    } else {
+                        $query->whereDate($campoFecha, $fecha);
+                    }
+                } elseif ($desde && $hasta) {
+                    // Si son fechas
+                    if (strtotime($desde)) {
+                        if ($key === 'cierres') {
+                            $query->whereBetween('fecha', [$desde, $hasta])
+                                  ->where('tipo_cierre', 1);
+                        } else {
+                            $query->whereBetween($campoFecha, [$desde, $hasta]);
+                        }
+                    } else {
+                        // Si son IDs
+                        $query->whereBetween('id', [$desde, $hasta]);
+                    }
+                }
+                
+                $updateData = [$campoSync => 0];
+                if ($campoSync !== 'push') {
+                    $updateData['sincronizado_at'] = null;
+                }
+                
+                $actualizados = $query->update($updateData);
+                $totalActualizados += $actualizados;
+                
+                $resultados[$key] = [
+                    'tabla' => $tablaConfig['nombre'],
+                    'registros_actualizados' => $actualizados,
+                ];
+                
+                Log::info("Desmarcados {$actualizados} registros de {$key} para fecha " . ($fecha ?? "rango {$desde} - {$hasta}"));
+                
+            } catch (\Exception $e) {
+                $resultados[$key] = [
+                    'tabla' => $tablaConfig['nombre'],
+                    'error' => $e->getMessage(),
+                ];
+                Log::error("Error desmarcando {$key}: " . $e->getMessage());
+            }
+        }
+        
+        $mensaje = $tabla 
+            ? "Se desmarcaron {$totalActualizados} registros de {$tabla}"
+            : "Se desmarcaron {$totalActualizados} registros en " . count($resultados) . " tablas";
+        
+        return Response::json([
+            'estado' => true,
+            'mensaje' => $mensaje,
+            'total_actualizados' => $totalActualizados,
+            'fecha' => $fecha ?? "rango {$desde} - {$hasta}",
+            'detalle' => $resultados,
         ]);
     }
 }
