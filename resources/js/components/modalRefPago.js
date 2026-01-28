@@ -431,6 +431,10 @@ export default function ModalRefPago({
         }
     }, [montoTraido]);
 
+    // Datos del pedido a validar (para mostrar en el modal)
+    const totalBs = parseFloat(pedidoData?.bs_clean ?? pedidoData?.bs ?? 0) || 0;
+    const itemsPedido = pedidoData?.items ?? [];
+
     return (
         <>
             {/* Overlay sutil que no bloquea la vista */}
@@ -439,26 +443,26 @@ export default function ModalRefPago({
                 onClick={handleClose}
             ></div>
 
-            {/* Modal flotante posicionado */}
-            <div className="fixed z-50 w-full max-w-2xl overflow-y-auto max-h-[90vh] transform -translate-x-1/2 -translate-y-1/2 bg-white border border-gray-200 rounded-lg shadow-xl top-1/2 left-1/2">
+            {/* Modal full alto y full ancho */}
+            <div className="fixed inset-0 z-50 flex flex-col w-full h-full bg-white border border-gray-200 shadow-xl">
                 {/* Header compacto */}
-                <div className="px-4 py-3 border-b border-orange-100 bg-orange-50">
-                    <div className="flex items-center justify-between">
+                <div className="flex-shrink-0 px-3 py-2 border-b border-orange-100 bg-orange-50">
+                    <div className="flex items-center justify-between gap-2">
                         <h3 className="flex items-center text-sm font-semibold text-gray-800">
-                            <i className="mr-2 text-xs text-orange-500 fa fa-credit-card"></i>
+                            <i className="mr-1.5 text-orange-500 fa fa-credit-card text-xs"></i>
                             Referencia de Pago
                         </h3>
                         <button
                             onClick={handleClose}
-                            className="p-1 text-gray-400 transition-colors rounded hover:text-gray-600 hover:bg-gray-100"
+                            className="flex items-center justify-center w-10 h-10 text-lg font-bold text-gray-600 transition-colors rounded-full hover:text-gray-800 hover:bg-orange-200 border-2 border-orange-300 bg-white shadow-sm flex-shrink-0"
                             title="Cerrar (ESC)"
                         >
-                            <i className="text-xs fa fa-times"></i>
+                            <i className="fa fa-times"></i>
                         </button>
                     </div>
 
                     {/* Selector de módulos */}
-                    <div className="flex flex-wrap gap-1 mt-3">
+                    <div className="flex flex-wrap gap-1 mt-2">
                         {MODULOS.map((modulo) => (
                             <button
                                 key={modulo.id}
@@ -477,8 +481,36 @@ export default function ModalRefPago({
                     </div>
                 </div>
 
-                {/* Body compacto */}
-                <form onSubmit={handleSubmit} className="p-4 space-y-3">
+                {/* Contenido con scroll: pedido a validar + formulario */}
+                <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
+                    {/* Sección: Pedido a validar (lineal) */}
+                    {pedidoData && (
+                        <div className="flex-shrink-0 mx-4 mt-3 py-2 px-3 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                            <span className="flex items-center text-gray-700 font-medium">
+                                <i className="fa fa-shopping-cart mr-1.5 text-orange-500 text-xs"></i>
+                                Pedido a validar
+                            </span>
+                            <span className="text-gray-600">#<strong>{pedidoData.id}</strong></span>
+                            <span className="text-gray-600">Total: <strong>Bs {totalBs.toFixed(2)}</strong></span>
+                            {sumaReferencias > 0 && (
+                                <span className="text-orange-600 text-xs">Cargado: Bs {sumaReferencias.toFixed(2)}</span>
+                            )}
+                            {itemsPedido.length > 0 && (
+                                <span className="text-gray-500 text-xs truncate max-w-full overflow-hidden" title={itemsPedido.map(i => `${i.producto?.nombre ?? i.nombre ?? 'Item'} × ${i.cantidad ?? ''}`).join(', ')}>
+                                    · {itemsPedido.map((item, idx) => (
+                                        <span key={idx}>
+                                            {idx > 0 && ', '}
+                                            {item.producto?.nombre ?? item.nombre ?? `Item ${idx + 1}`}
+                                            {item.cantidad != null && `×${item.cantidad}`}
+                                        </span>
+                                    ))}
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                {/* Body del formulario */}
+                <form onSubmit={handleSubmit} className="p-4 space-y-3 flex-1">
                     {/* Cédula - Solo para módulo Central */}
                     {moduloSeleccionado === 'Central' && (
                         <div>
@@ -913,6 +945,7 @@ export default function ModalRefPago({
                         )}
                     </div>
                 </form>
+                </div>
             </div>
         </>
     );

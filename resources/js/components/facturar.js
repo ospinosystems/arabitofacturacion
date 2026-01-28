@@ -450,6 +450,7 @@ export default function Facturar({
 
     const [pedidosCentral, setpedidoCentral] = useState([]);
     const [indexPedidoCentral, setIndexPedidoCentral] = useState(null);
+    const [savingPedidoVerificado, setSavingPedidoVerificado] = useState(false);
 
     const [showaddpedidocentral, setshowaddpedidocentral] = useState(false);
     const [permisoExecuteEnter, setpermisoExecuteEnter] = useState(true);
@@ -4066,10 +4067,11 @@ export default function Facturar({
         // Convertir monto: 12.36 -> 1236 (sin decimales, multiplicado por 100)
         const montoEntero = Math.round(montoActual * 100);
         
-        // Construir numeroOrden con formato: codigoSucursal-usuario-pedidoId
+        // Construir numeroOrden: codigoSucursal-usuario-pedidoId-montoSinDecimal-indiceDebito (0, 1, 2...)
         const codigoSucursal = sucursaldata?.codigo || "SUC";
         const nombreUsuario = user?.usuario || user?.nombre || "user";
-        const numeroOrdenCompleto = `${codigoSucursal}-${nombreUsuario}-${pedidoData.id}`;
+        const indiceDebito = posTransaccionesAprobadas.length;
+        const numeroOrdenCompleto = `${codigoSucursal}-${nombreUsuario}-${pedidoData.id}-${montoEntero}-${indiceDebito}`;
         
         const payload = {
             operacion: "COMPRA",
@@ -6192,13 +6194,14 @@ export default function Facturar({
     const checkPedidosCentral = () => {
         if (indexPedidoCentral !== null && pedidosCentral) {
             if (pedidosCentral[indexPedidoCentral]) {
+                setSavingPedidoVerificado(true);
                 setLoading(true);
                 db.checkPedidosCentral({
                     pathcentral,
                     pedido: pedidosCentral[indexPedidoCentral],
                 }).then((res) => {
                     setLoading(false);
-
+                    setSavingPedidoVerificado(false);
                     notificar(res, false);
                     if (res.data.estado) {
                         getPedidosCentral();
@@ -6206,7 +6209,6 @@ export default function Facturar({
                     if (res.data.proceso === "enrevision") {
                         getPedidosCentral();
                     }
-
                     if (res.data) {
                         if (res.data.estado === false) {
                             if (res.data.id_item) {
@@ -6214,6 +6216,9 @@ export default function Facturar({
                             }
                         }
                     }
+                }).catch(() => {
+                    setLoading(false);
+                    setSavingPedidoVerificado(false);
                 });
             }
         }
@@ -7310,6 +7315,7 @@ export default function Facturar({
                             getPedidosCentral={getPedidosCentral}
                             selectPedidosCentral={selectPedidosCentral}
                             checkPedidosCentral={checkPedidosCentral}
+                            savingPedidoVerificado={savingPedidoVerificado}
                             removeVinculoCentral={removeVinculoCentral}
                             setinventarioModifiedCentralImport={
                                 setinventarioModifiedCentralImport
