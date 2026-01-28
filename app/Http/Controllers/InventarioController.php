@@ -1678,24 +1678,31 @@ class InventarioController extends Controller
                 }
             }
 
+            // Respetar id original: si no existe por id, marcar push=1
             
-            // Buscar con lock y actualizar/crear
-            if ($req_id) {
-                $insertOrUpdateInv = inventario::where('id', $req_id)->lockForUpdate()->first();
-            } else {
-                $insertOrUpdateInv = null;
-            }
 
-            if ($insertOrUpdateInv) {
-                // Actualizar registro existente
-                $insertOrUpdateInv->update($arr_produc);
-            } else {
-                // Crear nuevo registro
-                if (!$req_id) {
-                    $arr_produc['push'] = 1;
+            ///////////////////////////////////
+                if ($req_id) {
+                    $existeInventario = inventario::find($req_id);
+                    if (!$existeInventario) {
+                        $arr_produc['push'] = 1;
+                    }
                 }
-                $insertOrUpdateInv = inventario::create($arr_produc);
-            }
+                
+                $insertOrUpdateInv = $req_id ? inventario::where('id', $req_id)->lockForUpdate()->first() : null;
+                if ($insertOrUpdateInv) {
+                    $insertOrUpdateInv->update($arr_produc);
+                } else {
+                    if ($req_id) {
+                        $arr_produc['id'] = $req_id;
+                    }
+                    $insertOrUpdateInv = inventario::create($arr_produc);
+                }
+            
+            //////////////////////////////////
+
+
+            
 
             $this->insertItemFact($id_factura, $insertOrUpdateInv, $ctInsert, $beforecantidad, $ctNew, $tipo);
             if ($insertOrUpdateInv) {
