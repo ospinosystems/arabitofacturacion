@@ -4122,7 +4122,8 @@ class PedidosController extends Controller
             ->with('metodosPago')
             ->get();
         
-        // Extraer lotes desde metadatos de CierresMetodosPago
+        // Extraer lotes desde metadatos de CierresMetodosPago y construir resumen por banco
+        $resumen_electronicos_por_banco = [];
         foreach ($cierres_del_dia as $cierre_item) {
             foreach ($cierre_item->metodosPago as $metodo_pago) {
                 $metadatos = is_string($metodo_pago->metadatos) 
@@ -4132,24 +4133,49 @@ class PedidosController extends Controller
                 if ($metodo_pago->subtipo == 'pinpad') {
                     $lotes = $metadatos['lotes'] ?? [];
                     foreach ($lotes as $lote) {
+                        $banco = $lote['banco_nombre'] ?? $lote['banco'] ?? '';
+                        $monto_raw = floatval($lote['monto_bs'] ?? $lote['monto'] ?? 0);
                         $lotes_pinpad_guardados[] = [
-                            'banco' => $lote['banco_nombre'] ?? $lote['banco'] ?? '',
+                            'banco' => $banco,
                             'lote' => $lote['terminal'] ?? $lote['lote'] ?? '',
-                            'monto' => number_format(floatval($lote['monto_bs'] ?? $lote['monto'] ?? 0), 2),
+                            'monto' => number_format($monto_raw, 2),
                         ];
+                        $banco_key = $banco ?: 'Sin banco';
+                        if (!isset($resumen_electronicos_por_banco[$banco_key])) {
+                            $resumen_electronicos_por_banco[$banco_key] = ['puntos_venta' => 0, 'pinpad' => 0, 'transferencia' => 0];
+                        }
+                        $resumen_electronicos_por_banco[$banco_key]['pinpad'] += $monto_raw;
                     }
                 } else if ($metodo_pago->subtipo == 'otros_puntos') {
                     $lotes = $metadatos['lotes'] ?? [];
                     foreach ($lotes as $lote) {
+                        $banco = $lote['banco'] ?? '';
+                        $monto_raw = floatval($lote['monto'] ?? 0);
                         $lotes_otros_puntos[] = [
-                            'banco' => $lote['banco'] ?? '',
+                            'banco' => $banco,
                             'lote' => $lote['descripcion'] ?? $lote['lote'] ?? '',
-                            'monto' => number_format(floatval($lote['monto'] ?? 0), 2),
+                            'monto' => number_format($monto_raw, 2),
                         ];
+                        $banco_key = $banco ?: 'Sin banco';
+                        if (!isset($resumen_electronicos_por_banco[$banco_key])) {
+                            $resumen_electronicos_por_banco[$banco_key] = ['puntos_venta' => 0, 'pinpad' => 0, 'transferencia' => 0];
+                        }
+                        $resumen_electronicos_por_banco[$banco_key]['puntos_venta'] += $monto_raw;
                     }
                 }
             }
         }
+        // Sumar transferencias por banco desde referencias (tipo 1 = Transferencia)
+        foreach ($pagos_referencias as $ref) {
+            if (intval($ref->tipo) === 1) {
+                $banco_key = trim($ref->banco) ?: 'Sin banco';
+                if (!isset($resumen_electronicos_por_banco[$banco_key])) {
+                    $resumen_electronicos_por_banco[$banco_key] = ['puntos_venta' => 0, 'pinpad' => 0, 'transferencia' => 0];
+                }
+                $resumen_electronicos_por_banco[$banco_key]['transferencia'] += floatval($ref->monto);
+            }
+        }
+        ksort($resumen_electronicos_por_banco);
         
         // Obtener caja inicial desde cuadre_detallado guardado (valores guardados en cierres)
         $caja_inicial = 0;
@@ -4247,6 +4273,7 @@ class PedidosController extends Controller
         
         $arr_send = [
             "referencias" => $pagos_referencias,
+            "resumen_electronicos_por_banco" => $resumen_electronicos_por_banco,
             "cierre" => $cierre,
             "cierre_tot" => moneda($cierre_tot),
 

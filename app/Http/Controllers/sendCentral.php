@@ -922,6 +922,40 @@ class sendCentral extends Controller
         return sucursal::all()->first()->codigo;
     }
 
+    /**
+     * Consultar en central (Instapago) si existe una transacción aprobada con el mismo OrderNumber y monto.
+     * Se usa cuando enviarTransaccionPOS recibe respuesta negativa del POS.
+     *
+     * @param string $orderNumber numeroOrden enviado al POS
+     * @param float|int $amount monto en decimal (ej. 58.77). Si se recibe entero (centavos), dividir por 100.
+     * @param array|null $posErrorBody respuesta negativa del POS que generó esta confirmación (para registro en central)
+     * @return array|null ['approved' => bool, 'data' => array|null] o null si falla la llamada
+     */
+    public function queryTransaccionPosCentral($orderNumber, $amount, $posErrorBody = null)
+    {
+        $codigoOrigen = $this->getOrigen();
+        try {
+            $payload = [
+                'codigo_sucursal' => $codigoOrigen,
+                'order_number' => $orderNumber,
+                'amount' => $amount,
+            ];
+            if ($posErrorBody !== null) {
+                $payload['pos_error_body'] = is_array($posErrorBody) ? $posErrorBody : ['raw' => $posErrorBody];
+            }
+            $response = Http::timeout(30)->post($this->path() . '/pos/query-transaction', $payload);
+            if ($response->ok() && $response->json()) {
+                $json = $response->json();
+                return [
+                    'approved' => (bool) ($json['approved'] ?? false),
+                    'data' => $json['data'] ?? null,
+                ];
+            }
+        } catch (\Exception $e) {
+            \Log::warning('queryTransaccionPosCentral exception: ' . $e->getMessage());
+        }
+        return null;
+    }
 
     public function getSucursales()
     {
@@ -4550,7 +4584,7 @@ class sendCentral extends Controller
             \Artisan::call('backup:run');
             \Log::info('    Backup completado');
             
-            \Log::info('    Actualizando IVA...');
+           /*  \Log::info('    Actualizando IVA...');
             \DB::statement("UPDATE `inventarios` SET iva=1");
             \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MACHETE%'");
             \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'PEINILLA%'");
@@ -4560,7 +4594,7 @@ class sendCentral extends Controller
             \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOSIERRA%'");
             \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'CUCHILLA%'");
             \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'FUMIGADORA%'");
-            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MANGUERA%'");
+            \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MANGUERA%'"); */
             
             \Log::info('=== POST-SYNC COMPLETADO ===');
             return response()->json(['estado' => true, 'msj' => 'Post-procesamiento completado']);
@@ -4571,6 +4605,57 @@ class sendCentral extends Controller
         }
     }
 
+
+    /* public function autoScan($port = 9001) {
+            // 1. Obtener la IP local del servidor (ej. 192.168.0.123)
+        $serverIp = gethostbyname(gethostname());
+        
+        // Validar que no estemos en localhost (127.0.0.1)
+        if (strpos($serverIp, '127.') === 0) {
+            // Intento alternativo para sistemas Linux/Cloud
+            $serverIp = exec("hostname -I | cut -d' ' -f1");
+        }
+
+        $ipParts = explode('.', trim($serverIp));
+        if (count($ipParts) !== 4) {
+            return ['error' => 'No se pudo determinar la subred local.'];
+        }
+
+        // 2. Construir la subred (ej. 192.168.0)
+        $subnet = $ipParts[0] . '.' . $ipParts[1] . '.' . $ipParts[2];
+        $foundDevices = [];
+
+        // 3. Barrido de red (Escaneo)
+        // NOTA: Usamos un timeout de 1.5s debido a la latencia que reportaste
+        $timeout = 1.5; 
+
+        for ($i = 1; $i <= 254; $i++) {
+            $ipToScan = $subnet . '.' . $i;
+
+            // Omitir la propia IP del servidor para ganar tiempo
+            if ($ipToScan === $serverIp) continue;
+
+            $fp = @fsockopen($ipToScan, $port, $errno, $errstr, $timeout);
+
+            if ($fp) {
+                $foundDevices[] = [
+                    'ip' => $ipToScan,
+                    'port' => $port,
+                    'name' => "Terminal en $ipToScan"
+                ];
+                fclose($fp);
+                
+                // Si solo esperas una terminal, puedes usar 'break' para detener el bucle aquí
+                // break; 
+            }
+        }
+
+        return [
+            'subnet_scanned' => $subnet . '.0/24',
+            'server_ip' => $serverIp,
+            'devices' => $foundDevices
+        ];
+    } */
     /**
      * Enviar transacción al POS físico de débito
      */
@@ -4607,11 +4692,29 @@ class sendCentral extends Controller
                     'Accept' => 'application/json',
                 ])
                 ->post($posUrl, $payload);
-            
+
+            $data = $response->json() ?? $response->body();
+            $posSuccess = $response->successful() && (is_array($data) ? ($data['success'] ?? false) : false);
+
+            if (!$posSuccess) {
+                // Respuesta negativa del POS: consultar en central (Instapago) si hay transacción aprobada con mismo OrderNumber y monto
+                $numeroOrden = $request->input('numeroOrden');
+                $montoCents = (int) $request->input('monto', 0);
+                $amountDecimal = $montoCents / 100.0;
+                $posErrorBody = is_array($data) ? $data : ['raw' => $data];
+                $centralResult = $this->queryTransaccionPosCentral($numeroOrden, $amountDecimal, $posErrorBody);
+                if ($centralResult && !empty($centralResult['approved']) && !empty($centralResult['data'])) {
+                    return response()->json([
+                        'success' => true,
+                        'data' => $centralResult['data'],
+                    ]);
+                }
+            }
+
             return response()->json([
-                'success' => $response->successful(),
+                'success' => $posSuccess,
                 'status' => $response->status(),
-                'data' => $response->json() ?? $response->body(),
+                'data' => $data,
             ]);
         } catch (\Exception $e) {
             \Log::error('Error POS: ' . $e->getMessage());

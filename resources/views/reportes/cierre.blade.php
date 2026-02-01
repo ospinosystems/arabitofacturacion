@@ -937,6 +937,36 @@
 					</tr>
 				@endforeach
 
+				{{-- Resumen de pagos electrónicos por banco (Puntos de venta, Pinpad, Transferencia) --}}
+				<tr>
+					<th colspan="5" style="background-color: #e3f2fd;">RESUMEN PAGOS ELECTRÓNICOS POR BANCO</th>
+				</tr>
+				<tr class="table-dark">
+					<th>BANCO</th>
+					<th class="text-right">PUNTOS DE VENTA</th>
+					<th class="text-right">PINPAD</th>
+					<th class="text-right">TRANSFERENCIA</th>
+					<th class="text-right">TOTAL BANCO</th>
+				</tr>
+				@if(isset($resumen_electronicos_por_banco) && count($resumen_electronicos_por_banco) > 0)
+					@foreach ($resumen_electronicos_por_banco as $banco_nombre => $totales)
+						@php
+							$total_banco = ($totales['puntos_venta'] ?? 0) + ($totales['pinpad'] ?? 0) + ($totales['transferencia'] ?? 0);
+						@endphp
+						<tr>
+							<td class="left"><strong>{{ $banco_nombre }}</strong></td>
+							<td class="text-right">{{ number_format($totales['puntos_venta'] ?? 0, 2) }}</td>
+							<td class="text-right">{{ number_format($totales['pinpad'] ?? 0, 2) }}</td>
+							<td class="text-right">{{ number_format($totales['transferencia'] ?? 0, 2) }}</td>
+							<td class="text-right"><strong>{{ number_format($total_banco, 2) }}</strong></td>
+						</tr>
+					@endforeach
+				@else
+					<tr>
+						<td colspan="5" class="text-center">Sin datos de pagos electrónicos por banco.</td>
+					</tr>
+				@endif
+
 				<tr>
 					<th colspan="5">REFERENCIAS DE PAGOS ELECTRÓNICOS</th>
 
