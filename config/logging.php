@@ -100,6 +100,13 @@ return [
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],
+
+        'pos_transacciones' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/pos_transacciones.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 30,
+        ],
     ],
 
 ];

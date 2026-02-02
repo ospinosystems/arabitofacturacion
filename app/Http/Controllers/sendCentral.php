@@ -4684,6 +4684,19 @@ class sendCentral extends Controller
         }
         
         $posUrl = 'http://' . $ipPinpad . '/transaction';
+
+        $logPos = function ($mensaje, array $context = []) {
+            \Log::channel('pos_transacciones')->info($mensaje, $context);
+        };
+
+        $logPos('enviarTransaccionPOS INICIO', [
+            'payload' => $payload,
+            'ip_pinpad' => $ipPinpad,
+            'pos_url' => $posUrl,
+            'id_usuario' => session('id_usuario'),
+            'id_sucursal' => session('sucursal'),
+            'request_all' => $request->except(['password', '_token']),
+        ]);
         
         try {
             $response = Http::timeout(120)
@@ -4696,13 +4709,32 @@ class sendCentral extends Controller
             $data = $response->json() ?? $response->body();
             $posSuccess = $response->successful() && (is_array($data) ? ($data['success'] ?? false) : false);
 
+            $logPos('enviarTransaccionPOS RESPUESTA POS', [
+                'numero_orden' => $request->input('numeroOrden'),
+                'http_status' => $response->status(),
+                'pos_success' => $posSuccess,
+                'response_body' => $data,
+                'response_raw' => $response->body(),
+            ]);
+
             if (!$posSuccess) {
                 // Respuesta negativa del POS: consultar en central (Instapago) si hay transacción aprobada con mismo OrderNumber y monto
                 $numeroOrden = $request->input('numeroOrden');
                 $montoCents = (int) $request->input('monto', 0);
                 $amountDecimal = $montoCents / 100.0;
                 $posErrorBody = is_array($data) ? $data : ['raw' => $data];
+                $logPos('enviarTransaccionPOS consulta central (POS falló)', [
+                    'numero_orden' => $numeroOrden,
+                    'monto_cents' => $montoCents,
+                    'amount_decimal' => $amountDecimal,
+                    'pos_error_body' => $posErrorBody,
+                ]);
                 $centralResult = $this->queryTransaccionPosCentral($numeroOrden, $amountDecimal, $posErrorBody);
+                $logPos('enviarTransaccionPOS resultado central', [
+                    'central_approved' => $centralResult['approved'] ?? null,
+                    'central_has_data' => !empty($centralResult['data'] ?? null),
+                    'central_result' => $centralResult,
+                ]);
                 if ($centralResult && !empty($centralResult['approved']) && !empty($centralResult['data'])) {
                     return response()->json([
                         'success' => true,
@@ -4711,12 +4743,25 @@ class sendCentral extends Controller
                 }
             }
 
+            $logPos('enviarTransaccionPOS FIN', [
+                'success' => $posSuccess,
+                'respondiendo' => ['success' => $posSuccess, 'status' => $response->status()],
+            ]);
+
             return response()->json([
                 'success' => $posSuccess,
                 'status' => $response->status(),
                 'data' => $data,
             ]);
         } catch (\Exception $e) {
+            $logPos('enviarTransaccionPOS EXCEPCIÓN', [
+                'exception' => get_class($e),
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'payload' => $payload,
+                'pos_url' => $posUrl,
+            ]);
             \Log::error('Error POS: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
