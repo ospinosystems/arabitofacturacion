@@ -3851,6 +3851,7 @@ export default function Facturar({
     const posTimeoutRef = useRef(null);
     const posProcesandoRef = useRef(false);
     const setPagoPedidoTimeoutRef = useRef(null);
+    const focusRefDebitoInputRef = useRef(null);
     
     const setPagoPedido = (callback = null) => {
         // Evitar ejecuciones múltiples
@@ -3926,7 +3927,12 @@ export default function Facturar({
                 for (let i = 0; i < debitosValidos.length; i++) {
                     const debito = debitosValidos[i];
                     if (!debito.referencia) {
-                        alert(`Error: Debe ingresar la referencia para la tarjeta #${debitos.indexOf(debito) + 1}`);
+                        const esUnSoloDebito = debitosValidos.length === 1;
+                        if (esUnSoloDebito && focusRefDebitoInputRef?.current) {
+                            focusRefDebitoInputRef.current();
+                        } else {
+                            alert(`Error: Debe ingresar la referencia para la tarjeta #${debitos.indexOf(debito) + 1}`);
+                        }
                         procesandoPagoRef.current = false;
                         return;
                     }
@@ -4090,11 +4096,11 @@ export default function Facturar({
             console.log("Respuesta POS:", response.data);
             
             const posData = response.data.data || {};
-            
-            if (response.data.success && posData.success) {
+            // Backend devuelve success: true cuando el POS aprobó O cuando central verificó y aprobó (queryTransaccionPosCentral)
+            if (response.data.success && posData && Object.keys(posData).length > 0) {
                 // Éxito: agregar transacción al array
-                const posReference = posData.reference || posData.approval || "";
-                const refUltimos4 = posReference.slice(-4).padStart(4, '0');
+                const posReference = String(posData.reference || posData.approval || "").trim();
+                const refUltimos4 = posReference.replace(/\D/g, '').slice(-4).padStart(4, '0');
                 
                 const nuevaTransaccion = {
                     monto: montoActual,
@@ -8365,6 +8371,7 @@ export default function Facturar({
                                     view={view}
                                     changeEntregado={changeEntregado}
                                     setPagoPedido={setPagoPedido}
+                                    focusRefDebitoInputRef={focusRefDebitoInputRef}
                                     viewconfigcredito={viewconfigcredito}
                                     setviewconfigcredito={setviewconfigcredito}
                                     fechainiciocredito={fechainiciocredito}

@@ -172,6 +172,8 @@ export default function PagarMain({
     posTransaccionesPorPedido,
     // Estado del modal POS para bloquear hotkeys
     showModalPosDebito,
+    // Ref que el padre (facturar) usa para enfocar el campo Ref. cuando hay un solo débito sin referencia
+    focusRefDebitoInputRef,
 }) {
     const [recibido_dolar, setrecibido_dolar] = useState("");
     const [recibido_bs, setrecibido_bs] = useState("");
@@ -216,6 +218,18 @@ export default function PagarMain({
     
     // Ref para input de referencia del débito
     const debitoRefInputRef = useRef(null);
+    // Refs para los inputs de referencia (Ref.) de cada débito
+    const debitosRefInputRefs = useRef([]);
+    
+    // Exponer al padre la función para enfocar el campo Ref. del primer débito (solo cuando hay un solo débito)
+    useEffect(() => {
+        if (!focusRefDebitoInputRef) return;
+        focusRefDebitoInputRef.current = () => {
+            const first = debitosRefInputRefs.current[0];
+            if (first && typeof first.focus === "function") first.focus();
+        };
+        return () => { focusRefDebitoInputRef.current = null; };
+    }, [focusRefDebitoInputRef, debitos.length]);
     
     // Configuración de métodos de pago (cambiar aquí para mostrar/ocultar)
     const SHOW_BIOPAGO = false; // Cambiar a true para mostrar Biopago
@@ -2982,6 +2996,7 @@ export default function PagarMain({
                                                         <div className="relative w-28">
                                                             <div className={`h-full border rounded ${debito.bloqueado ? "bg-green-50 border-green-300" : debito.referencia.length === 4 ? "bg-white border-orange-300" : debito.monto && debito.referencia.length > 0 && debito.referencia.length < 4 ? "bg-yellow-50 border-yellow-400" : "bg-white border-gray-200"}`}>
                                                                 <input
+                                                                    ref={(el) => (debitosRefInputRefs.current[index] = el)}
                                                                     type="text"
                                                                     className={`w-full h-full px-2 text-lg font-bold text-center bg-transparent border-0 focus:ring-0 focus:outline-none ${debito.bloqueado ? "text-green-700 cursor-not-allowed" : "placeholder-gray-400"}`}
                                                                     value={debito.referencia}

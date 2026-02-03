@@ -933,6 +933,14 @@ class sendCentral extends Controller
      */
     public function queryTransaccionPosCentral($orderNumber, $amount, $posErrorBody = null)
     {
+        $logPos = function ($msg, $context = []) {
+            \Log::channel('pos_transacciones')->info($msg, $context);
+        };
+        $logPos('queryTransaccionPosCentral INICIO', [
+            'order_number' => $orderNumber,
+            'amount' => $amount,
+            'pos_error_body' => $posErrorBody,
+        ]);
         $codigoOrigen = $this->getOrigen();
         try {
             $payload = [
@@ -943,15 +951,38 @@ class sendCentral extends Controller
             if ($posErrorBody !== null) {
                 $payload['pos_error_body'] = is_array($posErrorBody) ? $posErrorBody : ['raw' => $posErrorBody];
             }
-            $response = Http::timeout(30)->post($this->path() . '/pos/query-transaction', $payload);
-            if ($response->ok() && $response->json()) {
-                $json = $response->json();
-                return [
-                    'approved' => (bool) ($json['approved'] ?? false),
-                    'data' => $json['data'] ?? null,
+            $url = $this->path() . '/pos/query-transaction';
+            $logPos('queryTransaccionPosCentral REQUEST', ['url' => $url, 'payload' => $payload]);
+            $response = Http::timeout(30)->post($url, $payload);
+            $responseOk = $response->ok();
+            $responseJson = $response->json();
+            $logPos('queryTransaccionPosCentral RESPONSE', [
+                'http_status' => $response->status(),
+                'response_ok' => $responseOk,
+                'has_json' => $responseJson !== null,
+                'body' => $response->body(),
+                'json' => $responseJson,
+            ]);
+            if ($responseOk && $responseJson) {
+                $result = [
+                    'approved' => (bool) ($responseJson['approved'] ?? false),
+                    'data' => $responseJson['data'] ?? null,
                 ];
+                $logPos('queryTransaccionPosCentral RETORNA aprobado', [
+                    'approved' => $result['approved'],
+                    'has_data' => !empty($result['data']),
+                ]);
+                return $result;
             }
+            $logPos('queryTransaccionPosCentral RETORNA null (response no ok o sin json)', [
+                'response_ok' => $responseOk,
+            ]);
         } catch (\Exception $e) {
+            $logPos('queryTransaccionPosCentral EXCEPCIÓN', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
             \Log::warning('queryTransaccionPosCentral exception: ' . $e->getMessage());
         }
         return null;
@@ -4730,17 +4761,28 @@ class sendCentral extends Controller
                     'pos_error_body' => $posErrorBody,
                 ]);
                 $centralResult = $this->queryTransaccionPosCentral($numeroOrden, $amountDecimal, $posErrorBody);
+                $centralApproved = $centralResult !== null ? ($centralResult['approved'] ?? null) : null;
+                $centralData = $centralResult !== null ? ($centralResult['data'] ?? null) : null;
+                $centralHasData = !empty($centralData);
                 $logPos('enviarTransaccionPOS resultado central', [
-                    'central_approved' => $centralResult['approved'] ?? null,
-                    'central_has_data' => !empty($centralResult['data'] ?? null),
+                    'central_approved' => $centralApproved,
+                    'central_has_data' => $centralHasData,
                     'central_result' => $centralResult,
                 ]);
-                if ($centralResult && !empty($centralResult['approved']) && !empty($centralResult['data'])) {
+                $vaRetornarExito = $centralResult && $centralApproved && $centralHasData;
+                if ($vaRetornarExito) {
+                    $logPos('enviarTransaccionPOS RETORNA success=true con data de central (transacción considerada aprobada)');
                     return response()->json([
                         'success' => true,
                         'data' => $centralResult['data'],
                     ]);
                 }
+                $logPos('enviarTransaccionPOS NO retorna éxito central', [
+                    'motivo' => !$centralResult ? 'centralResult es null' : (!$centralApproved ? 'approved es false/vacío' : 'data está vacío'),
+                    'centralResult_null' => $centralResult === null,
+                    'approved' => $centralApproved,
+                    'has_data' => $centralHasData,
+                ]);
             }
 
             $logPos('enviarTransaccionPOS FIN', [
