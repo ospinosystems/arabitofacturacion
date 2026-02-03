@@ -496,6 +496,9 @@ const db = {
   guardarCierreV2: data => axios.post(host + "cierre-v2/guardar", data),
   reversarCierreV2: data => axios.post(host + "cierre-v2/reversar", data),
 
+  // Inventario de consumo interno (desde central vía sendCentral)
+  getInventarioInternoMiSucursal: () => axios.post(host + "getInventarioInternoMiSucursal"),
+  recibirOrdenInventarioInterno: (data) => axios.post(host + "recibirOrdenInventarioInterno", data),
 }
 
 export default db

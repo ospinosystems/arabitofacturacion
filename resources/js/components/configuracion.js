@@ -15,6 +15,8 @@ usuarioRole,
 setusuarioRole,
 usuarioClave,
 setusuarioClave,
+usuarioIpPinpad,
+setusuarioIpPinpad,
 indexSelectUsuarios,
 setIndexSelectUsuarios,
 qBuscarUsuario,
@@ -62,7 +64,8 @@ categorias,
 	          setusuarioRole={setusuarioRole}
 	          usuarioClave={usuarioClave}
 	          setusuarioClave={setusuarioClave}
-
+	          usuarioIpPinpad={usuarioIpPinpad}
+	          setusuarioIpPinpad={setusuarioIpPinpad}
 	          indexSelectUsuarios={indexSelectUsuarios}
 	          setIndexSelectUsuarios={setIndexSelectUsuarios}
 	          

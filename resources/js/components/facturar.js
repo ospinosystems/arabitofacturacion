@@ -6283,6 +6283,7 @@ export default function Facturar({
 
         if (usuarioRole && usuarioNombre && usuarioUsuario) {
             setLoading(true);
+
             db.setUsuario({
                 id,
                 role: usuarioRole,
@@ -6314,7 +6315,8 @@ export default function Facturar({
                 setusuarioUsuario(obj.usuario);
                 setusuarioRole(obj.tipo_usuario);
                 setusuarioClave(obj.clave);
-                setusuarioIpPinpad(obj.ip_pinpad || "");
+                setusuarioIpPinpad(obj.ip_pinpad);
+                console.log(obj)
             }
         }
     };

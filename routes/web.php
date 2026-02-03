@@ -81,6 +81,9 @@ Route::get('sendAllMovs', [sendCentral::class,"sendAllMovs"]);
 
 
 Route::get('', [HomeController::class,"index"]);
+Route::get('inventario-suministros', function () {
+    return view('inventario-suministros');
+})->name('inventario-suministros');
 
 Route::get('senComoVamos', [sendCentral::class,"sendComovamos"]);
 
@@ -564,6 +567,8 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		
 		Route::post('setInventarioFromSucursal', [sendCentral::class,"setInventarioFromSucursal"]);
 		Route::post('getSucursales', [sendCentral::class,"getSucursales"]);
+		Route::post('getInventarioInternoMiSucursal', [sendCentral::class,"getInventarioInternoMiSucursal"]);
+		Route::post('recibirOrdenInventarioInterno', [sendCentral::class,"recibirOrdenInventarioInternoRequest"]);
 		Route::post('getInventarioSucursalFromCentral', [sendCentral::class,"getInventarioSucursalFromCentral"]);
 		Route::post('setInventarioSucursalFromCentral', [sendCentral::class,"setInventarioSucursalFromCentral"]);
 		
