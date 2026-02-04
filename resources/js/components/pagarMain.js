@@ -602,18 +602,23 @@ export default function PagarMain({
             disponibleUsd -= montoAImportarUsd;
         }
         
-        // Importar Débito (Bs)
+        // Importar Débito (Bs) — permite positivos y negativos
         const pagoDebito = parseFloat(calcPagoDebito) || 0;
         const pagoDebitoUsd = pagoDebito / tasaBs;
-        if (pagoDebito > 0 && disponibleUsd > 0) {
-            const montoAImportarUsd = Math.min(pagoDebitoUsd, disponibleUsd);
-            const montoAImportarBs = montoAImportarUsd * tasaBs;
-            setDebito(prev => ((parseFloat(prev) || 0) + montoAImportarBs).toFixed(2));
-            setCalcPagoDebito(prev => {
-                const resto = (parseFloat(prev) || 0) - montoAImportarBs;
-                return resto > 0 ? resto.toFixed(2) : "";
-            });
-            disponibleUsd -= montoAImportarUsd;
+        if (pagoDebito !== 0) {
+            if (pagoDebito > 0 && disponibleUsd > 0) {
+                const montoAImportarUsd = Math.min(pagoDebitoUsd, disponibleUsd);
+                const montoAImportarBs = montoAImportarUsd * tasaBs;
+                setDebito(prev => ((parseFloat(prev) || 0) + montoAImportarBs).toFixed(2));
+                setCalcPagoDebito(prev => {
+                    const resto = (parseFloat(prev) || 0) - montoAImportarBs;
+                    return resto > 0 ? resto.toFixed(2) : "";
+                });
+                disponibleUsd -= montoAImportarUsd;
+            } else if (pagoDebito < 0) {
+                setDebito(prev => ((parseFloat(prev) || 0) + pagoDebito).toFixed(2));
+                setCalcPagoDebito("");
+            }
         }
         
         // Importar Transferencia (USD)
@@ -3074,10 +3079,10 @@ export default function PagarMain({
                                                     );
                                                 })()}
                                                 {/* Total */}
-                                                {debitos.length > 1 && calcularTotalDebitos() > 0 && (
+                                                {debitos.length > 1 && calcularTotalDebitos() !== 0 && (
                                                     <div className="flex justify-end items-center gap-2 px-2 py-1 bg-orange-50 border border-orange-200 rounded">
                                                         <span className="text-[10px] font-medium text-orange-600">Total:</span>
-                                                        <span className="text-sm font-bold text-orange-700">{moneda(calcularTotalDebitos())} Bs</span>
+                                                        <span className={`text-sm font-bold ${calcularTotalDebitos() < 0 ? 'text-red-700' : 'text-orange-700'}`}>{moneda(calcularTotalDebitos())} Bs</span>
                                                         <span className="text-[10px] text-orange-500">≈${moneda(calcularTotalDebitos() / getTasaPromedioCarrito())}</span>
                                                     </div>
                                                 )}

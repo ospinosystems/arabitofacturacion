@@ -126,11 +126,12 @@ class PagoPedidosController extends Controller
             if ($req->debito && floatval($req->debito)) {
                 $metodos_pago[] = ['tipo' => 'debito', 'monto' => floatval($req->debito)];
             }
-            // Verificar múltiples débitos
+            // Verificar múltiples débitos (incluye montos negativos)
             if ($req->debitos && is_array($req->debitos)) {
                 foreach ($req->debitos as $debitoItem) {
-                    if (floatval($debitoItem['monto']) > 0) {
-                        $metodos_pago[] = ['tipo' => 'debito', 'monto' => floatval($debitoItem['monto'])];
+                    $montoDeb = floatval($debitoItem['monto'] ?? 0);
+                    if ($montoDeb != 0) {
+                        $metodos_pago[] = ['tipo' => 'debito', 'monto' => $montoDeb];
                     }
                 }
             }
@@ -634,14 +635,15 @@ class PagoPedidosController extends Controller
                             ]);
                         }
                         
-                        // Validar que la referencia sea única para este usuario en el día actual
-                        
-                        $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $montoDebito, $metodos_pago, $cuenta, 2);
-                        if ($resultadoValidacion !== true) {
-                            return $resultadoValidacion;
+                        // Validar descuentos solo para débito positivo (no para devoluciones)
+                        if ($montoDebito > 0) {
+                            $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $montoDebito, $metodos_pago, $cuenta, 2);
+                            if ($resultadoValidacion !== true) {
+                                return $resultadoValidacion;
+                            }
                         }
                         
-                        // Preparar datos para guardar
+                        // Preparar datos para guardar (permite monto negativo para devoluciones)
                         $datosPago = [
                             "cuenta" => $cuenta, 
                             "monto" => $montoDebito, // Convertido a USD

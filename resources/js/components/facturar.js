@@ -3991,8 +3991,14 @@ export default function Facturar({
         let debitosParam = null;
         let posDataParam = null;
         
-        // Filtrar débitos válidos (con monto)
-        const debitosValidos = debitos.filter(d => parseFloat(d.monto) > 0);
+        // Débito simple: enviar siempre que sea distinto de 0 (incluye negativos)
+        if (debitoBs !== 0) {
+            debitoParam = debitoBs;
+            debitoRefParam = refFinal || null;
+        }
+        
+        // Filtrar débitos válidos (con monto distinto de 0, incluye negativos)
+        const debitosValidos = debitos.filter(d => parseFloat(d.monto) !== 0 && !Number.isNaN(parseFloat(d.monto)));
         if (debitosValidos.length > 0) {
             debitosParam = debitosValidos.map(d => ({
                 monto: parseFloat(d.monto),
