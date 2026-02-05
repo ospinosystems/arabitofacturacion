@@ -1054,9 +1054,37 @@ class sendCentral extends Controller
     }
 
     /**
+     * Construye el numeroOrden igual que el frontend (PagarMain/facturar) al enviar enviarTransaccionPOS:
+     * codigoSucursal-nombreUsuario-pedidoId-montoSinDecimal-indiceDebito
+     */
+    private function buildNumeroOrdenComoFrontend(pago_pedidos $pago): string
+    {
+        $codigoSucursal = $this->getOrigen();
+        // Usuario que facturó el pedido (vendedor), no el de la sesión actual
+        $pedido = pedidos::with('vendedor')->find($pago->id_pedido);
+        $vendedor = $pedido && $pedido->vendedor ? $pedido->vendedor : null;
+        $nombreUsuario = $vendedor ? ($vendedor->usuario ?? $vendedor->nombre ?? 'user') : 'user';
+        $nombreUsuario = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) $nombreUsuario);
+        $pedidoId = (int) $pago->id_pedido;
+        $montoEntero = (int) round((float) ($pago->monto_original ?? 0) * 100);
+        $hermanos = pago_pedidos::where('id_pedido', $pago->id_pedido)
+            ->where('tipo', 2)
+            ->orderBy('id')
+            ->get();
+        $indiceDebito = 0;
+        foreach ($hermanos as $i => $h) {
+            if ((int) $h->id === (int) $pago->id) {
+                $indiceDebito = $i;
+                break;
+            }
+        }
+        return "{$codigoSucursal}-{$nombreUsuario}-{$pedidoId}-{$montoEntero}-{$indiceDebito}";
+    }
+
+    /**
      * Verificar en Instapago (vía central) si la transacción está aprobada y, si es así,
      * actualizar el pago con pos_message, pos_terminal, pos_amount, pos_responsecode.
-     * Usado desde el modal "Detalles de Pagos" en Cierre para pagos "Otros puntos".
+     * Usa el mismo order_number que el frontend (buildNumeroOrdenComoFrontend).
      *
      * @param Request $request id (id del pago_pedidos)
      * @return \Illuminate\Http\JsonResponse
@@ -1073,23 +1101,22 @@ class sendCentral extends Controller
         if ((int) $pago->tipo !== 2) {
             return response()->json(['success' => false, 'message' => 'El pago no es de tipo débito'], 400);
         }
-        $referencia = trim((string) ($pago->referencia ?? ''));
-        if ($referencia === '') {
-            return response()->json(['success' => false, 'message' => 'El pago no tiene referencia (order number)'], 400);
-        }
         $amount = (float) ($pago->monto_original ?? 0);
         if ($amount <= 0) {
             return response()->json(['success' => false, 'message' => 'Monto original inválido'], 400);
         }
 
+        // Mismo formato que el frontend al enviar enviarTransaccionPOS (numeroOrden)
+        $orderNumber = $this->buildNumeroOrdenComoFrontend($pago);
+
         // Parámetros que se envían a la API de central (Instapago)
         $requestSent = [
             'codigo_sucursal' => $this->getOrigen(),
-            'order_number' => $referencia,
+            'order_number' => $orderNumber,
             'amount' => $amount,
         ];
 
-        $result = $this->queryTransaccionPosCentral($referencia, $amount);
+        $result = $this->queryTransaccionPosCentral($orderNumber, $amount);
 
         if ($result === null || !($result['approved'] ?? false) || empty($result['data'])) {
             return response()->json([
