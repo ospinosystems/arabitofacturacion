@@ -168,8 +168,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		
 		Route::post('setPagoPedido', [PagoPedidosController::class,"setPagoPedido"]);
 		Route::post('enviarTransaccionPOS', [sendCentral::class,"enviarTransaccionPOS"]);
-		Route::post('queryTransaccionPosYActualizarPago', [sendCentral::class,"queryTransaccionPosYActualizarPago"]);
-		Route::get('queryTransaccionPosYActualizarPago', [sendCentral::class,"queryTransaccionPosYActualizarPago"]);
+		Route::match(['get', 'post'], 'queryTransaccionPosYActualizarPago', [sendCentral::class,"queryTransaccionPosYActualizarPago"]);
 		
 		Route::post('registrarPosRechazado', [sendCentral::class,"registrarPosRechazado"]);
 		Route::post('ejecutarPostSync', [sendCentral::class,"ejecutarPostSync"]);
