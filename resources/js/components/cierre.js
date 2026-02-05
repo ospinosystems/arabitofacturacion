@@ -1231,6 +1231,7 @@ function Cierre({
 									cierre={cierre}
 									tipo={modalPagos.tipo}
 									moneda={modalPagos.moneda}
+									onRefrescarCierre={fechaCierre ? () => verCierreReq(fechaCierre, 'ver') : undefined}
 								/>
 							</div>
 							<div className="modal-footer">
@@ -1255,13 +1256,15 @@ function Cierre({
 }
 
 // Componente para mostrar detalles de pagos
-function ModalDetallesPagos({ cierre, tipo, moneda }) {
+function ModalDetallesPagos({ cierre, tipo, moneda, onRefrescarCierre }) {
 	const [pedidoDetalle, setPedidoDetalle] = useState(null);
 	const [pedidoData, setPedidoData] = useState(null);
 	const [loadingPedido, setLoadingPedido] = useState(false);
 	const [vistaAgrupada, setVistaAgrupada] = useState(tipo === 1); // Si es transferencia, mostrar agrupado por defecto
 	const [acordeonAbierto, setAcordeonAbierto] = useState({}); // Controlar qué acordeones están abiertos
 	const [pagosVerificados, setPagosVerificados] = useState({}); // Estado para trackear los pagos verificados
+	const [verificandoId, setVerificandoId] = useState(null); // ID del pago que se está verificando con Instapago
+	const [pagosActualizados, setPagosActualizados] = useState({}); // Pagos actualizados tras verificar Instapago
 	
 	// Función para togglear acordeón
 	const toggleAcordeon = (key) => {
@@ -1438,6 +1441,26 @@ function ModalDetallesPagos({ cierre, tipo, moneda }) {
 	const cerrarPedido = () => {
 		setPedidoDetalle(null);
 		setPedidoData(null);
+	};
+
+	const verificarInstapago = async (pago) => {
+		if (!pago?.id) return;
+		setVerificandoId(pago.id);
+		try {
+			const res = await db.queryTransaccionPosYActualizarPago({ id: pago.id });
+			if (res.data?.success && res.data?.pago) {
+				setPagosActualizados(prev => ({ ...prev, [pago.id]: res.data.pago }));
+				onRefrescarCierre?.();
+				alert('Transacción aprobada. Pago actualizado con datos de Instapago.');
+			} else {
+				alert(res.data?.message || 'No se encontró transacción aprobada en Instapago con esa referencia y monto.');
+			}
+		} catch (e) {
+			const msg = e.response?.data?.message || e.message || 'Error al verificar con Instapago';
+			alert(msg);
+		} finally {
+			setVerificandoId(null);
+		}
 	};
 	
 	if (pagosFiltrados.length === 0) {
@@ -1700,16 +1723,33 @@ function ModalDetallesPagos({ cierre, tipo, moneda }) {
 									{pago.created_at ? new Date(pago.created_at).toLocaleString('es-VE', {dateStyle: 'short', timeStyle: 'short'}) : <span className="text-gray-400 italic">N/A</span>}
 								</td>
 								<td className="px-4 py-3 whitespace-nowrap text-center text-sm">
-									{pago.id_pedido ? (
-										<button 
-											className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-150"
-											onClick={() => verPedido(pago.id_pedido)}
-										>
-											<i className="fa fa-file-text mr-1"></i> Ver
-										</button>
-									) : (
-										<span className="text-gray-400 text-xs italic">N/A</span>
-									)}
+									<div className="d-flex flex-wrap gap-1 justify-content-center align-items-center">
+										{pago.id_pedido ? (
+											<button 
+												className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-150"
+												onClick={() => verPedido(pago.id_pedido)}
+											>
+												<i className="fa fa-file-text mr-1"></i> Ver
+											</button>
+										) : null}
+										{moneda === 'OTROS' && (
+											<button 
+												className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-amber-600 hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-colors duration-150"
+												onClick={() => verificarInstapago(pagosActualizados[pago.id] || pago)}
+												disabled={verificandoId === pago.id}
+												title="Verificar con Instapago si la transacción está aprobada y actualizar el pago"
+											>
+												{verificandoId === pago.id ? (
+													<><i className="fa fa-spinner fa-spin mr-1"></i> Verificando...</>
+												) : (
+													<><i className="fa fa-check-circle mr-1"></i> Verificar Instapago</>
+												)}
+											</button>
+										)}
+										{!pago.id_pedido && moneda !== 'OTROS' && (
+											<span className="text-gray-400 text-xs italic">N/A</span>
+										)}
+									</div>
 								</td>
 							</tr>
 						))}

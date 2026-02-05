@@ -922,6 +922,71 @@ class sendCentral extends Controller
         return sucursal::all()->first()->codigo;
     }
 
+    /** ID sucursal (para inventario interno central) */
+    public function getOrigenId()
+    {
+        $s = sucursal::all()->first();
+        return $s ? (int) $s->id : null;
+    }
+
+    /** Inventario de consumo interno de esta sucursal (desde central) */
+    public function getInventarioInternoSucursal()
+    {
+        try {
+            $id_sucursal = $this->getOrigenId();
+            if (!$id_sucursal) {
+                return ['estado' => false, 'msj' => 'Sucursal no configurada', 'data' => []];
+            }
+            $response = Http::timeout(30)->post($this->path() . '/inventario-interno/getInventarioSucursalRemoto', [
+                'id_sucursal' => $id_sucursal,
+            ]);
+            if ($response->ok()) {
+                $data = $response->json();
+                return ['estado' => $data['estado'] ?? false, 'msj' => $data['msj'] ?? '', 'data' => $data['data'] ?? []];
+            }
+            return ['estado' => false, 'msj' => 'Error central: ' . $response->status(), 'data' => []];
+        } catch (\Exception $e) {
+            return ['estado' => false, 'msj' => $e->getMessage(), 'data' => []];
+        }
+    }
+
+    /** Marcar orden de inventario interno como recibida en central */
+    public function recibirOrdenInventarioInterno($id_orden)
+    {
+        try {
+            $id_sucursal = $this->getOrigenId();
+            $response = Http::timeout(30)->post($this->path() . '/inventario-interno/recibirOrden', [
+                'id_orden' => $id_orden,
+                'id_sucursal_receptor' => $id_sucursal,
+            ]);
+            if ($response->ok()) {
+                $data = $response->json();
+                return ['estado' => $data['estado'] ?? false, 'msj' => $data['msj'] ?? ''];
+            }
+            return ['estado' => false, 'msj' => 'Error central: ' . $response->status()];
+        } catch (\Exception $e) {
+            return ['estado' => false, 'msj' => $e->getMessage()];
+        }
+    }
+
+    /** Wrapper para ruta web: inventario interno de esta sucursal (desde central) */
+    public function getInventarioInternoMiSucursal(Request $request)
+    {
+        $result = $this->getInventarioInternoSucursal();
+        return response()->json($result);
+    }
+
+    /** Wrapper para ruta web: marcar orden inventario interno como recibida */
+    public function recibirOrdenInventarioInternoRequest(Request $request)
+    {
+        $id_orden = $request->get('id_orden');
+        if (!$id_orden) {
+            return response()->json(['estado' => false, 'msj' => 'Falta id_orden']);
+        }
+        $result = $this->recibirOrdenInventarioInterno($id_orden);
+        return response()->json($result);
+    }
+
     /**
      * Consultar en central (Instapago) si existe una transacción aprobada con el mismo OrderNumber y monto.
      * Se usa cuando enviarTransaccionPOS recibe respuesta negativa del POS.
@@ -986,6 +1051,69 @@ class sendCentral extends Controller
             \Log::warning('queryTransaccionPosCentral exception: ' . $e->getMessage());
         }
         return null;
+    }
+
+    /**
+     * Verificar en Instapago (vía central) si la transacción está aprobada y, si es así,
+     * actualizar el pago con pos_message, pos_terminal, pos_amount, pos_responsecode.
+     * Usado desde el modal "Detalles de Pagos" en Cierre para pagos "Otros puntos".
+     *
+     * @param Request $request id (id del pago_pedidos)
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function queryTransaccionPosYActualizarPago(Request $request)
+    {
+        $request->validate(['id' => 'required|integer']);
+        $id = (int) $request->input('id');
+
+        $pago = pago_pedidos::find($id);
+        if (!$pago) {
+            return response()->json(['success' => false, 'message' => 'Pago no encontrado'], 404);
+        }
+        if ((int) $pago->tipo !== 2) {
+            return response()->json(['success' => false, 'message' => 'El pago no es de tipo débito'], 400);
+        }
+        $referencia = trim((string) ($pago->referencia ?? ''));
+        if ($referencia === '') {
+            return response()->json(['success' => false, 'message' => 'El pago no tiene referencia (order number)'], 400);
+        }
+        $amount = (float) ($pago->monto_original ?? 0);
+        if ($amount <= 0) {
+            return response()->json(['success' => false, 'message' => 'Monto original inválido'], 400);
+        }
+
+        $result = $this->queryTransaccionPosCentral($referencia, $amount);
+        if ($result === null || !($result['approved'] ?? false) || empty($result['data'])) {
+            return response()->json([
+                'success' => false,
+                'approved' => false,
+                'message' => 'Instapago no reporta transacción aprobada con esa referencia y monto',
+            ], 200);
+        }
+
+        $data = $result['data'];
+        if (!is_array($data)) {
+            return response()->json(['success' => false, 'message' => 'Respuesta de central sin datos'], 200);
+        }
+
+        // Mapear campos de la respuesta Instapago/central al modelo pago_pedidos
+        $posMessage = $data['message'] ?? $data['status'] ?? $data['estado'] ?? null;
+        $posTerminal = $data['terminal'] ?? null;
+        $posAmount = isset($data['amount']) ? (is_numeric($data['amount']) ? (float) $data['amount'] : null) : null;
+        $posResponsecode = $data['responsecode'] ?? $data['response_code'] ?? null;
+
+        $pago->pos_message = $posMessage;
+        $pago->pos_terminal = $posTerminal;
+        $pago->pos_amount = $posAmount;
+        $pago->pos_responsecode = $posResponsecode;
+        $pago->save();
+
+        return response()->json([
+            'success' => true,
+            'approved' => true,
+            'message' => 'Transacción aprobada y pago actualizado',
+            'pago' => $pago->fresh()->toArray(),
+        ]);
     }
 
     public function getSucursales()
