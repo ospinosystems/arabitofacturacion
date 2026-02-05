@@ -220,6 +220,8 @@ export default function PagarMain({
     const debitoRefInputRef = useRef(null);
     // Refs para los inputs de referencia (Ref.) de cada débito
     const debitosRefInputRefs = useRef([]);
+    // Evitar ciclo infinito: solo auto-disparar facturar una vez por (pedidoId, totalAprobado)
+    const lastAutoSubmitPosRef = useRef({ pedidoId: null, totalAprobado: null });
     
     // Exponer al padre la función para enfocar el campo Ref. del primer débito (solo cuando hay un solo débito)
     useEffect(() => {
@@ -1890,8 +1892,12 @@ export default function PagarMain({
         // Si el total aprobado coincide exactamente con el total de la factura, procesar e imprimir automáticamente
         const diferencia = Math.abs(totalAprobado - totalFacturaBs);
         if (diferencia < 0.01 && totalAprobado > 0 && totalFacturaBs > 0) {
-            // El monto aprobado coincide exactamente con el total de la factura
-            // Ejecutar inmediatamente sin delay para asegurar que se detecte el cambio
+            // Evitar ciclo infinito: solo disparar una vez por (pedidoId, totalAprobado)
+            const { pedidoId: lastId, totalAprobado: lastTotal } = lastAutoSubmitPosRef.current;
+            if (lastId === pedidoData.id && lastTotal === totalAprobado) {
+                return;
+            }
+            lastAutoSubmitPosRef.current = { pedidoId: pedidoData.id, totalAprobado };
             if (facturar_e_imprimir) {
                 facturar_e_imprimir();
             }
@@ -1904,6 +1910,8 @@ export default function PagarMain({
 
     // Limpiar estados de factura original cuando cambie el pedido
     useEffect(() => {
+        // Permitir nuevo auto-disparo POS al cambiar de pedido (evita ciclo infinito al seleccionar otro y volver)
+        lastAutoSubmitPosRef.current = { pedidoId: null, totalAprobado: null };
         // Limpiar estados relacionados con devoluciones al cambiar de pedido
         setPedidoOriginalAsignado(null);
         setItemsFacturaOriginal([]);
