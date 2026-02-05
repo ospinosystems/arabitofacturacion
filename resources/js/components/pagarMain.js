@@ -1003,14 +1003,15 @@ export default function PagarMain({
         // Calcular total pagado en Bs (solo débitos no bloqueados + otros pagos)
         const totalPagadoBs = nuevoTotalDebitosNoBloqueadosBs + otrosPagosBs;
         
-        // Si el total pagado supera el total del pedido ajustado, limpiar el campo
+        // Si el total pagado supera el total del pedido ajustado
         const esDevolucion = totalPedidoBs < 0;
         const excedeTotal = esDevolucion 
             ? totalPagadoBs < totalPedidoAjustadoBs - 0.01
             : totalPagadoBs > totalPedidoAjustadoBs + 0.01;
         
-        if (excedeTotal) {
-            // Limpiar el campo del débito
+        // Con múltiples débitos: si excede, limpiar el campo. Con un solo débito: no limpiar;
+        // se llamará a syncPago para autorestar en los otros montos con valores.
+        if (excedeTotal && debitos.length !== 1) {
             nuevosDebitos[index].monto = "";
             setDebitos(nuevosDebitos);
             if (pedidoData?.id && guardarDebitosPorPedido) {
@@ -1025,11 +1026,10 @@ export default function PagarMain({
             guardarDebitosPorPedido(pedidoData.id, nuevosDebitos);
         }
         
-        // Disparar el auto-corrector para redistribuir otros métodos de pago
-        // Solo si no se está limpiando intencionalmente (skipSync = false)
-        if (!skipSync && autoCorrector) {
-            // Llamar a syncPago con el nuevo total de débitos no bloqueados para que redistribuya
-            // Esto permitirá que el auto-corrector ajuste los otros métodos de pago
+        // Disparar el auto-corrector para redistribuir otros métodos de pago (autorestar en otros montos)
+        // Solo si no se está limpiando intencionalmente (skipSync = false).
+        // Con un solo débito siempre se llama a syncPago para autorestar en los otros montos con valores.
+        if (!skipSync && (autoCorrector || debitos.length === 1)) {
             syncPago(nuevoTotalDebitosNoBloqueadosBs.toString(), "Debito");
         }
     };
@@ -1462,10 +1462,9 @@ export default function PagarMain({
             ? totalPagadoConNuevoValorBs < totalPedidoAjustadoBs - 0.01
             : totalPagadoConNuevoValorBs > totalPedidoAjustadoBs + 0.01;
 
-        if (excedeTotal) {
-            // Limpiar el campo que se está editando
-            if (type === "Debito") setDebito("");
-            else if (type === "EfectivoUSD") setEfectivo_dolar("");
+        // Con Débito (p. ej. un solo débito) no limpiar al exceder: se redistribuirá en los otros montos (autorestar)
+        if (excedeTotal && type !== "Debito") {
+            if (type === "EfectivoUSD") setEfectivo_dolar("");
             else if (type === "EfectivoBs") setEfectivo_bs("");
             else if (type === "EfectivoCOP") setEfectivo_peso("");
             else if (type === "Transferencia") setTransferencia("");
@@ -1474,8 +1473,8 @@ export default function PagarMain({
             return;
         }
 
-        // Si autoCorrector está DESACTIVADO, limitar el valor si excede
-        if (!autoCorrector) {
+        // Si autoCorrector está DESACTIVADO, limitar el valor si excede (excepto Débito: siempre autorestar)
+        if (!autoCorrector && type !== "Debito") {
             const excede = esDevolucion 
                 ? valUSD < maxPermitidoUSD - 0.01
                 : valUSD > maxPermitidoUSD + 0.01;
