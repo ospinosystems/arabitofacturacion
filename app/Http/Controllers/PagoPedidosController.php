@@ -604,7 +604,10 @@ class PagoPedidosController extends Controller
                                 $datosPagoDebito["pos_message"] = $posData['message'] ?? null;
                                 $datosPagoDebito["pos_lote"] = $posData['lote'] ?? null;
                                 $datosPagoDebito["pos_responsecode"] = $posData['responsecode'] ?? null;
-                                $datosPagoDebito["pos_amount"] = $posData['amount'] ?? null;
+                                // pos_amount: decimal sin coma (ej. "3,481.82" -> 3481.82)
+                                $amountRaw = isset($posData['amount']) ? trim((string) $posData['amount']) : '';
+                                $amountClean = $amountRaw !== '' ? str_replace(',', '', $amountRaw) : '';
+                                $datosPagoDebito["pos_amount"] = $amountClean !== '' && is_numeric($amountClean) ? (float) $amountClean : null;
                                 $datosPagoDebito["pos_terminal"] = $posData['terminal'] ?? null;
                                 $datosPagoDebito["pos_json_response"] = $posData['json_response'] ?? null;
                             }
@@ -658,7 +661,10 @@ class PagoPedidosController extends Controller
                             $datosPago["pos_message"] = $posData['message'] ?? null;
                             $datosPago["pos_lote"] = $posData['lote'] ?? null;
                             $datosPago["pos_responsecode"] = $posData['responsecode'] ?? null;
-                            $datosPago["pos_amount"] = $posData['amount'] ?? null;
+                            // pos_amount: decimal sin coma (ej. "3,481.82" -> 3481.82)
+                            $amountRaw = isset($posData['amount']) ? trim((string) $posData['amount']) : '';
+                            $amountClean = $amountRaw !== '' ? str_replace(',', '', $amountRaw) : '';
+                            $datosPago["pos_amount"] = $amountClean !== '' && is_numeric($amountClean) ? (float) $amountClean : null;
                             $datosPago["pos_terminal"] = $posData['terminal'] ?? null;
                             $datosPago["pos_json_response"] = $posData['json_response'] ?? null;
                         }
