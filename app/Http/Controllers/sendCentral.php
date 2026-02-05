@@ -1082,18 +1082,33 @@ class sendCentral extends Controller
             return response()->json(['success' => false, 'message' => 'Monto original inválido'], 400);
         }
 
+        // Parámetros que se envían a la API de central (Instapago)
+        $requestSent = [
+            'codigo_sucursal' => $this->getOrigen(),
+            'order_number' => $referencia,
+            'amount' => $amount,
+        ];
+
         $result = $this->queryTransaccionPosCentral($referencia, $amount);
+
         if ($result === null || !($result['approved'] ?? false) || empty($result['data'])) {
             return response()->json([
                 'success' => false,
                 'approved' => false,
                 'message' => 'Instapago no reporta transacción aprobada con esa referencia y monto',
+                'request_sent' => $requestSent,
+                'api_response' => $result,
             ], 200);
         }
 
         $data = $result['data'];
         if (!is_array($data)) {
-            return response()->json(['success' => false, 'message' => 'Respuesta de central sin datos'], 200);
+            return response()->json([
+                'success' => false,
+                'message' => 'Respuesta de central sin datos',
+                'request_sent' => $requestSent,
+                'api_response' => $result,
+            ], 200);
         }
 
         // Mapear campos de la respuesta Instapago/central al modelo pago_pedidos
@@ -1112,6 +1127,8 @@ class sendCentral extends Controller
             'success' => true,
             'approved' => true,
             'message' => 'Transacción aprobada y pago actualizado',
+            'request_sent' => $requestSent,
+            'api_response' => $result,
             'pago' => $pago->fresh()->toArray(),
         ]);
     }
