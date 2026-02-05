@@ -119,6 +119,7 @@ Route::get('ajustarbalancecajas', [CajasController::class,"ajustarbalancecajas"]
 Route::post('setMoneda', [MonedasController::class,"setMoneda"]);
 
 
+Route::match(['get', 'post'], 'queryTransaccionPosYActualizarPago', [sendCentral::class,"queryTransaccionPosYActualizarPago"]);
 
 
 Route::group(['middleware' => ['auth.user:login']], function () {
@@ -168,7 +169,6 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		
 		Route::post('setPagoPedido', [PagoPedidosController::class,"setPagoPedido"]);
 		Route::post('enviarTransaccionPOS', [sendCentral::class,"enviarTransaccionPOS"]);
-		Route::match(['get', 'post'], 'queryTransaccionPosYActualizarPago', [sendCentral::class,"queryTransaccionPosYActualizarPago"]);
 		
 		Route::post('registrarPosRechazado', [sendCentral::class,"registrarPosRechazado"]);
 		Route::post('ejecutarPostSync', [sendCentral::class,"ejecutarPostSync"]);
