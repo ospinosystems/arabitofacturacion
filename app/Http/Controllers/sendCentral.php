@@ -929,16 +929,16 @@ class sendCentral extends Controller
         return $s ? (int) $s->id : null;
     }
 
-    /** Inventario de consumo interno de esta sucursal (desde central) */
+    /** Inventario de consumo interno de esta sucursal (desde central). Central identifica la sucursal por codigo, como el resto de métodos. */
     public function getInventarioInternoSucursal()
     {
         try {
-            $id_sucursal = $this->getOrigenId();
-            if (!$id_sucursal) {
+            $codigo_sucursal = $this->getOrigen();
+            if (!$codigo_sucursal) {
                 return ['estado' => false, 'msj' => 'Sucursal no configurada', 'data' => []];
             }
             $response = Http::timeout(30)->post($this->path() . '/inventario-interno/getInventarioSucursalRemoto', [
-                'id_sucursal' => $id_sucursal,
+                'codigo_sucursal' => $codigo_sucursal,
             ]);
             if ($response->ok()) {
                 $data = $response->json();
@@ -950,14 +950,14 @@ class sendCentral extends Controller
         }
     }
 
-    /** Marcar orden de inventario interno como recibida en central */
+    /** Marcar orden de inventario interno como recibida en central. Central identifica la sucursal por codigo. */
     public function recibirOrdenInventarioInterno($id_orden)
     {
         try {
-            $id_sucursal = $this->getOrigenId();
+            $codigo_sucursal = $this->getOrigen();
             $response = Http::timeout(30)->post($this->path() . '/inventario-interno/recibirOrden', [
                 'id_orden' => $id_orden,
-                'id_sucursal_receptor' => $id_sucursal,
+                'codigo_sucursal_receptor' => $codigo_sucursal,
             ]);
             if ($response->ok()) {
                 $data = $response->json();

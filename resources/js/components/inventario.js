@@ -9,6 +9,7 @@ import InventarioNovedades from '../components/inventarionovedades';
 
 import ControlEfectivo from '../components/controlefectivo';
 import Garantias from '../components/garantias';
+import InventarioSuministrosSucursal from '../components/InventarioSuministrosSucursal';
 
 import React, { useEffect } from 'react';
 import { useHotkeys } from "react-hotkeys-hook";
@@ -440,6 +441,13 @@ function Inventario({
                   >
                     <i className="fas fa-chart-bar me-2"></i>
                     Estadísticas
+                  </button>
+                  <button 
+                    className={`btn ${subViewInventario === "suministros" ? "btn-primary" : "btn-outline-primary"}`}
+                    onClick={() => setsubViewInventario("suministros")}
+                  >
+                    <i className="fas fa-box-open me-2"></i>
+                    Suministros
                   </button>
                 </div>
 
@@ -887,6 +895,9 @@ function Inventario({
                   getEstaInventario={getEstaInventario}
                   dataEstaInven={dataEstaInven}
                 />
+              )}
+              {subViewInventario === "suministros" && (
+                <InventarioSuministrosSucursal onBack={() => setsubViewInventario("inventario")} />
               )}
             </div>
           </div>

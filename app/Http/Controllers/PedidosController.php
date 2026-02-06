@@ -4543,6 +4543,120 @@ class PedidosController extends Controller
         ];
 
         if ($type == "ver") {
+            // Descarga CSV detallado: Total Digital Consolidado USD + Venta neta total
+            if ($req->get('descargar_csv') == '1') {
+                $tasa_bs = $cierre->tasa ?? 36;
+                $tasa_cop = $cierre->tasacop ?? 4000;
+                $tasa_bs_safe = $tasa_bs > 0 ? $tasa_bs : 36;
+                $tasa_cop_safe = $tasa_cop > 0 ? $tasa_cop : 4000;
+
+                $pedidos_csv = pedidos::where("fecha_factura", "LIKE", $fechareq . "%")
+                    ->where("estado", 1)
+                    ->whereIn("id_vendedor", $id_vendedor)
+                    ->with(['pagos', 'items' => function ($q) { $q->with('producto'); }])
+                    ->get();
+
+                $todos_pagos_csv = $pedidos_csv->pluck('pagos')->flatten()->filter(function ($p) {
+                    return in_array((int)$p->tipo, [1, 2, 3, 5]);
+                });
+                $pedidos_credito_ids_csv = $pedidos_csv->pluck('pagos')->flatten()->where('tipo', 4)->pluck('id_pedido')->unique()->merge(
+                    $pedidos_csv->where('export', 1)->pluck('id')
+                )->unique();
+
+                $nombre_tipo = [1 => 'Transferencia', 2 => 'Débito', 3 => 'Efectivo', 5 => 'Biopago'];
+
+                $filas_digital = [];
+                foreach ($todos_pagos_csv as $pago) {
+                    $moneda = ($pago->tipo == 3) ? $this->determinarMonedaPago($pago) : strtoupper($pago->moneda ?? 'USD');
+                    $monto = floatval($pago->monto);
+                    $monto_orig = floatval($pago->monto_original ?? $pago->monto);
+                    if ($moneda === 'USD') {
+                        $monto_usd = $monto;
+                    } elseif ($moneda === 'BS') {
+                        $monto_usd = $monto_orig / $tasa_bs_safe;
+                    } else {
+                        $monto_usd = $monto_orig / $tasa_cop_safe;
+                    }
+                    $filas_digital[] = [
+                        $pago->id,
+                        $pago->id_pedido,
+                        $nombre_tipo[(int)$pago->tipo] ?? 'Tipo ' . $pago->tipo,
+                        $pago->tipo,
+                        $moneda,
+                        $monto_orig,
+                        $monto_usd,
+                        $pago->referencia ?? '',
+                        $pago->pos_terminal ?? '',
+                        $pago->created_at ? \Carbon\Carbon::parse($pago->created_at)->format('Y-m-d H:i:s') : '',
+                    ];
+                }
+
+                $items_csv = $pedidos_csv->pluck('items')->flatten()->filter(function ($item) use ($pedidos_credito_ids_csv) {
+                    return isset($item->producto) && !$pedidos_credito_ids_csv->contains($item->id_pedido);
+                });
+                $filas_venta_neta = [];
+                foreach ($items_csv as $item) {
+                    $precio_unit = $item->precio_unitario ?? ($item->producto->precio ?? 0);
+                    $factor_descuento = 1 - (floatval($item->descuento ?? 0) / 100);
+                    $venta_bruta = $precio_unit * $item->cantidad;
+                    $venta_neta = $venta_bruta * $factor_descuento;
+                    $filas_venta_neta[] = [
+                        $item->id,
+                        $item->id_pedido,
+                        $item->id_producto ?? '',
+                        $item->producto ? ($item->producto->nombre ?? $item->producto->codigo ?? '') : '',
+                        $item->cantidad,
+                        $precio_unit,
+                        $item->descuento ?? 0,
+                        $venta_bruta,
+                        $venta_neta,
+                        $item->created_at ? \Carbon\Carbon::parse($item->created_at)->format('Y-m-d H:i:s') : '',
+                    ];
+                }
+
+                $total_digital_usd = array_sum(array_column($filas_digital, 6));
+                $total_venta_neta = array_sum(array_column($filas_venta_neta, 8));
+
+                $csv = function () use ($fechareq, $filas_digital, $filas_venta_neta, $total_digital_usd, $total_venta_neta) {
+                    $out = fopen('php://output', 'w');
+                    fputcsv($out, ['CIERRE DETALLADO - Fecha: ' . $fechareq], ';');
+                    fputcsv($out, [], ';');
+                    fputcsv($out, ['=== TOTAL DE DIGITAL DE CONSOLIDADO EN DÓLARES (detalle de transacciones) ==='], ';');
+                    fputcsv($out, ['id_pago', 'id_pedido', 'tipo_nombre', 'tipo', 'moneda', 'monto_original', 'monto_usd', 'referencia', 'pos_terminal', 'created_at'], ';');
+                    foreach ($filas_digital as $f) {
+                        $fEscrito = $f;
+                        $fEscrito[5] = number_format($f[5], 2, '.', '');
+                        $fEscrito[6] = number_format($f[6], 2, '.', '');
+                        fputcsv($out, $fEscrito, ';');
+                    }
+                    fputcsv($out, [], ';');
+                    fputcsv($out, ['TOTAL DIGITAL USD', number_format($total_digital_usd, 2, '.', '')], ';');
+                    fputcsv($out, [], ';');
+                    fputcsv($out, ['=== VENTA NETA TOTAL (detalle por ítem) ==='], ';');
+                    fputcsv($out, ['id_item', 'id_pedido', 'id_producto', 'producto_nombre', 'cantidad', 'precio_unitario', 'descuento_%', 'venta_bruta', 'venta_neta', 'created_at'], ';');
+                    foreach ($filas_venta_neta as $f) {
+                        $fEscrito = $f;
+                        $fEscrito[5] = number_format($f[5], 2, '.', '');
+                        $fEscrito[6] = number_format($f[6], 2, '.', '');
+                        $fEscrito[7] = number_format($f[7], 2, '.', '');
+                        $fEscrito[8] = number_format($f[8], 2, '.', '');
+                        fputcsv($out, $fEscrito, ';');
+                    }
+                    fputcsv($out, [], ';');
+                    fputcsv($out, ['TOTAL VENTA NETA', number_format($total_venta_neta, 2, '.', '')], ';');
+                    fclose($out);
+                };
+
+                $nombre_archivo = 'cierre_detalle_' . $fechareq . '.csv';
+                return response()->streamDownload($csv, $nombre_archivo, [
+                    'Content-Type' => 'text/csv; charset=UTF-8',
+                    'Content-Disposition' => 'attachment; filename="' . $nombre_archivo . '"',
+                ]);
+            }
+            $arr_send['url_descargar_csv'] = url('verCierre') . '?type=ver&fecha=' . $fechareq . '&descargar_csv=1';
+            if ($usuario) {
+                $arr_send['url_descargar_csv'] .= '&usuario=' . $usuario;
+            }
             return view("reportes.cierre", $arr_send);
         } else if ($type == "getData") {
             // Retornar datos para uso interno (ej: ejecutarPostSync)
