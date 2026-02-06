@@ -4946,7 +4946,11 @@ class sendCentral extends Controller
                 ]);
                 $vaRetornarExito = $centralResult && $centralApproved && $centralHasData;
                 if ($vaRetornarExito) {
-                    $logPos('enviarTransaccionPOS RETORNA success=true con data de central (transacción considerada aprobada)');
+                    $logPos('enviarTransaccionPOS RETORNA success=true con data de central (transacción considerada aprobada)', [
+                        'numero_orden' => $numeroOrden,
+                        'amount_decimal' => $amountDecimal,
+                        'central_data_amount' => $centralData['amount'] ?? null,
+                    ]);
                     return response()->json([
                         'success' => true,
                         'data' => $centralResult['data'],
@@ -4960,9 +4964,11 @@ class sendCentral extends Controller
                 ]);
             }
 
-            $logPos('enviarTransaccionPOS FIN', [
+            $logPos('enviarTransaccionPOS FIN (respuesta exitosa del POS)', [
                 'success' => $posSuccess,
                 'respondiendo' => ['success' => $posSuccess, 'status' => $response->status()],
+                'data_amount' => is_array($data) ? ($data['amount'] ?? null) : null,
+                'numero_orden' => $request->input('numeroOrden'),
             ]);
 
             return response()->json([

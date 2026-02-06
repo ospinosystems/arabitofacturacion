@@ -4,6 +4,7 @@ import { useHotkeys } from "react-hotkeys-hook";
 import { Html5QrcodeScanner } from "html5-qrcode";
 
 import { useState, useEffect, useRef } from "react";
+import { flushSync } from "react-dom";
 import { cloneDeep } from "lodash";
 import db from "../database/database";
 import { useApp } from "../contexts/AppContext";
@@ -3846,19 +3847,12 @@ export default function Facturar({
     const [puedeFacturarTransfe, setpuedeFacturarTransfe] = useState(true);
     const [puedeFacturarTransfeTime, setpuedeFacturarTransfeTime] =
         useState(null);
-    // Ref para evitar ejecuciones múltiples de setPagoPedido
-    const procesandoPagoRef = useRef(false);
     const posTimeoutRef = useRef(null);
     const posProcesandoRef = useRef(false);
     const setPagoPedidoTimeoutRef = useRef(null);
     const focusRefDebitoInputRef = useRef(null);
     
     const setPagoPedido = (callback = null) => {
-        // Evitar ejecuciones múltiples
-        if (procesandoPagoRef.current) {
-            return;
-        }
-        
         // Limpiar timeout anterior si existe (debouncing)
         if (setPagoPedidoTimeoutRef.current) {
             clearTimeout(setPagoPedidoTimeoutRef.current);
@@ -3870,38 +3864,18 @@ export default function Facturar({
             // Limpiar el ref del timeout
             setPagoPedidoTimeoutRef.current = null;
             
-            // Verificar nuevamente que no esté procesando (por si cambió durante el delay)
-            if (procesandoPagoRef.current) {
-                return;
-            }
-            
             // Validar que si hay descuentos en algún ítem, debe haber un cliente registrado (distinto al por defecto id=1)
             const tieneDescuentos = pedidoData?.items?.some(item => item.descuento && parseFloat(item.descuento) > 0);
             const clientePorDefecto = !pedidoData?.id_cliente || pedidoData.id_cliente == 1;
             
             if (tieneDescuentos && clientePorDefecto) {
                 alert("Error: El pedido tiene descuentos aplicados. Debe registrar un cliente antes de procesar el pago.");
-                procesandoPagoRef.current = false;
                 return;
             }
             
-            // DEBUG: Log para diagnosticar problema intermitente con PINPAD
-            // Si hay débito pero sucursaldata está vacío o sin pinpad, loguear para diagnóstico
-            if (debito && parseFloat(debito) > 0) {
-                console.log('[PINPAD DEBUG]', {
-                    debito,
-                    sucursaldata_exists: !!sucursaldata,
-                    sucursaldata_pinpad: sucursaldata?.pinpad,
-                    sucursaldata_codigo: sucursaldata?.codigo,
-                    forzarReferenciaManual,
-                    timestamp: new Date().toISOString()
-                });
-                
-                // Si sucursaldata está vacío o es string, intentar recargar datos de sucursal
-                if (!sucursaldata || typeof sucursaldata === 'string') {
-                    console.warn('[PINPAD DEBUG] sucursaldata perdido, recargando...');
-                    getSucursalFun();
-                }
+            // Si hay débito pero sucursaldata está vacío o es string, intentar recargar datos de sucursal
+            if (debito && parseFloat(debito) > 0 && (!sucursaldata || typeof sucursaldata === 'string')) {
+                getSucursalFun();
             }
             
             // Verificar si hay débitos en el array
@@ -3933,12 +3907,10 @@ export default function Facturar({
                         } else {
                             alert(`Error: Debe ingresar la referencia para la tarjeta #${debitos.indexOf(debito) + 1}`);
                         }
-                        procesandoPagoRef.current = false;
                         return;
                     }
                     if (debito.referencia.length !== 4) {
                         alert(`Error: La referencia de la tarjeta #${debitos.indexOf(debito) + 1} debe tener exactamente 4 dígitos.`);
-                        procesandoPagoRef.current = false;
                         return;
                     }
                 }
@@ -3950,8 +3922,6 @@ export default function Facturar({
                 alert(
                     "Error: Debe cargar referencia de transferencia electrónica."
                 );
-                // Liberar el flag si hay error de validación
-                procesandoPagoRef.current = false;
             } else {
                 procesarPagoInterno(callback);
             }
@@ -3960,9 +3930,8 @@ export default function Facturar({
     
     // Función interna para procesar el pago (llamada después de POS exitoso o sin débito)
     // refOverride: permite pasar la referencia directamente (para cuando viene del POS)
-    const procesarPagoInterno = (callback = null, refOverride = null) => {
-        // Marcar como procesando
-        procesandoPagoRef.current = true;
+    // posOverrides: { debitoOverride, debitosOverride } - evita closure obsoleto cuando se llama desde flujo POS
+    const procesarPagoInterno = (callback = null, refOverride = null, posOverrides = null) => {
         setLoading(true);
         // Construir pagos adicionales de efectivo (Bs y COP)
         let pagosAdicionales = [];
@@ -3979,17 +3948,23 @@ export default function Facturar({
             });
         }
         
-        const debitoBs = parseFloat(debito) || 0;
+        // Usar overrides del POS cuando existen (evita closure obsoleto con debito/debitos)
+        const debitoVal = posOverrides?.debitoOverride != null ? parseFloat(posOverrides.debitoOverride) : parseFloat(debito) || 0;
+        const debitoBs = !Number.isNaN(debitoVal) ? debitoVal : 0;
         const efectivoDolarVal = parseFloat(efectivo_dolar) || 0;
         
         // Usar refOverride si viene del POS, sino usar el estado debitoRef
         const refFinal = refOverride !== null ? refOverride : debitoRef;
         
-        // Preparar débitos: siempre usar el array de débitos
+        // Preparar débitos: usar posOverrides.debitosOverride si existe, sino el estado debitos
         let debitoParam = null;
         let debitoRefParam = null;
         let debitosParam = null;
         let posDataParam = null;
+        
+        const debitosParaUsar = (posOverrides?.debitosOverride && Array.isArray(posOverrides.debitosOverride))
+            ? posOverrides.debitosOverride
+            : debitos;
         
         // Débito simple: enviar siempre que sea distinto de 0 (incluye negativos)
         if (debitoBs !== 0) {
@@ -3998,7 +3973,7 @@ export default function Facturar({
         }
         
         // Filtrar débitos válidos (con monto distinto de 0, incluye negativos)
-        const debitosValidos = debitos.filter(d => parseFloat(d.monto) !== 0 && !Number.isNaN(parseFloat(d.monto)));
+        const debitosValidos = debitosParaUsar.filter(d => parseFloat(d.monto) !== 0 && !Number.isNaN(parseFloat(d.monto)));
         if (debitosValidos.length > 0) {
             debitosParam = debitosValidos.map(d => ({
                 monto: parseFloat(d.monto),
@@ -4024,8 +3999,6 @@ export default function Facturar({
         db.setPagoPedido(params).then((res) => {
             notificar(res);
             setLoading(false);
-            // Liberar el flag de procesamiento
-            procesandoPagoRef.current = false;
             
             if (res.data.estado) {
                 // Limpiar datos de localStorage para este pedido procesado
@@ -4050,8 +4023,6 @@ export default function Facturar({
                 openValidationTarea(res.data.id_tarea);
             }
         }).catch((error) => {
-            // En caso de error, también liberar el flag
-            procesandoPagoRef.current = false;
             setLoading(false);
         });
     };
@@ -4080,9 +4051,10 @@ export default function Facturar({
         const montoEntero = Math.round(montoActual * 100);
         
         // Construir numeroOrden: codigoSucursal-usuario-pedidoId-montoSinDecimal-indiceDebito (0, 1, 2...)
+        // Modo débito por fila: usar currentDebitoIndex (índice de la fila). Modo simple: usar posTransaccionesAprobadas.length
         const codigoSucursal = sucursaldata?.codigo || "SUC";
         const nombreUsuario = user?.usuario || user?.nombre || "user";
-        const indiceDebito = posTransaccionesAprobadas.length;
+        const indiceDebito = typeof window.currentDebitoIndex === 'number' ? window.currentDebitoIndex : posTransaccionesAprobadas.length;
         const numeroOrdenCompleto = `${codigoSucursal}-${nombreUsuario}-${pedidoData.id}-${montoEntero}-${indiceDebito}`;
         
         const payload = {
@@ -4094,13 +4066,9 @@ export default function Facturar({
             tipoCuenta: posTipoCuenta
         };
 
-        console.log("Payload POS:", payload);
-        
         try {
             // Enviar a través del backend para evitar CORS
             const response = await db.enviarTransaccionPOS(payload);
-            console.log("Respuesta POS:", response.data);
-            
             const posData = response.data.data || {};
             // Backend devuelve success: true cuando el POS aprobó O cuando central verificó y aprobó (queryTransaccionPosCentral)
             if (response.data.success && posData && Object.keys(posData).length > 0) {
@@ -4162,6 +4130,21 @@ export default function Facturar({
                     }
                     
                     delete window.currentDebitoIndex; // Limpiar el índice
+
+                    // Total aprobado (solo débitos bloqueados) vs bs_clean del pedido
+                    const debitosBloqueados = nuevosDebitos.filter(d => d.bloqueado);
+                    const totalAprobadoDebitos = debitosBloqueados
+                        .reduce((s, d) => s + parseFloat(d.monto || 0), 0);
+                    const totalFacturaBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
+                    const diferenciaDebitos = Math.abs(totalAprobadoDebitos - totalFacturaBs);
+                    const debeFacturarImprimir = diferenciaDebitos < 0.01;
+
+                    // Forzar commit inmediato del estado para que facturar_e_imprimir lea debito/debitos correctos
+                    flushSync(() => {
+                        setDebitos(nuevosDebitos);
+                        setDebito(totalAprobadoDebitos.toFixed(2));
+                        setDebitoRef(refUltimos4);
+                    });
                     
                     // Cerrar modal inmediatamente
                     setPosRespuesta({ mensaje: `✓ APROBADO - Ref: ${posReference}`, exito: true });
@@ -4176,6 +4159,20 @@ export default function Facturar({
                         setPosTransaccionesAprobadas([]);
                         setPosRespuesta(null);
                     }, 500);
+
+                    // Solo al recibir respuesta exitosa de enviarTransaccionPOS: si montos aprobados == bs_clean, facturar e imprimir
+                    if (debeFacturarImprimir) {
+                        // Llamar procesarPagoInterno directamente con overrides para evitar closure obsoleto
+                        const cbImprimir = () => toggleImprimirTicket();
+                        if (transferencia && !refPago.filter((e) => e.tipo == 1).length) {
+                            alert("Error: Debe cargar referencia de transferencia electrónica.");
+                        } else {
+                            procesarPagoInterno(cbImprimir, refUltimos4, {
+                                debitoOverride: totalAprobadoDebitos,
+                                debitosOverride: nuevosDebitos
+                            });
+                        }
+                    }
                     
                     return; // Salir temprano para no ejecutar la lógica de modo simple
                 }
@@ -4224,53 +4221,27 @@ export default function Facturar({
                     setPosRespuesta(null);
                     setPosTransaccionesAprobadas([]);
                     setPosMontoTotalOriginal("");
-                    setDebitoRef(refFinal);
                     
-                    // Actualizar el monto de débito con el total aprobado
-                    setDebito(totalAprobadoFinal.toFixed(2));
+                    // Solo al recibir respuesta exitosa de enviarTransaccionPOS: si montos aprobados == bs_clean, facturar e imprimir
+                    const diferencia = Math.abs(totalAprobadoFinal - totalFacturaBs);
+                    const debeFacturarImprimir = diferencia < 0.01; // Tolerancia de 0.01 para comparación de decimales
+
+                    // Forzar commit inmediato para que facturar_e_imprimir lea debito correcto
+                    flushSync(() => {
+                        setDebitoRef(refFinal);
+                        setDebito(totalAprobadoFinal.toFixed(2));
+                    });
                     
                     notificar({ data: { msj: `✓ POS Completado - ${numTransacciones} transacción(es) - Total: Bs ${totalAprobadoFinal.toFixed(2)}`, estado: true } });
-                    
-                    // Si el monto total aprobado es igual al total de la factura en bolívares, procesar e imprimir automáticamente
-                    const diferencia = Math.abs(totalAprobadoFinal - totalFacturaBs);
-                    if (diferencia < 0.01) { // Tolerancia de 0.01 para comparación de decimales
-                        // El monto aprobado coincide exactamente con el total de la factura
-                        // Procesar e imprimir automáticamente
-                        
-                        // Cancelar timeout anterior si existe
-                        if (posTimeoutRef.current) {
-                            clearTimeout(posTimeoutRef.current);
-                            posTimeoutRef.current = null;
+
+                    if (debeFacturarImprimir) {
+                        if (facturar_e_imprimir) {
+                            facturar_e_imprimir();
                         }
-                        
-                        // Verificar que no esté ya procesando antes de crear el timeout
-                        if (procesandoPagoRef.current) {
-                            posProcesandoRef.current = false;
-                            return;
-                        }
-                        
-                        posTimeoutRef.current = setTimeout(() => {
-                            // Limpiar el ref del timeout
-                            posTimeoutRef.current = null;
-                            // Liberar el flag de procesamiento
-                            posProcesandoRef.current = false;
-                            
-                            // Verificar que no esté ya procesando antes de llamar
-                            if (!procesandoPagoRef.current && facturar_e_imprimir) {
-                                facturar_e_imprimir();
-                            }
-                        }, 100); // Pequeño delay para asegurar que el débito se haya actualizado
                     } else {
                         // Solo procesar el pago sin facturar
-                        // Verificar que no esté ya procesando antes de llamar
-                        if (!procesandoPagoRef.current) {
-                            // Liberar el flag de procesamiento antes de llamar
-                            posProcesandoRef.current = false;
-                            procesarPagoInterno(posPendingCallback, refFinal);
-                        } else {
-                            // Liberar el flag si no se va a procesar
-                            posProcesandoRef.current = false;
-                        }
+                        posProcesandoRef.current = false;
+                        procesarPagoInterno(posPendingCallback, refFinal);
                     }
                     setPosPendingCallback(null);
                 }
@@ -4300,11 +4271,6 @@ export default function Facturar({
     // Función para finalizar múltiples transacciones POS
     // Si el total no está cubierto, solo aplica el monto al campo débito sin procesar el pago
     const finalizarTransaccionesPOS = (forzarSinProcesar = false) => {
-        // Evitar ejecuciones múltiples
-        if (procesandoPagoRef.current) {
-            return;
-        }
-        
         if (posTransaccionesAprobadas.length === 0) {
             alert("No hay transacciones aprobadas");
             return;
@@ -4334,8 +4300,6 @@ export default function Facturar({
         setPosTransaccionesAprobadas([]);
         setPosMontoTotalOriginal("");
         setDebitoRef(refFinal);
-        
-        // Actualizar el monto de débito con el total aprobado
         setDebito(totalAprobado.toFixed(2));
         
         if (totalCubierto && !forzarSinProcesar) {
@@ -4348,43 +4312,18 @@ export default function Facturar({
             // Si el monto total aprobado es igual al total de la factura en bolívares, procesar e imprimir automáticamente
             const diferencia = Math.abs(totalAprobado - totalFacturaBs);
             if (diferencia < 0.01) { // Tolerancia de 0.01 para comparación de decimales
-                // El monto aprobado coincide exactamente con el total de la factura
-                // Procesar e imprimir automáticamente
-                
-                // Cancelar timeout anterior si existe
-                if (posTimeoutRef.current) {
-                    clearTimeout(posTimeoutRef.current);
-                    posTimeoutRef.current = null;
+                // Forzar commit inmediato y ejecutar facturar_e_imprimir sin delay
+                flushSync(() => {
+                    setDebitoRef(refFinal);
+                    setDebito(totalAprobado.toFixed(2));
+                });
+                if (facturar_e_imprimir) {
+                    facturar_e_imprimir();
                 }
-                
-                // Verificar que no esté ya procesando antes de crear el timeout
-                if (procesandoPagoRef.current) {
-                    posProcesandoRef.current = false;
-                    return;
-                }
-                
-                posTimeoutRef.current = setTimeout(() => {
-                    // Limpiar el ref del timeout
-                    posTimeoutRef.current = null;
-                    // Liberar el flag de procesamiento
-                    posProcesandoRef.current = false;
-                    
-                    // Verificar que no esté ya procesando antes de llamar
-                    if (!procesandoPagoRef.current && facturar_e_imprimir) {
-                        facturar_e_imprimir();
-                    }
-                }, 500); // Pequeño delay para asegurar que el débito se haya actualizado
             } else {
                 // Solo procesar el pago sin facturar
-                // Verificar que no esté ya procesando antes de llamar
-                if (!procesandoPagoRef.current) {
-                    // Liberar el flag de procesamiento antes de llamar
-                    posProcesandoRef.current = false;
-                    procesarPagoInterno(posPendingCallback, refFinal);
-                } else {
-                    // Liberar el flag si no se va a procesar
-                    posProcesandoRef.current = false;
-                }
+                posProcesandoRef.current = false;
+                procesarPagoInterno(posPendingCallback, refFinal);
             }
         } else {
             // Total NO cubierto: solo aplicar monto al campo débito, el usuario completará con otros métodos
@@ -9048,9 +8987,7 @@ export default function Facturar({
                                                 clearTimeout(posTimeoutRef.current);
                                                 posTimeoutRef.current = null;
                                             }
-                                            // Liberar flags
                                             posProcesandoRef.current = false;
-                                            procesandoPagoRef.current = false;
                                         }}
                                         disabled={posLoading}
                                         className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
@@ -9073,9 +9010,7 @@ export default function Facturar({
                                                 clearTimeout(posTimeoutRef.current);
                                                 posTimeoutRef.current = null;
                                             }
-                                            // Liberar flags
                                             posProcesandoRef.current = false;
-                                            procesandoPagoRef.current = false;
                                             // Hacer foco en el campo de referencia después de cerrar el modal
                                             setTimeout(() => {
                                                 const debitoRefInput = document.querySelector('[data-ref-input="true"]');
