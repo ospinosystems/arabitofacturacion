@@ -154,7 +154,7 @@ class tickera extends Controller
                     $pedido_date = \Carbon\Carbon::parse($pedido->fecha_factura ?? $pedido->created_at)->toDateString();
                     $today_date = \Carbon\Carbon::now()->toDateString();
                     if ($pedido_date !== $today_date) {
-                        throw new \Exception("¡El pedido no es de hoy, no se puede imprimir!", 1);
+                        //throw new \Exception("¡El pedido no es de hoy, no se puede imprimir!", 1);
                     }
                 }
 
@@ -924,9 +924,11 @@ class tickera extends Controller
                     $items[] = [
                         'descripcion' => $val->abono,
                         'codigo_barras' => 0,
-                        'pu' => $val->monto,
                         'cantidad' => $val->cantidad,
+                        'pu' => $val->monto,
                         'totalprecio' => $val->total,
+                        "pu_bs" => $val->monto*$val->tasa,
+                        "totalprecio_bs" => $val->total*$val->tasa,
                     ];
                 }else{
                     // Usar precio_unitario del item (precio al momento de la venta)
@@ -934,9 +936,11 @@ class tickera extends Controller
                     $items[] = [
                         'descripcion' => $val->producto->descripcion,
                         'codigo_barras' => $val->producto->codigo_barras,
-                        'pu' => ($val->descuento<0)?$precioItem-$val->des_unitario:$precioItem,
                         'cantidad' => $val->cantidad,
                         'totalprecio' => $val->total,
+                        'pu' => ($val->descuento<0)?$precioItem-$val->des_unitario:$precioItem,
+                        "pu_bs" => ($val->descuento<0)?($precioItem-$val->des_unitario)*$val->tasa:$precioItem*$val->tasa,
+                        "totalprecio_bs" => $val->total*$val->tasa,
                     ];
                 }
             }
@@ -958,14 +962,11 @@ class tickera extends Controller
                $cantidad = floatval($item['cantidad']);
                $totDolares = $puDolares * $cantidad;
                // Calcular equivalentes en bolívares
-               $puBs = $puDolares * $dolar;
-               $totBs = $totDolares * $dolar;
-               
                // Línea 1: P/U y TOT en dólares (REF)
-               $printer->text("P/U:" . number_format($puDolares, 2) . " TOT:" . number_format($totDolares, 2) . " REF");
+               $printer->text("P/U:" . number_format($item['pu'], 2) . " TOT:" . number_format($item['totalprecio'], 2) . " REF");
                $printer->text("\n");
                // Línea 2: P/U y TOT en bolívares
-               $printer->text("P/U:Bs" . number_format($puBs, 2) . " TOT:Bs" . number_format($totBs, 2));
+               $printer->text("P/U:Bs" . number_format($item['pu_bs'], 2) . " TOT:Bs" . number_format($item['totalprecio_bs'], 2));
                $printer->text("\n");
            }
            
@@ -1047,9 +1048,9 @@ class tickera extends Controller
             
             $printer->text("Desc: ".$pedido->total_des);
             $printer->text("\n");
-            $printer->text("Sub-Total: ". number_format($pedido->clean_total,2) );
+            $printer->text("Sub-Total: ". number_format($pedido->bs_clean,2) );
             $printer->text("\n");
-            $printer->text("Total: ".$pedido->total);
+            $printer->text("Total: ". number_format($pedido->bs_clean,2) );
             $printer->text("\n");
             
             $printer->text("\n");
