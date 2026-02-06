@@ -963,10 +963,10 @@ class tickera extends Controller
                $totDolares = $puDolares * $cantidad;
                // Calcular equivalentes en bolívares
                // Línea 1: P/U y TOT en dólares (REF)
-               $printer->text("P/U:" . number_format($item['pu'], 2) . " TOT:" . number_format($item['totalprecio'], 2) . " REF");
+               $printer->text("P/U:" . number_format($item['pu'], 2) . " TOT:" . number_format($item['pu']*$item['cantidad'], 2) . " REF");
                $printer->text("\n");
                // Línea 2: P/U y TOT en bolívares
-               $printer->text("P/U:Bs" . number_format($item['pu_bs'], 2) . " TOT:Bs" . number_format($item['totalprecio_bs'], 2));
+               $printer->text("P/U:Bs" . number_format($item['pu_bs'], 2) . " TOT:Bs" . number_format($item['pu_bs']*$item['cantidad'], 2));
                $printer->text("\n");
            }
            
@@ -1048,9 +1048,9 @@ class tickera extends Controller
             
             $printer->text("Desc: ".$pedido->total_des);
             $printer->text("\n");
-            $printer->text("Sub-Total: ". number_format($pedido->bs_clean,2) );
+            $printer->text("Sub-Total: ". number_format($pedido->total,2) );
             $printer->text("\n");
-            $printer->text("Total: ". number_format($pedido->bs_clean,2) );
+            $printer->text("Total: ". number_format($pedido->total,2) );
             $printer->text("\n");
             
             $printer->text("\n");
