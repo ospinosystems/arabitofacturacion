@@ -969,11 +969,92 @@ class sendCentral extends Controller
         }
     }
 
+    /** Órdenes de inventario interno con esta sucursal como destino (historial y pendientes de recibir). */
+    public function getOrdenesInventarioInternoDestino()
+    {
+        try {
+            $codigo_sucursal = $this->getOrigen();
+            if (!$codigo_sucursal) {
+                return ['estado' => false, 'msj' => 'Sucursal no configurada', 'data' => []];
+            }
+            $response = Http::timeout(30)->post($this->path() . '/inventario-interno/getOrdenesDestinoSucursal', [
+                'codigo_sucursal' => $codigo_sucursal,
+                'limit' => 80,
+            ]);
+            if ($response->ok()) {
+                $data = $response->json();
+                return ['estado' => $data['estado'] ?? false, 'msj' => $data['msj'] ?? '', 'data' => $data['data'] ?? []];
+            }
+            return ['estado' => false, 'msj' => 'Error central: ' . $response->status(), 'data' => []];
+        } catch (\Exception $e) {
+            return ['estado' => false, 'msj' => $e->getMessage(), 'data' => []];
+        }
+    }
+
+    /** Detalle de una orden de inventario interno (ítems y cantidades) para esta sucursal. */
+    public function getOrdenDetalleInventarioInternoDestino($id_orden)
+    {
+        try {
+            $codigo_sucursal = $this->getOrigen();
+            if (!$codigo_sucursal) {
+                return ['estado' => false, 'msj' => 'Sucursal no configurada', 'data' => null];
+            }
+            $response = Http::timeout(30)->post($this->path() . '/inventario-interno/getOrdenDetalleDestinoSucursal', [
+                'codigo_sucursal' => $codigo_sucursal,
+                'id_orden' => (int) $id_orden,
+            ]);
+            if ($response->ok()) {
+                $data = $response->json();
+                return ['estado' => $data['estado'] ?? false, 'msj' => $data['msj'] ?? '', 'data' => $data['data'] ?? null];
+            }
+            return ['estado' => false, 'msj' => 'Error central: ' . $response->status(), 'data' => null];
+        } catch (\Exception $e) {
+            return ['estado' => false, 'msj' => $e->getMessage(), 'data' => null];
+        }
+    }
+
     /** Wrapper para ruta web: inventario interno de esta sucursal (desde central) */
     public function getInventarioInternoMiSucursal(Request $request)
     {
         $result = $this->getInventarioInternoSucursal();
         return response()->json($result);
+    }
+
+    /** Wrapper para ruta web: órdenes destino esta sucursal */
+    public function getOrdenesInventarioInternoDestinoRequest(Request $request)
+    {
+        $result = $this->getOrdenesInventarioInternoDestino();
+        return response()->json($result);
+    }
+
+    /** Detalle de una orden (ítems y cantidades) para esta sucursal. */
+    public function getOrdenDetalleInventarioInternoDestinoRequest(Request $request)
+    {
+        $id_orden = $request->get('id_orden');
+        $result = $this->getOrdenDetalleInventarioInternoDestino($id_orden);
+        return response()->json($result);
+    }
+
+    /** Registrar consumo de inventario interno en esta sucursal (resta del stock en central). */
+    public function registrarConsumoInventarioInterno(array $items)
+    {
+        try {
+            $codigo_sucursal = $this->getOrigen();
+            if (!$codigo_sucursal) {
+                return ['estado' => false, 'msj' => 'Sucursal no configurada'];
+            }
+            $response = Http::timeout(30)->post($this->path() . '/inventario-interno/registrarConsumoInventarioInterno', [
+                'codigo_sucursal' => $codigo_sucursal,
+                'items' => $items,
+            ]);
+            if ($response->ok()) {
+                $data = $response->json();
+                return ['estado' => $data['estado'] ?? false, 'msj' => $data['msj'] ?? ''];
+            }
+            return ['estado' => false, 'msj' => 'Error central: ' . $response->status()];
+        } catch (\Exception $e) {
+            return ['estado' => false, 'msj' => $e->getMessage()];
+        }
     }
 
     /** Wrapper para ruta web: marcar orden inventario interno como recibida */
@@ -984,6 +1065,57 @@ class sendCentral extends Controller
             return response()->json(['estado' => false, 'msj' => 'Falta id_orden']);
         }
         $result = $this->recibirOrdenInventarioInterno($id_orden);
+        return response()->json($result);
+    }
+
+    /** Wrapper para ruta web: registrar consumo inventario interno */
+    public function registrarConsumoInventarioInternoRequest(Request $request)
+    {
+        $items = $request->get('items');
+        if (!is_array($items) || count($items) === 0) {
+            return response()->json(['estado' => false, 'msj' => 'Debe indicar al menos un ítem con cantidad a consumir']);
+        }
+        $result = $this->registrarConsumoInventarioInterno($items);
+        return response()->json($result);
+    }
+
+    /** Historial de consumo de inventario interno de esta sucursal (desde central). Params: fecha_desde, fecha_hasta (Y-m-d), agrupado (1). */
+    public function getHistorialConsumoInventarioInterno($params = [])
+    {
+        try {
+            $codigo_sucursal = $this->getOrigen();
+            if (!$codigo_sucursal) {
+                return ['estado' => false, 'msj' => 'Sucursal no configurada', 'data' => []];
+            }
+            $payload = array_merge([
+                'codigo_sucursal' => $codigo_sucursal,
+                'limit' => 100,
+            ], $params);
+            $response = Http::timeout(30)->post($this->path() . '/inventario-interno/getHistorialConsumoInventarioInterno', $payload);
+            if ($response->ok()) {
+                $data = $response->json();
+                return ['estado' => $data['estado'] ?? false, 'msj' => $data['msj'] ?? '', 'data' => $data['data'] ?? []];
+            }
+            return ['estado' => false, 'msj' => 'Error central: ' . $response->status(), 'data' => []];
+        } catch (\Exception $e) {
+            return ['estado' => false, 'msj' => $e->getMessage(), 'data' => []];
+        }
+    }
+
+    /** Wrapper para ruta web: historial consumo inventario interno (fecha_desde, fecha_hasta, agrupado) */
+    public function getHistorialConsumoInventarioInternoRequest(Request $request)
+    {
+        $params = [];
+        if ($request->has('fecha_desde')) {
+            $params['fecha_desde'] = $request->get('fecha_desde');
+        }
+        if ($request->has('fecha_hasta')) {
+            $params['fecha_hasta'] = $request->get('fecha_hasta');
+        }
+        if ($request->has('agrupado')) {
+            $params['agrupado'] = $request->get('agrupado');
+        }
+        $result = $this->getHistorialConsumoInventarioInterno($params);
         return response()->json($result);
     }
 

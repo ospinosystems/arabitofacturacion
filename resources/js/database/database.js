@@ -499,7 +499,11 @@ const db = {
 
   // Inventario de consumo interno (desde central vía sendCentral)
   getInventarioInternoMiSucursal: () => axios.post(host + "getInventarioInternoMiSucursal"),
+  getOrdenesInventarioInternoDestino: () => axios.post(host + "getOrdenesInventarioInternoDestino"),
+  getOrdenDetalleInventarioInternoDestino: (data) => axios.post(host + "getOrdenDetalleInventarioInternoDestino", data),
   recibirOrdenInventarioInterno: (data) => axios.post(host + "recibirOrdenInventarioInterno", data),
+  registrarConsumoInventarioInterno: (data) => axios.post(host + "registrarConsumoInventarioInterno", data),
+  getHistorialConsumoInventarioInterno: (data) => axios.post(host + "getHistorialConsumoInventarioInterno", data || {}),
 }
 
 export default db

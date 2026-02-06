@@ -569,7 +569,11 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('setInventarioFromSucursal', [sendCentral::class,"setInventarioFromSucursal"]);
 		Route::post('getSucursales', [sendCentral::class,"getSucursales"]);
 		Route::post('getInventarioInternoMiSucursal', [sendCentral::class,"getInventarioInternoMiSucursal"]);
+		Route::post('getOrdenesInventarioInternoDestino', [sendCentral::class,"getOrdenesInventarioInternoDestinoRequest"]);
+		Route::post('getOrdenDetalleInventarioInternoDestino', [sendCentral::class,"getOrdenDetalleInventarioInternoDestinoRequest"]);
 		Route::post('recibirOrdenInventarioInterno', [sendCentral::class,"recibirOrdenInventarioInternoRequest"]);
+		Route::post('registrarConsumoInventarioInterno', [sendCentral::class,"registrarConsumoInventarioInternoRequest"]);
+		Route::post('getHistorialConsumoInventarioInterno', [sendCentral::class,"getHistorialConsumoInventarioInternoRequest"]);
 		Route::post('getInventarioSucursalFromCentral', [sendCentral::class,"getInventarioSucursalFromCentral"]);
 		Route::post('setInventarioSucursalFromCentral', [sendCentral::class,"setInventarioSucursalFromCentral"]);
 		
