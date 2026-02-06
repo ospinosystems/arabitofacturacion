@@ -1053,9 +1053,9 @@ class tickera extends Controller
             $printer->text("\n");
             // Agregar detalle de montos y formas de pago al log
             
-            $printer->text("Sub-Total: ". $total_bs );
+            $printer->text("Sub-Total: ". number_format($total_bs,2) );
             $printer->text("\n");
-            $printer->text("Total: ". $total_bs );
+            $printer->text("Total: ". number_format($total_bs,2) );
             $printer->text("\n");
             
             $printer->text("\n");
