@@ -1048,9 +1048,9 @@ class tickera extends Controller
             
             $printer->text("Desc: ".$pedido->total_des);
             $printer->text("\n");
-            $printer->text("Sub-Total: ". number_format($pedido->total,2) );
+            $printer->text("Sub-Total: ". number_format($pedido->bs_clean,2) );
             $printer->text("\n");
-            $printer->text("Total: ". number_format($pedido->total,2) );
+            $printer->text("Total: ". number_format($pedido->bs_clean,2) );
             $printer->text("\n");
             
             $printer->text("\n");
