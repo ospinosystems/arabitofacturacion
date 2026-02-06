@@ -154,7 +154,7 @@ class tickera extends Controller
                     $pedido_date = \Carbon\Carbon::parse($pedido->fecha_factura ?? $pedido->created_at)->toDateString();
                     $today_date = \Carbon\Carbon::now()->toDateString();
                     if ($pedido_date !== $today_date) {
-                        //throw new \Exception("¡El pedido no es de hoy, no se puede imprimir!", 1);
+                        throw new \Exception("¡El pedido no es de hoy, no se puede imprimir!", 1);
                     }
                 }
 
