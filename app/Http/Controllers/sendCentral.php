@@ -1141,10 +1141,11 @@ class sendCentral extends Controller
         // Mapear campos de la respuesta Instapago/central al modelo pago_pedidos
         $posMessage = $data['message'] ?? $data['status'] ?? $data['estado'] ?? null;
         $posTerminal = $data['terminal'] ?? null;
-        // Instapago devuelve amount con separador de miles (ej. "9,377.06"). is_numeric("9,377.06") es false; hay que quitar la coma.
+        // Instapago devuelve amount con separador de miles (ej. "9,123.54"). Quitar coma y guardar como monto*100 (912354).
         $amountRaw = isset($data['amount']) ? trim((string) $data['amount']) : '';
         $amountClean = $amountRaw !== '' ? str_replace(',', '', $amountRaw) : '';
-        $posAmount = $amountClean !== '' && is_numeric($amountClean) ? (float) $amountClean : null;
+        $montoDecimal = $amountClean !== '' && is_numeric($amountClean) ? (float) $amountClean : null;
+        $posAmount = $montoDecimal !== null ? (int) round($montoDecimal * 100) : null;
         $posResponsecode = $data['responsecode'] ?? $data['response_code'] ?? null;
 
         $pago->pos_message = $posMessage;
