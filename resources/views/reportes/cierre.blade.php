@@ -115,7 +115,7 @@
 						<h2>{{$sucursal->sucursal}}</h2>
 						@if(isset($url_descargar_csv) && $url_descargar_csv)
 						<p style="margin-top: 10px;">
-							<a href="{{ $url_descargar_csv }}" class="text-primary" style="font-weight: bold;" download>📥 Descargar CSV detalle (Total Digital USD + Venta neta)</a>
+							<a href="{{ $url_descargar_csv }}" class="text-primary" style="font-weight: bold;" download>📥 Descargar CSV conciliación (una fila por pedido: pagos + ítems + totales)</a>
 						</p>
 						@endif
 					</td>
