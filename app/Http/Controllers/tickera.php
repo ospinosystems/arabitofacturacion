@@ -1048,9 +1048,31 @@ class tickera extends Controller
             
             $printer->text("Desc: ".$pedido->total_des);
             $printer->text("\n");
-            $printer->text("Sub-Total: ". number_format($pedido->bs_clean,2) );
+            // Agregar detalle de montos y formas de pago al log
+            $montosPagos = [];
+            if (isset($pedido->pagos)) {
+                foreach ($pedido->pagos as $pago) {
+                    $montosPagos[] = [
+                        'tipo' => $pago->tipo_pago_str ?? $pago->tipo ?? '',
+                        'monto' => $pago->monto ?? 0,
+                        'moneda' => $pago->moneda ?? '',
+                        'referencia' => $pago->referencia ?? '',
+                    ];
+                }
+            }
+            \Log::info('Ticket impreso para pedido', [
+                'pedido_id' => $pedido->id ?? null,
+                'cliente' => ($pedido->cliente->nombre ?? null) . ' (' . ($pedido->cliente->identificacion ?? '') . ')',
+                'usuario' => session("usuario") ?? ($pedido->vendedor->usuario ?? ''),
+                'fecha' => $pedido->fecha_factura ?? $pedido->created_at ?? null,
+                'total' => $pedido->bs_clean ?? null,
+                'descuento' => $pedido->total_des ?? null,
+                'ticked_count' => isset($updateprint) ? $updateprint->ticked : null,
+                'montos' => $montosPagos,
+            ]);
+            $printer->text("Sub-Total: ". $pedido->bs_clean );
             $printer->text("\n");
-            $printer->text("Total: ". number_format($pedido->bs_clean,2) );
+            $printer->text("Total: ". $pedido->bs_clean );
             $printer->text("\n");
             
             $printer->text("\n");
