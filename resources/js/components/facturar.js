@@ -3164,6 +3164,7 @@ export default function Facturar({
         
     };
     const getPedido = (id, callback = null, clearPagosPedido = true) => {
+        if (showModalPosDebito) return; // No recargar pedido mientras el modal POS débito está activo
         setLoading(true);
         if (!id) {
             id = pedidoSelect;
@@ -4693,7 +4694,6 @@ export default function Facturar({
         
         if (window.confirm("¿Realmente desea Guardar/Editar?")) {
             setLoading(true);
-            console.log(tipo_accionCierre);
             
             // Preparar dataPuntosAdicionales incluyendo lotesPinpad
             const dataPuntosAdicionalesConLotes = {
@@ -4768,6 +4768,10 @@ export default function Facturar({
                         settipo_accionCierre(res.data.tipo_accionCierre);
                     });
                 }
+            }).catch((err) => {
+                setLoading(false);
+                const msj = err.response?.data?.msj || err.message || 'Error al guardar el cierre';
+                notificar({ data: { msj, estado: false } }, false);
             });
         }
     };
