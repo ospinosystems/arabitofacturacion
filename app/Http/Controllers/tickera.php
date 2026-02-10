@@ -153,8 +153,10 @@ class tickera extends Controller
                 if (isset($pedido->fecha_factura) || isset($pedido->created_at)) {
                     $pedido_date = \Carbon\Carbon::parse($pedido->fecha_factura ?? $pedido->created_at)->toDateString();
                     $today_date = \Carbon\Carbon::now()->toDateString();
-                    if ($pedido_date !== $today_date) {
-                        throw new \Exception("¡El pedido no es de hoy, no se puede imprimir!", 1);
+                    if(session("usuario") != "admin"){
+                        if ($pedido_date !== $today_date) {
+                            throw new \Exception("¡El pedido no es de hoy, no se puede imprimir!", 1);
+                        }
                     }
                 }
 
@@ -1197,6 +1199,18 @@ class tickera extends Controller
                 $nombre_equipo = "caja2";
                 //$nombre_equipo = "ospino";
                 $ipReal = gethostbyname($nombre_equipo);
+            }
+            
+            $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
+        }
+
+
+        if($codigo_origen=="guacara"){
+            if ($caja=="autopago1") {
+                $nombre_equipo = "GUACARA-AUTOPAGO1";
+                //$nombre_equipo = "ospino";
+               // $ipReal = gethostbyname($nombre_equipo);
+               $ipReal = "192.168.0.107";
             }
             
             $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
