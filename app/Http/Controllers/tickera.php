@@ -1210,7 +1210,7 @@ class tickera extends Controller
                 $nombre_equipo = "GUACARA-AUTOPAGO1";
                 //$nombre_equipo = "ospino";
                // $ipReal = gethostbyname($nombre_equipo);
-               $ipReal = "192.168.0.107";
+               $ipReal = "192.168.0.210";
             }
             
             $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
