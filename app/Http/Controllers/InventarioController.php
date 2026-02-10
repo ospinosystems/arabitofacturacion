@@ -1777,6 +1777,67 @@ class InventarioController extends Controller
         }
     }
 
+    /**
+     * Solicitar agregar producto (autopago): por código y cantidad.
+     * Requiere id_tarea de una tarea tipo agregarProducto ya aprobada (clave DICI).
+     * Si el producto existe en inventario local -> envía guardarProductoNovedad con cantidad solicitada.
+     * Si no existe -> busca en central (id_sucursal 13), crea producto con cantidad 0, luego envía novedad con cantidad solicitada.
+     */
+    public function solicitarAgregarProducto(Request $req)
+    {
+        $id_tarea = $req->id_tarea;
+        $codigo = trim((string) ($req->codigo ?? ''));
+        $cantidad = (int) ($req->cantidad ?? 0);
+
+        if (!$codigo || $cantidad <= 0) {
+            return Response::json(['estado' => false, 'msj' => 'Código y cantidad requeridos (cantidad > 0).']);
+        }
+
+        $tarea = \App\Models\tareaslocal::find($id_tarea);
+        if (!$tarea || $tarea->tipo !== 'agregarProducto' || $tarea->estado != 1) {
+            return Response::json(['estado' => false, 'msj' => 'Acceso no autorizado. Debe validar clave de administrador primero.']);
+        }
+
+        $inv = inventario::where('codigo_barras', $codigo)->orWhere('codigo_proveedor', $codigo)->first();
+
+        if ($inv) {
+            $arr = $inv->toArray();
+            $arr['cantidad'] = $inv->cantidad + $cantidad;
+            $result = $this->guardarProductoNovedad($arr);
+            if (is_array($result) && isset($result['estado']) && !$result['estado']) {
+                return Response::json($result);
+            }
+            return Response::json(['estado' => true, 'msj' => 'Novedad enviada a central. Producto existente.']);
+        }
+
+        $res = (new sendCentral)->buscarProductoEnCentralPorCodigo($codigo);
+        if (!$res['estado']) {
+            return Response::json(['estado' => false, 'msj' => $res['msj'] ?? 'No se encontró el producto en central.']);
+        }
+
+        $arrProducto = $res['data'];
+        $saveResult = $this->guardarProducto($arrProducto);
+        if (is_array($saveResult) && isset($saveResult['estado']) && !$saveResult['estado']) {
+            return Response::json($saveResult);
+        }
+        $idNuevo = is_numeric($saveResult) ? (int) $saveResult : null;
+        if (!$idNuevo) {
+            return Response::json(['estado' => false, 'msj' => 'Error al crear el producto en sucursal.']);
+        }
+
+        $invNuevo = inventario::find($idNuevo);
+        if (!$invNuevo) {
+            return Response::json(['estado' => false, 'msj' => 'Error al obtener el producto creado.']);
+        }
+        $arrNovedad = $invNuevo->toArray();
+        $arrNovedad['cantidad'] = $cantidad;
+        $result = $this->guardarProductoNovedad($arrNovedad);
+        if (is_array($result) && isset($result['estado']) && !$result['estado']) {
+            return Response::json($result);
+        }
+        return Response::json(['estado' => true, 'msj' => 'Producto creado y novedad enviada a central.']);
+    }
+
     function openTransferenciaPedido(Request $req)
     {
         $sucursal = sucursal::all()->first();

@@ -29,6 +29,7 @@ use App\Http\Controllers\tickera;
 use App\Http\Controllers\sendCentral;
 use App\Http\Controllers\UsuariosController;
 use App\Http\Controllers\PagosReferenciasController;
+use App\Http\Controllers\AutopagoController;
 use App\Http\Controllers\tickeprecioController;
 use App\Http\Controllers\CierresController;
 use App\Http\Controllers\MovimientosInventarioController;
@@ -84,6 +85,10 @@ Route::get('', [HomeController::class,"index"]);
 Route::get('inventario-suministros', function () {
     return view('inventario-suministros');
 })->name('inventario-suministros');
+
+Route::get('autopago', function () {
+    return view('autopago');
+})->name('autopago');
 
 Route::get('senComoVamos', [sendCentral::class,"sendComovamos"]);
 
@@ -182,7 +187,9 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('validarCodigoAprobacion', [PagosReferenciasController::class,"validarCodigoAprobacion"]);
 		Route::post('delRefPago', [PagosReferenciasController::class,"delRefPago"]);
 		Route::post('autovalidar-transferencia', [PagosReferenciasController::class,"autovalidarTransferencia"]);
-		
+		Route::post('autopago-completar-orden', [AutopagoController::class,"completarOrden"]);
+		Route::post('autopago-crear-tarea-agregar-producto', [AutopagoController::class,"crearTareaAgregarProducto"]);
+		Route::post('autopago-solicitar-agregar-producto', [InventarioController::class,"solicitarAgregarProducto"]);
 
 		Route::post('addRetencionesPago', [RetencionesController::class,"addRetencionesPago"]);
 		Route::post('delRetencionPago', [RetencionesController::class,"delRetencionPago"]);

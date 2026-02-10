@@ -38,6 +38,11 @@ class HomeController extends Controller
                         $obj->save();
                         return Response::json(["msj"=>"EXITO","estado"=>true]);
                     }
+                    if ($obj && $obj->tipo=="agregarProducto") {
+                        $obj->estado = 1;
+                        $obj->save();
+                        return Response::json(["msj"=>"EXITO","estado"=>true]);
+                    }
                 }
             }
 

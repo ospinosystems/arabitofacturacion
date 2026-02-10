@@ -10,6 +10,7 @@ class pedidos extends Model
 {
     protected $fillable= [
         "id",
+        "uuid",
         "push",
         "estado",
         "export",

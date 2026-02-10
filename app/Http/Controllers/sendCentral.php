@@ -950,6 +950,43 @@ class sendCentral extends Controller
         }
     }
 
+    /**
+     * Busca en central (inventario_sucursals id_sucursal=13) un producto por codigo_barras o codigo_proveedor.
+     * Devuelve ['estado' => true, 'data' => array para guardarProducto] o ['estado' => false, 'msj' => ...].
+     */
+    public function buscarProductoEnCentralPorCodigo($codigo)
+    {
+        try {
+            $response = Http::timeout(15)->post($this->path() . '/buscarProductoPorCodigoSucursal13', [
+                'codigo' => $codigo,
+            ]);
+            $body = $response->json();
+            if (!$response->ok() || empty($body['estado']) || empty($body['data'])) {
+                return ['estado' => false, 'msj' => $body['msj'] ?? 'Error al buscar en central'];
+            }
+            $d = $body['data'];
+            $arr = [
+                'id' => null,
+                'id_factura' => null,
+                'codigo_barras' => $d['codigo_barras'] ?? '',
+                'codigo_proveedor' => $d['codigo_proveedor'] ?? '',
+                'descripcion' => $d['descripcion'] ?? '',
+                'unidad' => $d['unidad'] ?? 'pza',
+                'id_categoria' => $d['id_categoria'] ?? null,
+                'id_proveedor' => $d['id_proveedor'] ?? null,
+                'id_marca' => $d['id_marca'] ?? null,
+                'precio_base' => $d['precio_base'] ?? 0,
+                'precio' => $d['precio'] ?? 0,
+                'iva' => $d['iva'] ?? 0,
+                'cantidad' => 0,
+                'origen' => 'agregarProductoCentral',
+            ];
+            return ['estado' => true, 'data' => $arr];
+        } catch (\Exception $e) {
+            return ['estado' => false, 'msj' => $e->getMessage()];
+        }
+    }
+
     /** Marcar orden de inventario interno como recibida en central. Central identifica la sucursal por codigo. */
     public function recibirOrdenInventarioInterno($id_orden)
     {

@@ -3145,49 +3145,48 @@ export default function PagarMain({
                                                 <span className="flex items-center px-1 text-sm font-bold text-yellow-700">Bs</span>
                                             </div>
                                         </div>
-                                            {/* Efectivo Pesos (oculto por defecto) */}
+                                            {/* Efectivo COP (oculto por defecto) */}
                                             {showEfectivoPeso && (
-                                                <div className={`flex-1 min-w-[120px] flex border rounded ${efectivo_peso != "" ? "bg-white border-amber-300" : "bg-white border-gray-200"}`}>
-                                                    <label
-                                                        className="flex items-center justify-center w-8 text-amber-600 border-r border-gray-200 rounded-l cursor-pointer bg-amber-100"
-                                                        onClick={() => {
-                                                            const tasaBs = getTasaPromedioCarrito();
-                                                            const tasaCop = pedidoData?.items?.[0]?.tasa_cop || peso;
-                                                            // Calcular solo débitos NO bloqueados
-                                                            const debitosNoBloqueados = debitos.filter(d => !d.bloqueado);
-                                                            const totalDebitosNoBloqueadosBs = debitosNoBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
-                                                            const totalPagos = (totalDebitosNoBloqueadosBs / tasaBs) + parseFloat(efectivo_dolar || 0) + (parseFloat(efectivo_bs || 0) / tasaBs) + (parseFloat(efectivo_peso || 0) / tasaCop) + parseFloat(transferencia || 0);
-                                                            const restanteUSD = parseFloat(pedidoData?.clean_total || 0) - totalPagos;
-                                                            if (restanteUSD > 0) setEfectivo_peso((restanteUSD * tasaCop).toFixed(0));
-                                                        }}
-                                                        title="Efectivo Pesos COP"
-                                                    >
-                                                        <span className="text-[10px] font-bold">COP</span>
-                                                    </label>
-                                                    <div className="flex-1 flex flex-col">
-                                                        <div className="flex items-center">
-                                                            <input
-                                                                data-efectivo="cop"
-                                                                type="text"
-                                                                className="flex-1 min-w-0 px-2 py-1 text-lg font-bold text-amber-700 bg-transparent border-0 focus:ring-0 focus:outline-none text-right"
-                                                                value={displayMonedaLive(efectivo_peso)}
-                                                                onChange={(e) => syncPago(formatMonedaLive(e.target.value), "EfectivoCOP")}
-                                                                placeholder="0"
-                                                            />
-                                                            <span className="px-1 text-[10px] font-bold text-amber-700">COP</span>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => { setShowEfectivoPeso(false); setEfectivo_peso(""); }}
-                                                                className="px-1 text-gray-400 hover:text-red-500"
-                                                                title="Quitar COP"
-                                                            >
-                                                                <i className="text-xs fa fa-times"></i>
-                                                            </button>
-                                                        </div>
-                                                        {efectivo_peso && (
-                                                            <div className="px-2 pb-0.5 text-[10px] text-amber-600 text-right">≈${moneda(parseFloat(efectivo_peso || 0) / (pedidoData?.items?.[0]?.tasa_cop || peso))}</div>
-                                                        )}
+                                                <div className="flex-1 min-w-[120px] flex flex-col gap-1">
+                                                    <span className="text-[10px] font-medium text-amber-600">Efectivo COP (C)</span>
+                                                    <div className={`flex border rounded ${efectivo_peso != "" ? "bg-white border-amber-300" : "bg-white border-gray-200"}`}>
+                                                        <label
+                                                            className="flex items-center justify-center w-8 text-amber-600 border-r border-gray-200 rounded-l cursor-pointer bg-amber-100"
+                                                            onClick={() => {
+                                                                const tasaBs = getTasaPromedioCarrito();
+                                                                const tasaCop = pedidoData?.items?.[0]?.tasa_cop || peso;
+                                                                const debitosNoBloqueados = debitos.filter(d => !d.bloqueado);
+                                                                const totalDebitosNoBloqueadosBs = debitosNoBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+                                                                const totalPagos = (totalDebitosNoBloqueadosBs / tasaBs) + parseFloat(efectivo_dolar || 0) + (parseFloat(efectivo_bs || 0) / tasaBs) + (parseFloat(efectivo_peso || 0) / tasaCop) + parseFloat(transferencia || 0);
+                                                                const restanteUSD = parseFloat(pedidoData?.clean_total || 0) - totalPagos;
+                                                                if (restanteUSD > 0) setEfectivo_peso((restanteUSD * tasaCop).toFixed(0));
+                                                            }}
+                                                            title="Efectivo Pesos COP"
+                                                        >
+                                                            <span className="text-[10px] font-bold">COP</span>
+                                                        </label>
+                                                        <input
+                                                            data-efectivo="cop"
+                                                            type="text"
+                                                            className="flex-1 min-w-0 px-2 py-1.5 text-lg font-bold text-amber-700 bg-transparent border-0 focus:ring-0 focus:outline-none text-right"
+                                                            value={displayMonedaLive(efectivo_peso)}
+                                                            onChange={(e) => syncPago(formatMonedaLive(e.target.value), "EfectivoCOP")}
+                                                            onKeyDown={handlePaymentInputKeyDown}
+                                                            placeholder="0"
+                                                        />
+                                                        <span className="flex items-center px-1 text-sm font-bold text-amber-700">COP</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => { setShowEfectivoPeso(false); setEfectivo_peso(""); }}
+                                                            className="flex items-center px-1.5 text-gray-400 hover:text-red-500"
+                                                            title="Quitar COP"
+                                                        >
+                                                            <i className="text-xs fa fa-times"></i>
+                                                        </button>
                                                     </div>
+                                                    {efectivo_peso && (
+                                                        <div className="px-2 pb-0.5 text-[10px] text-amber-600 text-right">≈${moneda(parseFloat(efectivo_peso || 0) / (pedidoData?.items?.[0]?.tasa_cop || peso))}</div>
+                                                    )}
                                                 </div>
                                             )}
                                     </div>

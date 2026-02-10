@@ -24,7 +24,10 @@ class NoCacheMiddleware
             $response->headers->set('Pragma', 'no-cache');
             $response->headers->set('Expires', '0');
             $response->headers->set('Last-Modified', gmdate('D, d M Y H:i:s') . ' GMT');
-            $response->headers->set('ETag', '"' . md5_file($request->path()) . '"');
+            $filePath = public_path($request->path());
+            if (file_exists($filePath)) {
+                $response->headers->set('ETag', '"' . md5_file($filePath) . '"');
+            }
         }
 
         return $response;

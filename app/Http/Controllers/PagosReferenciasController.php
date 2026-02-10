@@ -881,21 +881,22 @@ class PagosReferenciasController extends Controller
                  ]);
              }
 
-             // Verificar que el pedido exista
-             $pedido = pedidos::find($id_pedido);
-             if (!$pedido) {
-                 return Response::json([
-                     "estado" => false,
-                     "msj" => "Pedido no encontrado"
-                 ]);
-             }
-
-             // Verificar que el pedido esté pendiente (estado 0 = pendiente, 1 = procesado)
-             if ($pedido->estado != 0) {
-                 return Response::json([
-                     "estado" => false,
-                     "msj" => "El pedido ya está procesado"
-                 ]);
+             // Si viene un UUID (autopago/kiosk), omitir validación de pedido en BD
+             $esUuid = preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id_pedido) === 1;
+             if (!$esUuid) {
+                 $pedido = pedidos::find($id_pedido);
+                 if (!$pedido) {
+                     return Response::json([
+                         "estado" => false,
+                         "msj" => "Pedido no encontrado"
+                     ]);
+                 }
+                 if ($pedido->estado != 0) {
+                     return Response::json([
+                         "estado" => false,
+                         "msj" => "El pedido ya está procesado"
+                     ]);
+                 }
              }
 
              // Verificar que no exista ya una referencia con el mismo número
@@ -947,7 +948,12 @@ class PagosReferenciasController extends Controller
                  $pagoRef = new pagos_referencias();
                  $pagoRef->tipo = 1; // Transferencia
                  $pagoRef->monto = $monto;
-                 $pagoRef->id_pedido = $id_pedido;
+                 if ($esUuid) {
+                     $pagoRef->id_pedido = null;
+                     $pagoRef->uuid_pedido = $id_pedido;
+                 } else {
+                     $pagoRef->id_pedido = $id_pedido;
+                 }
                  $pagoRef->cedula = $cedula;
                  $pagoRef->descripcion = $resultado['referencia_completa'] ?? $referencia;
                  $pagoRef->banco = $resultado['banco'] ?? "0134"; // Banco destino desde central

@@ -21,6 +21,7 @@ class pagos_referencias extends Model
         'descripcion',
         'monto',
         'id_pedido',
+        'uuid_pedido',
         'banco',
         'response',
         'estatus',
