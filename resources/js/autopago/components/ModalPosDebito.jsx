@@ -1,24 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import TecladoNumerico from './TecladoNumerico';
-import { PAYMENT_METHOD_COLORS, POS_INSTRUCCIONES, POS_INSTRUCCIONES_KEYWORDS } from '../config';
-
-/** Envuelve las palabras clave del texto en <strong> para resaltarlas */
-function resaltarClaves(texto, palabrasClave) {
-  if (!palabrasClave?.length) return texto;
-  const escapadas = palabrasClave.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const re = new RegExp(`(${escapadas.join('|')})`, 'gi');
-  const partes = texto.split(re);
-  return partes.map((parte, i) =>
-    parte && palabrasClave.some((kw) => kw.toLowerCase() === parte.toLowerCase()) ? (
-      <strong key={i} className="font-extrabold text-gray-900">
-        {parte}
-      </strong>
-    ) : (
-      parte
-    )
-  );
-}
 
 /** Extrae solo dígitos de la cédula para el POS */
 const cedulaSoloDigitos = (v) => String(v || '').replace(/\D/g, '');
@@ -177,112 +159,35 @@ export default function ModalPosDebito({
         onKeyDown={handleKeyDown}
         tabIndex={-1}
       >
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
-          <div
-            className="px-4 py-2 rounded-t-lg flex-shrink-0 flex items-center justify-between gap-3"
-            style={{ backgroundColor: PAYMENT_METHOD_COLORS.card.bg, color: PAYMENT_METHOD_COLORS.card.textOnBg }}
-          >
-            <h3 className=" font-bold flex items-center gap-2">
-              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="px-6 py-4 flex-shrink-0 border-b border-gray-200 bg-gray-50">
+            <h3 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+              <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
               </svg>
-              Punto de Venta - Débito
+              Pago con tarjeta
             </h3>
-            <span className="text-sm font-semibold opacity-95 whitespace-nowrap">
-              Total: Bs {parseFloat(posMontoDebito || 0).toFixed(2)}
-            </span>
+            <p className="text-sm text-gray-500 mt-1">
+              Monto: Bs {parseFloat(posMontoDebito || 0).toFixed(2)} · Máx. Bs {parseFloat(montoTotal || 0).toFixed(2)}
+            </p>
           </div>
 
-          <div className="p-6 space-y-4 overflow-y-auto flex-1 bg-gray-50">
-            {/* Instrucciones por pasos: resaltan según lo que va completando el cliente */}
-            {(() => {
-              const requestSent = posLoading || transaccionesEstaSesion.length > 0;
-              const allDone = transaccionesEstaSesion.length > 0 && !posLoading;
-              const stepStatus = [
-                requestSent ? 'completed' : 'current',   // 1: deja de resaltar tras enviar
-                posLoading ? 'current' : (allDone ? 'completed' : 'pending'),
-                allDone ? 'completed' : 'pending',
-              ];
-              return (
-                <div
-                  className="rounded-xl p-3 border-2 border-amber-200 bg-amber-50"
-                >
-                  <p className="text-3xl font-extrabold mb-2 text-gray-900 tracking-tight">
-                    Siga estos pasos:
-                  </p>
-                  <ul className="space-y-2">
-                    {POS_INSTRUCCIONES.map((inst, i) => {
-                      const status = stepStatus[i];
-                      const isCurrent = status === 'current';
-                      const isCompleted = status === 'completed';
-                      const esEnviarLector = i === 0;
-                      return (
-                        <li
-                          key={i}
-                          className={`flex items-start gap-3 rounded-lg py-2.5 px-3 transition-all duration-200 ${
-                            esEnviarLector && isCurrent
-                              ? 'bg-amber-300 border-2 border-amber-600 shadow-lg ring-2 ring-amber-400'
-                              : isCurrent
-                                ? 'bg-amber-200 border-2 border-amber-500 shadow-md'
-                                : isCompleted
-                                  ? 'bg-green-50 border border-green-200'
-                                  : 'bg-white/80 border border-gray-200'
-                          }`}
-                        >
-                          <span
-                            className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold ${
-                              isCompleted
-                                ? 'bg-green-600 text-white'
-                                : isCurrent
-                                  ? 'bg-amber-600 text-white'
-                                  : 'bg-gray-300 text-gray-600'
-                            }`}
-                          >
-                            {isCompleted ? '✓' : i + 1}
-                          </span>
-                          <span
-                            className={`pt-0.5 text-2xl font-semibold leading-snug ${
-                              esEnviarLector && isCurrent
-                                ? 'text-amber-950'
-                                : isCurrent
-                                  ? 'text-amber-900'
-                                  : isCompleted
-                                    ? 'text-green-800'
-                                    : 'text-gray-600'
-                            }`}
-                          >
-                            {resaltarClaves(inst, POS_INSTRUCCIONES_KEYWORDS[i])}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              );
-            })()}
-
-            <div
-              className="border rounded-lg p-3"
-              style={{
-                backgroundColor: PAYMENT_METHOD_COLORS.card.bgLight,
-                borderColor: PAYMENT_METHOD_COLORS.card.border,
-              }}
-            >
-              <div className="flex justify-between items-center text-sm font-semibold text-gray-900">
-                <span>Pendiente:</span>
-                <span>Bs {parseFloat(montoTotal || 0).toFixed(2)}</span>
-              </div>
-              {transaccionesEstaSesion.length > 0 && (
-                <div className="flex justify-between items-center text-sm mt-1 pt-1 border-t font-semibold" style={{ borderColor: PAYMENT_METHOD_COLORS.card.border }}>
-                  <span className="text-green-900 font-semibold">Aprobado en esta sesión:</span>
-                  <span className="text-green-900 font-semibold">Bs {transaccionesEstaSesion.reduce((s, t) => s + (t.amount || 0), 0).toFixed(2)}</span>
-                </div>
-              )}
+          <div className="p-6 space-y-5 overflow-y-auto flex-1">
+            {/* Instrucción simple y clara */}
+            <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
+              <p className="text-base text-slate-700 leading-relaxed">
+                {posLoading ? (
+                  <>Enviando al datáfono… confirme el monto e introduzca su clave en el lector.</>
+                ) : (
+                  <>Ingrese su cédula y el monto, luego pulse <strong className="text-slate-800">Enviar al datáfono</strong>. En el lector confirme el monto e introduzca su clave.</>
+                )}
+              </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-white rounded-xl border-2 border-amber-200 shadow-md p-3 focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-200 transition-all">
-                <label className="block  font-bold text-gray-900 mb-2">Cédula del Titular</label>
+            {/* Campos en bloque limpio */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Cédula del titular</label>
                 <input
                   id="autopago-pos-cedula-input"
                   type="text"
@@ -298,58 +203,60 @@ export default function ModalPosDebito({
                     }
                   }}
                   placeholder="Ej: 12345678"
-                  className={`w-full px-4 py-3 text-xl font-semibold text-gray-900 border-2 rounded-lg focus:outline-none ${campoActivo === 'cedula' ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-300' : 'border-gray-300'}`}
+                  className={`w-full px-4 py-3 text-lg text-gray-900 border rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-300 ${campoActivo === 'cedula' ? 'border-slate-400 ring-2 ring-slate-200 bg-white' : 'border-gray-300 bg-white'}`}
                   disabled={posLoading}
                 />
               </div>
-              <div className="bg-white rounded-xl border-2 border-amber-200 shadow-md p-3 focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-200 transition-all">
-                <label className="block  font-bold text-amber-900 mb-2">Tipo de Cuenta</label>
-                <select
-                  value={posTipoCuenta}
-                  onChange={(e) => setPosTipoCuenta(e.target.value)}
-                  className="w-full px-4 py-3 text-xl font-semibold text-gray-900 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 bg-white"
-                  disabled={posLoading}
-                >
-                  <option value="CORRIENTE">CORRIENTE</option>
-                  <option value="AHORROS">AHORROS</option>
-                  <option value="CREDITO">CREDITO</option>
-                </select>
-              </div>
-              <div className="bg-white rounded-xl border-2 border-amber-200 shadow-md p-3 focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-200 transition-all">
-                <label className="block  font-bold text-gray-900 mb-2">Monto a pagar (Bs)</label>
-                <input
-                  type="text"
-                  inputMode="none"
-                  value={posMontoDebito}
-                  onChange={(e) => {
-                    const v = formatMontoInput(e.target.value);
-                    if (v === '') { setPosMontoDebito(''); return; }
-                    if (!/^\d*\.?\d{0,2}$/.test(v)) return;
-                    const max = parseFloat(montoTotal) || 0;
-                    const num = parseFloat(v);
-                    if (!v.endsWith('.') && max > 0 && round2(num) > round2(max)) {
-                      setPosMontoDebito(max.toFixed(2));
-                    } else {
-                      setPosMontoDebito(v);
-                    }
-                  }}
-                  onFocus={() => setCampoActivo('monto')}
-                  onBlur={() => {
-                    const num = parseFloat(posMontoDebito) || 0;
-                    const max = parseFloat(montoTotal) || 0;
-                    if (round2(num) > round2(max)) setPosMontoDebito(max.toFixed(2));
-                    else if (num > 0 && posMontoDebito && !posMontoDebito.endsWith('.')) setPosMontoDebito(num.toFixed(2));
-                  }}
-                  placeholder="0.00"
-                  className={`w-full px-4 py-3 text-xl font-bold text-gray-900 rounded-lg focus:outline-none ${campoActivo === 'monto' ? 'border-2 border-amber-500 bg-amber-50 ring-2 ring-amber-300' : 'border-2 border-gray-300'}`}
-                  disabled={posLoading}
-                />
-                <p className="text-sm font-semibold text-gray-900 mt-1">Máx: Bs {parseFloat(montoTotal || 0).toFixed(2)}</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Tipo de cuenta</label>
+                  <select
+                    value={posTipoCuenta}
+                    onChange={(e) => setPosTipoCuenta(e.target.value)}
+                    className="w-full px-4 py-3 text-base text-gray-900 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white"
+                    disabled={posLoading}
+                  >
+                    <option value="CORRIENTE">Corriente</option>
+                    <option value="AHORROS">Ahorros</option>
+                    <option value="CREDITO">Crédito</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Monto (Bs)</label>
+                  <input
+                    type="text"
+                    inputMode="none"
+                    value={posMontoDebito}
+                    onChange={(e) => {
+                      const v = formatMontoInput(e.target.value);
+                      if (v === '') { setPosMontoDebito(''); return; }
+                      if (!/^\d*\.?\d{0,2}$/.test(v)) return;
+                      const max = parseFloat(montoTotal) || 0;
+                      const num = parseFloat(v);
+                      if (!v.endsWith('.') && max > 0 && round2(num) > round2(max)) {
+                        setPosMontoDebito(max.toFixed(2));
+                      } else {
+                        setPosMontoDebito(v);
+                      }
+                    }}
+                    onFocus={() => setCampoActivo('monto')}
+                    onBlur={() => {
+                      const num = parseFloat(posMontoDebito) || 0;
+                      const max = parseFloat(montoTotal) || 0;
+                      if (round2(num) > round2(max)) setPosMontoDebito(max.toFixed(2));
+                      else if (num > 0 && posMontoDebito && !posMontoDebito.endsWith('.')) setPosMontoDebito(num.toFixed(2));
+                    }}
+                    placeholder="0.00"
+                    className={`w-full px-4 py-3 text-lg text-gray-900 border rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-300 ${campoActivo === 'monto' ? 'border-slate-400 ring-2 ring-slate-200 bg-white' : 'border-gray-300 bg-white'}`}
+                    disabled={posLoading}
+                  />
+                </div>
               </div>
             </div>
 
             {!posLoading && (
-              <div className="pt-2">
+              <div>
+                <p className="text-sm text-gray-500 mb-2">Teclado</p>
                 <TecladoNumerico
                   value={campoActivo === 'cedula' ? posCedulaTitular : posMontoDebito}
                   onChange={(v) => {
@@ -370,24 +277,23 @@ export default function ModalPosDebito({
                   }}
                   maxLength={campoActivo === 'cedula' ? 8 : 15}
                   allowDecimal={campoActivo === 'monto'}
-                  accentColor={PAYMENT_METHOD_COLORS.card.bg}
+                  accentColor="#475569"
                 />
               </div>
             )}
 
             {transaccionesEstaSesion.length > 0 && (
-              <div className="border border-green-200 rounded-lg overflow-hidden">
-                <div className="bg-green-50 px-3 py-2 border-b border-green-200">
-                  <span className="text-sm font-semibold text-green-900">
-                    Tarjetas aprobadas ({transaccionesEstaSesion.length})
+              <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+                <div className="px-4 py-2 border-b border-slate-200">
+                  <span className="text-sm font-medium text-slate-700">
+                    Aprobado en esta sesión: Bs {transaccionesEstaSesion.reduce((s, t) => s + (t.amount || 0), 0).toFixed(2)}
                   </span>
                 </div>
-                <div className="divide-y divide-green-100 max-h-24 overflow-y-auto">
+                <div className="divide-y divide-slate-200 max-h-20 overflow-y-auto">
                   {transaccionesEstaSesion.map((t, i) => (
-                    <div key={i} className="flex items-center justify-between px-3 py-2 bg-white text-sm">
-                      <span className="font-medium text-gray-900">Bs {parseFloat(t.amount || 0).toFixed(2)}</span>
-                      <span className="text-gray-800 font-medium">CI: {t.cedula}</span>
-                      <span className="text-green-600 font-medium">Ref: {t.refCorta}</span>
+                    <div key={i} className="flex items-center justify-between px-4 py-2 text-sm text-slate-700">
+                      <span>Bs {parseFloat(t.amount || 0).toFixed(2)}</span>
+                      <span>Ref: {t.refCorta}</span>
                     </div>
                   ))}
                 </div>
@@ -396,65 +302,44 @@ export default function ModalPosDebito({
 
             {posRespuesta && (
               <div
-                className={`p-4 rounded-lg text-center font-semibold ${
+                className={`p-4 rounded-xl text-center text-sm ${
                   posRespuesta.exito
-                    ? 'bg-green-100 text-green-900 border border-green-300'
-                    : 'bg-red-100 text-red-900 border border-red-300'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-red-50 text-red-800 border border-red-200'
                 }`}
               >
-                <p className="text-lg font-semibold">{posRespuesta.mensaje}</p>
+                <p className="font-medium">{posRespuesta.mensaje}</p>
                 {!posRespuesta.exito && (
-                  <p className="text-sm mt-2 font-medium text-gray-900">Puede reintentar</p>
+                  <p className="mt-1 text-gray-600">Puede reintentar</p>
                 )}
               </div>
             )}
           </div>
 
-          <div className="flex flex-col gap-3 px-6 py-4 bg-gray-100 rounded-b-lg flex-shrink-0 border-t border-gray-200">
+          <div className="flex flex-col gap-2 px-6 py-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
             <button
               type="button"
               onClick={enviarSolicitudPosDebito}
               disabled={posLoading || !posCedulaTitular}
-              className="w-full py-5 px-6 rounded-xl transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-3 font-bold text-xl shadow-lg"
-              style={{
-                backgroundColor: posLoading || !posCedulaTitular ? '#9ca3af' : '#059669',
-                color: '#fff',
-              }}
-              onMouseEnter={(e) => {
-                if (!posLoading && posCedulaTitular) {
-                  e.currentTarget.style.backgroundColor = '#047857';
-                  e.currentTarget.style.transform = 'scale(1.01)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!posLoading && posCedulaTitular) {
-                  e.currentTarget.style.backgroundColor = '#059669';
-                  e.currentTarget.style.transform = 'scale(1)';
-                }
-              }}
+              className="w-full py-4 px-6 rounded-xl disabled:opacity-50 flex items-center justify-center gap-2 font-semibold text-lg bg-slate-700 text-white hover:bg-slate-800 focus:ring-2 focus:ring-slate-400 focus:outline-none transition-colors"
             >
               {posLoading ? (
                 <>
-                  <svg className="animate-spin h-8 w-8 flex-shrink-0" viewBox="0 0 24 24">
+                  <svg className="animate-spin h-6 w-6" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
                   Procesando...
                 </>
               ) : (
-                <>
-                  <svg className="w-10 h-10 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                  </svg>
-                  <span className="text-3xl font-bold">Enviar al datáfono</span>
-                </>
+                <>Enviar al datáfono</>
               )}
             </button>
             <button
               type="button"
               onClick={onClose}
               disabled={posLoading}
-              className="w-full px-4 py-3 border-2 border-gray-400 rounded-xl font-semibold text-gray-900 hover:bg-gray-200 transition-colors disabled:opacity-50"
+              className="w-full py-3 text-gray-600 hover:text-gray-800 font-medium disabled:opacity-50"
             >
               Cancelar
             </button>

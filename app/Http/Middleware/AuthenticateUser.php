@@ -58,6 +58,9 @@ class AuthenticateUser
         'inventario-ciclico/planillas/crear',
         'inventario-ciclico/planillas/{id}',
         'inventario-ciclico/planillas/{id}/productos',
+        'inventario-ciclico/planillas/{id}/reporte',
+        'inventario-ciclico/planillas/{id}/reporte-pdf',
+        'inventario-ciclico/planillas/{id}/enviar-tareas',
         'inventario-ciclico/planillas/{planillaId}/productos/{detalleId}',
         'getUsuarios',
 

@@ -824,10 +824,11 @@ class sendCentral extends Controller
                     "descripcion" => $arrproducto['descripcion'] ?? 'Ajuste de inventario cíclico',
                     "cantidad_solicitada" => $arrproducto['cantidad_solicitada'] ?? 0,
                     "cantidad_actual" => $arrproducto['cantidad_actual'] ?? 0,
-                    "usuario_aprobador" => $arrproducto['usuario_aprobador'] ?? null, // Nombre del usuario como texto
+                    "usuario_aprobador" => $arrproducto['usuario_aprobador'] ?? null,
                     "observaciones" => $arrproducto['observaciones'] ?? null,
                     "antes" => $arrproducto['antes'] ?? [],
                     "novedad" => $arrproducto['novedad'] ?? [],
+                    "responsable" => $arrproducto['responsable'] ?? null,
                 ]);
             } else {
                 // Comportamiento original para compatibilidad

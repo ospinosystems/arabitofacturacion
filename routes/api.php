@@ -404,14 +404,23 @@ Route::prefix('inventario-ciclico')->middleware(['auth.user:api'])->group(functi
         }
     });
     
-    // Agregar producto a planilla usando sendNovedadCentral
+    // Agregar producto a planilla (solo local: ya no envía a central; usar enviar-tareas para enviar en lote)
     Route::post('planillas/{id}/productos', function (Request $request, $id) {
+        return response()->json([
+            'success' => true,
+            'message' => 'Use la interfaz para agregar productos (se guardan en local). Luego use "Enviar a Central" para enviar todas las tareas.',
+            'data' => null
+        ], 200);
+    });
+
+    // Enviar todas las tareas pendientes de la planilla a Central en un solo request (una llamada por tarea a central)
+    Route::post('planillas/{id}/enviar-tareas', function (Request $request, $id) {
         try {
-            // Validar datos requeridos
             $validator = Validator::make($request->all(), [
-                'id_producto' => 'required|integer',
-                'cantidad_fisica' => 'required|integer|min:0',
-                'observaciones' => 'nullable|string|max:500'
+                'tareas' => 'required|array',
+                'tareas.*.id_producto' => 'required|integer',
+                'tareas.*.cantidad_fisica' => 'required|numeric|min:0',
+                'tareas.*.observaciones' => 'nullable|string|max:500',
             ]);
 
             if ($validator->fails()) {
@@ -422,102 +431,93 @@ Route::prefix('inventario-ciclico')->middleware(['auth.user:api'])->group(functi
                 ], 422);
             }
 
-            // Obtener datos del producto desde inventario local
-            $producto = App\Models\inventario::find($request->id_producto);
-            if (!$producto) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Producto no encontrado'
-                ], 404);
-            }
-
-            $cantidadSistema = $producto->cantidad ?? 0;
-            $cantidadFisica = $request->cantidad_fisica;
-            $diferenciaCantidad = $cantidadFisica - $cantidadSistema;
-
-            // Preparar datos para sendNovedadCentral
-            $datosAntes = [
-                'id' => $producto->id,
-                'idinsucursal' => $producto->id,
-                'codigo_barras' => $producto->codigo_barras ?? '',
-                'codigo_proveedor' => $producto->codigo_proveedor ?? '',
-                'cantidad' => $cantidadSistema,
-                'precio' => $producto->precio ?? 0,
-                'precio_base' => $producto->precio_base ?? 0,
-                'descripcion' => $producto->descripcion ?? '',
-                'unidad' => $producto->unidad ?? '',
-                'id_categoria' => $producto->id_categoria ?? null,
-                'id_proveedor' => $producto->id_proveedor ?? null,
-                'id_marca' => $producto->id_marca ?? null,
-                'iva' => $producto->iva ?? 0,
-                'stockmin' => $producto->stockmin ?? 0,
-                'stockmax' => $producto->stockmax ?? 0,
-            ];
-            
-            $datosDespues = [
-                'id' => $producto->id,
-                'idinsucursal' => $producto->id,
-                'cantidad' => $cantidadFisica,
-                'precio' => $producto->precio ?? 0,
-                'precio_base' => $producto->precio_base ?? 0,
-                'unidad' => $producto->unidad ?? '',
-                'id_categoria' => $producto->id_categoria ?? null,
-                'id_proveedor' => $producto->id_proveedor ?? null,
-                'id_marca' => $producto->id_marca ?? null,
-                'iva' => $producto->iva ?? 0,
-                'stockmin' => $producto->stockmin ?? 0,
-                'stockmax' => $producto->stockmax ?? 0,
-            ];
-
-            // Obtener usuario responsable
-            $usuarioResponsable = session("usuario");
-            $responsable = $usuarioResponsable ? $usuarioResponsable : 'Usuario Sistema';
-
-            // Preparar datos para sendNovedadCentral
-            $arrproducto = [
-                'tipo_tarea' => 'inventario_ciclico',
-                'id_planilla' => $id,
-                'id_producto' => $request->id_producto,
-                'descripcion' => "Ajuste de inventario por planilla #{$id}. Diferencia: {$diferenciaCantidad} unidades",
-                'cantidad_solicitada' => $cantidadFisica,
-                'cantidad_actual' => $cantidadSistema,
-                'usuario_aprobador' => null,
-                'observaciones' => $request->observaciones,
-                'antes' => $datosAntes,
-                'novedad' => $datosDespues,
-                'responsable' => $responsable,
-            ];
-
-            // Usar sendNovedadCentral para enviar a central
             $sendCentral = new App\Http\Controllers\sendCentral();
-            $resultado = $sendCentral->sendNovedadCentral($arrproducto);
+            $usuarioResponsable = session("usuario");
+            $responsable = $usuarioResponsable ?: 'Usuario Sistema';
+            $enviados = 0;
+            $errores = [];
 
-            if (isset($resultado['estado']) && $resultado['estado']) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Producto agregado exitosamente',
-                    'data' => [
-                        'id_tarea' => $resultado['id_tarea'] ?? null,
-                        'producto' => [
-                            'id' => $producto->id,
-                            'descripcion' => $producto->descripcion,
-                            'codigo_barras' => $producto->codigo_barras,
-                            'codigo_proveedor' => $producto->codigo_proveedor,
-                            'precio' => $producto->precio,
-                            'precio_base' => $producto->precio_base,
-                        ]
-                    ]
-                ], 201);
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error al agregar producto: ' . ($resultado['msj'] ?? 'Error desconocido')
-                ], 500);
+            foreach ($request->tareas as $idx => $tarea) {
+                $producto = App\Models\inventario::find($tarea['id_producto']);
+                if (!$producto) {
+                    $errores[] = "Producto ID {$tarea['id_producto']} no encontrado.";
+                    continue;
+                }
+
+                $cantidadSistema = $producto->cantidad ?? 0;
+                $cantidadFisica = (int) $tarea['cantidad_fisica'];
+                $diferenciaCantidad = $cantidadFisica - $cantidadSistema;
+
+                $datosAntes = [
+                    'id' => $producto->id,
+                    'idinsucursal' => $producto->id,
+                    'codigo_barras' => $producto->codigo_barras ?? '',
+                    'codigo_proveedor' => $producto->codigo_proveedor ?? '',
+                    'cantidad' => $cantidadSistema,
+                    'precio' => $producto->precio ?? 0,
+                    'precio_base' => $producto->precio_base ?? 0,
+                    'descripcion' => $producto->descripcion ?? '',
+                    'unidad' => $producto->unidad ?? '',
+                    'id_categoria' => $producto->id_categoria ?? null,
+                    'id_proveedor' => $producto->id_proveedor ?? null,
+                    'id_marca' => $producto->id_marca ?? null,
+                    'iva' => $producto->iva ?? 0,
+                    'stockmin' => $producto->stockmin ?? 0,
+                    'stockmax' => $producto->stockmax ?? 0,
+                ];
+
+                $datosDespues = [
+                    'id' => $producto->id,
+                    'idinsucursal' => $producto->id,
+                    'cantidad' => $cantidadFisica,
+                    'precio' => $producto->precio ?? 0,
+                    'precio_base' => $producto->precio_base ?? 0,
+                    'unidad' => $producto->unidad ?? '',
+                    'id_categoria' => $producto->id_categoria ?? null,
+                    'id_proveedor' => $producto->id_proveedor ?? null,
+                    'id_marca' => $producto->id_marca ?? null,
+                    'iva' => $producto->iva ?? 0,
+                    'stockmin' => $producto->stockmin ?? 0,
+                    'stockmax' => $producto->stockmax ?? 0,
+                ];
+
+                $arrproducto = [
+                    'tipo_tarea' => 'inventario_ciclico',
+                    'id_planilla' => (int) $id,
+                    'id_producto' => $producto->id,
+                    'descripcion' => "Ajuste de inventario por planilla #{$id}. Diferencia: {$diferenciaCantidad} unidades",
+                    'cantidad_solicitada' => $cantidadFisica,
+                    'cantidad_actual' => $cantidadSistema,
+                    'usuario_aprobador' => null,
+                    'observaciones' => $tarea['observaciones'] ?? null,
+                    'antes' => $datosAntes,
+                    'novedad' => $datosDespues,
+                    'responsable' => $responsable,
+                ];
+
+                $resultado = $sendCentral->sendNovedadCentral($arrproducto);
+                if (isset($resultado['estado']) && $resultado['estado']) {
+                    $enviados++;
+                } else {
+                    $errores[] = $producto->descripcion . ': ' . ($resultado['msj'] ?? 'Error desconocido');
+                }
             }
+
+            $message = $enviados === count($request->tareas)
+                ? "Se enviaron {$enviados} tarea(s) a Central correctamente."
+                : "Se enviaron {$enviados} de " . count($request->tareas) . ". " . (count($errores) ? implode(' ', $errores) : '');
+
+            return response()->json([
+                'success' => $enviados > 0,
+                'message' => $message,
+                'enviados' => $enviados,
+                'total' => count($request->tareas),
+                'errores' => $errores,
+            ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error de conexión: ' . $e->getMessage()
+                'message' => 'Error al enviar tareas: ' . $e->getMessage()
             ], 500);
         }
     });
@@ -660,29 +660,9 @@ Route::prefix('inventario-ciclico')->middleware(['auth.user:api'])->group(functi
         }
     });
     
-    // Generar reporte PDF
+    // Redirigir a la vista Blade del reporte (no generar PDF por API)
     Route::get('planillas/{id}/reporte-pdf', function (Request $request, $id) {
-        $sendCentral = new App\Http\Controllers\sendCentral();
-        
-        try {
-            $response = Http::timeout(60)->get($sendCentral->path() . "/api/inventario-ciclico/planillas/{$id}/reporte-pdf");
-            
-            if ($response->successful()) {
-                return response($response->body())
-                    ->header('Content-Type', 'application/pdf')
-                    ->header('Content-Disposition', 'attachment; filename="Planilla_Inventario_' . $id . '_' . date('Y-m-d') . '.pdf"');
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error al generar reporte PDF: ' . $response->body()
-                ], 500);
-            }
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error de conexión: ' . $e->getMessage()
-            ], 500);
-        }
+        return redirect()->route('inventario-ciclico.reporte', ['id' => $id]);
     });
     
     // Generar reporte Excel

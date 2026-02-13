@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import BuscarProductoModal from './BuscarProductoModal';
+
+const STORAGE_KEY_PENDIENTES = (planillaId) => `inventario_ciclico_pendientes_${planillaId}`;
 
 const PlanillaDetalle = ({ planilla, onBack, sucursalConfig }) => {
     const [planillaData, setPlanillaData] = useState(planilla);
@@ -8,10 +10,27 @@ const PlanillaDetalle = ({ planilla, onBack, sucursalConfig }) => {
     const [showBuscarModal, setShowBuscarModal] = useState(false);
     const [editingDetalle, setEditingDetalle] = useState(null);
     const [editForm, setEditForm] = useState({ cantidad_fisica: '', observaciones: '' });
+    const [pendientes, setPendientes] = useState([]);
+    const [enviando, setEnviando] = useState(false);
+    const [editingPendienteIdx, setEditingPendienteIdx] = useState(null);
+    const [editCantidadValue, setEditCantidadValue] = useState('');
+
+    const loadPendientes = useCallback(() => {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_PENDIENTES(planilla.id));
+            setPendientes(raw ? JSON.parse(raw) : []);
+        } catch {
+            setPendientes([]);
+        }
+    }, [planilla.id]);
 
     useEffect(() => {
         loadPlanillaDetalle();
     }, [planilla.id]);
+
+    useEffect(() => {
+        loadPendientes();
+    }, [loadPendientes]);
 
     const loadPlanillaDetalle = async () => {
         setLoading(true);
@@ -28,9 +47,69 @@ const PlanillaDetalle = ({ planilla, onBack, sucursalConfig }) => {
         }
     };
 
-    const handleProductoAdded = (producto) => {
-        setShowBuscarModal(false);
-        loadPlanillaDetalle();
+    const handleProductoAdded = () => {
+        loadPendientes();
+    };
+
+    const handleEnviarACentral = async () => {
+        if (pendientes.length === 0) return;
+        if (!confirm(`¿Enviar ${pendientes.length} producto(s) a Central? Esta acción enviará todas las tareas pendientes.`)) {
+            return;
+        }
+        setEnviando(true);
+        try {
+            const response = await axios.post(`/api/inventario-ciclico/planillas/${planilla.id}/enviar-tareas`, {
+                tareas: pendientes.map((p) => ({
+                    id_producto: p.id_producto,
+                    cantidad_fisica: p.cantidad_fisica,
+                    observaciones: p.observaciones || '',
+                })),
+            });
+            if (response.data.success) {
+                localStorage.removeItem(STORAGE_KEY_PENDIENTES(planilla.id));
+                loadPendientes();
+                loadPlanillaDetalle();
+                alert(response.data.message || 'Tareas enviadas a Central correctamente.');
+            } else {
+                alert(response.data.message || 'Error al enviar.');
+            }
+        } catch (error) {
+            console.error('Error al enviar tareas:', error);
+            alert(error.response?.data?.message || 'Error al enviar las tareas a Central.');
+        } finally {
+            setEnviando(false);
+        }
+    };
+
+    const quitarPendiente = (index) => {
+        const next = pendientes.filter((_, i) => i !== index);
+        localStorage.setItem(STORAGE_KEY_PENDIENTES(planilla.id), JSON.stringify(next));
+        setPendientes(next);
+        if (editingPendienteIdx === index) {
+            setEditingPendienteIdx(null);
+        } else if (editingPendienteIdx != null && editingPendienteIdx > index) {
+            setEditingPendienteIdx(editingPendienteIdx - 1);
+        }
+    };
+
+    const iniciarEditarCantidad = (idx) => {
+        setEditingPendienteIdx(idx);
+        setEditCantidadValue(String(pendientes[idx].cantidad_fisica ?? ''));
+    };
+
+    const guardarCantidadPendiente = (idx) => {
+        const num = parseInt(editCantidadValue, 10);
+        if (isNaN(num) || num < 0) {
+            setEditingPendienteIdx(null);
+            setEditCantidadValue('');
+            return;
+        }
+        const next = [...pendientes];
+        next[idx] = { ...next[idx], cantidad_fisica: num };
+        localStorage.setItem(STORAGE_KEY_PENDIENTES(planilla.id), JSON.stringify(next));
+        setPendientes(next);
+        setEditingPendienteIdx(null);
+        setEditCantidadValue('');
     };
 
     const handleEditDetalle = (detalle) => {
@@ -95,26 +174,35 @@ const PlanillaDetalle = ({ planilla, onBack, sucursalConfig }) => {
         }
     };
 
-    const handleGenerarReporte = async (tipo) => {
-        try {
-            const url = `/api/inventario-ciclico/planillas/${planilla.id}/reporte-${tipo}`;
-            const response = await axios.get(url, {
-                responseType: 'blob' // ← Para manejar archivos binarios
-            });
-            
-            const blob = new Blob([response.data]);
-            const downloadUrl = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = `Planilla_Inventario_${planilla.id}_${new Date().toISOString().split('T')[0]}.${tipo}`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(downloadUrl);
-            document.body.removeChild(a);
-        } catch (error) {
-            console.error('Error:', error);
-            alert('Error al generar el reporte');
+    const handleGenerarReporte = (tipo) => {
+        if (tipo === 'pdf') {
+            let reporteUrl = '/inventario-ciclico/planillas/' + planilla.id + '/reporte';
+            if (pendientes.length > 0) {
+                try {
+                    reporteUrl += '?pendientes=' + encodeURIComponent(JSON.stringify(pendientes));
+                } catch (e) {
+                    console.warn('No se pudieron incluir pendientes en el reporte', e);
+                }
+            }
+            window.open(reporteUrl, '_blank', 'noopener,noreferrer');
+            return;
         }
+        axios.get(`/api/inventario-ciclico/planillas/${planilla.id}/reporte-excel`, { responseType: 'blob' })
+            .then((response) => {
+                const blob = new Blob([response.data]);
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = `Planilla_Inventario_${planilla.id}_${new Date().toISOString().split('T')[0]}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(downloadUrl);
+                document.body.removeChild(a);
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+                alert('Error al generar el reporte Excel');
+            });
     };
 
     const getEstatusTareaColor = (estatus) => {
@@ -180,13 +268,42 @@ const PlanillaDetalle = ({ planilla, onBack, sucursalConfig }) => {
                     </button>
                     
                     {planillaData?.estatus == 'Abierta' && (
-                        <button
-                            onClick={() => setShowBuscarModal(true)}
-                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
-                        >
-                            <i className="fa fa-plus mr-2"></i>
-                            Agregar Producto
-                        </button>
+                        <>
+                            <button
+                                onClick={() => handleGenerarReporte('pdf')}
+                                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 border border-transparent rounded-md hover:bg-amber-700"
+                                title="Reporte pendiente (no cerrada): cant. sistema y cant. entrantes"
+                            >
+                                <i className="fa fa-file-text-o mr-2"></i>
+                                Reporte pendiente
+                            </button>
+                            <button
+                                onClick={() => setShowBuscarModal(true)}
+                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
+                            >
+                                <i className="fa fa-plus mr-2"></i>
+                                Agregar Producto
+                            </button>
+                            {pendientes.length > 0 && (
+                                <button
+                                    onClick={handleEnviarACentral}
+                                    disabled={enviando}
+                                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 disabled:opacity-50"
+                                >
+                                    {enviando ? (
+                                        <>
+                                            <i className="fa fa-spinner fa-spin mr-2"></i>
+                                            Enviando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="fa fa-paper-plane mr-2"></i>
+                                            Enviar a Central ({pendientes.length})
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                        </>
                     )}
                     
                     {canClose && (
@@ -219,6 +336,112 @@ const PlanillaDetalle = ({ planilla, onBack, sucursalConfig }) => {
                     )}
                 </div>
             </div>
+
+            {/* Pendientes de envío (localStorage) */}
+            {pendientes.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg shadow-sm">
+                    <h3 className="text-sm font-semibold text-amber-900 mb-2">
+                        <i className="fa fa-clock-o mr-2"></i>
+                        Pendientes de envío a Central ({pendientes.length})
+                    </h3>
+                    <p className="text-xs text-amber-800 mb-3">
+                        Estos productos se guardaron localmente. Use &quot;Enviar a Central&quot; para enviarlos todos de una vez.
+                    </p>
+                    <div className="overflow-x-auto">
+                        <table className="w-full divide-y divide-amber-200 text-sm table-fixed" style={{ minWidth: '520px' }}>
+                            <colgroup>
+                                <col style={{ width: '32%' }} />
+                                <col style={{ width: '10%' }} />
+                                <col style={{ width: '12%' }} />
+                                <col style={{ width: '12%' }} />
+                                <col style={{ width: '24%' }} />
+                                <col style={{ width: '10%' }} />
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th className="text-left py-2 text-amber-900">Producto</th>
+                                    <th className="text-right py-2 text-amber-900">Cant. sistema</th>
+                                    <th className="text-right py-2 text-amber-900">Cant. física</th>
+                                    <th className="text-right py-2 text-amber-900">Diferencia</th>
+                                    <th className="text-left py-2 text-amber-900">Hora agregado</th>
+                                    <th className="text-center py-2 text-amber-900 w-12"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {pendientes.map((p, idx) => (
+                                    <tr key={`${p.id_producto}-${idx}`} className="border-t border-amber-200">
+                                        <td className="py-2 overflow-hidden">
+                                            <div className="font-medium text-gray-900 truncate" title={p.producto?.descripcion}>{p.producto?.descripcion}</div>
+                                            <div className="text-xs text-gray-500 truncate" title={`Barras: ${p.producto?.codigo_barras ?? '-'} | Proveedor: ${p.producto?.codigo_proveedor ?? '-'}`}>
+                                                Barras: {p.producto?.codigo_barras ?? '-'}
+                                                {p.producto?.codigo_proveedor != null && p.producto?.codigo_proveedor !== '' && (
+                                                    <span className="ml-2">| Proveedor: {p.producto.codigo_proveedor}</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="text-right py-2 whitespace-nowrap">
+                                            {p.cantidad_sistema ?? p.producto?.cantidad ?? '-'}
+                                        </td>
+                                        <td className="text-right py-2 whitespace-nowrap">
+                                            {editingPendienteIdx === idx ? (
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={editCantidadValue}
+                                                    onChange={(e) => setEditCantidadValue(e.target.value)}
+                                                    onBlur={() => guardarCantidadPendiente(idx)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') guardarCantidadPendiente(idx);
+                                                        if (e.key === 'Escape') {
+                                                            setEditingPendienteIdx(null);
+                                                            setEditCantidadValue('');
+                                                        }
+                                                    }}
+                                                    className="w-20 px-2 py-1 border border-amber-400 rounded text-right text-sm"
+                                                    autoFocus
+                                                />
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => iniciarEditarCantidad(idx)}
+                                                    className="text-right hover:bg-amber-100 px-2 py-1 rounded inline-flex items-center gap-1 min-w-[3rem]"
+                                                    title="Editar cantidad física"
+                                                >
+                                                    {p.cantidad_fisica}
+                                                    <i className="fa fa-pencil text-xs text-amber-700"></i>
+                                                </button>
+                                            )}
+                                        </td>
+                                        <td className="text-right py-2 whitespace-nowrap">
+                                            {(p.cantidad_sistema ?? p.producto?.cantidad) != null
+                                                ? (p.cantidad_fisica - (p.cantidad_sistema ?? p.producto.cantidad))
+                                                : '-'}
+                                        </td>
+                                        <td className="py-2 text-gray-600 whitespace-nowrap overflow-hidden">
+                                            {p.fecha_agregado
+                                                ? new Date(p.fecha_agregado).toLocaleString('es-VE', {
+                                                      dateStyle: 'short',
+                                                      timeStyle: 'short',
+                                                  })
+                                                : '-'}
+                                        </td>
+                                        <td className="py-2 text-center">
+                                            <button
+                                                type="button"
+                                                onClick={() => quitarPendiente(idx)}
+                                                className="text-red-600 hover:text-red-800 text-xs inline-flex"
+                                                title="Quitar de pendientes"
+                                            >
+                                                <i className="fa fa-times"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
             {/* Estatus de la planilla */}
             <div className="bg-white p-4 rounded-lg shadow-sm border">

@@ -534,6 +534,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		
 		Route::get('setCentralData', [sendCentral::class,"setCentralData"]);
 		Route::get('central', [sendCentral::class,"index"]);
+		Route::get('inventario-ciclico/planillas/{id}/reporte', [App\Http\Controllers\InventarioCiclicoReporteController::class, 'reporte'])->name('inventario-ciclico.reporte');
 		Route::get('getMonedaCentral', [sendCentral::class,"getMonedaCentral"]);
 		
 		Route::get('setFacturasCentral', [sendCentral::class,"setFacturasCentral"]);

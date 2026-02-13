@@ -18,7 +18,7 @@ export default function WelcomeView({ onStart }) {
           e.target.style.display = 'none';
         }}
       />
-      <h1 className="text-8xl font-black text-center mb-4 tracking-tight text-sinapsis">
+      <h1 className="text-[5rem] sm:text-[7rem] md:text-[8rem] text-center mb-4 autopago-hero-word welcome-autopago">
         Autopago
       </h1>
       <p className="text-2xl text-gray-600 text-center mb-14 max-w-lg font-medium">

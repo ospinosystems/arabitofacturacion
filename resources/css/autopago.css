@@ -1,4 +1,6 @@
 /* POS Autopago - Estilos específicos para kiosco */
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+
 .font-kiosk {
   font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
 }
@@ -95,7 +97,17 @@
   letter-spacing: 0.03em;
 }
 
-/* Home: Autopago destacado */
+/* Home: Autopago destacado - fuente impactante y muy gruesa */
+.autopago-hero-word {
+  font-family: "Bebas Neue", Impact, "Arial Black", sans-serif;
+  font-weight: 400; /* Bebas Neue solo tiene un peso, ya es muy gruesa */
+  letter-spacing: 0.02em;
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.12),
+    0 4px 0 rgba(0, 0, 0, 0.06),
+    0 6px 16px rgba(0, 0, 0, 0.1);
+}
+
 .welcome-autopago {
   background: linear-gradient(135deg, rgba(242, 109, 10, 1) 0%, rgba(224, 92, 0, 0.95) 100%);
   -webkit-background-clip: text;

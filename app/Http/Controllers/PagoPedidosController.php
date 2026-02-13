@@ -325,7 +325,12 @@ class PagoPedidosController extends Controller
                 return Response::json(["msj"=>"Error: En caso de crédito, debe registrar los datos del cliente","estado"=>false]);
             }
         
-            $res = $total_real-$total_ins;
+            $res = $total_real - $total_ins;
+
+            // Tolerancia por redondeo: aceptar si la diferencia es mínima (ej. 0.3 por redondeo Bs/USD)
+            $toleranciaMontos = 0.5;
+            $montosCoinciden = (abs($res) <= $toleranciaMontos)
+                || (abs(round($total_real, 2) - round($total_ins, 2)) <= $toleranciaMontos);
             
             // Validación adicional en bolívares cuando hay débito (simple o múltiple)
             $validacionBolivaresOk = true;
@@ -394,7 +399,7 @@ class PagoPedidosController extends Controller
                 ]);
             }
         
-            if (($res > -0.2 && $res < 0.2) && $validacionBolivaresOk) {
+            if ($montosCoinciden && $validacionBolivaresOk) {
                 // 1 Transferencia
                 // 2 Debito 
                 // 3 Efectivo 
@@ -783,10 +788,18 @@ class PagoPedidosController extends Controller
             }else{
                 \DB::rollback();
 
-                // Detalle explícito de los montos para ayudar al usuario a corregir
+                // Detalle explícito de los montos para ayudar al usuario a corregir (Debito en $ y entre paréntesis en Bs)
+                $debitoBsParaMsg = 0;
+                if ($req->debitos && is_array($req->debitos)) {
+                    foreach ($req->debitos as $debitoItem) {
+                        $debitoBsParaMsg += floatval($debitoItem['monto'] ?? 0);
+                    }
+                } else {
+                    $debitoBsParaMsg = floatval($req->debito);
+                }
                 $detalle = [];
                 $detalle[] = "Pedido: ".round($total_real,4)." $";
-                $detalle[] = "Pagos principales en $: Debito=".round($debitoUSD,4)." (Bs ".round(floatval($req->debito),2)."), Efectivo=".round(floatval($req->efectivo),4).", Transf=".round(floatval($req->transferencia),4).", Biopago=".round(floatval($req->biopago),4).", Credito=".round(floatval($req->credito),4);
+                $detalle[] = "Pagos principales en $: Debito=".round($debitoUSD,4)." (Bs ".round($debitoBsParaMsg,2)."), Efectivo=".round(floatval($req->efectivo),4).", Transf=".round(floatval($req->transferencia),4).", Biopago=".round(floatval($req->biopago),4).", Credito=".round(floatval($req->credito),4);
 
                 if ($totalAdicUsdBs || $totalAdicUsdCop || $totalAdicUsdDolar) {
                     $detalleAdic = [];

@@ -41,7 +41,6 @@ import Modalconfigcredito from "./Modalconfigcredito";
 import PagarMain from "./pagarMain";
 import ModalRefPago from "./modalRefPago";
 
-import Submenuinventario from "./Submenuinventario";
 import ModalSelectFactura from "./modalSelectFactura";
 import ModalSelectProductoNewFact from "./ModalSelectProductoNewFact";
 
@@ -142,7 +141,7 @@ export default function Facturar({
     const [proveedortelefono, setproveedortelefono] = useState("");
 
     const [subViewInventario, setsubViewInventario] =
-        useState("Submenuinventario");
+        useState("inventario");
 
     const [indexSelectProveedores, setIndexSelectProveedores] = useState(null);
 
@@ -1685,9 +1684,10 @@ export default function Facturar({
                 getProductos();
             } else if (subViewInventario == "proveedores") {
                 getProveedores();
+            } else if (subViewInventario == "facturasItems") {
+                getFacturas(false);
             }
-        } 
-        
+        }
     }, [view, subViewInventario]);
 
     useEffect(() => {
@@ -8135,15 +8135,6 @@ export default function Facturar({
                             setinpInvid_deposito={setinpInvid_deposito}
                         />
                     ) : null}
-                    {view == "Submenuinventario" ? (
-                        <Submenuinventario
-                            view={view}
-                            setView={setView}
-                            setsubViewInventario={setsubViewInventario}
-                            showAjustesPuntuales={showAjustesPuntuales}
-                        />
-                    ) : null}
-
                     {view == "ViewPedidoVendedor" ? (
                         <ViewPedidoVendedor />
                     ) : null}

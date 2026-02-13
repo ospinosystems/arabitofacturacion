@@ -10,6 +10,7 @@ import InventarioNovedades from '../components/inventarionovedades';
 import ControlEfectivo from '../components/controlefectivo';
 import Garantias from '../components/garantias';
 import InventarioSuministrosSucursal from '../components/InventarioSuministrosSucursal';
+import FacturasItemsConsulta from '../components/FacturasItemsConsulta';
 
 import React, { useEffect } from 'react';
 import { useHotkeys } from "react-hotkeys-hook";
@@ -390,101 +391,82 @@ function Inventario({
   return (
     <div className="inventario-container">
       <div className="container-fluid px-4">
-        <div className="row mb-4">
-          <div className="col-12">
-            {user.tipo_usuario==1?
-              <div className="d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <div className="btn-group">
-                  <button 
-                    className={`btn ${subViewInventario === "inventario" ? "btn-primary" : "btn-outline-primary"}`}
-                    onClick={() => setView("Submenuinventario")}
-                  >
-                    <i className="fas fa-boxes me-2"></i>
-                    Inventario
-                  </button>
-                  <button 
-                    className={`btn ${subViewInventario === "garantia" ? "btn-primary" : "btn-outline-primary"}`}
-                    onClick={() => setsubViewInventario("Submenugarantia")}
-                  >
-                    <i className="fas fa-shield-alt me-2"></i>
-                    Garantías
-                  </button>
-                  {user.iscentral && (
-                    <button 
-                      className={`btn ${subViewInventario === "proveedores" ? "btn-primary" : "btn-outline-primary"}`}
-                      onClick={() => setsubViewInventario("proveedores")}
+          {user.tipo_usuario==1?
+            <div className="row mb-3">
+              <div className="col-12">
+                <div className="d-flex flex-wrap align-items-center gap-2">
+                  {/* Navegación principal */}
+                  <div className="d-flex flex-wrap gap-1 me-3">
+                    <button
+                      className={`btn ${subViewInventario === "inventario" ? "btn-primary" : "btn-outline-primary"}`}
+                      onClick={() => setsubViewInventario("inventario")}
                     >
-                      <i className="fas fa-truck me-2"></i>
-                      Proveedores
+                      <i className="fas fa-boxes me-1"></i>
+                      Inventario
                     </button>
-                  )}
-                  <button 
-                    className={`btn ${subViewInventario === "fallas" ? "btn-primary" : "btn-outline-primary"}`}
-                    onClick={() => setsubViewInventario("fallas")}
-                  >
-                    <i className="fas fa-exclamation-triangle me-2"></i>
-                    Fallas
-                  </button>
-                </div>
-
-                <div className="btn-group">
-                  <button 
-                    className={`btn ${subViewInventario === "efectivo" ? "btn-primary" : "btn-outline-primary"}`}
-                    onClick={() => setsubViewInventario("efectivo")}
-                  >
-                    <i className="fas fa-money-bill-wave me-2"></i>
-                    Control de Efectivo
-                  </button>
-                  <button 
-                    className={`btn ${subViewInventario === "estadisticas" ? "btn-primary" : "btn-outline-primary"}`}
-                    onClick={() => setsubViewInventario("estadisticas")}
-                  >
-                    <i className="fas fa-chart-bar me-2"></i>
-                    Estadísticas
-                  </button>
-                  <button 
-                    className={`btn ${subViewInventario === "suministros" ? "btn-primary" : "btn-outline-primary"}`}
-                    onClick={() => setsubViewInventario("suministros")}
-                  >
-                    <i className="fas fa-box-open me-2"></i>
-                    Suministros
-                  </button>
-                </div>
-
-                <div className="btn-group">
-                  <button 
-                    className="btn btn-outline-primary"
-                    onClick={() => reportefiscal("x")}
-                  >
-                    <i className="fas fa-file-invoice me-2"></i>
-                    Reporte X
-                  </button>
-                  <button 
-                    className="btn btn-outline-primary"
-                    onClick={() => reportefiscal("z")}
-                  >
-                    <i className="fas fa-file-invoice-dollar me-2"></i>
-                    Reporte Z
-                  </button>
-                  <div className="input-group">
-                    <span className="input-group-text">
-                      <i className="fas fa-hashtag"></i>
-                    </span>
-                    <input 
-                      className="form-control"
-                      type="number"
-                      value={numReporteZ}
-                      onChange={e => setnumReporteZ(e.target.value)}
-                      placeholder="Número de Reporte Z"
-                      aria-label="Número de Reporte Z"
-                    />
+                    <button
+                      className={`btn ${subViewInventario === "efectivo" ? "btn-primary" : "btn-outline-primary"}`}
+                      onClick={() => setsubViewInventario("efectivo")}
+                    >
+                      <i className="fas fa-money-bill-wave me-1"></i>
+                      Control de Efectivo
+                    </button>
+                    <button
+                      className={`btn ${subViewInventario === "estadisticas" ? "btn-primary" : "btn-outline-primary"}`}
+                      onClick={() => setsubViewInventario("estadisticas")}
+                    >
+                      <i className="fas fa-chart-bar me-1"></i>
+                      Estadísticas
+                    </button>
+                    <button
+                      className={`btn ${subViewInventario === "suministros" ? "btn-primary" : "btn-outline-primary"}`}
+                      onClick={() => setsubViewInventario("suministros")}
+                    >
+                      <i className="fas fa-box-open me-1"></i>
+                      Suministros
+                    </button>
+                    <button
+                      className={`btn ${subViewInventario === "facturasItems" ? "btn-primary" : "btn-outline-primary"}`}
+                      onClick={() => setsubViewInventario("facturasItems")}
+                    >
+                      <i className="fas fa-file-invoice me-1"></i>
+                      Facturas e ítems
+                    </button>
+                  </div>
+                  {/* Reportes fiscales */}
+                  <div className="d-flex flex-wrap align-items-center gap-2 ms-auto">
+                    <button
+                      className="btn btn-outline-primary"
+                      onClick={() => reportefiscal("x")}
+                    >
+                      <i className="fas fa-file-invoice me-1"></i>
+                      Reporte X
+                    </button>
+                    <button
+                      className="btn btn-outline-primary"
+                      onClick={() => reportefiscal("z")}
+                    >
+                      <i className="fas fa-file-invoice-dollar me-1"></i>
+                      Reporte Z
+                    </button>
+                    <div className="input-group" style={{ maxWidth: "12rem" }}>
+                      <span className="input-group-text">
+                        <i className="fas fa-hashtag"></i>
+                      </span>
+                      <input
+                        className="form-control"
+                        type="number"
+                        value={numReporteZ}
+                        onChange={e => setnumReporteZ(e.target.value)}
+                        placeholder="Nº Reporte Z"
+                        aria-label="Número de Reporte Z"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-            :null}
-
-          </div>
-        </div>
+            </div>
+          :null}
 
         <div className="row">
           <div className="col-12 p-0">
@@ -561,6 +543,16 @@ function Inventario({
                   verificarMovPenControlEfec={verificarMovPenControlEfec}
                   verificarMovPenControlEfecTRANFTRABAJADOR={verificarMovPenControlEfecTRANFTRABAJADOR}
                   
+                />
+              )}
+              {subViewInventario === "facturasItems" && (
+                <FacturasItemsConsulta
+                  getFacturas={getFacturas}
+                  facturas={facturas}
+                  factqBuscar={factqBuscar}
+                  setfactqBuscar={setfactqBuscar}
+                  factqBuscarDate={factqBuscarDate}
+                  setfactqBuscarDate={setfactqBuscarDate}
                 />
               )}
               {subViewInventario === "facturas" && (

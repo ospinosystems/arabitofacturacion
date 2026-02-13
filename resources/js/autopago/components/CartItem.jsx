@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Minus, Plus } from 'lucide-react';
+import { Minus, Plus, Trash2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { TASA_DOLAR_BS, formatBs, formatUsd } from '../config';
 
@@ -70,11 +70,10 @@ export default function CartItem({ item }) {
           <button
             type="button"
             onClick={handleDecrement}
-            className="w-16 h-16 rounded-lg flex items-center justify-center transition-all active:scale-95"
-            style={{ backgroundColor: 'rgba(242, 109, 10, 0.9)' }}
+            className="w-14 h-14 rounded-lg flex items-center justify-center transition-all active:scale-95 bg-orange-500 hover:bg-orange-600 text-white"
             aria-label="Restar cantidad"
           >
-            <Minus className="text-white" size={24} strokeWidth={3} />
+            <Minus size={22} strokeWidth={3} />
           </button>
 
           <span className="text-3xl font-bold text-gray-800 min-w-[48px] text-center tabular-nums">
@@ -84,11 +83,19 @@ export default function CartItem({ item }) {
           <button
             type="button"
             onClick={() => tryAddItem(item)}
-            className="w-16 h-16 rounded-lg flex items-center justify-center transition-all active:scale-95"
-            style={{ backgroundColor: 'rgba(242, 109, 10, 0.9)' }}
+            className="w-14 h-14 rounded-lg flex items-center justify-center transition-all active:scale-95 bg-orange-500 hover:bg-orange-600 text-white"
             aria-label="Sumar cantidad"
           >
-            <Plus className="text-white" size={24} strokeWidth={3} />
+            <Plus size={22} strokeWidth={3} />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowConfirm(true)}
+            className="w-14 h-14 rounded-lg flex items-center justify-center transition-all active:scale-95 bg-gray-200 hover:bg-red-100 text-gray-600 hover:text-red-600 border border-gray-300 hover:border-red-300"
+            aria-label="Eliminar del carrito"
+          >
+            <Trash2 size={22} strokeWidth={2} />
           </button>
         </div>
       </div>

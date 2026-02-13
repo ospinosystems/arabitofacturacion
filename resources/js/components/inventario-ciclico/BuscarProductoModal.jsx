@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
+const STORAGE_KEY_PENDIENTES = (planillaId) => `inventario_ciclico_pendientes_${planillaId}`;
+
 const BuscarProductoModal = ({ onClose, onProductoSelected, planillaId, sucursalConfig }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [productos, setProductos] = useState([]);
@@ -11,6 +13,20 @@ const BuscarProductoModal = ({ onClose, onProductoSelected, planillaId, sucursal
         observaciones: ''
     });
     const [submitting, setSubmitting] = useState(false);
+    const [mensajeAdicion, setMensajeAdicion] = useState(null);
+
+    const getPendientes = () => {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_PENDIENTES(planillaId));
+            return raw ? JSON.parse(raw) : [];
+        } catch {
+            return [];
+        }
+    };
+
+    const setPendientes = (arr) => {
+        localStorage.setItem(STORAGE_KEY_PENDIENTES(planillaId), JSON.stringify(arr));
+    };
 
     useEffect(() => {
         if (searchTerm.length >= 2) {
@@ -51,28 +67,49 @@ const BuscarProductoModal = ({ onClose, onProductoSelected, planillaId, sucursal
         });
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
-        setSubmitting(true);
+        setMensajeAdicion(null);
+        const cant = parseInt(formData.cantidad_fisica, 10) || 0;
+        const pendientes = getPendientes();
+        const existente = pendientes.find((p) => p.id_producto === selectedProducto.id);
 
-        try {
-            const response = await axios.post(`/api/inventario-ciclico/planillas/${planillaId}/productos`, {
-                id_producto: selectedProducto.id,
-                cantidad_fisica: parseInt(formData.cantidad_fisica),
-                observaciones: formData.observaciones
-            });
-
-            if (response.data.success) {
-                onProductoSelected(selectedProducto);
-            } else {
-                alert(response.data.msj || 'Error al agregar producto');
+        if (existente) {
+            const cantidadAnterior = existente.cantidad_fisica;
+            const nuevaCantidad = cantidadAnterior + cant;
+            existente.cantidad_fisica = nuevaCantidad;
+            existente.fecha_agregado = new Date().toISOString();
+            if (formData.observaciones?.trim()) {
+                existente.observaciones = [existente.observaciones, formData.observaciones].filter(Boolean).join(' | ');
             }
-        } catch (error) {
-            console.error('Error al agregar producto:', error);
-            alert(error.response?.data?.msj || 'Error al agregar producto');
-        } finally {
-            setSubmitting(false);
+            setPendientes([...pendientes]);
+            setMensajeAdicion(
+                `Producto ya estaba en la planilla. Se sumaron ${cant} unidades. Total en planilla: ${nuevaCantidad} unidades.`
+            );
+            onProductoSelected(selectedProducto);
+            onClose();
+            return;
         }
+
+        const nuevo = {
+            id_producto: selectedProducto.id,
+            cantidad_fisica: cant,
+            cantidad_sistema: selectedProducto.cantidad ?? 0,
+            fecha_agregado: new Date().toISOString(),
+            observaciones: formData.observaciones || '',
+            producto: {
+                id: selectedProducto.id,
+                descripcion: selectedProducto.descripcion,
+                codigo_barras: selectedProducto.codigo_barras,
+                codigo_proveedor: selectedProducto.codigo_proveedor,
+                cantidad: selectedProducto.cantidad,
+                precio: selectedProducto.precio,
+                precio_base: selectedProducto.precio_base,
+            },
+        };
+        setPendientes([...pendientes, nuevo]);
+        onProductoSelected(selectedProducto);
+        onClose();
     };
 
     const formatNumber = (value, decimals = 2) => {
@@ -238,32 +275,31 @@ const BuscarProductoModal = ({ onClose, onProductoSelected, planillaId, sucursal
                                             </p>
                                         </div>
 
+                                        {mensajeAdicion && (
+                                            <div className="bg-amber-50 border border-amber-200 p-3 rounded-md">
+                                                <p className="text-sm text-amber-800">
+                                                    <i className="fa fa-info-circle mr-2"></i>
+                                                    {mensajeAdicion}
+                                                </p>
+                                            </div>
+                                        )}
+
                                         {/* Botones */}
                                         <div className="flex justify-end space-x-3 pt-4">
                                             <button
                                                 type="button"
                                                 onClick={onClose}
                                                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                                                disabled={submitting}
                                             >
                                                 Cancelar
                                             </button>
                                             <button
                                                 type="submit"
                                                 className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50"
-                                                disabled={submitting || !formData.cantidad_fisica}
+                                                disabled={!formData.cantidad_fisica}
                                             >
-                                                {submitting ? (
-                                                    <>
-                                                        <i className="fa fa-spinner fa-spin mr-2"></i>
-                                                        Agregando...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <i className="fa fa-plus mr-2"></i>
-                                                        Agregar a Planilla
-                                                    </>
-                                                )}
+                                                <i className="fa fa-plus mr-2"></i>
+                                                Agregar a Planilla (local)
                                             </button>
                                         </div>
                                     </form>
