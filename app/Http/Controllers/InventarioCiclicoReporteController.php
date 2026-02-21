@@ -1,10 +1,10 @@
 <?php
 
 namespace App\Http\Controllers;
+use Illuminate\Support\Facades\Cache;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Cache;
 
 class InventarioCiclicoReporteController extends Controller
 {
@@ -50,58 +50,49 @@ class InventarioCiclicoReporteController extends Controller
     }
 
     /**
-     * Guardar pendientes en caché en disco (file) y devolver URL corta para el reporte.
-     * La nueva pestaña hace GET a la misma app; se lee la clave desde caché (persistente).
-     * POST body: { "pendientes": [...] }
+     * Devolver el HTML del reporte para mostrar en el mismo componente (POST con pendientes en body).
+     * POST body: { "pendientes": [...] } (opcional)
      */
-    public function reportePendientesStore(Request $request, $id)
+    public function reporteHtml(Request $request, $id)
     {
-        $request->validate(['pendientes' => 'required|array']);
-        $key = 'ic_' . uniqid() . '_' . bin2hex(random_bytes(4));
-        $cacheKey = "ic_report_pendientes.{$key}";
-        $payload = [
-            'planilla_id' => (int) $id,
-            'pendientes' => $request->input('pendientes'),
-        ];
-        Cache::store('file')->put($cacheKey, $payload, now()->addMinutes(15));
-        session()->put($cacheKey, $payload);
-        $path = "/inventario-ciclico/planillas/{$id}/reporte?pendientes_key=" . urlencode($key);
-        return response()->json([
-            'redirect' => url($path),
-            'redirect_path' => $path,
-            'pendientes_key' => $key,
-        ]);
-    }
+        $sendCentral = new \App\Http\Controllers\sendCentral();
+        try {
+            $response = Http::timeout(30)->get($sendCentral->path() . "/api/inventario-ciclico/planillas/{$id}");
+            if (!$response->successful()) {
+                return response()->json(['success' => false, 'message' => 'No se pudo cargar la planilla'], 500);
+            }
+            $json = $response->json();
+            if (!isset($json['success']) || !$json['success'] || !isset($json['data'])) {
+                return response()->json(['success' => false, 'message' => $json['message'] ?? 'Planilla no encontrada'], 404);
+            }
+            $planilla = $json['data'];
+            $estatus = $planilla['estatus'] ?? 'Abierta';
+            $tareas = $planilla['tareas'] ?? [];
 
-    /**
-     * Obtener pendientes desde caché file (clave en URL), sesión o query (JSON en URL).
-     */
-    private function resolvePendientesLocales(Request $request, $id): array
-    {
-        $pendientesKey = $request->query('pendientes_key');
-        if ($pendientesKey !== null && $pendientesKey !== '') {
-            $cacheKey = "ic_report_pendientes.{$pendientesKey}";
-            $store = Cache::store('file');
-            $stored = $store->get($cacheKey);
-            if (is_array($stored) && isset($stored['planilla_id']) && (int) $stored['planilla_id'] === (int) $id && isset($stored['pendientes'])) {
-                $store->forget($cacheKey);
-                return is_array($stored['pendientes']) ? $stored['pendientes'] : [];
+            if (strtoupper($estatus) === 'CERRADA') {
+                $estadisticas = $this->calcularEstadisticas($tareas);
+                $html = view('reportes.inventario-ciclico-cerrada', [
+                    'planilla' => $planilla,
+                    'tareas' => $tareas,
+                    'estadisticas' => $estadisticas,
+                ])->render();
+            } else {
+                $pendientesLocales = $request->input('pendientes', []);
+                if (!is_array($pendientesLocales)) {
+                    $pendientesLocales = [];
+                }
+                $html = view('reportes.inventario-ciclico-pendiente', [
+                    'planilla' => $planilla,
+                    'tareas' => $tareas,
+                    'pendientesLocales' => $pendientesLocales,
+                ])->render();
             }
-            $sessionKey = $cacheKey;
-            $stored = session()->get($sessionKey);
-            if (is_array($stored) && isset($stored['planilla_id']) && (int) $stored['planilla_id'] === (int) $id && isset($stored['pendientes'])) {
-                session()->forget($sessionKey);
-                return is_array($stored['pendientes']) ? $stored['pendientes'] : [];
-            }
-        }
-        $pendientesParam = $request->query('pendientes');
-        if ($pendientesParam !== null && $pendientesParam !== '') {
-            $decoded = json_decode($pendientesParam, true);
-            if (is_array($decoded)) {
-                return $decoded;
-            }
-        }
+
+            return response($html, 200, ['Content-Type' => 'text/html; charset=UTF-8']);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Error: ' . $e->getMessage()], 500);
         return [];
+        }
     }
 
     private function calcularEstadisticas(array $tareas): array

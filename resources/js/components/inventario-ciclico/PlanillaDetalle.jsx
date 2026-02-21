@@ -14,6 +14,7 @@ const PlanillaDetalle = ({ planilla, onBack, sucursalConfig }) => {
     const [enviando, setEnviando] = useState(false);
     const [editingPendienteIdx, setEditingPendienteIdx] = useState(null);
     const [editCantidadValue, setEditCantidadValue] = useState('');
+    const [showReporteFullScreen, setShowReporteFullScreen] = useState(false);
 
     const loadPendientes = useCallback(() => {
         try {
@@ -176,23 +177,7 @@ const PlanillaDetalle = ({ planilla, onBack, sucursalConfig }) => {
 
     const handleGenerarReporte = (tipo) => {
         if (tipo === 'pdf') {
-            // Siempre usar POST cuando hay pendientes para evitar "Request-URI Too long" con muchos productos
-            if (pendientes.length > 0) {
-                axios.post(`/inventario-ciclico/planillas/${planilla.id}/reporte-pendientes`, { pendientes })
-                    .then((res) => {
-                        const url = (res.data && res.data.redirect_path)
-                            ? (window.location.origin + res.data.redirect_path)
-                            : (res.data && res.data.redirect)
-                                ? res.data.redirect
-                                : '/inventario-ciclico/planillas/' + planilla.id + '/reporte';
-                        window.open(url, '_blank', 'noopener,noreferrer');
-                    })
-                    .catch(() => {
-                        window.open('/inventario-ciclico/planillas/' + planilla.id + '/reporte', '_blank', 'noopener,noreferrer');
-                    });
-                return;
-            }
-            window.open('/inventario-ciclico/planillas/' + planilla.id + '/reporte', '_blank', 'noopener,noreferrer');
+            setShowReporteFullScreen(true);
             return;
         }
         axios.get(`/api/inventario-ciclico/planillas/${planilla.id}/reporte-excel`, { responseType: 'blob' })
@@ -641,6 +626,126 @@ const PlanillaDetalle = ({ planilla, onBack, sucursalConfig }) => {
                     </div>
                 )}
             </div>
+
+            {/* Reporte a pantalla completa (solo front, datos de planillaData + pendientes) */}
+            {showReporteFullScreen && (
+                <div
+                    className="fixed inset-0 z-[9999] bg-white overflow-auto"
+                    style={{ fontFamily: 'Arial, sans-serif' }}
+                >
+                    <style>{`
+                        @media print {
+                            .reporte-no-print { display: none !important; }
+                            .reporte-print-container { box-shadow: none; border: none; max-width: 100%; }
+                        }
+                        .reporte-print-container { max-width: 215.9mm; margin: 0 auto; padding: 14px; }
+                        .reporte-tabla { width: 100%; border-collapse: collapse; font-size: 10px; }
+                        .reporte-tabla th, .reporte-tabla td { border: 1px solid #000; padding: 4px 6px; }
+                        .reporte-tabla th { background: #e0e0e0; font-weight: bold; }
+                    `}</style>
+                    <div className="reporte-no-print flex gap-3 items-center p-4 bg-gray-100 border-b border-gray-300 sticky top-0 z-10">
+                        <button
+                            type="button"
+                            onClick={() => window.print()}
+                            className="px-4 py-2 bg-blue-600 text-white rounded font-medium text-sm hover:bg-blue-700"
+                        >
+                            <i className="fa fa-print mr-2"></i>
+                            Imprimir
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => window.print()}
+                            className="px-4 py-2 bg-red-600 text-white rounded font-medium text-sm hover:bg-red-700"
+                        >
+                            <i className="fa fa-file-pdf-o mr-2"></i>
+                            Guardar como PDF
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setShowReporteFullScreen(false)}
+                            className="px-4 py-2 bg-gray-600 text-white rounded font-medium text-sm hover:bg-gray-700"
+                        >
+                            <i className="fa fa-times mr-2"></i>
+                            Cerrar reporte
+                        </button>
+                    </div>
+                    <div className="reporte-print-container p-4">
+                        <div className="mb-4 pb-2 border-b border-gray-300">
+                            <p className="text-base font-bold m-0">
+                                Planilla {planillaData?.estatus === 'Cerrada' ? 'cerrada' : 'pendiente'} #{planillaData?.id ?? planilla.id}
+                            </p>
+                            <p className="text-xs text-gray-600 mt-1">
+                                {planillaData?.sucursal?.nombre ?? ''} · {planillaData?.sucursal?.codigo ?? ''}
+                                {planillaData?.fecha_creacion && ` · ${new Date(planillaData.fecha_creacion).toLocaleDateString('es-VE')}`}
+                            </p>
+                        </div>
+
+                        <table className="reporte-tabla">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Producto</th>
+                                    <th>Cód. barras</th>
+                                    <th>Cód. proveedor</th>
+                                    <th className="text-right">Cant. sistema</th>
+                                    <th className="text-center">Cant. física</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {(planillaData?.tareas ?? []).map((tarea, idx) => {
+                                    const prod = tarea.producto ?? {};
+                                    return (
+                                        <tr key={tarea.id ?? idx}>
+                                            <td>{tarea.id ?? idx + 1}</td>
+                                            <td>{prod.descripcion ?? '—'}</td>
+                                            <td>{prod.codigo_barras ?? '—'}</td>
+                                            <td>{prod.codigo_proveedor ?? '—'}</td>
+                                            <td className="text-right">{Number(tarea.cantidad_sistema ?? 0).toLocaleString()}</td>
+                                            <td className="text-center">{tarea.cantidad_fisica ?? ''}</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+
+                        {pendientes.length > 0 && (
+                            <div className="mt-6">
+                                <p className="text-sm font-bold mb-2">Solo en local (pendientes envío)</p>
+                                <table className="reporte-tabla">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Producto</th>
+                                            <th>Cód. barras</th>
+                                            <th>Cód. proveedor</th>
+                                            <th className="text-right">Cant. sistema</th>
+                                            <th className="text-center">Cant. física</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {pendientes.map((p, idx) => {
+                                            const prod = p.producto ?? {};
+                                            const cantSistema = p.cantidad_sistema ?? prod.cantidad ?? '';
+                                            return (
+                                                <tr key={`p-${p.id_producto}-${idx}`}>
+                                                    <td>{idx + 1}</td>
+                                                    <td>{prod.descripcion ?? '—'}</td>
+                                                    <td>{prod.codigo_barras ?? '—'}</td>
+                                                    <td>{prod.codigo_proveedor ?? '—'}</td>
+                                                    <td className="text-right">
+                                                        {typeof cantSistema === 'number' ? cantSistema.toLocaleString() : cantSistema}
+                                                    </td>
+                                                    <td className="text-center">{p.cantidad_fisica ?? ''}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Modal para buscar productos */}
             {showBuscarModal && (
