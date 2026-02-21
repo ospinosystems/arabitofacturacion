@@ -180,11 +180,12 @@ const PlanillaDetalle = ({ planilla, onBack, sucursalConfig }) => {
             if (pendientes.length > 0) {
                 axios.post(`/inventario-ciclico/planillas/${planilla.id}/reporte-pendientes`, { pendientes })
                     .then((res) => {
-                        if (res.data && res.data.redirect) {
-                            window.open(res.data.redirect, '_blank', 'noopener,noreferrer');
-                        } else {
-                            window.open('/inventario-ciclico/planillas/' + planilla.id + '/reporte', '_blank', 'noopener,noreferrer');
-                        }
+                        const url = (res.data && res.data.redirect_path)
+                            ? (window.location.origin + res.data.redirect_path)
+                            : (res.data && res.data.redirect)
+                                ? res.data.redirect
+                                : '/inventario-ciclico/planillas/' + planilla.id + '/reporte';
+                        window.open(url, '_blank', 'noopener,noreferrer');
                     })
                     .catch(() => {
                         window.open('/inventario-ciclico/planillas/' + planilla.id + '/reporte', '_blank', 'noopener,noreferrer');

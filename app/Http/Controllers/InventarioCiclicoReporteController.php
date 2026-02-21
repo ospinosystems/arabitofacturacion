@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
 
 class InventarioCiclicoReporteController extends Controller
 {
@@ -49,31 +50,44 @@ class InventarioCiclicoReporteController extends Controller
     }
 
     /**
-     * Guardar pendientes en sesión y devolver URL corta para el reporte.
-     * La nueva pestaña comparte la misma sesión (misma cookie) y podrá leer los pendientes.
+     * Guardar pendientes en caché en disco (file) y devolver URL corta para el reporte.
+     * La nueva pestaña hace GET a la misma app; se lee la clave desde caché (persistente).
      * POST body: { "pendientes": [...] }
      */
     public function reportePendientesStore(Request $request, $id)
     {
         $request->validate(['pendientes' => 'required|array']);
         $key = 'ic_' . uniqid() . '_' . bin2hex(random_bytes(4));
-        $sessionKey = "ic_report_pendientes.{$key}";
-        session()->put($sessionKey, [
+        $cacheKey = "ic_report_pendientes.{$key}";
+        $payload = [
             'planilla_id' => (int) $id,
             'pendientes' => $request->input('pendientes'),
+        ];
+        Cache::store('file')->put($cacheKey, $payload, now()->addMinutes(15));
+        session()->put($cacheKey, $payload);
+        $path = "/inventario-ciclico/planillas/{$id}/reporte?pendientes_key=" . urlencode($key);
+        return response()->json([
+            'redirect' => url($path),
+            'redirect_path' => $path,
+            'pendientes_key' => $key,
         ]);
-        $redirect = url("/inventario-ciclico/planillas/{$id}/reporte?pendientes_key=" . urlencode($key));
-        return response()->json(['redirect' => $redirect, 'pendientes_key' => $key]);
     }
 
     /**
-     * Obtener pendientes desde sesión (clave en URL) o desde query (JSON en URL).
+     * Obtener pendientes desde caché file (clave en URL), sesión o query (JSON en URL).
      */
     private function resolvePendientesLocales(Request $request, $id): array
     {
         $pendientesKey = $request->query('pendientes_key');
         if ($pendientesKey !== null && $pendientesKey !== '') {
-            $sessionKey = "ic_report_pendientes.{$pendientesKey}";
+            $cacheKey = "ic_report_pendientes.{$pendientesKey}";
+            $store = Cache::store('file');
+            $stored = $store->get($cacheKey);
+            if (is_array($stored) && isset($stored['planilla_id']) && (int) $stored['planilla_id'] === (int) $id && isset($stored['pendientes'])) {
+                $store->forget($cacheKey);
+                return is_array($stored['pendientes']) ? $stored['pendientes'] : [];
+            }
+            $sessionKey = $cacheKey;
             $stored = session()->get($sessionKey);
             if (is_array($stored) && isset($stored['planilla_id']) && (int) $stored['planilla_id'] === (int) $id && isset($stored['pendientes'])) {
                 session()->forget($sessionKey);
