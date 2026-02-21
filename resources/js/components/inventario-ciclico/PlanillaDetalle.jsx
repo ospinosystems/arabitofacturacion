@@ -701,7 +701,7 @@ const PlanillaDetalle = ({ planilla, onBack, sucursalConfig }) => {
                                             <td>{prod.codigo_barras ?? '—'}</td>
                                             <td>{prod.codigo_proveedor ?? '—'}</td>
                                             <td className="text-right">{Number(tarea.cantidad_sistema ?? 0).toLocaleString()}</td>
-                                            <td className="text-center">{tarea.cantidad_fisica ?? ''}</td>
+                                            <td className="text-center">&nbsp;</td>
                                         </tr>
                                     );
                                 })}
@@ -735,7 +735,7 @@ const PlanillaDetalle = ({ planilla, onBack, sucursalConfig }) => {
                                                     <td className="text-right">
                                                         {typeof cantSistema === 'number' ? cantSistema.toLocaleString() : cantSistema}
                                                     </td>
-                                                    <td className="text-center">{p.cantidad_fisica ?? ''}</td>
+                                                    <td className="text-center">&nbsp;</td>
                                                 </tr>
                                             );
                                         })}
