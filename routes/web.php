@@ -37,12 +37,14 @@ use App\Http\Controllers\MovimientosInventariounitarioController;
 use App\Http\Controllers\sendCajerosReporteController;
 use App\Http\Controllers\ResponsablesController;
 use App\Http\Controllers\InventarioGarantiasController;
+use App\Http\Controllers\TransferenciaGarantiaController;
 use App\Http\Controllers\MonedasController;
 
 use App\Http\Controllers\WarehouseController;
 use App\Http\Controllers\WarehouseInventoryController;
 use App\Http\Controllers\TCRController;
 use App\Http\Controllers\TCDController;
+use App\Http\Controllers\PPRController;
 
 use App\Http\Controllers\CajasController;
 Route::get('checkroutes', [PedidosController::class,"checkroutes"]);
@@ -89,6 +91,14 @@ Route::get('inventario-suministros', function () {
 Route::get('autopago', function () {
     return view('autopago');
 })->name('autopago');
+
+// PPR - Pendiente por Retirar (solo usuario portero, tipo_usuario = 10)
+Route::group(['middleware' => ['auth.user:portero']], function () {
+    Route::get('ppr', [PPRController::class, 'index'])->name('ppr.index');
+    Route::get('ppr/pedido/{id}', [PPRController::class, 'getPedido'])->name('ppr.pedido');
+    Route::post('ppr/registrar-entrega', [PPRController::class, 'registrarEntrega'])->name('ppr.registrar-entrega');
+    Route::get('ppr/historico', [PPRController::class, 'historico'])->name('ppr.historico');
+});
 
 Route::get('senComoVamos', [sendCentral::class,"sendComovamos"]);
 
@@ -169,6 +179,9 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		
 		Route::post('setDescuentoUnitario', [ItemsPedidosController::class,"setDescuentoUnitario"]);
 		Route::post('setDescuentoTotal', [ItemsPedidosController::class,"setDescuentoTotal"]);
+		Route::post('solicitudDescuentoFrontCrear', [App\Http\Controllers\SolicitudDescuentoFrontController::class, 'crear']);
+		Route::post('solicitudDescuentoFrontVerificar', [App\Http\Controllers\SolicitudDescuentoFrontController::class, 'verificar']);
+		Route::post('solicitudCreditoFrontCrear', [App\Http\Controllers\SolicitudCreditoFrontController::class, 'crear']);
 	
 		Route::post('getpersona', [ClientesController::class,"getpersona"]);
 		
@@ -375,6 +388,10 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('warehouse-inventory/tcd/transferir-orden-sucursal', [TCDController::class, 'transferirOrdenASucursal'])->name('warehouse-inventory.tcd.transferir-orden-sucursal');
 		Route::get('warehouse-inventory/tcd/nota-entrega', [TCDController::class, 'notaEntrega'])->name('warehouse-inventory.tcd.nota-entrega');
 		
+		// Reporte PPR (DICI / admin): lista con filtros y reporte Blade
+		Route::get('ppr/reporte', [PPRController::class, 'reporteLista'])->name('ppr.reporte');
+		Route::get('ppr/reporte/ver', [PPRController::class, 'reporteVer'])->name('ppr.reporte.ver');
+		
 		// ================ RUTAS PARA INVENTARIAR PRODUCTOS ================
 		Route::get('inventario/inventariar', [InventarioController::class, 'inventariar'])->name('inventario.inventariar');
 		Route::post('inventario/buscar-producto-inventariar', [InventarioController::class, 'buscarProductoInventariar'])->name('inventario.buscar-producto-inventariar');
@@ -535,6 +552,8 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::get('setCentralData', [sendCentral::class,"setCentralData"]);
 		Route::get('central', [sendCentral::class,"index"]);
 		Route::get('inventario-ciclico/planillas/{id}/reporte', [App\Http\Controllers\InventarioCiclicoReporteController::class, 'reporte'])->name('inventario-ciclico.reporte');
+		Route::post('inventario-ciclico/planillas/{id}/reporte-pendientes', [App\Http\Controllers\InventarioCiclicoReporteController::class, 'reportePendientesStore'])->name('inventario-ciclico.reporte-pendientes');
+		Route::get('reportes/transferencia-garantia/{id}', [TransferenciaGarantiaController::class, 'reporte'])->name('reportes.transferencia-garantia');
 		Route::get('getMonedaCentral', [sendCentral::class,"getMonedaCentral"]);
 		
 		Route::get('setFacturasCentral', [sendCentral::class,"setFacturasCentral"]);

@@ -176,15 +176,22 @@ const PlanillaDetalle = ({ planilla, onBack, sucursalConfig }) => {
 
     const handleGenerarReporte = (tipo) => {
         if (tipo === 'pdf') {
-            let reporteUrl = '/inventario-ciclico/planillas/' + planilla.id + '/reporte';
+            // Siempre usar POST cuando hay pendientes para evitar "Request-URI Too long" con muchos productos
             if (pendientes.length > 0) {
-                try {
-                    reporteUrl += '?pendientes=' + encodeURIComponent(JSON.stringify(pendientes));
-                } catch (e) {
-                    console.warn('No se pudieron incluir pendientes en el reporte', e);
-                }
+                axios.post(`/inventario-ciclico/planillas/${planilla.id}/reporte-pendientes`, { pendientes })
+                    .then((res) => {
+                        if (res.data && res.data.redirect) {
+                            window.open(res.data.redirect, '_blank', 'noopener,noreferrer');
+                        } else {
+                            window.open('/inventario-ciclico/planillas/' + planilla.id + '/reporte', '_blank', 'noopener,noreferrer');
+                        }
+                    })
+                    .catch(() => {
+                        window.open('/inventario-ciclico/planillas/' + planilla.id + '/reporte', '_blank', 'noopener,noreferrer');
+                    });
+                return;
             }
-            window.open(reporteUrl, '_blank', 'noopener,noreferrer');
+            window.open('/inventario-ciclico/planillas/' + planilla.id + '/reporte', '_blank', 'noopener,noreferrer');
             return;
         }
         axios.get(`/api/inventario-ciclico/planillas/${planilla.id}/reporte-excel`, { responseType: 'blob' })
@@ -241,7 +248,7 @@ const PlanillaDetalle = ({ planilla, onBack, sucursalConfig }) => {
         planillaData?.tareas?.every(d => d.estado == 1);
 
     return (
-        <div className="space-y-6">
+        <div className="">
             {/* Header */}
             <div className="flex justify-between items-start">
                 <div>
