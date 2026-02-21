@@ -36,14 +36,7 @@ class InventarioCiclicoReporteController extends Controller
                 ]);
             }
 
-            $pendientesLocales = [];
-            $pendientesParam = $request->query('pendientes');
-            if ($pendientesParam !== null && $pendientesParam !== '') {
-                $decoded = json_decode($pendientesParam, true);
-                if (is_array($decoded)) {
-                    $pendientesLocales = $decoded;
-                }
-            }
+            $pendientesLocales = $this->resolvePendientesLocales($request, $id);
 
             return view('reportes.inventario-ciclico-pendiente', [
                 'planilla' => $planilla,
@@ -53,6 +46,48 @@ class InventarioCiclicoReporteController extends Controller
         } catch (\Exception $e) {
             abort(500, 'Error de conexión: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Guardar pendientes en sesión y devolver URL corta para el reporte.
+     * La nueva pestaña comparte la misma sesión (misma cookie) y podrá leer los pendientes.
+     * POST body: { "pendientes": [...] }
+     */
+    public function reportePendientesStore(Request $request, $id)
+    {
+        $request->validate(['pendientes' => 'required|array']);
+        $key = 'ic_' . uniqid() . '_' . bin2hex(random_bytes(4));
+        $sessionKey = "ic_report_pendientes.{$key}";
+        session()->put($sessionKey, [
+            'planilla_id' => (int) $id,
+            'pendientes' => $request->input('pendientes'),
+        ]);
+        $redirect = url("/inventario-ciclico/planillas/{$id}/reporte?pendientes_key=" . urlencode($key));
+        return response()->json(['redirect' => $redirect, 'pendientes_key' => $key]);
+    }
+
+    /**
+     * Obtener pendientes desde sesión (clave en URL) o desde query (JSON en URL).
+     */
+    private function resolvePendientesLocales(Request $request, $id): array
+    {
+        $pendientesKey = $request->query('pendientes_key');
+        if ($pendientesKey !== null && $pendientesKey !== '') {
+            $sessionKey = "ic_report_pendientes.{$pendientesKey}";
+            $stored = session()->get($sessionKey);
+            if (is_array($stored) && isset($stored['planilla_id']) && (int) $stored['planilla_id'] === (int) $id && isset($stored['pendientes'])) {
+                session()->forget($sessionKey);
+                return is_array($stored['pendientes']) ? $stored['pendientes'] : [];
+            }
+        }
+        $pendientesParam = $request->query('pendientes');
+        if ($pendientesParam !== null && $pendientesParam !== '') {
+            $decoded = json_decode($pendientesParam, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+        return [];
     }
 
     private function calcularEstadisticas(array $tareas): array
@@ -84,7 +119,7 @@ class InventarioCiclicoReporteController extends Controller
             $totalDiferenciaCantidad += $dif;
             $totalValorSistema += $cantSis * $precio;
             $totalValorFisico += $cantFis * $precio;
-            $totalDiferenciaValor += (float) ($t['diferencia_valor'] ?? ($dif * $precio));
+            $totalDiferenciaValor += $dif * $precio;
             $totalDiferenciaValorBase += (float) ($t['diferencia_valor_base'] ?? ($dif * $precioBase));
             if (isset($t['permiso']) && (int) $t['permiso'] === 1) {
                 $tareasAprobadas++;
