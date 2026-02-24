@@ -127,6 +127,14 @@ export default function PagarMain({
     descuentoMetodoPagoAprobadoPorUuid = {},
     metodosPagoAprobadosPorUuid = {},
     setDescuentoTotal,
+    pendientesDescuentoTotal = {},
+    descuentoTotalEditingId = null,
+    descuentoTotalInputValue = "",
+    setDescuentoTotalInputValue,
+    onDescuentoTotalSubmit,
+    onDescuentoTotalCancel,
+    descuentoTotalVerificando = false,
+    verificarDescuentoTotalFront,
     setCantidadCarrito,
     setCantidadCarritoFront,
     toggleAddPersona,
@@ -295,21 +303,29 @@ export default function PagarMain({
     const miniCalcRef = useRef(null);
     const calculadoraBtnRef = useRef(null);
     const descuentoUnitarioInputRef = useRef(null);
+    const descuentoTotalInputRef = useRef(null);
 
     const [descuentoUnitarioTick, setDescuentoUnitarioTick] = useState(0);
     useEffect(() => {
         const hasPendingUnitario = pendientesDescuentoUnitario && Object.keys(pendientesDescuentoUnitario).some((pid) => Object.keys(pendientesDescuentoUnitario[pid] || {}).length > 0);
         const hasPendingMetodoPago = pendienteDescuentoMetodoPago && Object.keys(pendienteDescuentoMetodoPago).length > 0;
-        if (!hasPendingUnitario && !hasPendingMetodoPago) return;
+        const hasPendingTotal = pendientesDescuentoTotal && Object.keys(pendientesDescuentoTotal).length > 0;
+        if (!hasPendingUnitario && !hasPendingMetodoPago && !hasPendingTotal) return;
         const id = setInterval(() => setDescuentoUnitarioTick((t) => t + 1), 1000);
         return () => clearInterval(id);
-    }, [pendientesDescuentoUnitario, pendienteDescuentoMetodoPago]);
+    }, [pendientesDescuentoUnitario, pendienteDescuentoMetodoPago, pendientesDescuentoTotal]);
 
     useEffect(() => {
         if (descuentoUnitarioEditingId && descuentoUnitarioInputRef.current) {
             descuentoUnitarioInputRef.current.focus();
         }
     }, [descuentoUnitarioEditingId]);
+
+    useEffect(() => {
+        if (descuentoTotalEditingId && descuentoTotalInputRef.current) {
+            descuentoTotalInputRef.current.focus();
+        }
+    }, [descuentoTotalEditingId]);
 
     // Handler para ejecutar facturar_e_imprimir al presionar ENTER en inputs de pago
     // (guarda el pedido e imprime el ticket, igual que Ctrl+Enter)
@@ -2720,14 +2736,48 @@ export default function PagarMain({
                                         </div>
 
                                         {/* Descuento */}
-                                        <button
-                                            data-index={id}
-                                            onClick={setDescuentoTotal}
-                                            className="px-2 py-1 text-xs font-semibold text-gray-700 border !border-gray-300 transition-colors bg-gray-100 rounded-lg hover:bg-gray-200"
-                                        >
-                                            <i className="mr-1.5 fa fa-percentage text-xs"></i>
-                                            {total_porciento}%
-                                        </button>
+                                        {pedidoData._frontOnly && descuentoTotalEditingId != null && String(id) === String(descuentoTotalEditingId) ? (
+                                            <div className="relative flex items-center gap-1">
+                                                <input
+                                                    ref={descuentoTotalInputRef}
+                                                    type="text"
+                                                    className="w-24 px-2 py-1 text-xs border border-orange-300 rounded-lg focus:ring-1 focus:ring-orange-400 focus:border-orange-400"
+                                                    placeholder="Monto final"
+                                                    value={descuentoTotalInputValue}
+                                                    onChange={(ev) => setDescuentoTotalInputValue && setDescuentoTotalInputValue(ev.target.value)}
+                                                    onBlur={() => {
+                                                        const v = (descuentoTotalInputValue || "").trim();
+                                                        if (v !== "") onDescuentoTotalSubmit && onDescuentoTotalSubmit(v);
+                                                        else onDescuentoTotalCancel && onDescuentoTotalCancel();
+                                                    }}
+                                                    onKeyDown={(ev) => {
+                                                        if (ev.key === "Enter") {
+                                                            ev.preventDefault();
+                                                            const v = (descuentoTotalInputValue || "").trim();
+                                                            onDescuentoTotalSubmit && onDescuentoTotalSubmit(v);
+                                                        }
+                                                        if (ev.key === "Escape") {
+                                                            ev.preventDefault();
+                                                            onDescuentoTotalCancel && onDescuentoTotalCancel();
+                                                        }
+                                                    }}
+                                                    onClick={(ev) => ev.stopPropagation()}
+                                                />
+                                                <span className="absolute right-full mr-1.5 top-1/2 -translate-y-1/2 px-2 py-1 text-xs min-w-[180px] max-w-[220px] rounded-lg shadow-lg bg-gray-800 text-white pointer-events-none z-[9999] leading-snug whitespace-normal">
+                                                    Monto final del pedido.<br />
+                                                    <span className="text-gray-300">0 = quitar descuento · Enter aplicar · Esc cancelar</span>
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                data-index={id}
+                                                onClick={setDescuentoTotal}
+                                                className="px-2 py-1 text-xs font-semibold text-gray-700 border !border-gray-300 transition-colors bg-gray-100 rounded-lg hover:bg-gray-200"
+                                            >
+                                                <i className="mr-1.5 fa fa-percentage text-xs"></i>
+                                                {total_porciento}%
+                                            </button>
+                                        )}
                                     </div>
 
                                     {/* Descuento por método de pago: solo se muestra cuando hay solicitud en espera (la solicitud se envía al guardar) */}
@@ -2766,6 +2816,42 @@ export default function PagarMain({
                                                 className="w-full flex items-center justify-center gap-2 px-4 py-3 font-semibold text-orange-800 bg-orange-200 border-2 border-orange-400 rounded-lg hover:bg-orange-300 hover:border-orange-500 disabled:opacity-60 shadow-md"
                                             >
                                                 {descuentoMetodoPagoVerificando ? (
+                                                    <>
+                                                        <span className="inline-block w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                                                        Verificando…
+                                                    </>
+                                                ) : (
+                                                    <>Verificar si ya está aprobado</>
+                                                )}
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* Descuento total pendiente: solo para pedidos front con solicitud global en espera */}
+                                    {pedidoData._frontOnly && pedidoData.id && pendientesDescuentoTotal[pedidoData.id] && (
+                                        <div className="mt-2 pt-2 border-t border-gray-200 flex flex-col gap-1.5">
+                                            <div className="flex items-center justify-between gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                                                <span className="text-xs font-medium">Descuento total en espera de aprobación</span>
+                                                <span className="text-[10px] tabular-nums text-amber-600">
+                                                    {(() => {
+                                                        const submittedAt = pendientesDescuentoTotal[pedidoData.id]?.submittedAt || 0;
+                                                        const elapsed = Math.floor((Date.now() - submittedAt) / 1000);
+                                                        const m = Math.floor(elapsed / 60);
+                                                        const s = elapsed % 60;
+                                                        return `${m}:${String(s).padStart(2, "0")}`;
+                                                    })()}
+                                                </span>
+                                            </div>
+                                            <div className="text-[10px] text-amber-700 bg-amber-50/80 rounded px-2 py-1">
+                                                <span className="font-medium">Monto final enviado:</span> {pendientesDescuentoTotal[pedidoData.id]?.montoFinal}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                disabled={descuentoTotalVerificando}
+                                                onClick={() => verificarDescuentoTotalFront && verificarDescuentoTotalFront()}
+                                                className="w-full flex items-center justify-center gap-2 px-4 py-3 font-semibold text-orange-800 bg-orange-200 border-2 border-orange-400 rounded-lg hover:bg-orange-300 hover:border-orange-500 disabled:opacity-60 shadow-md"
+                                            >
+                                                {descuentoTotalVerificando ? (
                                                     <>
                                                         <span className="inline-block w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin shrink-0" />
                                                         Verificando…

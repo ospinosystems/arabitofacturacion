@@ -508,6 +508,10 @@ export default function Facturar({
     const [descuentoUnitarioContext, setDescuentoUnitarioContext] = useState(null);
     const [descuentoUnitarioInputValue, setDescuentoUnitarioInputValue] = useState("");
     const [pendientesDescuentoUnitario, setPendientesDescuentoUnitario] = useState({});
+    const [pendientesDescuentoTotal, setPendientesDescuentoTotal] = useState({});
+    const [descuentoTotalEditingId, setDescuentoTotalEditingId] = useState(null);
+    const [descuentoTotalInputValue, setDescuentoTotalInputValue] = useState("");
+    const [descuentoTotalVerificando, setDescuentoTotalVerificando] = useState(false);
     const [pendienteDescuentoMetodoPago, setPendienteDescuentoMetodoPago] = useState({});
     const [descuentoMetodoPagoVerificando, setDescuentoMetodoPagoVerificando] = useState(false);
     const [descuentoMetodoPagoAprobadoPorUuid, setDescuentoMetodoPagoAprobadoPorUuid] = useState({});
@@ -3891,7 +3895,11 @@ export default function Facturar({
     };
 
     const setDescuentoTotal = (e) => {
-        // setLoading(true)
+        if (pedidoData._frontOnly && pedidoData.id) {
+            setDescuentoTotalEditingId(String(pedidoData.id));
+            setDescuentoTotalInputValue("");
+            return;
+        }
 
         let descuento = window.prompt("Descuento Total *0 para eliminar*");
         let index = e.currentTarget.attributes["data-index"].value;
@@ -3909,8 +3917,6 @@ export default function Facturar({
                             params,
                         });
                         openValidationTarea(res.data.id_tarea);
-                    } else if (pedidoData._frontOnly && pedidoData.id) {
-                        aplicarDescuentoAprobadoFront(pedidoData.id, pedidosFrontPendientes[pedidoData.id] || pedidoData);
                     }
                 });
             } else {
@@ -3935,14 +3941,164 @@ export default function Facturar({
                                 params,
                             });
                             openValidationTarea(res.data.id_tarea);
-                        } else if (pedidoData._frontOnly && pedidoData.id) {
-                            aplicarDescuentoAprobadoFront(pedidoData.id, pedidosFrontPendientes[pedidoData.id] || pedidoData);
                         }
                     });
                 }
             }
         }
     };
+    const aplicarDescuentoTotalDesdeModal = (montoFinal) => {
+        if (montoFinal === null || montoFinal === "") return;
+        setDescuentoTotalEditingId(null);
+        setDescuentoTotalInputValue("");
+
+        if (!pedidoData._frontOnly || !pedidoData.id) return;
+
+        setLoading(true);
+
+        if (montoFinal === "0" || montoFinal === 0) {
+            const newItems = (pedidoData.items || []).map((it) => {
+                const precio = parseFloat(it.producto?.precio || it.precio || 0);
+                const subtotal = precio * Math.abs(parseFloat(it.cantidad || 0));
+                return { ...it, descuento: 0, total: subtotal, total_des: subtotal };
+            });
+            const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
+            const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
+            setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
+            setPedidoData(updated);
+            setLoading(false);
+            notificar({ data: { msj: "Descuento total eliminado", estado: true } });
+            return;
+        }
+
+        const montoFinalNum = parseFloat(montoFinal);
+        const cleanSubtotal = parseFloat(pedidoData.clean_subtotal) || 0;
+
+        if (isNaN(montoFinalNum) || montoFinalNum < 0) {
+            notificar({ data: { msj: "Monto inválido", estado: false } });
+            setLoading(false);
+            return;
+        }
+        if (cleanSubtotal <= 0) {
+            notificar({ data: { msj: "El pedido no tiene subtotal válido", estado: false } });
+            setLoading(false);
+            return;
+        }
+        if (montoFinalNum >= cleanSubtotal) {
+            notificar({ data: { msj: "El monto final debe ser menor al subtotal", estado: false } });
+            setLoading(false);
+            return;
+        }
+
+        const descuento = (100 - (montoFinalNum * 100) / cleanSubtotal).toFixed(4);
+        const items = pedidoData.items || [];
+        let monto_bruto = 0;
+        let monto_descuento = 0;
+        const ids_productos = items.map((it) => {
+            const subtotal_it = parseFloat(it.producto?.precio || 0) * Math.abs(parseFloat(it.cantidad || 0));
+            const pct = parseFloat(descuento);
+            const subtotal_con_descuento = subtotal_it * (1 - pct / 100);
+            monto_bruto += subtotal_it;
+            monto_descuento += subtotal_it - subtotal_con_descuento;
+            return {
+                id_producto: it.producto?.id ?? it.id,
+                cantidad: it.cantidad,
+                precio: it.producto?.precio ?? it.precio ?? 0,
+                precio_base: it.producto?.precio_base ?? 0,
+                subtotal: subtotal_it,
+                subtotal_con_descuento,
+                porcentaje_descuento: pct,
+            };
+        });
+        const monto_con_descuento = monto_bruto - monto_descuento;
+
+        db.solicitudDescuentoFrontCrear({
+            uuid_pedido_front: pedidoData.id,
+            ids_productos,
+            monto_bruto,
+            monto_con_descuento,
+            monto_descuento,
+            porcentaje_descuento: parseFloat(descuento),
+            tipo_descuento: "monto_porcentaje",
+        })
+            .then((res) => {
+                setLoading(false);
+                const data = res.data || res;
+                if (data.estado === true && data.data?.estado === "aprobado") {
+                    const byProduct = {};
+                    (data.data.ids_productos || []).forEach((p) => {
+                        byProduct[p.id_producto] = parseFloat(p.porcentaje_descuento) || 0;
+                    });
+                    const newItems = (pedidoData.items || []).map((it) => {
+                        const idProd = it.producto?.id ?? it.id;
+                        const pct = byProduct[idProd] ?? parseFloat(descuento);
+                        const subtotal_it = parseFloat(it.producto?.precio || 0) * Math.abs(parseFloat(it.cantidad || 0));
+                        const totalConDescuento = subtotal_it * (1 - pct / 100);
+                        return { ...it, descuento: pct, total: totalConDescuento, total_des: totalConDescuento };
+                    });
+                    const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
+                    const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
+                    setPedidoData(updated);
+                    setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
+                    setPendientesDescuentoTotal((prev) => { const next = { ...prev }; delete next[pedidoData.id]; return next; });
+                    notificar({ data: { msj: "Descuento total aprobado y aplicado", estado: true } });
+                    return;
+                }
+                if (data.estado === true && data.existe) {
+                    notificar({ data: { msj: data.msj || "Ya existe una solicitud en espera de aprobación", estado: true } });
+                    return;
+                }
+                if (data.estado === true) {
+                    setPendientesDescuentoTotal((prev) => ({
+                        ...prev,
+                        [pedidoData.id]: { montoFinal: String(montoFinal), submittedAt: Date.now() },
+                    }));
+                    notificar({ data: { msj: "Solicitud de descuento total enviada a central para aprobación", estado: true } });
+                    return;
+                }
+                notificar({ data: { msj: data.msj || "Error al enviar solicitud", estado: false } });
+            })
+            .catch(() => {
+                setLoading(false);
+                notificar({ data: { msj: "Error de conexión con el servidor", estado: false } });
+            });
+    };
+
+    const verificarDescuentoTotalFront = () => {
+        if (!pedidoData._frontOnly || !pedidoData.id) return;
+        setDescuentoTotalVerificando(true);
+        const order = pedidosFrontPendientes[pedidoData.id] || pedidoData;
+        db.solicitudDescuentoFrontVerificar({ uuid_pedido_front: pedidoData.id, tipo_descuento: "monto_porcentaje" })
+            .then((res) => {
+                setDescuentoTotalVerificando(false);
+                if (res.data?.existe && res.data?.data?.estado === "aprobado" && Array.isArray(res.data.data.ids_productos)) {
+                    const byProduct = {};
+                    (res.data.data.ids_productos || []).forEach((p) => {
+                        byProduct[p.id_producto] = parseFloat(p.porcentaje_descuento) || 0;
+                    });
+                    const newItems = (order.items || []).map((it) => {
+                        const idProd = it.producto?.id ?? it.id;
+                        const pct = byProduct[idProd] ?? (parseFloat(it.descuento) || 0);
+                        const subtotal = parseFloat(it.producto?.precio || it.precio || 0) * Math.abs(parseFloat(it.cantidad || 0));
+                        const total = subtotal * (1 - pct / 100);
+                        return { ...it, descuento: pct, total, total_des: total };
+                    });
+                    const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
+                    const updated = { ...order, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(order.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
+                    setPedidoData(updated);
+                    setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
+                    setPendientesDescuentoTotal((prev) => { const next = { ...prev }; delete next[pedidoData.id]; return next; });
+                    notificar({ data: { msj: "Descuento total aprobado y aplicado", estado: true } });
+                } else {
+                    notificar({ data: { msj: "La solicitud aún no ha sido aprobada", estado: false } });
+                }
+            })
+            .catch(() => {
+                setDescuentoTotalVerificando(false);
+                notificar({ data: { msj: "Error al verificar", estado: false } });
+            });
+    };
+
     const setDescuentoUnitario = (e) => {
         const index = e.currentTarget.attributes["data-index"].value;
         const item = pedidoData.items?.find((i) => i.id == index);
@@ -9528,6 +9684,17 @@ export default function Facturar({
                                     descuentoMetodoPagoAprobadoPorUuid={descuentoMetodoPagoAprobadoPorUuid}
                                     metodosPagoAprobadosPorUuid={metodosPagoAprobadosPorUuid}
                                     setDescuentoTotal={setDescuentoTotal}
+                                    pendientesDescuentoTotal={pendientesDescuentoTotal}
+                                    descuentoTotalEditingId={descuentoTotalEditingId}
+                                    descuentoTotalInputValue={descuentoTotalInputValue}
+                                    setDescuentoTotalInputValue={setDescuentoTotalInputValue}
+                                    onDescuentoTotalSubmit={aplicarDescuentoTotalDesdeModal}
+                                    onDescuentoTotalCancel={() => {
+                                        setDescuentoTotalEditingId(null);
+                                        setDescuentoTotalInputValue("");
+                                    }}
+                                    descuentoTotalVerificando={descuentoTotalVerificando}
+                                    verificarDescuentoTotalFront={verificarDescuentoTotalFront}
                                     setCantidadCarrito={setCantidadCarrito}
                                     setCantidadCarritoFront={setCantidadCarritoFront}
                                     toggleAddPersona={toggleAddPersona}
