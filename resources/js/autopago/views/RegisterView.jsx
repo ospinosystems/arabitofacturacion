@@ -80,15 +80,15 @@ export default function RegisterView({ userData, onUserDataChange, onConfirm, on
         Toca cada campo para completarlo
       </p>
 
-      <div className="space-y-4 mb-6">
+      <div className="space-y-3 mb-4">
         <div>
-          <label className="block text-lg font-semibold text-gray-600 mb-1.5">
+          <label className="block text-sm font-semibold text-gray-600 mb-1">
             Nombre completo
           </label>
           <button
             type="button"
             onClick={() => setActiveField('nombre')}
-            className={`w-full py-4 px-5 text-2xl text-left rounded-xl transition-all ${
+            className={`w-full py-3 px-4 text-xl text-left rounded-lg transition-all ${
               activeField === 'nombre' ? 'border-2 bg-white shadow-sm' : 'border-2 border-gray-200 bg-white'
             }`}
             style={activeField === 'nombre' ? { borderColor: 'rgba(242, 109, 10, 0.6)' } : {}}
@@ -100,18 +100,18 @@ export default function RegisterView({ userData, onUserDataChange, onConfirm, on
         </div>
 
         <div>
-          <label className="block text-lg font-semibold text-gray-600 mb-1.5">
+          <label className="block text-sm font-semibold text-gray-600 mb-1">
             Teléfono
           </label>
           <div
-            className={`flex items-stretch rounded-xl overflow-hidden border-2 ${
+            className={`flex items-stretch rounded-lg overflow-hidden border-2 ${
               activeField === 'telefono' ? 'border-orange-400' : 'border-gray-200'
             }`}
           >
             <select
               value={parseTelefono(userData.telefono).prefix}
               onChange={(e) => handlePrefixChange(e.target.value)}
-              className="flex-shrink-0 w-32 py-4 px-4 text-2xl font-semibold text-gray-800 bg-gray-50 border-r-2 border-gray-200 focus:outline-none appearance-none cursor-pointer"
+              className="flex-shrink-0 w-24 py-3 px-3 text-lg font-semibold text-gray-800 bg-gray-50 border-r-2 border-gray-200 focus:outline-none appearance-none cursor-pointer"
               style={{
                 backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23737475'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
                 backgroundRepeat: 'no-repeat',
@@ -129,7 +129,7 @@ export default function RegisterView({ userData, onUserDataChange, onConfirm, on
             <button
               type="button"
               onClick={() => setActiveField('telefono')}
-              className="flex-1 py-4 px-5 text-2xl text-left bg-white min-w-0"
+              className="flex-1 py-3 px-4 text-xl text-left bg-white min-w-0"
             >
               <span className={parseTelefono(userData.telefono).suffix ? 'text-gray-800' : 'text-gray-400'}>
                 {parseTelefono(userData.telefono).suffix || '7 dígitos'}
@@ -140,10 +140,10 @@ export default function RegisterView({ userData, onUserDataChange, onConfirm, on
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto mb-4 flex flex-col items-center">
-        <p className="text-lg font-medium text-gray-500 mb-3">
+        <p className="text-sm font-medium text-gray-500 mb-2">
           {activeField === 'telefono' ? 'Teclado numérico para teléfono' : 'Teclado para nombre'}
         </p>
-        <div className="w-full max-w-2xl" style={{ transform: 'scale(1.35)', transformOrigin: 'top center' }}>
+        <div className="w-full max-w-md mx-auto">
           {activeField === 'telefono' ? (
             <>
               <Numpad
@@ -152,7 +152,7 @@ export default function RegisterView({ userData, onUserDataChange, onConfirm, on
                 maxLength={7}
               />
               {userData.telefono && !isValidTelefono(userData.telefono) && (
-                <p className="mt-3 text-base font-medium text-red-600">
+                <p className="mt-2 text-sm font-medium text-red-600">
                   Ingresa los 7 dígitos restantes
                 </p>
               )}
@@ -167,7 +167,7 @@ export default function RegisterView({ userData, onUserDataChange, onConfirm, on
         type="button"
         onClick={onConfirm}
         disabled={!canConfirm || loading}
-        className="w-full max-w-2xl py-8 rounded-2xl text-4xl font-bold text-white tracking-tight transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed mb-16 mx-auto kiosk-btn-primary flex items-center justify-center gap-3 shadow-lg"
+        className="w-full max-w-md py-5 rounded-xl text-2xl font-bold text-white tracking-tight transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed mb-10 mx-auto kiosk-btn-primary flex items-center justify-center gap-2 shadow-lg"
         style={{ backgroundColor: 'rgba(242, 109, 10, 0.95)' }}
       >
         {loading ? (

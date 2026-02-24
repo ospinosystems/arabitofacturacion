@@ -19,15 +19,15 @@ export default function QWERTYKeyboard({ onKeyPress, onBackspace, withSymbols = 
   const bgStyle = highContrast ? { backgroundColor: HIGH_CONTRAST_BG } : { backgroundColor: BRAND_COLOR };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {withSymbols && SYMBOL_ROWS.map((row, rowIdx) => (
-        <div key={`sym-${rowIdx}`} className="flex justify-center gap-1.5 flex-wrap">
+        <div key={`sym-${rowIdx}`} className="flex justify-center gap-1 flex-wrap">
           {row.map((key) => (
             <button
               key={key}
               type="button"
               onClick={() => onKeyPress(key)}
-              className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-semibold text-white transition-all active:scale-95"
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-semibold text-white transition-all active:scale-95"
               style={bgStyle}
             >
               {key}
@@ -36,13 +36,13 @@ export default function QWERTYKeyboard({ onKeyPress, onBackspace, withSymbols = 
         </div>
       ))}
       {ROWS.map((row, rowIdx) => (
-        <div key={rowIdx} className="flex justify-center gap-1.5">
+        <div key={rowIdx} className="flex justify-center gap-1">
           {row.map((key) => (
             <button
               key={key}
               type="button"
               onClick={() => onKeyPress(key)}
-              className="w-14 h-14 rounded-xl flex items-center justify-center text-xl font-semibold text-white transition-all active:scale-95"
+              className="w-10 h-10 rounded-lg flex items-center justify-center text-base font-semibold text-white transition-all active:scale-95"
               style={bgStyle}
             >
               {key}
@@ -50,19 +50,19 @@ export default function QWERTYKeyboard({ onKeyPress, onBackspace, withSymbols = 
           ))}
         </div>
       ))}
-      <div className="flex justify-center gap-2 pt-2">
+      <div className="flex justify-center gap-1.5 pt-1">
         <button
           type="button"
           onClick={onBackspace}
-          className="px-8 h-14 rounded-xl flex items-center justify-center text-white font-semibold transition-all active:scale-95"
+          className="px-5 h-10 rounded-lg flex items-center justify-center text-white font-semibold transition-all active:scale-95"
           style={bgStyle}
         >
-          <Delete size={28} strokeWidth={2.5} />
+          <Delete size={20} strokeWidth={2.5} />
         </button>
         <button
           type="button"
           onClick={() => onKeyPress(' ')}
-          className="px-16 h-14 rounded-xl flex items-center justify-center text-xl font-semibold text-white transition-all active:scale-95"
+          className="px-10 h-10 rounded-lg flex items-center justify-center text-base font-semibold text-white transition-all active:scale-95"
           style={bgStyle}
         >
           espacio
