@@ -129,103 +129,119 @@ class PagoPedidosController extends Controller
 
             // Pedido solo en front: crear pedido en BD, cargar items en lote (setCarrito por ítem) y continuar con el pago (salvo si ya venimos de id_tarea_aprobado)
             if ($req->front_only && $req->items && is_array($req->items) && count($req->items) > 0 && !$req->id_tarea_aprobado) {
-                $pedidosCtrl = new PedidosController();
-                $id_pedido = $pedidosCtrl->addNewPedido();
-                if ($id_pedido instanceof \Illuminate\Http\JsonResponse) {
-                    \DB::rollBack();
-                    return $id_pedido;
-                }
-                $pedido = pedidos::find($id_pedido);
-                if (!$pedido) {
-                    \DB::rollBack();
-                    return Response::json(['estado' => false, 'msj' => 'Error al crear pedido'], 500);
-                }
+                // Bloquear duplicados: si ya existe un pedido con este UUID, reutilizarlo sin recrearlo
+                $pedido_ya_existia = false;
                 if ($req->uuid) {
-                    $pedido->uuid = $req->uuid;
-                    $pedido->save();
-                }
-                if ($req->fecha_inicio) {
-                    $pedido->fecha_inicio = $req->fecha_inicio;
-                }
-                if ($req->fecha_vence) {
-                    $pedido->fecha_vence = $req->fecha_vence;
-                }
-                if (isset($req->formato_pago)) {
-                    $pedido->formato_pago = (int) $req->formato_pago;
-                }
-                // Devolución front: asignar el pedido original si viene en el request
-                if ($req->isdevolucionOriginalid && is_numeric($req->isdevolucionOriginalid)) {
-                    $pedidoOriginalExiste = pedidos::where('id', (int) $req->isdevolucionOriginalid)->exists();
-                    if ($pedidoOriginalExiste) {
-                        $pedido->isdevolucionOriginalid = (int) $req->isdevolucionOriginalid;
+                    $pedidoExistente = pedidos::where('uuid', $req->uuid)->first();
+                    if ($pedidoExistente) {
+                        if ((int) $pedidoExistente->estado === 1) {
+                            \DB::rollBack();
+                            return Response::json(['estado' => false, 'msj' => 'Este pedido ya fue registrado anteriormente.'], 409);
+                        }
+                        $req->merge(['id' => $pedidoExistente->id]);
+                        $pedido_ya_existia = true;
                     }
                 }
-                if ($req->fecha_inicio || $req->fecha_vence || isset($req->formato_pago) || $req->isdevolucionOriginalid) {
-                    $pedido->save();
-                }
-                $id_cliente = $req->id_cliente ?? 1;
-                $personaReq = Request::create('/internal', 'POST', [
-                    'numero_factura' => $id_pedido,
-                    'id_cliente' => $id_cliente,
-                ]);
-                $personaReq->setLaravelSession($req->session());
-                $prevRequest = app('request');
-                app()->instance('request', $personaReq);
-                try {
-                    $personaResp = $pedidosCtrl->setpersonacarrito($personaReq);
-                } finally {
-                    app()->instance('request', $prevRequest);
-                }
-                if ($personaResp instanceof \Illuminate\Http\JsonResponse && isset($personaResp->getData()->estado) && !$personaResp->getData()->estado) {
-                    \DB::rollBack();
-                    return $personaResp;
-                }
-                $invCtrl = new InventarioController();
-                foreach ($req->items as $item) {
-                    $id_producto = (int) ($item['id'] ?? 0);
-                    $cantidad = (float) ($item['cantidad'] ?? 1);
-                    if ($id_producto <= 0) {
-                        continue;
+
+                if (!$pedido_ya_existia) {
+                    $pedidosCtrl = new PedidosController();
+                    $id_pedido = $pedidosCtrl->addNewPedido();
+                    if ($id_pedido instanceof \Illuminate\Http\JsonResponse) {
+                        \DB::rollBack();
+                        return $id_pedido;
                     }
-                    $carritoReq = Request::create('/internal', 'GET', [
+                    $pedido = pedidos::find($id_pedido);
+                    if (!$pedido) {
+                        \DB::rollBack();
+                        return Response::json(['estado' => false, 'msj' => 'Error al crear pedido'], 500);
+                    }
+                    if ($req->uuid) {
+                        $pedido->uuid = $req->uuid;
+                        $pedido->save();
+                    }
+                    if ($req->fecha_inicio) {
+                        $pedido->fecha_inicio = $req->fecha_inicio;
+                    }
+                    if ($req->fecha_vence) {
+                        $pedido->fecha_vence = $req->fecha_vence;
+                    }
+                    if (isset($req->formato_pago)) {
+                        $pedido->formato_pago = (int) $req->formato_pago;
+                    }
+                    // Devolución front: asignar el pedido original si viene en el request
+                    if ($req->isdevolucionOriginalid && is_numeric($req->isdevolucionOriginalid)) {
+                        $pedidoOriginalExiste = pedidos::where('id', (int) $req->isdevolucionOriginalid)->exists();
+                        if ($pedidoOriginalExiste) {
+                            $pedido->isdevolucionOriginalid = (int) $req->isdevolucionOriginalid;
+                        }
+                    }
+                    if ($req->fecha_inicio || $req->fecha_vence || isset($req->formato_pago) || $req->isdevolucionOriginalid) {
+                        $pedido->save();
+                    }
+                    $id_cliente = $req->id_cliente ?? 1;
+                    $personaReq = Request::create('/internal', 'POST', [
                         'numero_factura' => $id_pedido,
-                        'id' => $id_producto,
-                        'cantidad' => $cantidad,
-                        'type' => null,
-                        // Bypass de clave para ítems negativos: la autoría ya fue validada en el front
-                        'front_only_bypass' => true,
+                        'id_cliente' => $id_cliente,
                     ]);
-                    $carritoReq->setLaravelSession($req->session());
+                    $personaReq->setLaravelSession($req->session());
                     $prevRequest = app('request');
-                    app()->instance('request', $carritoReq);
+                    app()->instance('request', $personaReq);
                     try {
-                        $carritoResp = $invCtrl->setCarrito($carritoReq);
+                        $personaResp = $pedidosCtrl->setpersonacarrito($personaReq);
                     } finally {
                         app()->instance('request', $prevRequest);
                     }
-                    if ($carritoResp instanceof \Illuminate\Http\JsonResponse) {
-                        $data = $carritoResp->getData();
-                        if (isset($data->estado) && $data->estado === false) {
-                            \DB::rollBack();
-                            return $carritoResp;
+                    if ($personaResp instanceof \Illuminate\Http\JsonResponse && isset($personaResp->getData()->estado) && !$personaResp->getData()->estado) {
+                        \DB::rollBack();
+                        return $personaResp;
+                    }
+                    $invCtrl = new InventarioController();
+                    foreach ($req->items as $item) {
+                        $id_producto = (int) ($item['id'] ?? 0);
+                        $cantidad = (float) ($item['cantidad'] ?? 1);
+                        if ($id_producto <= 0) {
+                            continue;
+                        }
+                        $carritoReq = Request::create('/internal', 'GET', [
+                            'numero_factura' => $id_pedido,
+                            'id' => $id_producto,
+                            'cantidad' => $cantidad,
+                            'type' => null,
+                            // Bypass de clave para ítems negativos: la autoría ya fue validada en el front
+                            'front_only_bypass' => true,
+                        ]);
+                        $carritoReq->setLaravelSession($req->session());
+                        $prevRequest = app('request');
+                        app()->instance('request', $carritoReq);
+                        try {
+                            $carritoResp = $invCtrl->setCarrito($carritoReq);
+                        } finally {
+                            app()->instance('request', $prevRequest);
+                        }
+                        if ($carritoResp instanceof \Illuminate\Http\JsonResponse) {
+                            $data = $carritoResp->getData();
+                            if (isset($data->estado) && $data->estado === false) {
+                                \DB::rollBack();
+                                return $carritoResp;
+                            }
                         }
                     }
-                }
-                // Aplicar descuentos por ítem antes de validar montos (por id_producto por si hay updateOrCreate que une líneas)
-                foreach ($req->items as $item) {
-                    $id_producto = (int) ($item['id'] ?? 0);
-                    if ($id_producto <= 0) {
-                        continue;
+                    // Aplicar descuentos por ítem antes de validar montos (por id_producto por si hay updateOrCreate que une líneas)
+                    foreach ($req->items as $item) {
+                        $id_producto = (int) ($item['id'] ?? 0);
+                        if ($id_producto <= 0) {
+                            continue;
+                        }
+                        $descuento = isset($item['descuento']) ? (float) $item['descuento'] : 0;
+                        if ($descuento < 0) {
+                            $descuento = 0;
+                        }
+                        items_pedidos::where('id_pedido', $id_pedido)
+                            ->where('id_producto', $id_producto)
+                            ->update(['descuento' => $descuento]);
                     }
-                    $descuento = isset($item['descuento']) ? (float) $item['descuento'] : 0;
-                    if ($descuento < 0) {
-                        $descuento = 0;
-                    }
-                    items_pedidos::where('id_pedido', $id_pedido)
-                        ->where('id_producto', $id_producto)
-                        ->update(['descuento' => $descuento]);
+                    $req->merge(['id' => $id_pedido]);
                 }
-                $req->merge(['id' => $id_pedido]);
             }
 
             $metodos_pago = [];
