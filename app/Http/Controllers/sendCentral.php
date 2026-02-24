@@ -4789,6 +4789,31 @@ class sendCentral extends Controller
         }
     }
 
+    /**
+     * Cancelar (rechazar) una solicitud de descuento pendiente en central por UUID y tipo.
+     * Permite al cajero reenviar la solicitud con los métodos de pago correctos.
+     */
+    public function cancelarSolicitudDescuentoFrontPorUuid($uuid, $tipo_descuento)
+    {
+        try {
+            $codigo_origen = $this->getOrigen();
+            $response = $this->requestToCentral('post', "/api/solicitudes-descuentos/cancelar-por-pedido-front", [
+                "id_sucursal" => $codigo_origen,
+                "uuid_pedido_front" => $uuid,
+                "tipo_descuento" => $tipo_descuento,
+            ]);
+            if ($response->ok()) {
+                $res = $response->json();
+                if ($res) {
+                    return $res;
+                }
+            }
+            return $response->json() ?? ["estado" => false, "msj" => "Error al cancelar solicitud"];
+        } catch (\Exception $e) {
+            return ["estado" => false, "msj" => "Error: " . $e->getMessage()];
+        }
+    }
+
     // =================== FIN MÉTODOS SOLICITUDES DE DESCUENTOS ===================
 
     // =================== MÉTODOS SOLICITUDES DE REVERSO ===================

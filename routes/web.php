@@ -181,6 +181,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('setDescuentoTotal', [ItemsPedidosController::class,"setDescuentoTotal"]);
 		Route::post('solicitudDescuentoFrontCrear', [App\Http\Controllers\SolicitudDescuentoFrontController::class, 'crear']);
 		Route::post('solicitudDescuentoFrontVerificar', [App\Http\Controllers\SolicitudDescuentoFrontController::class, 'verificar']);
+		Route::post('solicitudDescuentoFrontCancelar', [App\Http\Controllers\SolicitudDescuentoFrontController::class, 'cancelar']);
 		Route::post('solicitudCreditoFrontCrear', [App\Http\Controllers\SolicitudCreditoFrontController::class, 'crear']);
 	
 		Route::post('getpersona', [ClientesController::class,"getpersona"]);

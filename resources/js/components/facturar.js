@@ -514,6 +514,7 @@ export default function Facturar({
     const [descuentoTotalVerificando, setDescuentoTotalVerificando] = useState(false);
     const [pendienteDescuentoMetodoPago, setPendienteDescuentoMetodoPago] = useState({});
     const [descuentoMetodoPagoVerificando, setDescuentoMetodoPagoVerificando] = useState(false);
+    const [cancelandoDescuentoMetodoPago, setCancelandoDescuentoMetodoPago] = useState(false);
     const [descuentoMetodoPagoAprobadoPorUuid, setDescuentoMetodoPagoAprobadoPorUuid] = useState({});
     /** Métodos y montos aprobados por central para descuento por método de pago (por uuid). setPagoPedido solo se acepta con estos exactos. */
     const [metodosPagoAprobadosPorUuid, setMetodosPagoAprobadosPorUuid] = useState({});
@@ -4417,6 +4418,11 @@ export default function Facturar({
             notificar({ data: { msj: "Indique al menos un método de pago para solicitar el descuento", estado: false } });
             return;
         }
+        const algunMontoMayorQueCero = metodos_pago.some((m) => (parseFloat(m.monto) || 0) > 0);
+        if (!algunMontoMayorQueCero) {
+            notificar({ data: { msj: "Indique al menos un método de pago con monto mayor a cero para solicitar el descuento", estado: false } });
+            return;
+        }
         const monto_bruto = (pedidoData.items || []).reduce((sum, it) => {
             const subtotal = (parseFloat(it.producto?.precio ?? it.precio) || 0) * Math.abs(parseFloat(it.cantidad) || 0);
             return sum + subtotal;
@@ -4503,6 +4509,30 @@ export default function Facturar({
             .catch(() => {
                 setDescuentoMetodoPagoVerificando(false);
                 notificar({ data: { msj: "Error al verificar", estado: false } });
+            });
+    };
+
+    const cancelarSolicitudDescuentoMetodoPagoFront = () => {
+        if (!pedidoData._frontOnly || !pedidoData.id) return;
+        setCancelandoDescuentoMetodoPago(true);
+        db.solicitudDescuentoFrontCancelar({ uuid_pedido_front: pedidoData.id, tipo_descuento: "metodo_pago" })
+            .then((res) => {
+                setCancelandoDescuentoMetodoPago(false);
+                const data = res?.data ?? res;
+                if (data?.estado === true) {
+                    setPendienteDescuentoMetodoPago((prev) => {
+                        const next = { ...prev };
+                        delete next[pedidoData.id];
+                        return next;
+                    });
+                    notificar({ data: { msj: data.msj || "Solicitud cancelada. Puede enviar de nuevo con los métodos de pago correctos.", estado: true } });
+                } else {
+                    notificar({ data: { msj: data?.msj || "No se pudo cancelar la solicitud", estado: false } });
+                }
+            })
+            .catch(() => {
+                setCancelandoDescuentoMetodoPago(false);
+                notificar({ data: { msj: "Error de conexión al cancelar", estado: false } });
             });
     };
 
@@ -9676,7 +9706,9 @@ export default function Facturar({
                                     pendienteDescuentoMetodoPago={pendienteDescuentoMetodoPago}
                                     solicitarDescuentoMetodoPagoFront={solicitarDescuentoMetodoPagoFront}
                                     verificarDescuentoMetodoPagoFront={verificarDescuentoMetodoPagoFront}
+                                    cancelarSolicitudDescuentoMetodoPagoFront={cancelarSolicitudDescuentoMetodoPagoFront}
                                     descuentoMetodoPagoVerificando={descuentoMetodoPagoVerificando}
+                                    cancelandoDescuentoMetodoPago={cancelandoDescuentoMetodoPago}
                                     actualizarCampoPedidoFront={actualizarCampoPedidoFront}
                                     actualizarEstatusRefFront={actualizarEstatusRefFront}
                                     itemsDisponiblesDevolucion={itemsDisponiblesDevolucion}

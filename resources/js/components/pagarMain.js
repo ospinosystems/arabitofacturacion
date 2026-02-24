@@ -123,7 +123,9 @@ export default function PagarMain({
     pendienteDescuentoMetodoPago = {},
     solicitarDescuentoMetodoPagoFront,
     verificarDescuentoMetodoPagoFront,
+    cancelarSolicitudDescuentoMetodoPagoFront,
     descuentoMetodoPagoVerificando = false,
+    cancelandoDescuentoMetodoPago = false,
     descuentoMetodoPagoAprobadoPorUuid = {},
     metodosPagoAprobadosPorUuid = {},
     setDescuentoTotal,
@@ -2809,21 +2811,42 @@ export default function PagarMain({
                                                     </div>
                                                 ) : null;
                                             })()}
-                                            <button
-                                                type="button"
-                                                disabled={descuentoMetodoPagoVerificando}
-                                                onClick={() => verificarDescuentoMetodoPagoFront && verificarDescuentoMetodoPagoFront()}
-                                                className="w-full flex items-center justify-center gap-2 px-4 py-3 font-semibold text-orange-800 bg-orange-200 border-2 border-orange-400 rounded-lg hover:bg-orange-300 hover:border-orange-500 disabled:opacity-60 shadow-md"
-                                            >
-                                                {descuentoMetodoPagoVerificando ? (
-                                                    <>
-                                                        <span className="inline-block w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin shrink-0" />
-                                                        Verificando…
-                                                    </>
-                                                ) : (
-                                                    <>Verificar si ya está aprobado</>
-                                                )}
-                                            </button>
+                                            <p className="text-[10px] text-amber-600">
+                                                ¿Envió por el método equivocado? Cancele y vuelva a guardar con los datos correctos.
+                                            </p>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    disabled={descuentoMetodoPagoVerificando || cancelandoDescuentoMetodoPago}
+                                                    onClick={() => verificarDescuentoMetodoPagoFront && verificarDescuentoMetodoPagoFront()}
+                                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 font-semibold text-orange-800 bg-orange-200 border-2 border-orange-400 rounded-lg hover:bg-orange-300 hover:border-orange-500 disabled:opacity-60 shadow-md"
+                                                >
+                                                    {descuentoMetodoPagoVerificando ? (
+                                                        <>
+                                                            <span className="inline-block w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                                                            Verificando…
+                                                        </>
+                                                    ) : (
+                                                        <>Verificar si ya está aprobado</>
+                                                    )}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={descuentoMetodoPagoVerificando || cancelandoDescuentoMetodoPago}
+                                                    onClick={() => cancelarSolicitudDescuentoMetodoPagoFront && cancelarSolicitudDescuentoMetodoPagoFront()}
+                                                    className="flex items-center justify-center gap-2 px-4 py-3 font-semibold text-gray-700 bg-gray-100 border-2 border-gray-300 rounded-lg hover:bg-gray-200 hover:border-gray-400 disabled:opacity-60"
+                                                    title="Cancelar esta solicitud para poder enviar de nuevo con transferencia, débito, etc. correctos"
+                                                >
+                                                    {cancelandoDescuentoMetodoPago ? (
+                                                        <>
+                                                            <span className="inline-block w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                                                            Cancelando…
+                                                        </>
+                                                    ) : (
+                                                        <>Cancelar solicitud</>
+                                                    )}
+                                                </button>
+                                            </div>
                                         </div>
                                     )}
 
@@ -2866,7 +2889,7 @@ export default function PagarMain({
                                     {/* Info del pedido abajo */}
                                     <div className="flex items-center justify-between mt-2">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-xs font-semibold text-gray-700">#{id}</span>
+                                            <span className="text-xs font-semibold text-gray-700 min-w-0 max-w-[140px] truncate" title={id}>#{id}</span>
                                             <span className="text-xs text-gray-400">•</span>
                                             <span className="text-xs text-gray-500">{created_at}</span>
                                             
@@ -3057,6 +3080,18 @@ export default function PagarMain({
                                                                                     Cambio
                                                                                 </span>
                                                                             ) : null}
+                                                                            {/* Para pedidos front tipo campo (entrada/salida): mostrar Salida/Entrada si no hay condicion */}
+                                                                            {pedidoData._frontOnly && e.condicion != 1 && e.condicion != 2 && e.condicion != 0 ? (
+                                                                                e.cantidad < 0 ? (
+                                                                                    <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs">
+                                                                                        Salida
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="px-2 py-0.5 bg-red-100 text-red-800 rounded text-xs">
+                                                                                        Entrada
+                                                                                    </span>
+                                                                                )
+                                                                            ) : null}
                                                                         </>
                                                                     ) : null}
                                                                     <span
@@ -3149,13 +3184,24 @@ export default function PagarMain({
                                                                         />
                                                                     ) : (
                                                                         <div
-                                                                            className="flex items-center justify-center cursor-pointer hover:bg-amber-50 rounded px-1 py-0.5 min-h-[1.5rem]"
+                                                                            className="flex items-center justify-center space-x-1 cursor-pointer hover:bg-amber-50 rounded px-1 py-0.5 min-h-[1.5rem]"
                                                                             onClick={(ev) => {
                                                                                 ev.stopPropagation();
                                                                                 setEditingCantidadFrontItemId(e.id);
                                                                             }}
                                                                             title="Click para editar cantidad"
                                                                         >
+                                                                            {ifnegative ? (
+                                                                                e.cantidad < 0 ? (
+                                                                                    <span className="px-1 py-0.5 bg-green-100 text-green-800 rounded text-xs">
+                                                                                        <i className="fa fa-arrow-down"></i>
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="px-1 py-0.5 bg-red-100 text-red-800 rounded text-xs">
+                                                                                        <i className="fa fa-arrow-up"></i>
+                                                                                    </span>
+                                                                                )
+                                                                            ) : null}
                                                                             <span className="text-xs">
                                                                                 {Number(e.cantidad) % 1 === 0
                                                                                     ? Number(e.cantidad)

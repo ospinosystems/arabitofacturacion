@@ -80,4 +80,30 @@ class SolicitudDescuentoFrontController extends Controller
             'msj' => 'Error al verificar solicitud',
         ]);
     }
+
+    /**
+     * Cancelar una solicitud pendiente de descuento por método de pago (o monto/porcentaje).
+     * Así el cajero puede reenviar con los métodos de pago correctos.
+     */
+    public function cancelar(Request $request)
+    {
+        $request->validate([
+            'uuid_pedido_front' => 'required|string',
+            'tipo_descuento' => 'required|in:monto_porcentaje,metodo_pago',
+        ]);
+
+        $sendCentral = new sendCentral();
+        $resultado = $sendCentral->cancelarSolicitudDescuentoFrontPorUuid(
+            $request->uuid_pedido_front,
+            $request->tipo_descuento
+        );
+
+        if (is_array($resultado) && isset($resultado['estado'])) {
+            return Response::json($resultado);
+        }
+        return Response::json([
+            'estado' => false,
+            'msj' => 'Error al cancelar la solicitud',
+        ]);
+    }
 }

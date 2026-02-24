@@ -48,6 +48,7 @@ const db = {
   setDescuentoTotal: data=>axios.post(host+"setDescuentoTotal",data),
   solicitudDescuentoFrontCrear: data=>axios.post(host+"solicitudDescuentoFrontCrear",data),
   solicitudDescuentoFrontVerificar: data=>axios.post(host+"solicitudDescuentoFrontVerificar",data),
+  solicitudDescuentoFrontCancelar: data=>axios.post(host+"solicitudDescuentoFrontCancelar",data),
   solicitudCreditoFrontCrear: data=>axios.post(host+"solicitudCreditoFrontCrear",data),
 
   setCantidad: data=>axios.post(host+"setCantidad",data),
