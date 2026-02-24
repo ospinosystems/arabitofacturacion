@@ -105,24 +105,45 @@ export default function DespachoRapido({ pedido, yaDespachadoCompleto, fechaUlti
         className="absolute opacity-0 h-0 w-0 -left-[9999px]"
         aria-label="Segundo escaneo para despacho rápido"
       />
-      <div className="flex items-center justify-between p-3 border-b bg-white sticky top-0 z-10">
-        <button type="button" onClick={onVolver} className="px-3 py-2 text-gray-600 font-medium">
-          ← Volver
-        </button>
-        <span className="font-semibold text-gray-800">Pedido #{pedido.id}</span>
-        <span className="w-12" />
-      </div>
-
-      <div className="px-3 py-2 bg-gray-50 border-b text-sm text-gray-600">
-        <span>Usuario: <strong>{usuarioPedido}</strong></span>
-        <span className="mx-2">·</span>
-        <span>Hora pedido: <strong>{horaPedido}</strong></span>
-      </div>
-      {!yaDespachadoCompleto && items.some((i) => i.entregado_hasta != null && i.entregado_hasta > 0) && (
-        <div className="mx-3 mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium">
-          Este pedido tiene entregas parciales. Cantidades pendientes por ítem abajo.
+      <div className="sticky top-0 z-10 shadow-sm">
+        <div className="flex items-center justify-between p-3 border-b bg-white">
+          <button type="button" onClick={onVolver} className="px-3 py-2 text-gray-600 font-medium">
+            ← Volver
+          </button>
+          <span className="font-semibold text-gray-800">Pedido #{pedido.id}</span>
+          <span className="w-12" />
         </div>
-      )}
+        <div className="px-3 py-2 bg-gray-50 border-b text-sm text-gray-600">
+          <span>Usuario: <strong>{usuarioPedido}</strong></span>
+          <span className="mx-2">·</span>
+          <span>Hora pedido: <strong>{horaPedido}</strong></span>
+        </div>
+        {yaDespachadoCompleto && (
+          <div className="p-3 border-b-2 border-red-300 bg-red-50">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-14 h-14 rounded-full bg-red-500 flex items-center justify-center shadow-lg mb-2" aria-hidden="true">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </div>
+              <p className="text-xl font-bold text-red-900 leading-tight">Este pedido ya fue despachado completamente.</p>
+              <p className="mt-1 text-sm font-medium text-red-700">Fecha del despacho: <strong className="text-red-900">{fechaUltimoDespacho || '—'}</strong></p>
+              <button
+                type="button"
+                onClick={onVolver}
+                className="w-full max-w-sm mt-3 py-3 rounded-xl bg-sinapsis hover:bg-sinapsis-dark text-white font-bold shadow-lg active:scale-[0.98] border-0"
+              >
+                Volver al inicio — Empezar de nuevo
+              </button>
+            </div>
+          </div>
+        )}
+        {!yaDespachadoCompleto && items.some((i) => i.entregado_hasta != null && i.entregado_hasta > 0) && (
+          <div className="mx-3 mt-2 mb-2 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium">
+            Este pedido tiene entregas parciales. Cantidades pendientes por ítem abajo.
+          </div>
+        )}
+      </div>
       <div className="flex-1 overflow-y-auto p-3">
         <p className="text-sm font-semibold text-gray-700 mb-2">Productos del pedido (entregados y pendientes)</p>
         <div className="space-y-2 mb-4">
@@ -164,26 +185,6 @@ export default function DespachoRapido({ pedido, yaDespachadoCompleto, fechaUlti
           })}
         </div>
 
-        {yaDespachadoCompleto && (
-          <div className="w-full mb-4 flex flex-col items-center justify-center py-8 text-center">
-            <div className="w-28 h-28 rounded-full bg-red-500 flex items-center justify-center shadow-xl mb-6 flex-shrink-0" aria-hidden="true">
-              <svg className="w-20 h-20 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </div>
-            <div className="p-6 rounded-2xl bg-red-50 border-4 border-red-500 text-red-800 shadow-xl ring-2 ring-red-300 max-w-md w-full">
-              <p className="text-2xl font-bold text-red-900 leading-tight">Este pedido ya fue despachado completamente.</p>
-              <p className="mt-3 text-lg font-medium text-red-700">Fecha del despacho: <strong className="text-red-900">{fechaUltimoDespacho || '—'}</strong></p>
-            </div>
-            <button
-              type="button"
-              onClick={onVolver}
-              className="w-full max-w-md mt-6 py-6 rounded-2xl bg-sinapsis hover:bg-sinapsis-dark text-white text-xl font-bold shadow-xl active:scale-[0.98] border-0"
-            >
-              Volver al inicio — Empezar de nuevo
-            </button>
-          </div>
-        )}
         {!yaDespachadoCompleto && (
           <>
             <div className="rounded-2xl bg-green-50 border-2 border-green-200 p-6 w-full max-w-sm mx-auto text-center">
