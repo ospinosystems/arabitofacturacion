@@ -200,6 +200,8 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('validarCodigoAprobacion', [PagosReferenciasController::class,"validarCodigoAprobacion"]);
 		Route::post('delRefPago', [PagosReferenciasController::class,"delRefPago"]);
 		Route::post('autovalidar-transferencia', [PagosReferenciasController::class,"autovalidarTransferencia"]);
+		Route::post('registrar-ref-central-front', [PagosReferenciasController::class,"registrarRefCentralFront"]);
+		Route::post('consultar-ref-central-front', [PagosReferenciasController::class,"consultarRefCentralFront"]);
 		Route::post('autopago-completar-orden', [AutopagoController::class,"completarOrden"]);
 		Route::post('autopago-crear-tarea-agregar-producto', [AutopagoController::class,"crearTareaAgregarProducto"]);
 		Route::post('autopago-solicitar-agregar-producto', [InventarioController::class,"solicitarAgregarProducto"]);

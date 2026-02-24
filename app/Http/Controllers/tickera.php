@@ -12,6 +12,8 @@ use Mike42\Escpos;
 use Mike42\Escpos\Printer;
 use Mike42\Escpos\EscposImage;
 use Mike42\Escpos\PrintConnectors\WindowsPrintConnector;
+use Picqer\Barcode\BarcodeGeneratorPNG;
+use Picqer\Barcode\Barcode;
 
 use Response;
 use Http;
@@ -37,7 +39,7 @@ class tickera extends Controller
             ]);
         } catch (\Exception $e) {
             return Response::json([
-                "msj" => "Error: " . $e->getMessage(),
+                "msj" => "Error: " . $this->sanitizeUtf8ForJson($e->getMessage()),
                 "estado" => false
             ]);
         }
@@ -85,7 +87,7 @@ class tickera extends Controller
 
             return Response::json([
                 'success' => false,
-                'message' => 'Error al obtener cajas disponibles: ' . $e->getMessage()
+                'message' => 'Error al obtener cajas disponibles: ' . $this->sanitizeUtf8ForJson($e->getMessage())
             ], 500);
         }
     }
@@ -150,10 +152,11 @@ class tickera extends Controller
                     throw new \Exception("¡El pedido no tiene items, no se puede imprimir!", 1);
                 }
 
+                $fromPpr = !empty($req->from_ppr);
                 if (isset($pedido->fecha_factura) || isset($pedido->created_at)) {
                     $pedido_date = \Carbon\Carbon::parse($pedido->fecha_factura ?? $pedido->created_at)->toDateString();
                     $today_date = \Carbon\Carbon::now()->toDateString();
-                    if(session("usuario") != "admin"){
+                    if (!$fromPpr && session("usuario") != "admin") {
                         if ($pedido_date !== $today_date) {
                             throw new \Exception("¡El pedido no es de hoy, no se puede imprimir!", 1);
                         }
@@ -216,6 +219,7 @@ class tickera extends Controller
                 if (isset($req->identificacion)) {
                     $identificacion = $req->identificacion;
                 }
+                $telefono = $req->telefono ?? (isset($pedido->cliente) ? ($pedido->cliente->telefono ?? '') : ($pedido["cliente"]["telefono"] ?? ''));
     
                 if ($req->id==="presupuesto") {
                     
@@ -296,8 +300,8 @@ class tickera extends Controller
                     }
                     $fecha_creada = date("Y-m-d",strtotime($pedido->fecha_factura ?? $pedido->created_at));
                     $today = (new PedidosController)->today();
-    
-                    if ($fecha_creada != $today || ($fecha_creada == $today && $pedido->ticked)) {
+                    // PPR: no pedir aprobación para reimpresión; imprimir directo
+                    if (!$fromPpr && ($fecha_creada != $today || ($fecha_creada == $today && $pedido->ticked))) {
                         $isPermiso = (new TareaslocalController)->checkIsResolveTarea([
                             "id_pedido" => $req->id,
                             "tipo" => "tickera",
@@ -328,9 +332,18 @@ class tickera extends Controller
                     // Si hay items con cantidad negativa, imprimir ticket de devolución
                     if ($hasNegativeItems) {
                         $this->imprimirTicketDevolucion($printer, $pedido, $negativeItems, $positiveItems, $nombres, $identificacion, $sucursal, $dolar, $totalDevolucion, $totalEntrada, $saldoFinal, $tieneProductosMixtos);
+                    } elseif ($fromPpr && !empty($req->ppr_detalle) && is_array($req->ppr_detalle)) {
+                        // PPR: solo ticket PPR. Si 2 copias: 1ª DICI, 2ª CLIENTE; si 1 copia: sin etiqueta.
+                        $copias = (int) ($req->ppr_copias ?? 0);
+                        $fechaFactura = $pedido->fecha_factura ?? $pedido->created_at ?? null;
+                        $this->imprimirTicketSoloPpr($printer, $sucursal, (int) $req->id, $nombres, $identificacion, $telefono, $req->ppr_detalle, $copias >= 2 ? 'DICI' : null, $fechaFactura);
+                        if ($copias >= 2) {
+                            $printer->feed(2);
+                            $this->imprimirTicketSoloPpr($printer, $sucursal, (int) $req->id, $nombres, $identificacion, $telefono, $req->ppr_detalle, 'CLIENTE', $fechaFactura);
+                        }
                     } else {
-                        // Imprimir ticket normal
-                        $this->imprimirTicketNormal($printer, $pedido, $nombres, $identificacion, $sucursal, $dolar);
+                        // Imprimir ticket normal (orden de despacho)
+                        $this->imprimirTicketNormal($printer, $pedido, $nombres, $identificacion, $sucursal, $dolar, $telefono);
                     }
                     
                 }
@@ -338,6 +351,12 @@ class tickera extends Controller
                 $printer->cut();
                 $printer->pulse();
                 $printer->close();
+
+                // Marcar pedido como no imprimiendo tras éxito (evita bloquear reimpresión o siguiente PPR)
+                if (isset($pedidoBlock)) {
+                    $pedidoBlock->is_printing = false;
+                    $pedidoBlock->save();
+                }
 
                 \DB::commit();
 
@@ -358,10 +377,200 @@ class tickera extends Controller
             }
             \DB::rollback();
             return Response::json([
-                "msj" => "Error: " . $e->getMessage(),
+                "msj" => "Error: " . $this->sanitizeUtf8ForJson($e->getMessage()),
                 "estado" => false
             ]);
         }
+    }
+
+    /**
+     * Asegura que el texto sea UTF-8 válido para evitar "Malformed UTF-8" en JsonResponse.
+     */
+    private function sanitizeUtf8ForJson($str)
+    {
+        if (!is_string($str)) {
+            return (string) $str;
+        }
+        $cleaned = @iconv('UTF-8', 'UTF-8//IGNORE', $str);
+        if ($cleaned === false) {
+            $cleaned = @mb_convert_encoding($str, 'UTF-8', 'ISO-8859-1') ?: 'Error de codificación';
+        }
+        return preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $cleaned);
+    }
+
+    /**
+     * Ticket solo PPR: encabezado mínimo + detalle. Sin factura ni orden de despacho.
+     * $copiaPara: 'DICI' | 'CLIENTE' para identificar la copia (cuando hay 2).
+     * $fechaFactura: fecha de la factura/origen del pedido (opcional).
+     */
+    private function imprimirTicketSoloPpr($printer, $sucursal, $idPedido, $nombres, $identificacion, $telefono, array $pprDetalle, $copiaPara = null, $fechaFactura = null)
+    {
+        $printer->setJustification(Printer::JUSTIFY_CENTER);
+        $printer->text("\n");
+        $printer->text($this->cleanTextForPrinter($sucursal->nombre_registro ?? ''));
+        $printer->text("\n");
+        $printer->text($this->cleanTextForPrinter($sucursal->rif ?? ''));
+        $printer->text("\n");
+        $printer->text($this->cleanTextForPrinter(($sucursal->telefono1 ?? '') . ' | ' . ($sucursal->telefono2 ?? '')));
+        $printer->text("\n");
+        $printer->setTextSize(2, 1);
+        $printer->setEmphasis(true);
+        $printer->text("PPR");
+        $printer->setEmphasis(false);
+        $printer->setTextSize(1, 1);
+        $printer->text("\n");
+        if ($copiaPara === 'DICI') {
+            $printer->setEmphasis(true);
+            $printer->text("COPIA DICI");
+            $printer->setEmphasis(false);
+            $printer->text("\n");
+        } elseif ($copiaPara === 'CLIENTE') {
+            $printer->setEmphasis(true);
+            $printer->text("COPIA CLIENTE");
+            $printer->setEmphasis(false);
+            $printer->text("\n");
+        }
+        $printer->text("Pedido #" . $idPedido);
+        $printer->text("\n");
+        $printer->setJustification(Printer::JUSTIFY_LEFT);
+        if ($fechaFactura) {
+            $fechaFactStr = \Carbon\Carbon::parse($fechaFactura)->format('d/m/Y H:i');
+            $printer->text("Fecha factura: " . $fechaFactStr);
+            $printer->text("\n");
+        }
+        $printer->text("Fecha impresion PPR: " . now()->format('d/m/Y H:i'));
+        $printer->text("\n");
+        $printer->setJustification(Printer::JUSTIFY_CENTER);
+        $this->imprimirBarcodePedidoId($printer, $idPedido);
+        $printer->setJustification(Printer::JUSTIFY_LEFT);
+        $printer->text("\n");
+        if ($nombres !== '' && $nombres !== null) {
+            $printer->text("Cliente: " . $this->cleanTextForPrinter($nombres));
+            $printer->text("\n");
+        }
+        if ((string) $identificacion !== '') {
+            $printer->text("ID: " . $this->cleanTextForPrinter($identificacion));
+            $printer->text("\n");
+        }
+        if ($telefono !== '' && $telefono !== null) {
+            $printer->text("Telefono: " . $this->cleanTextForPrinter($telefono));
+            $printer->text("\n");
+        }
+        $printer->text("\n");
+        $this->imprimirSeccionPprDetalle($printer, $pprDetalle);
+    }
+
+    /**
+     * Imprime el código de barras de la orden (id pedido) para escanear en PPR.
+     */
+    private function imprimirBarcodePedidoId($printer, $idPedido)
+    {
+        $idStr = (string) $idPedido;
+        $barcodePrinted = false;
+        $contentCode128 = '{B' . $idStr;
+        try {
+            $printer->setBarcodeHeight(55);
+            $printer->setBarcodeWidth(3);
+            $printer->setBarcodeTextPosition(Printer::BARCODE_TEXT_BELOW);
+            $printer->barcode($contentCode128, Printer::BARCODE_CODE128);
+            $barcodePrinted = true;
+        } catch (\Throwable $e) {
+            \Log::error('Tickera PPR barcode nativo: ' . $e->getMessage());
+        }
+        if (!$barcodePrinted) {
+            $tmpBarcode = null;
+            try {
+                $generator = new BarcodeGeneratorPNG();
+                $png = $generator->getBarcode($idStr, $generator::TYPE_CODE_128, 2, 36);
+                $tmpBarcode = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'barcode_ppr_' . $idPedido . '_' . uniqid() . '.png';
+                if (file_put_contents($tmpBarcode, $png) !== false) {
+                    $img = EscposImage::load($tmpBarcode);
+                    $printer->bitImage($img, Printer::IMG_DEFAULT);
+                    $barcodePrinted = true;
+                }
+            } catch (\Throwable $e) {
+                \Log::error('Tickera PPR barcode image: ' . $e->getMessage());
+            }
+            if ($tmpBarcode && file_exists($tmpBarcode)) {
+                @unlink($tmpBarcode);
+            }
+        }
+        if (!$barcodePrinted) {
+            $printer->text($idStr);
+        }
+        $printer->text("\n");
+        $printer->feed(1);
+    }
+
+    /**
+     * Sección PPR en ticket: cantidad total, entregado y pendiente por retirar por ítem.
+     */
+    private function imprimirSeccionPprDetalle($printer, array $pprDetalle)
+    {
+        $printer->feed(1);
+        $printer->text("-----------------------------");
+        $printer->text("\n");
+        $printer->setEmphasis(true);
+        $printer->setJustification(Printer::JUSTIFY_CENTER);
+        $printer->text("PPR");
+        $printer->text("\n");
+        $printer->setEmphasis(false);
+        $printer->setJustification(Printer::JUSTIFY_LEFT);
+        $printer->text("-----------------------------");
+        $printer->text("\n");
+
+        $fmt = function ($n) {
+            return (floor($n) == $n && $n == round($n, 2)) ? (int) $n : number_format($n, 2);
+        };
+        foreach ($pprDetalle as $row) {
+            $desc = $this->cleanTextForPrinter($row['descripcion'] ?? '—');
+            $printer->text($desc);
+            $printer->text("\n");
+            if (!empty($row['codigo_barras'])) {
+                $printer->text("Cod.barras: " . $this->cleanTextForPrinter($row['codigo_barras']));
+                $printer->text("\n");
+            }
+            if (!empty($row['codigo_proveedor'])) {
+                $printer->text("Cod.prov: " . $this->cleanTextForPrinter($row['codigo_proveedor']));
+                $printer->text("\n");
+            }
+            $cantidad = (float) ($row['cantidad'] ?? 0);
+            $entregado = (float) ($row['entregado'] ?? 0);
+            $pendiente = (float) ($row['pendiente'] ?? 0);
+            $printer->text("Pedido total: " . $fmt($cantidad));
+            $printer->text("\n");
+            // Resaltar ENTREGADO (negrita + número grande)
+            $printer->setEmphasis(true);
+            $printer->text(">>> ENTREGADO: ");
+            $printer->setTextSize(2, 1);
+            $printer->text($fmt($entregado));
+            $printer->setTextSize(1, 1);
+            $printer->setEmphasis(false);
+            $printer->text("\n");
+            // Resaltar PENDIENTE POR RETIRAR (negrita + número grande)
+            $printer->setEmphasis(true);
+            $printer->text(">>> PEND. POR RETIRAR: ");
+            $printer->setTextSize(2, 1);
+            $printer->text($fmt($pendiente));
+            $printer->setTextSize(1, 1);
+            $printer->setEmphasis(false);
+            $printer->text("\n");
+            // Historial de entregas (fecha y hora de cada entrega)
+            if (!empty($row['entregas']) && is_array($row['entregas'])) {
+                $printer->text("Historial entregas:");
+                $printer->text("\n");
+                foreach ($row['entregas'] as $entrega) {
+                    $fecha = isset($entrega['created_at']) ? \Carbon\Carbon::parse($entrega['created_at'])->format('d/m/Y H:i') : '—';
+                    $unid = $fmt((float) ($entrega['unidades_entregadas'] ?? 0));
+                    $printer->text("  " . $fecha . " - " . $unid . " und.");
+                    $printer->text("\n");
+                }
+            }
+            $printer->feed(1);
+        }
+
+        $printer->text("-----------------------------");
+        $printer->text("\n");
     }
 
     /**
@@ -796,7 +1005,7 @@ class tickera extends Controller
     /**
      * Imprimir ticket normal (código original)
      */
-    private function imprimirTicketNormal($printer, $pedido, $nombres, $identificacion, $sucursal, $dolar)
+    private function imprimirTicketNormal($printer, $pedido, $nombres, $identificacion, $sucursal, $dolar, $telefono = '')
     {
         ////TICKET DE GARANTIA
         $isFullFiscal = (new SucursalController)->isFullFiscal();
@@ -909,6 +1118,10 @@ class tickera extends Controller
             $printer -> text("\n");
             $printer -> text("ID: ".$identificacion);
             $printer -> text("\n");
+            if ($telefono !== null && $telefono !== '') {
+                $printer -> text("Telefono: ".$telefono);
+                $printer -> text("\n");
+            }
             $printer->setJustification(Printer::JUSTIFY_LEFT);
         }
 
@@ -1080,12 +1293,91 @@ class tickera extends Controller
         $printer->text("\n");
 
         $printer->text("\n");
+        $printer->setJustification(Printer::JUSTIFY_CENTER);
+        $printer->text("Escanear en puerta para despacho");
+        $printer->text("\n");
+        $printer->feed(1);
+        $idStr = (string) $pedido->id;
+        $barcodePrinted = false;
+        $contentCode128 = '{B' . $idStr;
+        try {
+            $printer->setBarcodeHeight(55);
+            $printer->setBarcodeWidth(3);
+            $printer->setBarcodeTextPosition(Printer::BARCODE_TEXT_BELOW);
+            $printer->barcode($contentCode128, Printer::BARCODE_CODE128);
+            $barcodePrinted = true;
+        } catch (\Throwable $e) {
+            \Log::error('Tickera barcode nativo: ' . $e->getMessage());
+        }
+        if (!$barcodePrinted) {
+            $tmpBarcode = null;
+            try {
+                $generator = new BarcodeGeneratorPNG();
+                $png = $generator->getBarcode($idStr, $generator::TYPE_CODE_128, 2, 36);
+                $tmpBarcode = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'barcode_pedido_' . $pedido->id . '_' . uniqid() . '.png';
+                if (file_put_contents($tmpBarcode, $png) !== false) {
+                    $img = EscposImage::load($tmpBarcode);
+                    $printer->bitImage($img, Printer::IMG_DEFAULT);
+                    $barcodePrinted = true;
+                }
+            } catch (\Throwable $e) {
+                \Log::error('Tickera barcode image: ' . $e->getMessage());
+            }
+            if ($tmpBarcode && file_exists($tmpBarcode)) {
+                @unlink($tmpBarcode);
+            }
+        }
+        if (!$barcodePrinted) {
+            $printer->text($idStr);
+        }
+        $printer->text("\n");
+        $printer->text("\n");
+        $printer->setEmphasis(true);
+        $printer->text("(Ingresar este numero en PPR)");
+        $printer->setEmphasis(false);
+        $printer->text("\n");
+        $printer->feed(1);
+        $printer->setJustification(Printer::JUSTIFY_LEFT);
+
+        $printer->text("\n");
         $printer->text("\n");
 
         $updateprint = pedidos::find($pedido->id);
         $updateprint->ticked = !$updateprint->ticked ? 1 : $updateprint->ticked + 1;
-        $updateprint->is_printing = false; // Marcar como no imprimiendo
+        $updateprint->is_printing = false;
         $updateprint->save();
+    }
+
+    /**
+     * Imprime el barcode usando modo inverso (reverse): barras = espacios en negro.
+     * Funciona en impresoras que no dibujan graficos pero si respetan setReverseColors.
+     * No es escaneable; el numero debajo se usa para ingresar en PPR.
+     */
+    private static function printBarcodeWithReverse($printer, Barcode $barcodeData, int $maxWidth): void
+    {
+        $totalModules = $barcodeData->getWidth();
+        if ($totalModules <= 0) {
+            return;
+        }
+        $scale = $maxWidth / $totalModules;
+        $segments = [];
+        foreach ($barcodeData->getBars() as $bar) {
+            $w = (int) max(1, round($bar->getWidth() * $scale));
+            $segments[] = ['bar' => $bar->isBar(), 'width' => $w];
+        }
+        $numRows = 2;
+        for ($row = 0; $row < $numRows; $row++) {
+            foreach ($segments as $seg) {
+                if ($seg['bar']) {
+                    $printer->setReverseColors(true);
+                    $printer->text(str_repeat(' ', $seg['width']));
+                    $printer->setReverseColors(false);
+                } else {
+                    $printer->text(str_repeat(' ', $seg['width']));
+                }
+            }
+            $printer->text("\n");
+        }
     }
 
     function sendFiscalTerminal($parametros,$type,$file,$caja_force=null) {
@@ -1125,6 +1417,14 @@ class tickera extends Controller
         if($codigo_origen=="pariaguan"){
             //if ($caja=="caja1"||$caja=="caja2") {
                 $nombre_equipo = "caja3";
+                $ipReal = gethostbyname($nombre_equipo);
+                $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
+            //}
+        }
+
+        if($codigo_origen=="villadecura"){
+            //if ($caja=="caja1"||$caja=="caja2") {
+                $nombre_equipo = "caja2";
                 $ipReal = gethostbyname($nombre_equipo);
                 $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
             //}
@@ -1676,7 +1976,7 @@ class tickera extends Controller
 
             return Response::json([
                 'success' => false,
-                'message' => 'Error al imprimir ticket: ' . $e->getMessage(). " - ".$e->getLine()
+                'message' => 'Error al imprimir ticket: ' . $this->sanitizeUtf8ForJson($e->getMessage()) . " - " . $e->getLine()
             ], 500);
         }
     }
@@ -2156,6 +2456,59 @@ class tickera extends Controller
         $printer->text("\n");
 
         $printer->cut();
+
+        // Etiqueta horizontal para pegar al producto (un ticket por cada producto)
+        $nombreUsuario = $this->cleanTextForPrinter(session('nombre_usuario') ?? 'Sistema');
+        $sucursalOrigen = $this->cleanTextForPrinter($sucursal->sucursal);
+        $motivoFalla = $this->cleanTextForPrinter($solicitud['motivo_devolucion'] ?? 'N/A');
+        $fechaEtiqueta = formatFecha($solicitud['fecha_solicitud'] ?? $solicitud['fecha_ejecucion'] ?? now());
+
+        $todosProductosParaEtiqueta = array_merge($productosEntrantes, $productosSalientes);
+        foreach ($todosProductosParaEtiqueta as $producto) {
+            $productoDetalle = null;
+            foreach ($productosConDatos as $prodDetalle) {
+                if ($prodDetalle['id_producto'] == $producto['id_producto']) {
+                    $productoDetalle = $prodDetalle;
+                    break;
+                }
+            }
+            $descProducto = 'N/A';
+            if ($productoDetalle && isset($productoDetalle['producto']['descripcion'])) {
+                $descProducto = $this->cleanTextForPrinter($productoDetalle['producto']['descripcion']);
+            }
+            $descProducto = formatText58mm($descProducto, 28);
+
+            $printer->feed(2);
+            $printer->setJustification(Printer::JUSTIFY_CENTER);
+            $printer->text("\n");
+            $printer->setTextSize(2, 2);
+            $printer->setEmphasis(true);
+            $printer->text("\n");
+            $printer->setTextSize(3, 2);
+            $printer->text(strtoupper($sucursal->codigo));
+            $printer->setTextSize(1, 1);
+            $printer->setEmphasis(false);
+            $printer->text("\n");
+            $printer->setJustification(Printer::JUSTIFY_LEFT);
+            $printer->text("Producto: " . $descProducto);
+            $printer->text("\n");
+            $printer->text("Falla: " . formatText58mm($motivoFalla, 26));
+            $printer->text("\n");
+            $printer->text("Fecha: " . $fechaEtiqueta);
+            $printer->text("\n");
+            $printer->text("Cantidad: " . $this->formato_numero_dos_decimales($producto['cantidad']));
+            $printer->text("\n");
+            $printer->text("Procesado por: " . formatText58mm($nombreUsuario, 20));
+            $printer->text("\n");
+            $printer->text("\n");
+            $printer->text("\n");
+            $printer->feed(1);
+        }
+
+        if (!empty($todosProductosParaEtiqueta)) {
+            $printer->cut();
+        }
+
         $printer->pulse();
         $printer->close();
     }
@@ -2315,7 +2668,15 @@ class tickera extends Controller
         
         return $text;
     }
-    
+}
 
-    
+/**
+ * Helper para obtener datos del barcode (getBarcodeData es protected en Picqer).
+ */
+class BarcodeGeneratorTextHelper extends BarcodeGeneratorPNG
+{
+    public function getData(string $code): Barcode
+    {
+        return $this->getBarcodeData($code, self::TYPE_CODE_128);
+    }
 }

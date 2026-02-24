@@ -15,6 +15,7 @@ mix
 .js('resources/js/components/index.js', 'public/js/index.js').react()
 .js('resources/js/inventario-suministros-entry.js', 'public/js/inventario-suministros.js').react()
 .js('resources/js/autopago/autopago-entry.js', 'public/js/autopago.js').react()
+.js('resources/js/ppr/ppr-entry.js', 'public/js/ppr.js').react()
 .js('resources/js/warehouse.js', 'public/js').react()
 .sass('resources/sass/app.scss', 'public/css')
 .sass('resources/sass/table.scss', 'public/css')

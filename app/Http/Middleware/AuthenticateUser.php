@@ -52,6 +52,7 @@ class AuthenticateUser
         // Garantías
         'garantias/crear',
         'garantias/crear-pedido',
+        'reportes/transferencia-garantia/{id}',
 
         // Inventario Cíclico
         'inventario-ciclico/planillas',
@@ -134,6 +135,10 @@ class AuthenticateUser
         // Cargar ubicaciones por rango
         "warehouses/cargar-por-rango",
         "warehouses/generar-por-rango",
+
+        // Reporte PPR (lista y reporte Blade)
+        "ppr/reporte",
+        "ppr/reporte/ver",
     ];
 
     /**
@@ -191,6 +196,10 @@ class AuthenticateUser
         
         // Verificar acceso según el tipo requerido
         if ($accessType && !$this->hasAccess($userType, $accessType, $request)) {
+            // PPR (portero): en peticiones web redirigir a login para evitar bucle (navegador quedaba en /ppr con JSON)
+            if ($accessType === 'portero' && !$request->expectsJson() && !$request->is('api/*')) {
+                return redirect('/login')->with('error', 'Debe iniciar sesión como portero para acceder a PPR.');
+            }
             return Response::json([
                 "msj" => "Error: Sin permisos para acceder a {$accessType}",
                 "estado" => false
@@ -210,22 +219,29 @@ class AuthenticateUser
             'admin' => $this->hasAdminAccess($userType, $request),
             'caja' => $this->hasCajaAccess($userType),
             'vendedor' => $this->hasVendedorAccess($userType),
+            'portero' => $this->hasPorteroAccess($userType, $request),
             'api' => $this->hasApiAccess($userType, $request),
             default => false
         };
     }
     
     /**
-     * Acceso para middleware 'login' - Tipos 1, 4, 6, 7, 8 + tipo 7 con rutas específicas
+     * Acceso para middleware 'login' - Tipos 1, 4, 6, 7, 8, 10 + tipo 7 con rutas específicas
      * 1 = GERENTE
      * 4 = CAJERO_VENDEDOR
      * 5 = SUPERVISOR DE CAJA (solo inventario y tickets)
      * 6 = SUPERADMIN
      * 7 = DICI (chequeador)
      * 8 = PASILLERO
+     * 10 = PORTERO (solo módulo PPR)
      */
     private function hasLoginAccess(int $userType, Request $request): bool
     {
+        // Portero (10) solo tiene acceso a rutas PPR
+        if ($userType == 10) {
+            return $this->hasPorteroAccess($userType, $request);
+        }
+
         // Tipos básicos que siempre tienen acceso
         if (in_array($userType, [1, 4, 6])) {
             return true;
@@ -397,6 +413,19 @@ class AuthenticateUser
     private function hasVendedorAccess(int $userType): bool
     {
         return in_array($userType, [1, 4, 6]);
+    }
+
+    /**
+     * Acceso para middleware 'portero' - Solo tipo 10 (PORTERO), únicamente rutas PPR
+     */
+    private function hasPorteroAccess(int $userType, Request $request): bool
+    {
+        if ($userType != 10) {
+            return false;
+        }
+        $path = $request->path();
+        return $path === 'ppr'
+            || str_starts_with($path, 'ppr/');
     }
     
     /**

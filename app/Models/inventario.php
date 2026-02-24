@@ -18,18 +18,8 @@ class inventario extends Model
         return $this->hasMany(\App\Models\items_pedidos::class,"id_producto","id"); 
     }
 
-    public function proveedor() { 
-        return $this->hasOne(\App\Models\proveedores::class,"id","id_proveedor"); 
-    }
-    public function categoria() { 
-        return $this->hasOne(\App\Models\categorias::class,"id","id_categoria"); 
-    }
-    public function marca() { 
-        return $this->hasOne(\App\Models\marcas::class,"id","id_marca"); 
-    }
-    public function deposito() { 
-        return $this->hasOne(\App\Models\depositos::class,"id","id_deposito"); 
-    }
+   
+   
 
     /**
      * Ubicaciones de almacén donde está el producto

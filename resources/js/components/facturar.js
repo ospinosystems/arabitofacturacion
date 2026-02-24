@@ -7,6 +7,7 @@ import { useState, useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import { cloneDeep } from "lodash";
 import db from "../database/database";
+import { getPedidosFront, setPedidosFront, getPendienteDescuentoMetodoPago, setPendienteDescuentoMetodoPagoStorage, getMetodosPagoAprobadosPorUuid, setMetodosPagoAprobadosPorUuidStorage } from "../database/pedidosFrontStorage";
 import { useApp } from "../contexts/AppContext";
 
 import { moneda, number } from "./assets";
@@ -77,7 +78,7 @@ export default function Facturar({
 
     const [dropprintprice, setdropprintprice] = useState(false);
 
-    const [num, setNum] = useState(15);
+    const [num, setNum] = useState(10);
     const [showOptionQMain, setshowOptionQMain] = useState(false);
     const [itemCero, setItemCero] = useState(true);
     const [qProductosMain, setQProductosMain] = useState("");
@@ -173,17 +174,11 @@ export default function Facturar({
         }
     });
     
-    // Estados para modal POS débito físico
-    const [showModalPosDebito, setShowModalPosDebito] = useState(false);
-    const [posCedulaTitular, setPosCedulaTitular] = useState("");
-    const [posTipoCuenta, setPosTipoCuenta] = useState("CORRIENTE");
-    const [posMontoDebito, setPosMontoDebito] = useState("");
-    const [posLoading, setPosLoading] = useState(false);
-    const [posPendingCallback, setPosPendingCallback] = useState(null);
+    // Estados para modal POS débito físico: una instancia por pedido (varias modales a la vez, cada una independiente)
+    // modalesPosAbiertos[pedidoId] = { pedidoId, debitoIndex, montoTotalOriginal, transaccionesAprobadas, cedulaTitular, tipoCuenta, montoDebito, loading, respuesta }
+    const [modalesPosAbiertos, setModalesPosAbiertos] = useState({});
     const [forzarReferenciaManual, setForzarReferenciaManual] = useState(false); // Para bypassear PINPAD
-    const [posRespuesta, setPosRespuesta] = useState(null); // {mensaje, exito} para mostrar en modal
-    const [posTransaccionesAprobadas, setPosTransaccionesAprobadas] = useState([]); // Array de transacciones aprobadas del pedido actual [{monto, cedula, referencia, tipoCuenta}]
-    const [posMontoTotalOriginal, setPosMontoTotalOriginal] = useState(""); // Monto total original del débito
+    const [montosNoCoincidenDetalle, setMontosNoCoincidenDetalle] = useState(null); // { total_pedido_usd, total_pagos_usd, diferencia_usd, ... } para modal especial
     // Mapa global de transacciones POS por pedido: { pedidoId: [{monto, cedula, referencia, ...}] }
     const [posTransaccionesPorPedido, setPosTransaccionesPorPedido] = useState(() => {
         try {
@@ -195,6 +190,10 @@ export default function Facturar({
         }
     });
     
+    // Ref para detectar cambio de ítems/total del mismo pedido (y limpiar métodos de pago no aprobados)
+    const prevCartSigRef = useRef(null);
+    const prevPedidoIdRef = useRef(null);
+
     // useEffect para guardar y restaurar débitos al cambiar de pedido
     useEffect(() => {
         if (pedidoData?.id) {
@@ -215,6 +214,35 @@ export default function Facturar({
             setDebitos([{ monto: "", referencia: "", bloqueado: false, posData: null }]);
         }
     }, [pedidoData?.id]);
+
+    // Cuando se agregan/quitan ítems al carrito (mismo pedido), limpiar montos de métodos de pago no aprobados
+    useEffect(() => {
+        if (!pedidoData?.id) return;
+        const itemsLen = (pedidoData.items || []).length;
+        const total = pedidoData.clean_total != null ? String(pedidoData.clean_total) : "";
+        const cartSig = `${itemsLen}-${total}`;
+        const samePedido = prevPedidoIdRef.current === pedidoData.id;
+        const cartChanged = prevCartSigRef.current != null && prevCartSigRef.current !== cartSig;
+        prevCartSigRef.current = cartSig;
+        prevPedidoIdRef.current = pedidoData.id;
+
+        if (samePedido && cartChanged) {
+            setEfectivo("");
+            setEfectivo_bs("");
+            setEfectivo_dolar("");
+            setEfectivo_peso("");
+            setTransferencia("");
+            setCredito("");
+            setBiopago("");
+            setDebitos(prev => {
+                const withCleared = prev.map(d => d.bloqueado ? d : { ...d, monto: "", referencia: "" });
+                const hasAny = withCleared.some(d => (d.monto && parseFloat(d.monto)) || (d.referencia && d.referencia.length > 0));
+                if (!hasAny && withCleared.every(d => !d.bloqueado))
+                    return [{ monto: "", referencia: "", bloqueado: false, posData: null }];
+                return withCleared;
+            });
+        }
+    }, [pedidoData?.id, pedidoData?.items, pedidoData?.clean_total]);
     
     // Función para guardar débitos del pedido actual
     const guardarDebitosPorPedido = (pedidoId, debitosActuales) => {
@@ -466,6 +494,25 @@ export default function Facturar({
     const [fechaventas, setfechaventas] = useState("");
 
     const [pedidosFast, setpedidosFast] = useState([]);
+    // Pedidos solo en front (UUID): no se envían al backend hasta facturar/convertir (persistidos en IndexedDB)
+    const [pedidosFrontPendientes, setPedidosFrontPendientes] = useState({});
+    const pedidosFrontHydratedRef = useRef(false);
+    const [lastAddedFrontItemId, setLastAddedFrontItemId] = useState(null);
+    const lastAddedFrontItemIdTimeoutRef = useRef(null);
+    /** Items disponibles para devolución del pedido original asignado (para validar cantidades negativas en front) */
+    const [itemsDisponiblesDevolucion, setItemsDisponiblesDevolucion] = useState([]);
+
+    const [descuentoUnitarioEditingId, setDescuentoUnitarioEditingId] = useState(null);
+    const [descuentoUnitarioVerificandoId, setDescuentoUnitarioVerificandoId] = useState(null);
+    const [descuentoUnitarioTooltipAprobadoId, setDescuentoUnitarioTooltipAprobadoId] = useState(null);
+    const [descuentoUnitarioContext, setDescuentoUnitarioContext] = useState(null);
+    const [descuentoUnitarioInputValue, setDescuentoUnitarioInputValue] = useState("");
+    const [pendientesDescuentoUnitario, setPendientesDescuentoUnitario] = useState({});
+    const [pendienteDescuentoMetodoPago, setPendienteDescuentoMetodoPago] = useState({});
+    const [descuentoMetodoPagoVerificando, setDescuentoMetodoPagoVerificando] = useState(false);
+    const [descuentoMetodoPagoAprobadoPorUuid, setDescuentoMetodoPagoAprobadoPorUuid] = useState({});
+    /** Métodos y montos aprobados por central para descuento por método de pago (por uuid). setPagoPedido solo se acepta con estos exactos. */
+    const [metodosPagoAprobadosPorUuid, setMetodosPagoAprobadosPorUuid] = useState({});
 
     const [sucursaldata, setSucursaldata] = useState("");
 
@@ -1252,7 +1299,16 @@ export default function Facturar({
     );
 
     const [refPago, setrefPago] = useState([]);
-    
+    // Referencias de pago por pedido solo front (uuid) — no se envían al backend hasta setPagoPedido
+    const [refPagoPorPedidoFront, setRefPagoPorPedidoFront] = useState({});
+
+    // Sincronizar refPago cuando el pedido seleccionado es solo front (por uuid); incluir refPagoPorPedidoFront para que al agregar refs se actualice la lista
+    useEffect(() => {
+        if (pedidoData?._frontOnly && pedidoData?.id) {
+            setrefPago(refPagoPorPedidoFront[pedidoData.id] || []);
+        }
+    }, [pedidoData?._frontOnly, pedidoData?.id, refPagoPorPedidoFront]);
+
     // Ref para debouncing de addNewPedido
     const addNewPedidoTimeoutRef = useRef(null);
     const addNewPedidoProcessingRef = useRef(false);
@@ -1303,7 +1359,30 @@ export default function Facturar({
                     });
         }, 300); // Delay de 300ms para el debouncing
     };
-    
+
+    // Crear nuevo pedido solo en front (UUID); se muestra en tab azul y se agregan productos localmente
+    const addNewPedidoFront = () => {
+        const uuid = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : "front-" + Date.now() + "-" + Math.random().toString(36).slice(2, 11);
+        const created_at = new Date().toISOString().slice(0, 19).replace("T", " ");
+        const pedidoFront = {
+            id: uuid,
+            items: [],
+            created_at,
+            clean_total: 0,
+            clean_subtotal: 0,
+            bs: 0,
+            estado: 0,
+            cliente: null,
+            referencias: [],
+            pagos: [],
+            _frontOnly: true,
+        };
+        setPedidosFrontPendientes((prev) => ({ ...prev, [uuid]: pedidoFront }));
+        setPedidoData(pedidoFront);
+        setPedidoSelect(uuid);
+        setView("pagar");
+    };
+
     // Limpiar timeouts al desmontar el componente
     useEffect(() => {
         return () => {
@@ -1317,7 +1396,91 @@ export default function Facturar({
             }
         };
     }, []);
-    
+
+    // Cargar pedidos front pendientes y solicitudes descuento por método de pago desde IndexedDB al montar
+    useEffect(() => {
+        Promise.all([getPedidosFront(), getPendienteDescuentoMetodoPago(), getMetodosPagoAprobadosPorUuid()]).then(([pedidosData, pendienteDescuentoData, metodosAprobadosData]) => {
+            const pedidos = pedidosData && typeof pedidosData === "object" ? pedidosData : {};
+            if (Object.keys(pedidos).length > 0) {
+                setPedidosFrontPendientes(pedidos);
+                // Restaurar referencias por pedido (autovalidar y otras guardadas en IndexedDB)
+                const refsPorPedido = {};
+                Object.keys(pedidos).forEach((uuid) => {
+                    if (Array.isArray(pedidos[uuid].referencias) && pedidos[uuid].referencias.length > 0) {
+                        refsPorPedido[uuid] = pedidos[uuid].referencias;
+                    }
+                });
+                if (Object.keys(refsPorPedido).length > 0) {
+                    setRefPagoPorPedidoFront((prev) => ({ ...prev, ...refsPorPedido }));
+                }
+            }
+            // Solo restaurar solicitudes pendientes cuyo pedido sigue en la lista
+            if (pendienteDescuentoData && typeof pendienteDescuentoData === "object" && Object.keys(pendienteDescuentoData).length > 0) {
+                const filtered = {};
+                Object.keys(pendienteDescuentoData).forEach((uuid) => {
+                    if (pedidos[uuid]) filtered[uuid] = pendienteDescuentoData[uuid];
+                });
+                if (Object.keys(filtered).length > 0) setPendienteDescuentoMetodoPago(filtered);
+            }
+            // Restaurar métodos aprobados por uuid (solo para pedidos que siguen en la lista)
+            if (metodosAprobadosData && typeof metodosAprobadosData === "object" && Object.keys(metodosAprobadosData).length > 0) {
+                const filteredMetodos = {};
+                const filteredAprobado = {};
+                Object.keys(metodosAprobadosData).forEach((uuid) => {
+                    if (pedidos[uuid] && Array.isArray(metodosAprobadosData[uuid]) && metodosAprobadosData[uuid].length > 0) {
+                        filteredMetodos[uuid] = metodosAprobadosData[uuid];
+                        filteredAprobado[uuid] = true;
+                    }
+                });
+                if (Object.keys(filteredMetodos).length > 0) {
+                    setMetodosPagoAprobadosPorUuid(filteredMetodos);
+                    setDescuentoMetodoPagoAprobadoPorUuid(filteredAprobado);
+                }
+            }
+            pedidosFrontHydratedRef.current = true;
+        });
+    }, []);
+
+    // Sincronizar referencias de pago (refPagoPorPedidoFront) al objeto de cada pedido para persistirlas en IndexedDB
+    useEffect(() => {
+        if (!pedidosFrontHydratedRef.current) return;
+        setPedidosFrontPendientes((prev) => {
+            let changed = false;
+            const next = { ...prev };
+            Object.keys(refPagoPorPedidoFront).forEach((uuid) => {
+                const list = refPagoPorPedidoFront[uuid];
+                if (!Array.isArray(list)) return;
+                const current = (prev[uuid] && prev[uuid].referencias) || [];
+                if (JSON.stringify(current) !== JSON.stringify(list)) {
+                    next[uuid] = { ...(prev[uuid] || {}), referencias: list };
+                    changed = true;
+                }
+            });
+            return changed ? next : prev;
+        });
+    }, [refPagoPorPedidoFront]);
+
+    // Persistir pedidos front pendientes en IndexedDB cuando cambien
+    useEffect(() => {
+        if (!pedidosFrontHydratedRef.current) return;
+        setPedidosFront(pedidosFrontPendientes);
+    }, [pedidosFrontPendientes]);
+
+    // Persistir solicitudes de descuento por método de pago pendientes en IndexedDB cuando cambien
+    useEffect(() => {
+        if (!pedidosFrontHydratedRef.current) return;
+        setPendienteDescuentoMetodoPagoStorage(pendienteDescuentoMetodoPago);
+    }, [pendienteDescuentoMetodoPago]);
+
+    // Persistir métodos de pago aprobados por uuid (descuento por método ya aprobado)
+    useEffect(() => {
+        if (!pedidosFrontHydratedRef.current) return;
+        setMetodosPagoAprobadosPorUuidStorage(metodosPagoAprobadosPorUuid);
+    }, [metodosPagoAprobadosPorUuid]);
+
+    // F5: evitar recarga de página (la acción concreta, ej. del_pedido, se maneja en pagarMain)
+    useHotkeys("f5", (e) => e.preventDefault(), { enableOnTags: ["INPUT", "SELECT", "TEXTAREA"] });
+
     const [categoriasCajas, setcategoriasCajas] = useState([]);
     const [departamentosCajas, setdepartamentosCajas] = useState([]);
 
@@ -1372,48 +1535,182 @@ export default function Facturar({
             setcedula_referenciapago("");
             settelefono_referenciapago("");
         }
+        if (tipo == "cerrar") {
+            // Solo cerrar el modal sin recargar (para pedidos front donde las refs ya están en estado)
+            settogglereferenciapago(false);
+            settipo_referenciapago("");
+            setdescripcion_referenciapago("");
+            setmonto_referenciapago("");
+            setbanco_referenciapago("");
+            setcedula_referenciapago("");
+            settelefono_referenciapago("");
+        }
         if (tipo == "enviar") {
-            if (pedidoData.id && monto_referenciapago) {
+            if (!pedidoData?.id || !monto_referenciapago) return;
+            const uuid = pedidoData._frontOnly ? pedidoData.id : null;
+            if (uuid) {
+                // Pedido solo front: guardar referencia en estado por uuid (se enviará en setPagoPedido)
+                // La ref agregada desde la tab "Central" queda "pendiente" hasta que central la apruebe.
+                // Solo las refs validadas vía AutoValidar (que ya pasaron por central) van como "aprobada".
+                const estatusRef = (categoria === "autovalidar") ? "aprobada" : "pendiente";
                 let ref = descripcion_referenciapago;
-
-                db.addRefPago({
+                const nuevaRef = {
+                    _localId: `front_${Date.now()}_${Math.random().toString(36).slice(2)}`,
                     tipo: tipo_referenciapago,
                     descripcion: ref,
                     monto: monto_referenciapago,
                     banco: banco_referenciapago,
                     cedula: cedula_referenciapago,
                     telefono: telefono_referenciapago,
-                    id_pedido: pedidoData.id,
-                    categoria: categoria,
+                    categoria: categoria || "central",
+                    estatus: estatusRef,
                     ...datosAdicionales,
-                }).then((res) => {
-                    getPedido(null, null, false);
-                    notificar(res);
-                    settogglereferenciapago(false);
-
-                    settipo_referenciapago("");
-                    setdescripcion_referenciapago("");
-                    setmonto_referenciapago("");
-                    setbanco_referenciapago("");
-                    setcedula_referenciapago("");
-                    settelefono_referenciapago("");
-
-                    // Para módulos automáticos, enviar a merchant inmediatamente
-                    if (res.data && res.data.estado && res.data.id_referencia && 
-                        (categoria === "pagomovil" || categoria === "banesco" || categoria === "interbancaria")) {
-                        db.sendRefToMerchant({
-                            id_ref: res.data.id_referencia,
-                        }).then((resMerchant) => {
-                            console.log("Referencia enviada a merchant:", resMerchant);
-                            notificar(resMerchant);
-                        }).catch((err) => {
-                            console.error("Error al enviar a merchant:", err);
-                        });
-                    }
+                };
+                setRefPagoPorPedidoFront((prev) => {
+                    const list = prev[uuid] || [];
+                    const next = { ...prev, [uuid]: [...list, nuevaRef] };
+                    return next;
                 });
+                setrefPago((prev) => [...prev, nuevaRef]);
+                settogglereferenciapago(false);
+                settipo_referenciapago("");
+                setdescripcion_referenciapago("");
+                setmonto_referenciapago("");
+                setbanco_referenciapago("");
+                setcedula_referenciapago("");
+                settelefono_referenciapago("");
+                notificar({ data: { msj: "Referencia agregada (se guardará al procesar el pago).", estado: true } });
+
+                // Para refs "central" en pedido front-only: registrar en central de inmediato
+                // para que delRefPago pueda encontrarla si el usuario la elimina antes de pagar.
+                if ((categoria || "central") === "central") {
+                    db.registrarRefCentralFront({
+                        id_pedido:   uuid,
+                        descripcion: nuevaRef.descripcion,
+                        banco:       nuevaRef.banco,
+                        monto:       nuevaRef.monto,
+                        cedula:      nuevaRef.cedula ?? null,
+                        telefono:    nuevaRef.telefono ?? null,
+                        tipo:        nuevaRef.tipo ?? 1,
+                    }).catch(() => {}); // En segundo plano; no bloqueamos si central falla
+                }
+
+                return;
             }
+            // Pedido con id de backend: enviar al servidor
+            let ref = descripcion_referenciapago;
+            db.addRefPago({
+                tipo: tipo_referenciapago,
+                descripcion: ref,
+                monto: monto_referenciapago,
+                banco: banco_referenciapago,
+                cedula: cedula_referenciapago,
+                telefono: telefono_referenciapago,
+                id_pedido: pedidoData.id,
+                categoria: categoria,
+                ...datosAdicionales,
+            }).then((res) => {
+                getPedido(null, null, false);
+                notificar(res);
+                settogglereferenciapago(false);
+
+                settipo_referenciapago("");
+                setdescripcion_referenciapago("");
+                setmonto_referenciapago("");
+                setbanco_referenciapago("");
+                setcedula_referenciapago("");
+                settelefono_referenciapago("");
+
+                // Para módulos automáticos, enviar a merchant inmediatamente
+                if (res.data && res.data.estado && res.data.id_referencia && 
+                    (categoria === "pagomovil" || categoria === "banesco" || categoria === "interbancaria")) {
+                    db.sendRefToMerchant({
+                        id_ref: res.data.id_referencia,
+                    }).then((resMerchant) => {
+                        console.log("Referencia enviada a merchant:", resMerchant);
+                        notificar(resMerchant);
+                    }).catch((err) => {
+                        console.error("Error al enviar a merchant:", err);
+                    });
+                }
+            });
         }
     };
+
+    // Callback cuando autovalidar-transferencia tiene éxito en un pedido front: guardar referencia en estado e IndexedDB sin duplicar
+    /**
+     * Actualiza campos arbitrarios de un pedido front-only en estado local + IndexedDB.
+     * Útil para guardar datos como isdevolucionOriginalid antes de que el pedido exista en BD.
+     */
+    const actualizarCampoPedidoFront = (uuid, campos) => {
+        if (!uuid || !campos) return;
+        setPedidosFrontPendientes((prev) => {
+            if (!prev[uuid]) return prev;
+            return { ...prev, [uuid]: { ...prev[uuid], ...campos } };
+        });
+        // Actualizar también pedidoData si es el pedido actualmente seleccionado
+        setPedidoData((prev) => {
+            if (prev?._frontOnly && prev?.id === uuid) {
+                return { ...prev, ...campos };
+            }
+            return prev;
+        });
+    };
+
+    // Actualiza el estatus (y datos opcionales) de una referencia front-only existente por su _localId.
+    // Se usa cuando el usuario verifica manualmente una ref "pendiente" contra central.
+    const actualizarEstatusRefFront = (uuid, localId, newEstatus, responseData = null) => {
+        if (!uuid || !localId) return;
+        const actualizarLista = (list) =>
+            list.map((r) =>
+                r._localId === localId
+                    ? { ...r, estatus: newEstatus, ...(responseData ? { response: JSON.stringify(responseData) } : {}) }
+                    : r
+            );
+        setRefPagoPorPedidoFront((prev) => {
+            const list = prev[uuid] || [];
+            return { ...prev, [uuid]: actualizarLista(list) };
+        });
+        setrefPago((prev) => actualizarLista(prev));
+    };
+
+    const onAutovalidarReferenciaSuccess = (dataFromAutovalidar, formData = {}) => {
+        if (!pedidoData?._frontOnly || !pedidoData?.id) return;
+        const uuid = pedidoData.id;
+        const descripcion = (dataFromAutovalidar?.referencia_completa || formData?.descripcion || "").toString().trim();
+        if (!descripcion) return;
+        setRefPagoPorPedidoFront((prev) => {
+            const list = prev[uuid] || [];
+            const yaExiste = list.some((r) => (r.descripcion || "").toString().trim() === descripcion);
+            if (yaExiste) {
+                notificar({ data: { msj: "Esta referencia ya está cargada en el pedido.", estado: true } });
+                return prev;
+            }
+            const monto = formData.monto ?? dataFromAutovalidar?.monto ?? monto_referenciapago;
+            const nuevaRef = {
+                _localId: `autovalidar_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                tipo: 1,
+                descripcion,
+                monto: monto != null ? String(monto) : "",
+                banco: dataFromAutovalidar?.banco ?? formData.banco ?? "0134",
+                cedula: formData.cedula ?? dataFromAutovalidar?.cedula ?? "",
+                telefono: formData.telefono ?? dataFromAutovalidar?.telefono ?? "",
+                categoria: "autovalidar",
+                estatus: "aprobada",
+                fecha_pago: formData.fecha_pago ?? dataFromAutovalidar?.fecha_pago ?? null,
+                banco_origen: formData.banco_origen ?? dataFromAutovalidar?.banco_origen ?? null,
+                response: dataFromAutovalidar?.response_central ? JSON.stringify(dataFromAutovalidar.response_central) : null,
+            };
+            notificar({ data: { msj: "Referencia de transferencia guardada en el pedido. Se registrará al procesar el pago.", estado: true } });
+            // Actualizar refPago inmediatamente para que la UI lo muestre sin esperar al useEffect
+            setrefPago((p) => {
+                const ya = p.some((r) => (r.descripcion || "").toString().trim() === descripcion);
+                return ya ? p : [...p, nuevaRef];
+            });
+            return { ...prev, [uuid]: [...list, nuevaRef] };
+        });
+    };
+
     const changeEntregado = (e) => {
         let id = e.currentTarget.attributes["data-id"].value;
         if (confirm("Confirme Entrega de producto")) {
@@ -1425,12 +1722,35 @@ export default function Facturar({
     };
     const delRefPago = (e) => {
         let id = e.currentTarget.attributes["data-id"].value;
-        if (confirm("Confirme eliminación de referencia")) {
-            db.delRefPago({ id }).then((res) => {
-                getPedido();
+        if (!confirm("Confirme eliminación de referencia")) return;
+
+        // Referencias de pedido solo front: la ref no tiene ID en BD aún.
+        // Siempre pasar por backend→central PRIMERO; solo eliminar en front si el backend confirma.
+        if (pedidoData?._frontOnly && pedidoData?.id) {
+            const uuid = pedidoData.id;
+            // Buscar la ref en el estado local para obtener su descripcion
+            const refList = refPagoPorPedidoFront[uuid] || [];
+            const refObj = refList.find((r) => String(r._localId || r.id) === String(id));
+            const descripcion = refObj?.descripcion || null;
+
+            db.delRefPago({ descripcion_front: descripcion, uuid_pedido_front: uuid }).then((res) => {
                 notificar(res);
+                if (res?.data?.estado === true) {
+                    // Central confirmó: ahora sí eliminar del estado local
+                    setRefPagoPorPedidoFront((prev) => {
+                        const list = (prev[uuid] || []).filter((r) => String(r._localId || r.id) !== String(id));
+                        return { ...prev, [uuid]: list };
+                    });
+                    setrefPago((prev) => prev.filter((r) => String(r._localId || r.id) !== String(id)));
+                }
             });
+            return;
         }
+
+        db.delRefPago({ id }).then((res) => {
+            getPedido();
+            notificar(res);
+        });
     };
     //Gastos component
 
@@ -1635,8 +1955,13 @@ export default function Facturar({
         setInputsCats();
     }, [indexSelectCategorias]);
    
-
+    // No llamar getUsuarios al arrancar el componente, solo cuando el usuario busque
+    const skipGetUsuariosFirstRef = useRef(true);
     useEffect(() => {
+        if (skipGetUsuariosFirstRef.current) {
+            skipGetUsuariosFirstRef.current = false;
+            return;
+        }
         getUsuarios();
     }, [qBuscarUsuario]);
 
@@ -1656,7 +1981,13 @@ export default function Facturar({
 
     
 
+    // Solo llamar getClienteCrud cuando cambie qBuscarCliente, no al arrancar el componente
+    const skipGetClienteCrudFirstRef = useRef(true);
     useEffect(() => {
+        if (skipGetClienteCrudFirstRef.current) {
+            skipGetClienteCrudFirstRef.current = false;
+            return;
+        }
         getClienteCrud();
     }, [qBuscarCliente]);
     useEffect(() => {
@@ -3165,12 +3496,20 @@ export default function Facturar({
     };
     const getPedido = (id, callback = null, clearPagosPedido = true) => {
         if (showModalPosDebito) return; // No recargar pedido mientras el modal POS débito está activo
-        setLoading(true);
         if (!id) {
             id = pedidoSelect;
         } else {
             setPedidoSelect(id);
         }
+        // Pedido solo en front: no llamar API, datos ya están en state. solicitudDescuentoFrontVerificar solo se ejecuta al activar setDescuentoUnitario o setDescuentoTotal
+        if (pedidosFrontPendientes[id]) {
+            const order = pedidosFrontPendientes[id];
+            setrefPago(refPagoPorPedidoFront[id] || []);
+            setPedidoData(order);
+            if (callback) callback();
+            return;
+        }
+        setLoading(true);
         db.getPedido({ id }).then((res) => {
             setLoading(false);
             if (res.data) {
@@ -3376,6 +3715,14 @@ export default function Facturar({
         } else {
             id = e.currentTarget.attributes["data-id"].value;
         }
+        // Pedido pendiente solo en front (UUID): cargar desde state, no llamar getPedido
+        if (pedidosFrontPendientes[id]) {
+            setrefPago(refPagoPorPedidoFront[id] || []);
+            setPedidoData(pedidosFrontPendientes[id]);
+            setPedidoSelect(id);
+            setView("pagar");
+            return;
+        }
         getPedido(id, () => {
             setView("pagar");
         });
@@ -3416,9 +3763,22 @@ export default function Facturar({
 
   
     const onCLickDelPedido = (e) => {
+        const current = e.currentTarget.attributes;
+        const id = current["data-id"].value;
+        if (pedidosFrontPendientes[id]) {
+            setPedidosFrontPendientes((prev) => {
+                const next = { ...prev };
+                delete next[id];
+                return next;
+            });
+            if (pedidoData?.id === id) {
+                setPedidoData({});
+                setPedidoSelect(null);
+            }
+            notificar({ msj: "Pedido eliminado", estado: true });
+            return;
+        }
         if (confirm("¿Seguro de eliminar?")) {
-            const current = e.currentTarget.attributes;
-            const id = current["data-id"].value;
             let motivo = window.prompt("¿Cuál es el Motivo de eliminación?");
             if (motivo) {
                 let params = { id, motivo };
@@ -3446,8 +3806,25 @@ export default function Facturar({
         }
     };
     const delItemPedido = (e) => {
-        setLoading(true);
         const index = e.currentTarget.attributes["data-index"].value;
+        if (pedidoData._frontOnly && pedidoData.id) {
+            const newItems = (pedidoData.items || []).filter((it) => String(it.id) !== String(index));
+            const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
+            const clean_total = clean_subtotal;
+            const bs = clean_total * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0);
+            const updated = {
+                ...pedidoData,
+                items: newItems,
+                clean_subtotal,
+                clean_total,
+                bs,
+            };
+            setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
+            setPedidoData(updated);
+            notificar({ msj: "Ítem quitado", estado: true });
+            return;
+        }
+        setLoading(true);
         let params = { index };
         db.delItemPedido(params).then((res) => {
             getPedido();
@@ -3481,6 +3858,36 @@ export default function Facturar({
         }
     };
 
+    // Solo para pedidos front: verificar descuento aprobado en central y aplicar al estado (se llama solo tras setDescuentoUnitario o setDescuentoTotal)
+    const aplicarDescuentoAprobadoFront = (uuid, order) => {
+        if (!uuid || !order) return;
+        db.solicitudDescuentoFrontVerificar({ uuid_pedido_front: uuid, tipo_descuento: "monto_porcentaje" })
+            .then((res) => {
+                if (res.data?.existe && res.data?.data?.estado === "aprobado" && Array.isArray(res.data.data.ids_productos)) {
+                    const byProduct = {};
+                    (res.data.data.ids_productos || []).forEach((p) => {
+                        byProduct[p.id_producto] = parseFloat(p.porcentaje_descuento) || 0;
+                    });
+                    const newItems = (order.items || []).map((it) => {
+                        const pct = byProduct[it.producto?.id ?? it.id] ?? (parseFloat(it.descuento) || 0);
+                        const subtotal = parseFloat(it.producto?.precio || it.precio || 0) * Math.abs(parseFloat(it.cantidad || 0));
+                        const total = subtotal * (1 - pct / 100);
+                        return { ...it, descuento: pct, total, total_des: total };
+                    });
+                    const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
+                    const updated = { ...order, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(order.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
+                    setPedidoData(updated);
+                    setPedidosFrontPendientes((prev) => ({ ...prev, [uuid]: updated }));
+                    setPendientesDescuentoUnitario((prev) => {
+                        const next = { ...prev };
+                        delete next[uuid];
+                        return next;
+                    });
+                }
+            })
+            .catch(() => {});
+    };
+
     const setDescuentoTotal = (e) => {
         // setLoading(true)
 
@@ -3500,6 +3907,8 @@ export default function Facturar({
                             params,
                         });
                         openValidationTarea(res.data.id_tarea);
+                    } else if (pedidoData._frontOnly && pedidoData.id) {
+                        aplicarDescuentoAprobadoFront(pedidoData.id, pedidosFrontPendientes[pedidoData.id] || pedidoData);
                     }
                 });
             } else {
@@ -3524,6 +3933,8 @@ export default function Facturar({
                                 params,
                             });
                             openValidationTarea(res.data.id_tarea);
+                        } else if (pedidoData._frontOnly && pedidoData.id) {
+                            aplicarDescuentoAprobadoFront(pedidoData.id, pedidosFrontPendientes[pedidoData.id] || pedidoData);
                         }
                     });
                 }
@@ -3532,42 +3943,213 @@ export default function Facturar({
     };
     const setDescuentoUnitario = (e) => {
         const index = e.currentTarget.attributes["data-index"].value;
-        
-        // Buscar el item en el pedido para obtener su subtotal
-        const item = pedidoData.items?.find(i => i.id == index);
+        const item = pedidoData.items?.find((i) => i.id == index);
         if (!item) {
             notificar({ data: { msj: "Item no encontrado", estado: false } });
             return;
         }
-        
-        // Calcular el subtotal del item (precio * cantidad)
         const subtotalItem = parseFloat(item.producto?.precio || 0) * Math.abs(parseFloat(item.cantidad || 0));
-        
         if (subtotalItem <= 0) {
             notificar({ data: { msj: "El item no tiene subtotal válido", estado: false } });
             return;
         }
-        
-        const montoFinal = window.prompt(
-            `Monto total final del ítem (Subtotal actual: $${subtotalItem.toFixed(4)})\n*Ingrese 0 para eliminar descuento*`
-        );
-        
+
+        if (pedidoData._frontOnly && pedidoData.id) {
+            const tieneDescuentoAplicado = item.descuento != null && parseFloat(item.descuento) > 0;
+            if (tieneDescuentoAplicado) {
+                setDescuentoUnitarioTooltipAprobadoId((prev) => (prev === String(index) ? null : String(index)));
+                return;
+            }
+            setDescuentoUnitarioTooltipAprobadoId(null);
+            const openInlineDescuento = () => {
+                setDescuentoUnitarioVerificandoId(null);
+                setDescuentoUnitarioContext({ index, item, subtotalItem });
+                setDescuentoUnitarioInputValue("");
+                setDescuentoUnitarioEditingId(String(index));
+            };
+            setDescuentoUnitarioVerificandoId(String(index));
+            setLoading(true);
+            db.solicitudDescuentoFrontVerificar({ uuid_pedido_front: pedidoData.id, tipo_descuento: "monto_porcentaje" })
+                .then((res) => {
+                    setLoading(false);
+                    setDescuentoUnitarioVerificandoId(null);
+                    const data = res?.data;
+                    const existe = data?.existe === true;
+                    const aprobado = data?.data?.estado === "aprobado";
+                    const idsProductos = Array.isArray(data?.data?.ids_productos) ? data.data.ids_productos : [];
+                    if (existe && aprobado && idsProductos.length > 0) {
+                        const byProduct = {};
+                        idsProductos.forEach((p) => {
+                            const idProd = p.id_producto;
+                            if (idProd != null) byProduct[idProd] = parseFloat(p.porcentaje_descuento) || 0;
+                        });
+                        const idProductoItem = item.producto?.id ?? item.id;
+                        const pctAprobado = byProduct[idProductoItem] ?? byProduct[String(idProductoItem)];
+                        if (pctAprobado != null && Number(pctAprobado) > 0) {
+                            const totalConDescuento = subtotalItem * (1 - pctAprobado / 100);
+                            const newItems = (pedidoData.items || []).map((it) => {
+                                if (String(it.id) !== String(index)) return it;
+                                return { ...it, descuento: pctAprobado, total: totalConDescuento, total_des: totalConDescuento };
+                            });
+                            const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
+                            const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
+                            setPedidoData(updated);
+                            setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
+                            setPendientesDescuentoUnitario((prev) => {
+                                const next = { ...prev };
+                                if (next[pedidoData.id]) {
+                                    const sub = { ...next[pedidoData.id] };
+                                    delete sub[String(index)];
+                                    next[pedidoData.id] = Object.keys(sub).length ? sub : undefined;
+                                }
+                                return next;
+                            });
+                            notificar({ data: { msj: "Descuento aprobado aplicado al ítem", estado: true } });
+                            return;
+                        }
+                    }
+                    openInlineDescuento();
+                })
+                .catch(() => {
+                    setLoading(false);
+                    setDescuentoUnitarioVerificandoId(null);
+                    openInlineDescuento();
+                });
+            return;
+        }
+
+        setDescuentoUnitarioContext({ index, item, subtotalItem });
+        setDescuentoUnitarioInputValue("");
+        setDescuentoUnitarioEditingId(String(index));
+    };
+
+    const aplicarDescuentoUnitarioDesdeModal = (montoFinal) => {
         if (montoFinal === null || montoFinal === "") return;
-        
+        const { index, item, subtotalItem } = descuentoUnitarioContext || {};
+        if (!index || !item) return;
+        setDescuentoUnitarioEditingId(null);
+        setDescuentoUnitarioContext(null);
+        setDescuentoUnitarioInputValue("");
+
+        if (pedidoData._frontOnly && pedidoData.id) {
+            setLoading(true);
+            if (montoFinal === "0" || montoFinal === 0) {
+                const newItems = (pedidoData.items || []).map((it) =>
+                    String(it.id) === String(index) ? { ...it, descuento: 0, total: parseFloat(it.precio || 0) * Math.abs(parseFloat(it.cantidad || 0)), total_des: parseFloat(it.precio || 0) * Math.abs(parseFloat(it.cantidad || 0)) } : it
+                );
+                const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
+                const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
+                setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
+                setPedidoData(updated);
+                setLoading(false);
+                notificar({ data: { msj: "Descuento eliminado", estado: true } });
+                return;
+            }
+            const montoFinalNum = parseFloat(montoFinal);
+            if (isNaN(montoFinalNum) || montoFinalNum < 0) {
+                notificar({ data: { msj: "Monto inválido", estado: false } });
+                setLoading(false);
+                return;
+            }
+            if (montoFinalNum >= subtotalItem) {
+                notificar({ data: { msj: "El monto final debe ser menor al subtotal", estado: false } });
+                setLoading(false);
+                return;
+            }
+            const descuento = (100 - (montoFinalNum * 100) / subtotalItem).toFixed(4);
+            const items = pedidoData.items || [];
+            let monto_bruto = 0;
+            let monto_descuento = 0;
+            const ids_productos = items.map((it) => {
+                const subtotal_it = parseFloat(it.producto?.precio || 0) * Math.abs(parseFloat(it.cantidad || 0));
+                const pct = String(it.id) === String(index) ? parseFloat(descuento) : parseFloat(it.descuento) || 0;
+                const subtotal_con_descuento = subtotal_it * (1 - pct / 100);
+                monto_bruto += subtotal_it;
+                monto_descuento += subtotal_it - subtotal_con_descuento;
+                return {
+                    id_producto: it.producto?.id ?? it.id,
+                    cantidad: it.cantidad,
+                    precio: it.producto?.precio ?? it.precio ?? 0,
+                    precio_base: it.producto?.precio_base ?? 0,
+                    subtotal: subtotal_it,
+                    subtotal_con_descuento,
+                    porcentaje_descuento: pct,
+                };
+            });
+            const monto_con_descuento = monto_bruto - monto_descuento;
+            db.solicitudDescuentoFrontCrear({
+                uuid_pedido_front: pedidoData.id,
+                ids_productos,
+                monto_bruto,
+                monto_con_descuento,
+                monto_descuento,
+                porcentaje_descuento: parseFloat(descuento),
+                tipo_descuento: "monto_porcentaje",
+            })
+                .then((res) => {
+                    setLoading(false);
+                    const data = res.data || res;
+                    if (data.estado === true && data.data?.estado === "aprobado") {
+                        setPendientesDescuentoUnitario((prev) => {
+                            const next = { ...prev };
+                            if (next[pedidoData.id]) {
+                                const sub = { ...next[pedidoData.id] };
+                                delete sub[String(index)];
+                                next[pedidoData.id] = Object.keys(sub).length ? sub : undefined;
+                            }
+                            return next;
+                        });
+                        const byProduct = {};
+                        (data.data.ids_productos || []).forEach((p) => {
+                            byProduct[p.id_producto] = parseFloat(p.porcentaje_descuento) || 0;
+                        });
+                        const idProductoItem = item.producto?.id ?? item.id;
+                        const pctAprobado = byProduct[idProductoItem] ?? parseFloat(descuento);
+                        const totalConDescuento = subtotalItem * (1 - pctAprobado / 100);
+                        const newItems = (pedidoData.items || []).map((it) => {
+                            if (String(it.id) !== String(index)) return it;
+                            return { ...it, descuento: pctAprobado, total: totalConDescuento, total_des: totalConDescuento };
+                        });
+                        const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
+                        const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
+                        setPedidoData(updated);
+                        setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
+                        notificar({ data: { msj: "Descuento aprobado y aplicado al ítem", estado: true } });
+                        return;
+                    }
+                    if (data.estado === true && data.existe) {
+                        notificar({ data: { msj: data.msj || "Ya existe una solicitud en espera de aprobación", estado: true } });
+                        return;
+                    }
+                    if (data.estado === true) {
+                        setPendientesDescuentoUnitario((prev) => ({
+                            ...prev,
+                            [pedidoData.id]: {
+                                ...(prev[pedidoData.id] || {}),
+                                [String(index)]: { montoFinal: String(montoFinal), submittedAt: Date.now() },
+                            },
+                        }));
+                        notificar({ data: { msj: "Solicitud de descuento enviada a central para aprobación", estado: true } });
+                        return;
+                    }
+                    notificar({ data: { msj: data.msj || "Error al enviar solicitud", estado: false } });
+                })
+                .catch(() => {
+                    setLoading(false);
+                    notificar({ data: { msj: "Error de conexión con el servidor", estado: false } });
+                });
+            return;
+        }
+
         setLoading(true);
-        
-        if (montoFinal == "0") {
-            // Eliminar descuento
-            let params = { index, descuento: 0 };
+        if (montoFinal === "0" || montoFinal === 0) {
+            const params = { index, descuento: 0 };
             db.setDescuentoUnitario(params).then((res) => {
                 getPedido();
                 setLoading(false);
                 notificar(res);
                 if (res.data.estado === false) {
-                    setLastDbRequest({
-                        dbFunction: db.setDescuentoUnitario,
-                        params,
-                    });
+                    setLastDbRequest({ dbFunction: db.setDescuentoUnitario, params });
                     openValidationTarea(res.data.id_tarea);
                 }
             });
@@ -3578,35 +4160,231 @@ export default function Facturar({
                 setLoading(false);
                 return;
             }
-            
             if (montoFinalNum >= subtotalItem) {
                 notificar({ data: { msj: "El monto final debe ser menor al subtotal", estado: false } });
                 setLoading(false);
                 return;
             }
-            
-            // Calcular el porcentaje de descuento: descuento = 100 - ((montoFinal * 100) / subtotal)
-            const descuento = (100 - ((montoFinalNum * 100) / subtotalItem)).toFixed(4);
-            
-            let params = { index, descuento };
+            const descuento = (100 - (montoFinalNum * 100) / subtotalItem).toFixed(4);
+            const params = { index, descuento };
             db.setDescuentoUnitario(params).then((res) => {
                 getPedido();
                 setLoading(false);
                 notificar(res);
                 if (res.data.estado === false) {
-                    setLastDbRequest({
-                        dbFunction: db.setDescuentoUnitario,
-                        params,
-                    });
+                    setLastDbRequest({ dbFunction: db.setDescuentoUnitario, params });
                     openValidationTarea(res.data.id_tarea);
                 }
             });
         }
     };
+    const setCantidadCarritoFront = (itemId, newCantidad) => {
+        if (!pedidoData._frontOnly || !pedidoData.id) return;
+        const item = (pedidoData.items || []).find((it) => String(it.id) === String(itemId));
+        if (!item || !item.producto) return;
+        if (item.descuento != null && parseFloat(item.descuento) > 0) {
+            notificar({ msj: "No se puede editar la cantidad: el ítem tiene descuento aprobado", estado: false });
+            return;
+        }
+        const qty = parseFloat(newCantidad);
+        if (isNaN(qty) || qty < 0) {
+            notificar({ msj: "Cantidad inválida", estado: false });
+            return;
+        }
+        const productInList = productos.find((p) => p.id == item.producto.id);
+        const disponible = productInList != null ? parseFloat(productInList.cantidad) || 0 : 0;
+        const qtyCapped = Math.min(qty, Math.max(0, disponible));
+        if (qtyCapped < qty && disponible >= 0) {
+            notificar({ msj: "Solo hay " + disponible + " disponible(s). Se actualizó al máximo.", estado: true });
+        }
+        const newItems = (pedidoData.items || []).map((it) =>
+            String(it.id) === String(itemId) ? { ...it, cantidad: qtyCapped, total: qtyCapped * (parseFloat(it.precio) || 0), total_des: qtyCapped * (parseFloat(it.precio) || 0) } : it
+        );
+        const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
+        const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
+        setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
+        setPedidoData(updated);
+        notificar({ msj: "Cantidad actualizada", estado: true });
+    };
+
+    /** True si los métodos de pago son solo efectivo USD (libera sin solicitud de aprobación). */
+    const isSoloEfectivoUsd = (metodos) => {
+        if (!Array.isArray(metodos) || metodos.length === 0) return false;
+        if (metodos.length > 1) return false;
+        return metodos[0].tipo === "efectivo" && parseFloat(metodos[0].monto) > 0;
+    };
+
+    /** Compara si los métodos actuales coinciden con los aprobados (mismo tipo y monto con tolerancia 0.02). */
+    const metodosPagoCoincidenConAprobados = (actuales, aprobados) => {
+        if (!Array.isArray(aprobados) || aprobados.length === 0) return false;
+        if (!Array.isArray(actuales) || actuales.length !== aprobados.length) return false;
+        const sort = (arr) => [...arr].sort((a, b) => (String(a.tipo)).localeCompare(String(b.tipo)) || (parseFloat(a.monto) || 0) - (parseFloat(b.monto) || 0));
+        const sa = sort(actuales);
+        const sb = sort(aprobados);
+        for (let i = 0; i < sa.length; i++) {
+            if (sa[i].tipo !== sb[i].tipo) return false;
+            if (Math.abs((parseFloat(sa[i].monto) || 0) - (parseFloat(sb[i].monto) || 0)) > 0.02) return false;
+        }
+        return true;
+    };
+
+    // Construir metodos_pago como el backend (para solicitud descuento por método de pago)
+    const buildMetodosPagoFront = () => {
+        const metodos_pago = [];
+        if (efectivo_dolar && parseFloat(efectivo_dolar)) metodos_pago.push({ tipo: "efectivo", monto: parseFloat(efectivo_dolar) });
+        if (debito && parseFloat(debito)) metodos_pago.push({ tipo: "debito", monto: parseFloat(debito) });
+        if (debitos && Array.isArray(debitos)) {
+            debitos.forEach((d) => {
+                const m = parseFloat(d.monto);
+                if (!Number.isNaN(m) && m !== 0) metodos_pago.push({ tipo: "debito", monto: m });
+            });
+        }
+        if (transferencia && parseFloat(transferencia)) metodos_pago.push({ tipo: "transferencia", monto: parseFloat(transferencia) });
+        if (biopago && parseFloat(biopago)) metodos_pago.push({ tipo: "biopago", monto: 0 });
+        if (credito && parseFloat(credito)) metodos_pago.push({ tipo: "credito", monto: parseFloat(credito) });
+        if (efectivo_bs && parseFloat(efectivo_bs)) metodos_pago.push({ tipo: "adicional", monto: parseFloat(efectivo_bs) });
+        if (efectivo_peso && parseFloat(efectivo_peso)) metodos_pago.push({ tipo: "adicional", monto: parseFloat(efectivo_peso) });
+        return metodos_pago;
+    };
+
+    const solicitarDescuentoMetodoPagoFront = () => {
+        if (!pedidoData._frontOnly || !pedidoData.id || !pedidoData.items?.length) return;
+        const tieneDescuento = pedidoData.items.some((it) => it.descuento != null && parseFloat(it.descuento) > 0);
+        if (!tieneDescuento) {
+            notificar({ data: { msj: "El pedido no tiene ítems con descuento", estado: false } });
+            return;
+        }
+        const metodos_pago = buildMetodosPagoFront();
+        if (metodos_pago.length === 0) {
+            notificar({ data: { msj: "Indique al menos un método de pago para solicitar el descuento", estado: false } });
+            return;
+        }
+        const monto_bruto = (pedidoData.items || []).reduce((sum, it) => {
+            const subtotal = (parseFloat(it.producto?.precio ?? it.precio) || 0) * Math.abs(parseFloat(it.cantidad) || 0);
+            return sum + subtotal;
+        }, 0);
+        let monto_descuento = 0;
+        (pedidoData.items || []).forEach((it) => {
+            const subtotal = (parseFloat(it.producto?.precio ?? it.precio) || 0) * Math.abs(parseFloat(it.cantidad) || 0);
+            const pct = parseFloat(it.descuento) || 0;
+            if (pct > 0) monto_descuento += subtotal * (pct / 100);
+        });
+        const monto_con_descuento = monto_bruto - monto_descuento;
+        const porcentaje_descuento = monto_bruto > 0 ? (monto_descuento / monto_bruto) * 100 : 0;
+        const ids_productos = (pedidoData.items || []).map((it) => {
+            const subtotal_it = (parseFloat(it.producto?.precio ?? it.precio) || 0) * Math.abs(parseFloat(it.cantidad) || 0);
+            const pct = parseFloat(it.descuento) || 0;
+            const subtotal_con_descuento = subtotal_it * (1 - pct / 100);
+            return {
+                id_producto: it.producto?.id ?? it.id,
+                cantidad: parseFloat(it.cantidad) || 0,
+                precio: parseFloat(it.producto?.precio ?? it.precio) || 0,
+                precio_base: it.producto?.precio_base ?? 0,
+                subtotal: subtotal_it,
+                subtotal_con_descuento,
+                porcentaje_descuento: pct,
+            };
+        });
+        setLoading(true);
+        db.solicitudDescuentoFrontCrear({
+            uuid_pedido_front: pedidoData.id,
+            ids_productos,
+            monto_bruto,
+            monto_con_descuento,
+            monto_descuento,
+            porcentaje_descuento: porcentaje_descuento,
+            tipo_descuento: "metodo_pago",
+            metodos_pago,
+            observaciones: "Solicitud de descuento por método de pago: " + porcentaje_descuento.toFixed(2) + "%",
+        })
+            .then((res) => {
+                setLoading(false);
+                const data = res.data || res;
+                if (data.estado === true && data.existe) {
+                    notificar({ data: { msj: data.msj || "Ya existe una solicitud en espera de aprobación", estado: true } });
+                    return;
+                }
+                if (data.estado === true) {
+                    setPendienteDescuentoMetodoPago((prev) => ({ ...prev, [pedidoData.id]: { submittedAt: Date.now(), metodos_pago } }));
+                    notificar({ data: { msj: "Solicitud de descuento por método de pago enviada a central", estado: true } });
+                    return;
+                }
+                notificar({ data: { msj: data.msj || "Error al enviar solicitud", estado: false } });
+            })
+            .catch(() => {
+                setLoading(false);
+                notificar({ data: { msj: "Error de conexión con el servidor", estado: false } });
+            });
+    };
+
+    const verificarDescuentoMetodoPagoFront = () => {
+        if (!pedidoData._frontOnly || !pedidoData.id) return;
+        setDescuentoMetodoPagoVerificando(true);
+        db.solicitudDescuentoFrontVerificar({ uuid_pedido_front: pedidoData.id, tipo_descuento: "metodo_pago" })
+            .then((res) => {
+                setDescuentoMetodoPagoVerificando(false);
+                const data = res?.data;
+                if (data?.existe && data?.data?.estado === "aprobado") {
+                    const metodosAprobados = data?.data?.metodos_pago || [];
+                    setPendienteDescuentoMetodoPago((prev) => {
+                        const next = { ...prev };
+                        delete next[pedidoData.id];
+                        return next;
+                    });
+                    setDescuentoMetodoPagoAprobadoPorUuid((prev) => ({ ...prev, [pedidoData.id]: true }));
+                    setMetodosPagoAprobadosPorUuid((prev) => ({ ...prev, [pedidoData.id]: metodosAprobados }));
+                    const labels = { efectivo: "Efectivo", transferencia: "Transferencia", debito: "Débito", biopago: "Biopago", credito: "Crédito", adicional: "Bs/Pesos" };
+                    const list = metodosAprobados.map((m) => `${labels[m.tipo] || m.tipo} $${m.monto != null ? m.monto : ""}`).filter(Boolean).join(", ");
+                    notificar({ data: { msj: list ? `Descuento aprobado para: ${list}. Use exactamente estos métodos y montos para facturar.` : "Descuento por método de pago aprobado. Ya puede procesar el pago.", estado: true } });
+                } else if (data?.existe && data?.data?.estado === "enviado") {
+                    notificar({ data: { msj: "La solicitud sigue en espera de aprobación", estado: true } });
+                } else {
+                    notificar({ data: { msj: data?.msj || "No hay solicitud aprobada aún", estado: true } });
+                }
+            })
+            .catch(() => {
+                setDescuentoMetodoPagoVerificando(false);
+                notificar({ data: { msj: "Error al verificar", estado: false } });
+            });
+    };
+
     const setCantidadCarrito = (e) => {
         const cantidad = window.prompt("Cantidad");
         if (cantidad) {
             const index = e.currentTarget.attributes["data-index"].value;
+            const qty = parseFloat(cantidad);
+            if (isNaN(qty) || qty < 0) {
+                notificar({ msj: "Cantidad inválida", estado: false });
+                return;
+            }
+            if (pedidoData._frontOnly && pedidoData.id) {
+                const item = (pedidoData.items || []).find((it) => String(it.id) === String(index));
+                if (!item || !item.producto) return;
+                if (item.descuento != null && parseFloat(item.descuento) > 0) {
+                    notificar({ msj: "No se puede editar la cantidad: el ítem tiene descuento aprobado", estado: false });
+                    return;
+                }
+                const productInList = productos.find((p) => p.id == item.producto.id);
+                const disponible = productInList != null ? parseFloat(productInList.cantidad) || 0 : 0;
+                const qtyCapped = Math.min(qty, Math.max(0, disponible));
+                if (qtyCapped < qty && disponible >= 0) {
+                    notificar({ msj: "Solo hay " + disponible + " disponible(s). Se actualizó al máximo.", estado: true });
+                }
+                const newItems = (pedidoData.items || []).map((it) =>
+                    String(it.id) === String(index) ? { ...it, cantidad: qtyCapped, total: qtyCapped * (parseFloat(it.precio) || 0), total_des: qtyCapped * (parseFloat(it.precio) || 0) } : it
+                );
+                const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
+                const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
+                setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
+                setPedidoData(updated);
+                notificar({ msj: "Cantidad actualizada", estado: true });
+                return;
+            }
+            const itemBackend = (pedidoData.items || []).find((it) => String(it.id) === String(index));
+            if (itemBackend && itemBackend.descuento != null && parseFloat(itemBackend.descuento) > 0) {
+                notificar({ msj: "No se puede editar la cantidad: el ítem tiene descuento aprobado", estado: false });
+                return;
+            }
             setLoading(true);
             let params = { index, cantidad };
             db.setCantidad(params).then((res) => {
@@ -3630,18 +4408,184 @@ export default function Facturar({
             unidad: prod.unidad,
             cantidad: prod.cantidad,
             id,
+            codigo_barras: prod.codigo_barras ?? prod.codigo_proveedor ?? "",
+            codigo_proveedor: prod.codigo_proveedor ?? "",
         });
         setdevolucionTipo(null);
         setModaladdproductocarritoToggle(true);
     };
-    const addCarritoRequestInterno = (e = null, isnotformatogan = true) => {
-        if (e) {
+    const addCarritoRequestInterno = (e = null, isnotformatogan = true, cantidadOverride = null) => {
+        if (e && e.preventDefault) {
             e.preventDefault();
         }
 
         if (devolucionTipo == 1 && isnotformatogan) {
             setviewGarantiaFormato(true);
         } else {
+            // Pedido solo en front: agregar ítem localmente sin llamar API (si ya existe por id producto, editar cantidad). Permitir cantidades negativas para devoluciones.
+            if (pedidoData._frontOnly && pedidoData.id) {
+                const qtyRaw = cantidadOverride ?? cantidad;
+                const qty = parseFloat(qtyRaw) ?? 0;
+                const esDevolucion = qty < 0;
+                const precio = parseFloat(productoSelectinternouno.precio) || 0;
+                const productInList = productos.find((p) => p.id == productoSelectinternouno.id);
+                const disponible = productInList != null ? parseFloat(productInList.cantidad) || 0 : 0;
+                const items = pedidoData.items || [];
+                const existingIndex = items.findIndex((it) => it.producto && it.producto.id == productoSelectinternouno.id);
+
+                // Validar devolución: solo productos facturados en la factura original y máximo la cantidad disponible a devolver
+                if (esDevolucion) {
+                    const idOriginal = pedidoData.isdevolucionOriginalid || null;
+                    if (!idOriginal) {
+                        notificar({ data: { msj: "Asigne primero la factura original para realizar la devolución.", estado: false } });
+                        return;
+                    }
+                    const idProductoBuscar = productoSelectinternouno.id ?? productoSelectinternouno.id_producto;
+                    const idProductoNum = Number(idProductoBuscar);
+                    const codigoBarrasBuscar = (productoSelectinternouno.codigo_barras ?? productoSelectinternouno.codigo_proveedor ?? "").toString().trim();
+                    const itemDisponible = (itemsDisponiblesDevolucion || []).find((d) => {
+                        const idD = Number(d.id_producto);
+                        if (!Number.isNaN(idProductoNum) && !Number.isNaN(idD) && idD === idProductoNum) return true;
+                        if (String(d.id_producto) === String(idProductoBuscar)) return true;
+                        if (codigoBarrasBuscar && (d.codigo_barras || "").toString().trim() === codigoBarrasBuscar) return true;
+                        return false;
+                    });
+                    if (!itemDisponible) {
+                        notificar({ data: { msj: "Este producto no fue facturado en la factura original #" + idOriginal + ". Solo puede devolver ítems de esa factura.", estado: false } });
+                        return;
+                    }
+                    const cantidadDisponibleDevolucion = parseFloat(itemDisponible.cantidad_disponible) || 0;
+                    // Ya devuelto en este pedido (otras líneas del mismo producto con cantidad negativa), sin contar la línea que estamos editando
+                    const yaDevueltoOtrasLineas = items.reduce((sum, it, idx) => {
+                        if (idx === existingIndex) return sum;
+                        if (!it.producto || String(it.producto.id) !== String(productoSelectinternouno.id)) return sum;
+                        const c = parseFloat(it.cantidad) || 0;
+                        return c < 0 ? sum + Math.abs(c) : sum;
+                    }, 0);
+                    // Después de esta operación: nuestra línea aportaría (existing + qty si < 0) o (qty si línea nueva)
+                    const nuestraLineaDevolucion = existingIndex >= 0
+                        ? Math.max(0, -((parseFloat(items[existingIndex].cantidad) || 0) + qty))
+                        : Math.abs(qty);
+                    const totalDevolverDespues = yaDevueltoOtrasLineas + nuestraLineaDevolucion;
+                    if (totalDevolverDespues > cantidadDisponibleDevolucion) {
+                        notificar({
+                            data: {
+                                msj: "Máximo a devolver para este producto: " + cantidadDisponibleDevolucion + " (factura original #" + idOriginal + "). Ya tiene " + yaDevueltoOtrasLineas + " en esta devolución.",
+                                estado: false,
+                            },
+                        });
+                        return;
+                    }
+                }
+
+                let newItems;
+                if (existingIndex >= 0) {
+                    const existing = items[existingIndex];
+                    if (existing.descuento != null && parseFloat(existing.descuento) > 0) {
+                        notificar({ msj: "No se puede agregar más: el ítem tiene descuento aprobado. Para cambiar cantidad, pida al aprobador que revierta y vuelva a solicitar.", estado: false });
+                        return;
+                    }
+                    let newCantidad;
+                    if (esDevolucion) {
+                        newCantidad = (parseFloat(existing.cantidad) || 0) + qty;
+                    } else {
+                        const maxPermitido = Math.max(0, disponible);
+                        newCantidad = Math.min(qty, maxPermitido);
+                        if (newCantidad <= 0) {
+                            notificar({ msj: "No hay cantidad disponible (" + disponible + ")", estado: false });
+                            return;
+                        }
+                        if (newCantidad < qty) {
+                            notificar({ msj: "Solo hay " + disponible + " disponible(s). Se actualizó al máximo.", estado: true });
+                        }
+                    }
+                    const newTotal = newCantidad * (parseFloat(existing.precio) || precio);
+                    newItems = items.slice();
+                    newItems[existingIndex] = {
+                        ...existing,
+                        cantidad: newCantidad,
+                        total: newTotal,
+                        total_des: newTotal,
+                    };
+                } else {
+                    let qtyToAdd;
+                    if (esDevolucion) {
+                        qtyToAdd = qty;
+                    } else {
+                        qtyToAdd = Math.min(qty || 1, Math.max(0, disponible));
+                        if (qtyToAdd <= 0) {
+                            notificar({ msj: "No hay cantidad disponible (" + disponible + ")", estado: false });
+                            return;
+                        }
+                        if (qtyToAdd < (qty || 1)) {
+                            notificar({ msj: "Solo hay " + disponible + " disponible(s). Se agregó " + qtyToAdd + ".", estado: true });
+                        }
+                    }
+                    const itemId = "item-front-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9);
+                    const codigoBarras = (productoSelectinternouno.codigo_barras ?? productoSelectinternouno.codigo_proveedor ?? productInList?.codigo_barras ?? productInList?.codigo_proveedor ?? "").toString().trim();
+                    const newItem = {
+                        id: itemId,
+                        producto: {
+                            id: productoSelectinternouno.id,
+                            codigo_barras: codigoBarras,
+                            codigo_proveedor: productInList?.codigo_proveedor ?? productoSelectinternouno.codigo_proveedor ?? "",
+                            descripcion: productoSelectinternouno.descripcion || productoSelectinternouno.nombre || "",
+                            precio: productoSelectinternouno.precio,
+                            precio1: productoSelectinternouno.precio1,
+                        },
+                        codigo_barras: codigoBarras,
+                        cantidad: qtyToAdd,
+                        precio,
+                        tasa: parseFloat(dolar) || 0,
+                        tasa_cop: parseFloat(peso) || 0,
+                        descuento: 0,
+                        total: qtyToAdd * precio,
+                        total_des: qtyToAdd * precio,
+                    };
+                    newItems = [...items, newItem];
+                }
+                const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
+                const clean_total = clean_subtotal;
+                const bs = clean_total * (parseFloat(dolar) || 0);
+                const updated = {
+                    ...pedidoData,
+                    items: newItems,
+                    clean_subtotal,
+                    clean_total,
+                    bs,
+                };
+                setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
+                setPedidoData(updated);
+                const highlightedItemId = existingIndex >= 0 ? items[existingIndex].id : (newItems[newItems.length - 1]?.id ?? null);
+                if (lastAddedFrontItemIdTimeoutRef.current) clearTimeout(lastAddedFrontItemIdTimeoutRef.current);
+                setLastAddedFrontItemId(highlightedItemId);
+                lastAddedFrontItemIdTimeoutRef.current = setTimeout(() => {
+                    setLastAddedFrontItemId(null);
+                    lastAddedFrontItemIdTimeoutRef.current = null;
+                }, 900);
+                setinputqinterno("");
+                setproductoSelectinternouno(null);
+                setCantidad("");
+                setView("pagar");
+                setviewGarantiaFormato(false);
+                setdevolucionTipo(null);
+                setdevolucionMotivo("");
+                setdevolucion_cantidad_salida("");
+                setdevolucion_motivo_salida("");
+                setdevolucion_ci_cajero("");
+                setdevolucion_ci_autorizo("");
+                setdevolucion_dias_desdecompra("");
+                setdevolucion_ci_cliente("");
+                setdevolucion_telefono_cliente("");
+                setdevolucion_nombre_cliente("");
+                setdevolucion_nombre_cajero("");
+                setdevolucion_nombre_autorizo("");
+                setdevolucion_trajo_factura("");
+                setdevolucion_motivonotrajofact("");
+                setdevolucion_numfactoriginal("");
+                return;
+            }
+
             let type = "agregar";
             let params = {
                 id: productoSelectinternouno.id,
@@ -3702,14 +4646,25 @@ export default function Facturar({
         }
     };
     const setPersonas = (e) => {
-        setLoading(true);
         let id_cliente;
-
-        if (e.currentTarget) {
+        let clienteObj = null;
+        if (e && e.currentTarget) {
             id_cliente = e.currentTarget.attributes["data-index"].value;
+        } else if (e && typeof e === "object" && e.id != null) {
+            id_cliente = e.id;
+            clienteObj = { id: e.id, nombre: e.nombre, identificacion: e.identificacion, correo: e.correo, direccion: e.direccion, telefono: e.telefono };
         } else {
             id_cliente = e;
         }
+        if (pedidoData._frontOnly && pedidoData.id) {
+            const updated = { ...pedidoData, id_cliente: parseInt(id_cliente, 10), cliente: clienteObj || { id: id_cliente, nombre: "", identificacion: "" } };
+            setPedidoData(updated);
+            setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
+            setToggleAddPersona(false);
+            notificar({ data: { msj: "Cliente anclado a la orden", estado: true } });
+            return;
+        }
+        setLoading(true);
         if (pedidoData.id) {
             db.setpersonacarrito({
                 numero_factura: pedidoData.id,
@@ -3841,19 +4796,24 @@ export default function Facturar({
     };
 
     const facturar_e_imprimir = () => {
-        facturar_pedido(() => {
-            toggleImprimirTicket();
-        });
+        facturar_pedido(() => toggleImprimirTicket(), { imprimirDespues: true });
     };
     const [puedeFacturarTransfe, setpuedeFacturarTransfe] = useState(true);
     const [puedeFacturarTransfeTime, setpuedeFacturarTransfeTime] =
         useState(null);
-    const posTimeoutRef = useRef(null);
-    const posProcesandoRef = useRef(false);
+    const posTimeoutRef = useRef({}); // por instanceId (pedidoId)
+    const posProcesandoRef = useRef({}); // por instanceId (pedidoId)
+    const debitosPorPedidoRef = useRef({});
+    const debitosRef = useRef([]);
+    const pedidoDataRef = useRef(null);
+    useEffect(() => { debitosPorPedidoRef.current = debitosPorPedido; }, [debitosPorPedido]);
+    useEffect(() => { debitosRef.current = debitos; }, [debitos]);
+    useEffect(() => { pedidoDataRef.current = pedidoData; }, [pedidoData]);
+    const showModalPosDebito = Object.keys(modalesPosAbiertos).length > 0;
     const setPagoPedidoTimeoutRef = useRef(null);
     const focusRefDebitoInputRef = useRef(null);
     
-    const setPagoPedido = (callback = null) => {
+    const setPagoPedido = (callback = null, options = null) => {
         // Limpiar timeout anterior si existe (debouncing)
         if (setPagoPedidoTimeoutRef.current) {
             clearTimeout(setPagoPedidoTimeoutRef.current);
@@ -3919,12 +4879,58 @@ export default function Facturar({
             
             // Limpiar error si la referencia está cargada
             setDebitoRefError(false);
+
+            // Bloquear si alguna referencia bancaria está pendiente de aprobación
+            const refsPendientes = refPago.filter((e) => e.estatus === "pendiente");
+            if (refsPendientes.length > 0) {
+                notificar({
+                    data: {
+                        msj: `No se puede procesar el pago: la referencia "${refsPendientes[0].descripcion || refsPendientes[0]._localId}" está pendiente de aprobación en central. Verifíquela antes de continuar.`,
+                        estado: false,
+                    },
+                });
+                return;
+            }
+
             if (transferencia && !refPago.filter((e) => e.tipo == 1).length) {
                 alert(
                     "Error: Debe cargar referencia de transferencia electrónica."
                 );
             } else {
-                procesarPagoInterno(callback);
+                // Pedido front con ítems con descuento aprobado: regla 1) Solo efectivo USD → libera. 2) Cualquier otro método → protocolo solicitud aprobación.
+                const isFrontConDescuento = pedidoData?._frontOnly && pedidoData?.id && (pedidoData?.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0);
+                const uuid = pedidoData?.id;
+                if (isFrontConDescuento && uuid) {
+                    const metodos = buildMetodosPagoFront();
+                    if (metodos.length === 0) {
+                        notificar({ data: { msj: "Indique al menos un método de pago antes de guardar.", estado: false } });
+                        return;
+                    }
+                    // Solo efectivo USD: no requiere aprobación, avanza directo
+                    if (isSoloEfectivoUsd(metodos)) {
+                        procesarPagoInterno(callback, null, options || null);
+                        return;
+                    }
+                    // Hay método distinto a efectivo USD: activar protocolo
+                    if (pendienteDescuentoMetodoPago[uuid]) {
+                        notificar({ data: { msj: "Descuento por método de pago en espera. Use 'Verificar si ya está aprobado' y luego vuelva a guardar.", estado: false } });
+                        return;
+                    }
+                    if (descuentoMetodoPagoAprobadoPorUuid[uuid]) {
+                        const aprobados = metodosPagoAprobadosPorUuid[uuid];
+                        if (!metodosPagoCoincidenConAprobados(metodos, aprobados)) {
+                            const labels = { efectivo: "Efectivo", transferencia: "Transferencia", debito: "Débito", biopago: "Biopago", credito: "Crédito", adicional: "Bs/Pesos" };
+                            const list = (aprobados || []).map((m) => `${labels[m.tipo] || m.tipo} $${m.monto}`).join(", ");
+                            notificar({ data: { msj: `Debe usar exactamente los métodos y montos aprobados: ${list || "—"}.`, estado: false } });
+                            return;
+                        }
+                        procesarPagoInterno(callback, null, options || null);
+                        return;
+                    }
+                    solicitarDescuentoMetodoPagoFront();
+                    return;
+                }
+                procesarPagoInterno(callback, null, options || null);
             }
         }, 300); // Delay de 0.3 segundos (300ms) para el debouncing
     };
@@ -3983,8 +4989,46 @@ export default function Facturar({
             }));
         }
         
+        const isFrontOnly = !!(pedidoData && pedidoData._frontOnly);
+        const frontUuid = isFrontOnly ? pedidoData.id : null;
+        const frontItems = isFrontOnly && Array.isArray(pedidoData.items) && pedidoData.items.length > 0
+            ? pedidoData.items.map((it) => ({
+                id: it.producto?.id ?? it.id_producto,
+                cantidad: parseFloat(it.cantidad) || 0,
+                descuento: parseFloat(it.descuento) || 0,
+              })).filter((it) => it.id && it.cantidad !== 0)
+            : null;
+
+        // Referencias de pago para pedido front: enviar en la misma petición (backend las creará al crear el pedido).
+        // Se respeta el estatus real de cada ref: las "autovalidar" ya están "aprobada" y las "central"
+        // pueden estar "pendiente" (serán aprobadas a posteriori en central); el backend acepta ambas.
+        const referenciasFront = (isFrontOnly && refPago && refPago.length > 0)
+            ? refPago.map((r) => ({
+                tipo: r.tipo,
+                monto: r.monto,
+                descripcion: r.descripcion ?? null,
+                banco: r.banco ?? null,
+                cedula: r.cedula ?? null,
+                telefono: r.telefono ?? null,
+                categoria: r.categoria || "central",
+                estatus: r.estatus || "pendiente",
+                fecha_pago: r.fecha_pago ?? null,
+                banco_origen: r.banco_origen ?? null,
+                monto_real: r.monto_real ?? null,
+              }))
+            : undefined;
+
         let params = {
-            id: pedidoData.id,
+            id: isFrontOnly ? null : pedidoData.id,
+            front_only: isFrontOnly || undefined,
+            uuid: frontUuid || undefined,
+            total_pedido_usd: (isFrontOnly && pedidoData.clean_total != null) ? parseFloat(pedidoData.clean_total) : undefined,
+            id_cliente: isFrontOnly ? (pedidoData.id_cliente != null ? pedidoData.id_cliente : 1) : undefined,
+            data_cliente: (isFrontOnly && pedidoData.cliente && typeof pedidoData.cliente === "object") ? pedidoData.cliente : undefined,
+            fecha_inicio: (isFrontOnly && pedidoData.fecha_inicio) ? pedidoData.fecha_inicio : undefined,
+            fecha_vence: (isFrontOnly && pedidoData.fecha_vence) ? pedidoData.fecha_vence : undefined,
+            formato_pago: (isFrontOnly && pedidoData.formato_pago != null) ? pedidoData.formato_pago : undefined,
+            items: frontItems || undefined,
             debito: debitoParam,
             debitoRef: debitoRefParam,
             debitos: debitosParam,
@@ -3995,28 +5039,108 @@ export default function Facturar({
             credito,
             vuelto,
             pagosAdicionales: pagosAdicionales.length > 0 ? pagosAdicionales : null,
+            referencias: referenciasFront,
         };
+
+        // Una sola petición: backend imprime tras crear la orden (evita race con /imprimirTicked)
+        if (posOverrides?.imprimirDespues) {
+            params.imprimir_ticket = true;
+            params.imprimir_ticket_opciones = {
+                moneda: monedaToPrint,
+                printer: selectprinter,
+            };
+        }
         
         db.setPagoPedido(params).then((res) => {
-            notificar(res);
             setLoading(false);
-            
+            if (res.data.montos_no_coinciden && res.data.montos_detalle) {
+                setMontosNoCoincidenDetalle(res.data.montos_detalle);
+            } else {
+                notificar(res);
+            }
+
             if (res.data.estado) {
                 // Limpiar datos de localStorage para este pedido procesado
-                const pedidoId = params.id;
+                const pedidoId = res.data.id_pedido ?? params.id;
                 if (pedidoId) {
                     limpiarTransaccionesPedido(pedidoId);
+                }
+                // Si era pedido front, quitarlo del state y de IndexedDB y limpiar sus referencias locales
+                if (params.front_only && params.uuid) {
+                    setRefPagoPorPedidoFront((prev) => {
+                        const next = { ...prev };
+                        delete next[params.uuid];
+                        return next;
+                    });
+                    setPedidosFrontPendientes((prev) => {
+                        const next = { ...prev };
+                        delete next[params.uuid];
+                        return next;
+                    });
+                    setPendienteDescuentoMetodoPago((prev) => {
+                        const next = { ...prev };
+                        delete next[params.uuid];
+                        return next;
+                    });
+                    setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
+                        const next = { ...prev };
+                        delete next[params.uuid];
+                        return next;
+                    });
+                    setMetodosPagoAprobadosPorUuid((prev) => {
+                        const next = { ...prev };
+                        delete next[params.uuid];
+                        return next;
+                    });
+                    getPedidosFront().then((obj) => {
+                        const next = { ...(obj || {}) };
+                        delete next[params.uuid];
+                        setPedidosFront(next);
+                    });
                 }
                 
                 getPedidosFast();
                 setPedidoData({});
                 setSelectItem(null);
                 setviewconfigcredito(false);
-                if (callback) {
+                // Si el backend ya imprimió (una sola petición), no llamar callback para evitar doble /imprimirTicked
+                const backendImprimio = params.imprimir_ticket && res.data.imprimir_ticket_ok === true;
+                const backendIntentóImprimir = params.imprimir_ticket && res.data.imprimir_ticket_msj;
+                if (backendIntentóImprimir) {
+                    notificar(res.data.imprimir_ticket_msj);
+                }
+                if (callback && !backendImprimio) {
                     callback();
                 }
             }
             if (res.data.estado === false) {
+                // Crédito pendiente de aprobación: backend ya registró la orden (estado 0) y envió solicitud a central → quitar pedido del front y refrescar lista
+                if (res.data.id_tarea && params.front_only && params.uuid) {
+                    setPedidosFrontPendientes((prev) => {
+                        const next = { ...prev };
+                        delete next[params.uuid];
+                        return next;
+                    });
+                    setPendienteDescuentoMetodoPago((prev) => {
+                        const next = { ...prev };
+                        delete next[params.uuid];
+                        return next;
+                    });
+                    setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
+                        const next = { ...prev };
+                        delete next[params.uuid];
+                        return next;
+                    });
+                    getPedidosFront().then((obj) => {
+                        const next = { ...(obj || {}) };
+                        delete next[params.uuid];
+                        setPedidosFront(next);
+                    });
+                    getPedidosFast();
+                    setPedidoData({});
+                    setSelectItem(null);
+                    setviewconfigcredito(false);
+                }
                 setLastDbRequest({
                     dbFunction: db.setPagoPedido,
                     params,
@@ -4028,62 +5152,56 @@ export default function Facturar({
         });
     };
     
-    // Función para enviar solicitud al POS físico de débito
-    const enviarSolicitudPosDebito = async () => {
-        // Evitar ejecuciones múltiples mientras se procesa
-        if (posLoading) {
-            return;
-        }
-        
-        if (!posCedulaTitular) {
+    // Actualizar una instancia del modal POS (por pedidoId)
+    const actualizarInstanciaPos = (instanceId, updates) => {
+        setModalesPosAbiertos(prev => {
+            const inst = prev[instanceId];
+            if (!inst) return prev;
+            return { ...prev, [instanceId]: { ...inst, ...updates } };
+        });
+    };
+
+    // Función para enviar solicitud al POS físico de débito (por instancia de modal = pedido)
+    const enviarSolicitudPosDebito = async (instanceId, inst) => {
+        if (!inst || inst.loading) return;
+        if (!inst.cedulaTitular) {
             alert("Debe ingresar la cédula del titular");
             return;
         }
-        
-        const montoActual = parseFloat(posMontoDebito) || 0;
+        const montoActual = parseFloat(inst.montoDebito) || 0;
         if (montoActual <= 0) {
             alert("Debe ingresar un monto válido");
             return;
         }
-        
-        setPosLoading(true);
-        
-        // Convertir monto: 12.36 -> 1236 (sin decimales, multiplicado por 100)
+        posProcesandoRef.current[instanceId] = true;
+        actualizarInstanciaPos(instanceId, { loading: true });
+
         const montoEntero = Math.round(montoActual * 100);
-        
-        // Construir numeroOrden: codigoSucursal-usuario-pedidoId-montoSinDecimal-indiceDebito (0, 1, 2...)
-        // Modo débito por fila: usar currentDebitoIndex (índice de la fila). Modo simple: usar posTransaccionesAprobadas.length
         const codigoSucursal = sucursaldata?.codigo || "SUC";
         const nombreUsuario = user?.usuario || user?.nombre || "user";
-        const indiceDebito = typeof window.currentDebitoIndex === 'number' ? window.currentDebitoIndex : posTransaccionesAprobadas.length;
-        const numeroOrdenCompleto = `${codigoSucursal}-${nombreUsuario}-${pedidoData.id}-${montoEntero}-${indiceDebito}`;
-        
+        const indiceDebito = typeof inst.debitoIndex === 'number' ? inst.debitoIndex : inst.transaccionesAprobadas.length;
+        const numeroOrdenCompleto = `${codigoSucursal}-${nombreUsuario}-${inst.pedidoId}-${montoEntero}-${indiceDebito}`;
         const payload = {
             operacion: "COMPRA",
             monto: montoEntero,
-            cedula: posCedulaTitular,
+            cedula: inst.cedulaTitular,
             numeroOrden: numeroOrdenCompleto,
             mensaje: "PowerBy:Ospino",
-            tipoCuenta: posTipoCuenta
+            tipoCuenta: inst.tipoCuenta
         };
 
         try {
-            // Enviar a través del backend para evitar CORS
             const response = await db.enviarTransaccionPOS(payload);
             const posData = response.data.data || {};
-            // Backend devuelve success: true cuando el POS aprobó O cuando central verificó y aprobó (queryTransaccionPosCentral)
             if (response.data.success && posData && Object.keys(posData).length > 0) {
-                // Éxito: agregar transacción al array
                 const posReference = String(posData.reference || posData.approval || "").trim();
                 const refUltimos4 = posReference.replace(/\D/g, '').slice(-4).padStart(4, '0');
-                
                 const nuevaTransaccion = {
                     monto: montoActual,
-                    cedula: posCedulaTitular,
+                    cedula: inst.cedulaTitular,
                     referencia: posReference,
                     refCorta: refUltimos4,
-                    tipoCuenta: posTipoCuenta,
-                    // Guardar datos POS para enviar al backend
+                    tipoCuenta: inst.tipoCuenta,
                     posData: {
                         message: posData.message,
                         lote: posData.lote,
@@ -4093,21 +5211,15 @@ export default function Facturar({
                         json_response: JSON.stringify(posData)
                     }
                 };
-                
-                const nuevasTransacciones = [...posTransaccionesAprobadas, nuevaTransaccion];
-                setPosTransaccionesAprobadas(nuevasTransacciones);
-                
-                // Guardar en el mapa por pedido
-                if (pedidoData?.id) {
-                    guardarTransaccionPorPedido(pedidoData.id, nuevasTransacciones);
-                }
-                
-                // Si hay un índice guardado, actualizar ese débito específico
-                if (typeof window.currentDebitoIndex === 'number') {
-                    const index = window.currentDebitoIndex;
-                    const nuevosDebitos = [...debitos];
-                    
-                    // Preparar datos POS para este débito
+                const nuevasTransacciones = [...(inst.transaccionesAprobadas || []), nuevaTransaccion];
+                guardarTransaccionPorPedido(inst.pedidoId, nuevasTransacciones);
+
+                const esPedidoActual = inst.pedidoId === pedidoDataRef.current?.id;
+                const debitosActuales = esPedidoActual ? (debitosRef.current || []) : (debitosPorPedidoRef.current[inst.pedidoId] || []);
+
+                if (typeof inst.debitoIndex === 'number') {
+                    const index = inst.debitoIndex;
+                    const nuevosDebitos = [...debitosActuales];
                     const posDataParaDebito = {
                         message: posData.message || null,
                         lote: posData.lote || null,
@@ -4116,331 +5228,243 @@ export default function Facturar({
                         terminal: posData.terminal || null,
                         json_response: JSON.stringify(posData)
                     };
-                    
                     nuevosDebitos[index] = {
                         monto: montoActual.toFixed(2),
                         referencia: refUltimos4,
-                        bloqueado: true, // Bloquear la fila después de aprobar por POS
-                        posData: posDataParaDebito // Guardar datos POS en este débito
+                        bloqueado: true,
+                        posData: posDataParaDebito
                     };
-                    setDebitos(nuevosDebitos);
-                    
-                    // Guardar en el mapa por pedido
-                    if (pedidoData?.id) {
-                        guardarDebitosPorPedido(pedidoData.id, nuevosDebitos);
+                    guardarDebitosPorPedido(inst.pedidoId, nuevosDebitos);
+                    if (esPedidoActual) {
+                        flushSync(() => {
+                            setDebitos(nuevosDebitos);
+                            const totalAprobadoDebitos = nuevosDebitos.filter(d => d.bloqueado).reduce((s, d) => s + parseFloat(d.monto || 0), 0);
+                            setDebito(totalAprobadoDebitos.toFixed(2));
+                            setDebitoRef(refUltimos4);
+                        });
                     }
-                    
-                    delete window.currentDebitoIndex; // Limpiar el índice
-
-                    // Total aprobado (solo débitos bloqueados) vs bs_clean del pedido
-                    const debitosBloqueados = nuevosDebitos.filter(d => d.bloqueado);
-                    const totalAprobadoDebitos = debitosBloqueados
-                        .reduce((s, d) => s + parseFloat(d.monto || 0), 0);
-                    const totalFacturaBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
-                    const diferenciaDebitos = Math.abs(totalAprobadoDebitos - totalFacturaBs);
-                    const debeFacturarImprimir = diferenciaDebitos < 0.01;
-
-                    // Forzar commit inmediato del estado para que facturar_e_imprimir lea debito/debitos correctos
-                    flushSync(() => {
-                        setDebitos(nuevosDebitos);
-                        setDebito(totalAprobadoDebitos.toFixed(2));
-                        setDebitoRef(refUltimos4);
-                    });
-                    
-                    // Cerrar modal inmediatamente
-                    setPosRespuesta({ mensaje: `✓ APROBADO - Ref: ${posReference}`, exito: true });
+                    const totalFacturaBs = parseFloat(pedidoDataRef.current?.bs_clean || pedidoDataRef.current?.bs || 0);
+                    const totalAprobadoDebitos = nuevosDebitos.filter(d => d.bloqueado).reduce((s, d) => s + parseFloat(d.monto || 0), 0);
+                    const debeFacturarImprimir = esPedidoActual && Math.abs(totalAprobadoDebitos - totalFacturaBs) < 0.01;
                     notificar({ data: { msj: `POS APROBADO - Ref: ${posReference} - Bs ${montoActual.toFixed(2)}`, estado: true } });
-                    
+                    actualizarInstanciaPos(instanceId, { respuesta: { mensaje: `✓ APROBADO - Ref: ${posReference}`, exito: true }, loading: false });
                     setTimeout(() => {
-                        setShowModalPosDebito(false);
-                        setPosCedulaTitular("");
-                        setPosTipoCuenta("CORRIENTE");
-                        setPosMontoDebito("");
-                        setPosMontoTotalOriginal("");
-                        setPosTransaccionesAprobadas([]);
-                        setPosRespuesta(null);
+                        setModalesPosAbiertos(prev => {
+                            const next = { ...prev };
+                            delete next[instanceId];
+                            return next;
+                        });
                     }, 500);
-
-                    // Solo al recibir respuesta exitosa de enviarTransaccionPOS: si montos aprobados == bs_clean, facturar e imprimir
                     if (debeFacturarImprimir) {
-                        // Llamar procesarPagoInterno directamente con overrides para evitar closure obsoleto
                         const cbImprimir = () => toggleImprimirTicket();
                         if (transferencia && !refPago.filter((e) => e.tipo == 1).length) {
                             alert("Error: Debe cargar referencia de transferencia electrónica.");
                         } else {
-                            procesarPagoInterno(cbImprimir, refUltimos4, {
-                                debitoOverride: totalAprobadoDebitos,
-                                debitosOverride: nuevosDebitos
-                            });
+                            procesarPagoInterno(cbImprimir, refUltimos4, { debitoOverride: totalAprobadoDebitos, debitosOverride: nuevosDebitos, imprimirDespues: true });
                         }
                     }
-                    
-                    return; // Salir temprano para no ejecutar la lógica de modo simple
+                    posProcesandoRef.current[instanceId] = false;
+                    return;
                 }
-                
-                // Calcular monto restante (solo para modo simple)
+
                 const totalAprobado = nuevasTransacciones.reduce((sum, t) => sum + t.monto, 0);
-                const montoOriginal = parseFloat(posMontoTotalOriginal) || 0;
+                const montoOriginal = parseFloat(inst.montoTotalOriginal) || 0;
                 const restante = montoOriginal - totalAprobado;
-                
-                setPosRespuesta({ mensaje: `✓ APROBADO - Ref: ${posReference}`, exito: true });
+                actualizarInstanciaPos(instanceId, {
+                    transaccionesAprobadas: nuevasTransacciones,
+                    cedulaTitular: "",
+                    tipoCuenta: "CORRIENTE",
+                    montoDebito: restante > 0 ? restante.toFixed(2) : "0",
+                    respuesta: { mensaje: `✓ APROBADO - Ref: ${posReference}`, exito: true },
+                    loading: false,
+                });
                 notificar({ data: { msj: `POS APROBADO - Ref: ${posReference} - Bs ${montoActual.toFixed(2)}`, estado: true } });
-                
-                // Limpiar campos para siguiente transacción
-                setPosCedulaTitular("");
-                setPosTipoCuenta("CORRIENTE");
-                
-                if (restante > 0) {
-                    // Aún falta monto, preparar para siguiente transacción
-                    setPosMontoDebito(restante.toFixed(2));
-                    // Hacer foco en el input de cédula para la siguiente transacción
-                    setTimeout(() => {
-                        const inputCedula = document.getElementById('pos-cedula-input');
-                        if (inputCedula) inputCedula.focus();
-                    }, 100);
-                } else {
-                    // Ya se cubrió el total, finalizar automáticamente de inmediato
-                    // Usar la referencia de la última transacción como referencia principal
+
+                if (restante <= 0) {
                     const ultimaTrans = nuevasTransacciones[nuevasTransacciones.length - 1];
                     const refFinal = ultimaTrans.refCorta;
                     const totalAprobadoFinal = nuevasTransacciones.reduce((sum, t) => sum + t.monto, 0);
-                    const numTransacciones = nuevasTransacciones.length;
-                    
-                    // Obtener el total de la factura en bolívares (ya viene calculado en el pedido)
-                    const totalFacturaBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
-                    
-                    // Limpiar transacciones del mapa para este pedido
-                    if (pedidoData?.id) {
-                        limpiarTransaccionesPedido(pedidoData.id);
-                    }
-                    
-                    // Cerrar modal y limpiar estados
-                    setShowModalPosDebito(false);
-                    setPosCedulaTitular("");
-                    setPosTipoCuenta("CORRIENTE");
-                    setPosMontoDebito("");
-                    setPosRespuesta(null);
-                    setPosTransaccionesAprobadas([]);
-                    setPosMontoTotalOriginal("");
-                    
-                    // Solo al recibir respuesta exitosa de enviarTransaccionPOS: si montos aprobados == bs_clean, facturar e imprimir
-                    const diferencia = Math.abs(totalAprobadoFinal - totalFacturaBs);
-                    const debeFacturarImprimir = diferencia < 0.01; // Tolerancia de 0.01 para comparación de decimales
-
-                    // Forzar commit inmediato para que facturar_e_imprimir lea debito correcto
-                    flushSync(() => {
-                        setDebitoRef(refFinal);
-                        setDebito(totalAprobadoFinal.toFixed(2));
+                    limpiarTransaccionesPedido(inst.pedidoId);
+                    setModalesPosAbiertos(prev => {
+                        const next = { ...prev };
+                        delete next[instanceId];
+                        return next;
                     });
-                    
-                    notificar({ data: { msj: `✓ POS Completado - ${numTransacciones} transacción(es) - Total: Bs ${totalAprobadoFinal.toFixed(2)}`, estado: true } });
-
-                    if (debeFacturarImprimir) {
-                        if (facturar_e_imprimir) {
-                            facturar_e_imprimir();
+                    if (esPedidoActual) {
+                        flushSync(() => {
+                            setDebitoRef(refFinal);
+                            setDebito(totalAprobadoFinal.toFixed(2));
+                        });
+                        const totalFacturaBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
+                        if (Math.abs(totalAprobadoFinal - totalFacturaBs) < 0.01) {
+                            if (facturar_e_imprimir) facturar_e_imprimir();
+                        } else {
+                            posProcesandoRef.current[instanceId] = false;
+                            procesarPagoInterno(inst.pendingCallback || null, refFinal);
                         }
                     } else {
-                        // Solo procesar el pago sin facturar
-                        posProcesandoRef.current = false;
-                        procesarPagoInterno(posPendingCallback, refFinal);
+                        notificar({ data: { msj: `✓ POS Completado pedido #${inst.pedidoId}. Cambie al pedido para facturar.`, estado: true } });
                     }
-                    setPosPendingCallback(null);
+                } else {
+                    setTimeout(() => {
+                        const inputCedula = document.getElementById(`pos-cedula-input-${instanceId}`);
+                        if (inputCedula) inputCedula.focus();
+                    }, 100);
                 }
+                posProcesandoRef.current[instanceId] = false;
             } else {
-                // Error del POS - mostrar mensaje en el modal (no cerrar) y registrar en BD
                 const errorMsg = posData.message || response.data.error || "Error en transacción POS";
-                setPosRespuesta({ mensaje: `✗ ${errorMsg}`, exito: false });
-                
-                // Registrar operación rechazada en el backend
+                actualizarInstanciaPos(instanceId, { respuesta: { mensaje: `✗ ${errorMsg}`, exito: false }, loading: false });
                 if (posData && Object.keys(posData).length > 0) {
-                    db.registrarPosRechazado({
-                        ...posData,
-                        json_response: JSON.stringify(posData),
-                        id_pedido: pedidoData?.id || null
-                    }).catch(err => console.error("Error al registrar POS rechazado:", err));
+                    db.registrarPosRechazado({ ...posData, json_response: JSON.stringify(posData), id_pedido: inst.pedidoId || null }).catch(err => console.error("Error al registrar POS rechazado:", err));
                 }
             }
         } catch (error) {
             console.error("Error POS:", error);
             const errorMsg = error.response?.data?.error || error.message || "Error de conexión";
-            setPosRespuesta({ mensaje: `✗ ${errorMsg}`, exito: false });
+            actualizarInstanciaPos(instanceId, { respuesta: { mensaje: `✗ ${errorMsg}`, exito: false }, loading: false });
         } finally {
-            setPosLoading(false);
+            posProcesandoRef.current[instanceId] = false;
         }
     };
     
-    // Función para finalizar múltiples transacciones POS
-    // Si el total no está cubierto, solo aplica el monto al campo débito sin procesar el pago
-    const finalizarTransaccionesPOS = (forzarSinProcesar = false) => {
-        if (posTransaccionesAprobadas.length === 0) {
+    // Finalizar transacciones POS de una instancia (por pedido)
+    const finalizarTransaccionesPOS = (instanceId, inst, forzarSinProcesar = false) => {
+        if (!inst || !inst.transaccionesAprobadas || inst.transaccionesAprobadas.length === 0) {
             alert("No hay transacciones aprobadas");
             return;
         }
-        
-        // Usar la referencia de la última transacción como referencia principal
-        const ultimaTransaccion = posTransaccionesAprobadas[posTransaccionesAprobadas.length - 1];
+        const ultimaTransaccion = inst.transaccionesAprobadas[inst.transaccionesAprobadas.length - 1];
         const refFinal = ultimaTransaccion.refCorta;
-        
-        // Calcular total aprobado y verificar si cubre el total
-        const totalAprobado = posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0);
-        const montoOriginal = parseFloat(posMontoTotalOriginal) || 0;
-        const numTransacciones = posTransaccionesAprobadas.length;
+        const totalAprobado = inst.transaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0);
+        const montoOriginal = parseFloat(inst.montoTotalOriginal) || 0;
+        const numTransacciones = inst.transaccionesAprobadas.length;
         const totalCubierto = totalAprobado >= montoOriginal;
-        
-        // Limpiar transacciones del mapa para este pedido (ya se procesó)
-        if (pedidoData?.id) {
-            limpiarTransaccionesPedido(pedidoData.id);
+        const esPedidoActual = inst.pedidoId === pedidoDataRef.current?.id;
+
+        limpiarTransaccionesPedido(inst.pedidoId);
+        setModalesPosAbiertos(prev => {
+            const next = { ...prev };
+            delete next[instanceId];
+            return next;
+        });
+        if (esPedidoActual) {
+            setDebitoRef(refFinal);
+            setDebito(totalAprobado.toFixed(2));
         }
-        
-        // Cerrar modal y limpiar estados
-        setShowModalPosDebito(false);
-        setPosCedulaTitular("");
-        setPosTipoCuenta("CORRIENTE");
-        setPosMontoDebito("");
-        setPosRespuesta(null);
-        setPosTransaccionesAprobadas([]);
-        setPosMontoTotalOriginal("");
-        setDebitoRef(refFinal);
-        setDebito(totalAprobado.toFixed(2));
-        
         if (totalCubierto && !forzarSinProcesar) {
-            // Total cubierto: procesar pago y facturar
             notificar({ data: { msj: `✓ POS Completado - ${numTransacciones} transacción(es) - Total: Bs ${totalAprobado.toFixed(2)}`, estado: true } });
-            
-            // Obtener el total de la factura en bolívares (ya viene calculado en el pedido)
-            const totalFacturaBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
-            
-            // Si el monto total aprobado es igual al total de la factura en bolívares, procesar e imprimir automáticamente
-            const diferencia = Math.abs(totalAprobado - totalFacturaBs);
-            if (diferencia < 0.01) { // Tolerancia de 0.01 para comparación de decimales
-                // Forzar commit inmediato y ejecutar facturar_e_imprimir sin delay
-                flushSync(() => {
-                    setDebitoRef(refFinal);
-                    setDebito(totalAprobado.toFixed(2));
-                });
-                if (facturar_e_imprimir) {
-                    facturar_e_imprimir();
+            if (esPedidoActual) {
+                const totalFacturaBs = parseFloat(pedidoDataRef.current?.bs_clean || pedidoDataRef.current?.bs || 0);
+                const diferencia = Math.abs(totalAprobado - totalFacturaBs);
+                if (diferencia < 0.01) {
+                    flushSync(() => {
+                        setDebitoRef(refFinal);
+                        setDebito(totalAprobado.toFixed(2));
+                    });
+                    if (facturar_e_imprimir) facturar_e_imprimir();
+                } else {
+                    posProcesandoRef.current[instanceId] = false;
+                    procesarPagoInterno(inst.pendingCallback || null, refFinal);
                 }
             } else {
-                // Solo procesar el pago sin facturar
-                posProcesandoRef.current = false;
-                procesarPagoInterno(posPendingCallback, refFinal);
+                notificar({ data: { msj: `Pago aplicado al pedido #${inst.pedidoId}. Cambie al pedido para facturar.`, estado: true } });
             }
         } else {
-            // Total NO cubierto: solo aplicar monto al campo débito, el usuario completará con otros métodos
             const restante = montoOriginal - totalAprobado;
             notificar({ data: { msj: `POS Parcial - Bs ${totalAprobado.toFixed(2)} aplicado. Faltan Bs ${restante.toFixed(2)} por otros métodos.`, estado: true } });
         }
-        setPosPendingCallback(null);
     };
-    
-    // Función para eliminar una transacción aprobada
-    const eliminarTransaccionPOS = (index) => {
-        if (posLoading) return;
-        
-        const nuevasTransacciones = posTransaccionesAprobadas.filter((_, i) => i !== index);
-        setPosTransaccionesAprobadas(nuevasTransacciones);
-        
-        // Actualizar en el mapa por pedido
-        if (pedidoData?.id) {
-            guardarTransaccionPorPedido(pedidoData.id, nuevasTransacciones);
-        }
-        
-        // Recalcular monto restante
+
+    // Eliminar una transacción aprobada de una instancia
+    const eliminarTransaccionPOS = (instanceId, inst, index) => {
+        if (!inst || inst.loading) return;
+        const nuevasTransacciones = (inst.transaccionesAprobadas || []).filter((_, i) => i !== index);
+        guardarTransaccionPorPedido(inst.pedidoId, nuevasTransacciones);
         const totalAprobado = nuevasTransacciones.reduce((sum, t) => sum + t.monto, 0);
-        const montoOriginal = parseFloat(posMontoTotalOriginal) || 0;
+        const montoOriginal = parseFloat(inst.montoTotalOriginal) || 0;
         const restante = montoOriginal - totalAprobado;
-        setPosMontoDebito(restante > 0 ? restante.toFixed(2) : "0");
-        setPosRespuesta(null);
+        actualizarInstanciaPos(instanceId, {
+            transaccionesAprobadas: nuevasTransacciones,
+            montoDebito: restante > 0 ? restante.toFixed(2) : "0",
+            respuesta: null,
+        });
     };
     
-    // Función para abrir modal de POS débito
+    // Función para abrir modal de POS débito (usa pedido actual)
     const abrirModalPosDebito = (callback = null) => {
-        // Precarga el monto del débito en Bs
-        const montoInicial = debito || "0";
-        
-        // Obtener el total del pedido en bolívares
+        const pedidoId = pedidoData?.id;
+        if (!pedidoId) return;
         const totalPedidoBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
+        const montoInicial = debito || "0";
         const montoNumerico = parseFloat(montoInicial) || 0;
-        
-        // Nunca permitir que el monto sea mayor al total del pedido
         const montoLimitado = Math.min(montoNumerico, totalPedidoBs);
         const montoFinal = montoLimitado.toFixed(2);
-        
-        setPosMontoTotalOriginal(montoFinal); // Guardar monto total original
-        
-        // Cargar transacciones existentes del pedido actual
-        const transaccionesExistentes = pedidoData?.id ? (posTransaccionesPorPedido[pedidoData.id] || []) : [];
-        setPosTransaccionesAprobadas(transaccionesExistentes);
-        
-        // Calcular monto restante considerando transacciones ya aprobadas
+        const transaccionesExistentes = posTransaccionesPorPedido[pedidoId] || [];
         const totalAprobado = transaccionesExistentes.reduce((sum, t) => sum + t.monto, 0);
         const montoRestante = Math.max(0, parseFloat(montoFinal) - totalAprobado);
-        setPosMontoDebito(montoRestante.toFixed(2));
-        
-        setPosPendingCallback(() => callback);
-        setPosRespuesta(null); // Limpiar respuesta anterior
-        setPosCedulaTitular(""); // Limpiar cédula anterior
-        setShowModalPosDebito(true);
+        const instanceId = String(pedidoId);
+        setModalesPosAbiertos(prev => ({
+            ...prev,
+            [instanceId]: {
+                pedidoId,
+                debitoIndex: 0,
+                montoTotalOriginal: montoFinal,
+                transaccionesAprobadas: transaccionesExistentes,
+                cedulaTitular: "",
+                tipoCuenta: "CORRIENTE",
+                montoDebito: montoRestante.toFixed(2),
+                loading: false,
+                respuesta: null,
+                pendingCallback: callback,
+            },
+        }));
     };
     
-    // Función para abrir modal POS con monto específico (para múltiples débitos)
+    // Función para abrir modal POS con monto específico (para múltiples débitos). Independiente por pedido.
     const abrirModalPosDebitoConMonto = (monto, index) => {
-        if (!sucursaldata?.pinpad || forzarReferenciaManual) {
-            return; // No abrir modal si no hay PINPAD o está en modo manual
-        }
+        if (!sucursaldata?.pinpad || forzarReferenciaManual) return;
+        const pedidoId = pedidoData?.id;
+        if (!pedidoId) return;
         
-        // Obtener el total del pedido en bolívares
         const totalPedidoBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
-        const montoInicial = monto || "0";
-        const montoNumerico = parseFloat(montoInicial) || 0;
-        
-        // Nunca permitir que el monto sea mayor al total del pedido
+        const montoNumerico = parseFloat(monto || "0") || 0;
         const montoLimitado = Math.min(montoNumerico, totalPedidoBs);
         const montoFinal = montoLimitado.toFixed(2);
+        const instanceId = String(pedidoId);
         
-        setPosMontoTotalOriginal(montoFinal);
-        setPosMontoDebito(montoFinal);
-        setPosTransaccionesAprobadas([]); // Limpiar transacciones previas
-        setPosPendingCallback(null);
-        setPosRespuesta(null);
-        setPosCedulaTitular("");
-        setShowModalPosDebito(true);
-        
-        // Guardar el índice del débito que se está procesando
-        window.currentDebitoIndex = index;
+        setModalesPosAbiertos(prev => ({
+            ...prev,
+            [instanceId]: {
+                pedidoId,
+                debitoIndex: index,
+                montoTotalOriginal: montoFinal,
+                transaccionesAprobadas: [],
+                cedulaTitular: "",
+                tipoCuenta: "CORRIENTE",
+                montoDebito: montoFinal,
+                loading: false,
+                respuesta: null,
+                pendingCallback: null,
+            },
+        }));
     };
-    
-    // useEffect para hacer foco en el input de cédula cuando se abre el modal POS
+
+    // Enfocar input de cédula cuando se abre el modal POS
+    const prevModalesPosAbiertosIdsRef = useRef([]);
     useEffect(() => {
-        if (showModalPosDebito) {
-            // Usar requestAnimationFrame para asegurar que el DOM esté listo
-            requestAnimationFrame(() => {
-                setTimeout(() => {
-                    const inputCedula = document.getElementById('pos-cedula-input');
-                    if (inputCedula) {
-                        inputCedula.focus();
-                    }
-                }, 50);
-            });
+        const currentIds = Object.keys(modalesPosAbiertos);
+        const prevIds = prevModalesPosAbiertosIdsRef.current;
+        const newId = currentIds.find(id => !prevIds.includes(id));
+        prevModalesPosAbiertosIdsRef.current = currentIds;
+        if (newId) {
+            const t = setTimeout(() => {
+                const inputCedula = document.getElementById(`pos-cedula-input-${newId}`);
+                if (inputCedula) inputCedula.focus();
+            }, 150);
+            return () => clearTimeout(t);
         }
-    }, [showModalPosDebito]);
-    
-    // useEffect para cargar transacciones POS cuando cambia el pedido
-    // Solo se ejecuta cuando cambia el ID del pedido (no cuando cambia el mapa)
-    useEffect(() => {
-        if (pedidoData?.id) {
-            // Cargar transacciones guardadas para este pedido desde el mapa
-            // Usamos una función para acceder al estado actual del mapa
-            setPosTransaccionesAprobadas(prev => {
-                const transaccionesDelPedido = posTransaccionesPorPedido[pedidoData.id] || [];
-                return transaccionesDelPedido;
-            });
-        } else {
-            // No hay pedido seleccionado, limpiar transacciones actuales
-            setPosTransaccionesAprobadas([]);
-        }
-    }, [pedidoData?.id, posTransaccionesPorPedido]);
+    }, [modalesPosAbiertos]);
     
     // Función para guardar transacciones en el mapa por pedido
     const guardarTransaccionPorPedido = (pedidoId, transacciones) => {
@@ -4508,37 +5532,135 @@ export default function Facturar({
     const setconfigcredito = (e) => {
         e.preventDefault();
 
-        if (pedidoData.id) {
+        if (!pedidoData.id) return;
+
+        if (pedidoData._frontOnly && pedidoData.id) {
+            if (!pedidoData.id_cliente || pedidoData.id_cliente === 1 || !pedidoData.cliente) {
+                notificar({ data: { msj: "Debe anclar un cliente a la orden para solicitar crédito", estado: false } });
+                return;
+            }
             setLoading(true);
-            db.setconfigcredito({
-                fechainiciocredito,
-                fechavencecredito,
-                formatopagocredito,
-                id_pedido: pedidoData.id,
-            }).then((res) => {
-                notificar(res);
-                setLoading(false);
-            });
+            const clientePayload = {
+                identificacion: pedidoData.cliente.identificacion ?? "",
+                nombre: pedidoData.cliente.nombre ?? "Cliente",
+                correo: pedidoData.cliente.correo ?? null,
+                direccion: pedidoData.cliente.direccion ?? null,
+                telefono: pedidoData.cliente.telefono ?? null,
+            };
+            const doEnviar = (deudaPayload) => {
+                db.solicitudCreditoFrontCrear({
+                    uuid_pedido_front: pedidoData.id,
+                    saldo: parseFloat(credito) || 0,
+                    fecha_inicio: fechainiciocredito,
+                    fecha_vence: fechavencecredito,
+                    formato_pago: formatopagocredito,
+                    cliente: clientePayload,
+                    deuda: deudaPayload,
+                    fecha_ultimopago: deudaPayload?.fecha_ultimopago,
+                })
+                    .then((res) => {
+                        setLoading(false);
+                        notificar(res.data || res);
+                        if (res.data && res.data.estado !== false) {
+                            const updated = {
+                                ...pedidoData,
+                                fecha_inicio: fechainiciocredito,
+                                fecha_vence: fechavencecredito,
+                                formato_pago: formatopagocredito,
+                            };
+                            setPedidoData(updated);
+                            setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
+                            setviewconfigcredito(false);
+                        }
+                    })
+                    .catch(() => {
+                        setLoading(false);
+                        notificar({ data: { msj: "Error al enviar solicitud de crédito a central", estado: false } });
+                    });
+            };
+            // No enviar checkDeuda al guardar crédito; enviar directamente la solicitud
+            doEnviar(null);
+            return;
         }
+
+        setLoading(true);
+        db.setconfigcredito({
+            fechainiciocredito,
+            fechavencecredito,
+            formatopagocredito,
+            id_pedido: pedidoData.id,
+        }).then((res) => {
+            notificar(res);
+            setLoading(false);
+        });
     };
-    const facturar_pedido = (callback = null) => {
+    const facturar_pedido = (callback = null, options = null) => {
         if (pedidoData.id) {
             if (credito) {
-                db.checkDeuda({ id_cliente: pedidoData.id_cliente }).then(
-                    (res) => {
-                        if (res.data) {
-                            let p = res.data.pedido_total;
-                            setdatadeudacredito(p);
-                            setviewconfigcredito(true);
-                        }
-                    }
-                );
+                if (pedidoData._frontOnly && (!pedidoData.id_cliente || pedidoData.id_cliente === 1)) {
+                    notificar({ data: { msj: "Debe anclar un cliente a la orden para solicitar crédito", estado: false } });
+                    return;
+                }
+                // Crédito: no solicitar checkDeuda; ejecutar setPagoPedido directamente
+                setPagoPedido(callback, options);
             } else {
-                setPagoPedido(callback);
+                setPagoPedido(callback, options);
             }
         }
     };
     const del_pedido = () => {
+        // Bloquear si hay referencias bancarias cargadas (independiente del tipo de pedido)
+        if (refPago && refPago.length > 0) {
+            notificar({ data: { msj: "No se puede eliminar el pedido: tiene referencias bancarias cargadas. Elimínelas primero.", estado: false } });
+            return;
+        }
+
+        if (pedidoData._frontOnly && pedidoData.id) {
+            const uuid = pedidoData.id;
+
+            // Intentar eliminar de central las refs ya aprobadas (autovalidar) en segundo plano.
+            // No bloqueamos la eliminación local aunque central falle.
+            const refsAprobadas = (refPagoPorPedidoFront[uuid] || []).filter(
+                (r) => r.estatus === "aprobada" && r.descripcion
+            );
+            refsAprobadas.forEach((ref) => {
+                db.delRefPago({ descripcion_front: ref.descripcion, uuid_pedido_front: uuid }).catch(() => {});
+            });
+
+            // Limpiar refs del uuid ANTES de borrar pedidosFrontPendientes para evitar
+            // que el useEffect de sincronización refs→pedidos recree el pedido eliminado.
+            setRefPagoPorPedidoFront((prev) => {
+                const next = { ...prev };
+                delete next[uuid];
+                return next;
+            });
+            setrefPago([]);
+
+            setPedidosFrontPendientes((prev) => {
+                const next = { ...prev };
+                delete next[uuid];
+                return next;
+            });
+            setPendienteDescuentoMetodoPago((prev) => {
+                const next = { ...prev };
+                delete next[uuid];
+                return next;
+            });
+            setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
+                const next = { ...prev };
+                delete next[uuid];
+                return next;
+            });
+            setMetodosPagoAprobadosPorUuid((prev) => {
+                const next = { ...prev };
+                delete next[uuid];
+                return next;
+            });
+            setPedidoData({});
+            setPedidoSelect(null);
+            notificar({ msj: "Pedido eliminado", estado: true });
+            return;
+        }
         if (confirm("¿Seguro de eliminar?")) {
             if (pedidoData.id) {
                 let motivo = window.prompt(
@@ -6871,8 +7993,12 @@ export default function Facturar({
                     setshowclaveadmin(false);
                     setvalinputsetclaveadmin("");
                     if (lastDbRequest) {
+                        // Pedidos front + crédito: al reintentar setPagoPedido enviar id_tarea_aprobado para que el backend reutilice el pedido y no pida clave de nuevo
+                        const params = lastDbRequest.dbFunction === db.setPagoPedido
+                            ? { ...lastDbRequest.params, id_tarea_aprobado: idtareatemp }
+                            : lastDbRequest.params;
                         lastDbRequest
-                            .dbFunction(lastDbRequest.params)
+                            .dbFunction(params)
                             .then((res) => {
                                 notificar(res.data.msj);
                                 getPedido();
@@ -6897,7 +8023,9 @@ export default function Facturar({
             {showHeaderAndMenu && (
                 <Header
                     addNewPedido={addNewPedido}
+                    addNewPedidoFront={addNewPedidoFront}
                     pedidosFast={pedidosFast}
+                    pedidosFrontPendientesList={Object.values(pedidosFrontPendientes).reverse()}
                     onClickEditPedido={onClickEditPedido}
                     pedidoData={pedidoData}
                     updatetasasfromCentral={updatetasasfromCentral}
@@ -8174,6 +9302,7 @@ export default function Facturar({
                             ) : viewconfigcredito ? (
                                 <Modalconfigcredito
                                     pedidoData={pedidoData}
+                                    lastAddedFrontItemId={lastAddedFrontItemId}
                                     setPagoPedido={setPagoPedido}
                                     viewconfigcredito={viewconfigcredito}
                                     setviewconfigcredito={setviewconfigcredito}
@@ -8292,6 +9421,7 @@ export default function Facturar({
                                     notificar={notificar}
                                     getPedidosFast={getPedidosFast}
                                     addNewPedido={addNewPedido}
+                                    addNewPedidoFront={addNewPedidoFront}
                                     setModRetencion={setModRetencion}
                                     sendNotaCredito={sendNotaCredito}
                                     sendReciboFiscal={sendReciboFiscal}
@@ -8338,6 +9468,7 @@ export default function Facturar({
                                     refPago={refPago}
                                     setrefPago={setrefPago}
                                     pedidosFast={pedidosFast}
+                                    pedidosFrontPendientesList={Object.values(pedidosFrontPendientes).reverse()}
                                     pedidoData={pedidoData}
                                     getPedido={getPedido}
                                     debito={debito}
@@ -8372,8 +9503,31 @@ export default function Facturar({
                                     delItemPedido={delItemPedido}
                                     setDescuento={setDescuento}
                                     setDescuentoUnitario={setDescuentoUnitario}
+                                    descuentoUnitarioEditingId={descuentoUnitarioEditingId}
+                                    descuentoUnitarioVerificandoId={descuentoUnitarioVerificandoId}
+                                    descuentoUnitarioTooltipAprobadoId={descuentoUnitarioTooltipAprobadoId}
+                                    descuentoUnitarioInputValue={descuentoUnitarioInputValue}
+                                    setDescuentoUnitarioInputValue={setDescuentoUnitarioInputValue}
+                                    pendientesDescuentoUnitario={pendientesDescuentoUnitario}
+                                    onDescuentoUnitarioSubmit={aplicarDescuentoUnitarioDesdeModal}
+                                    onDescuentoUnitarioCancel={() => {
+                                        setDescuentoUnitarioEditingId(null);
+                                        setDescuentoUnitarioContext(null);
+                                        setDescuentoUnitarioInputValue("");
+                                    }}
+                                    pendienteDescuentoMetodoPago={pendienteDescuentoMetodoPago}
+                                    solicitarDescuentoMetodoPagoFront={solicitarDescuentoMetodoPagoFront}
+                                    verificarDescuentoMetodoPagoFront={verificarDescuentoMetodoPagoFront}
+                                    descuentoMetodoPagoVerificando={descuentoMetodoPagoVerificando}
+                                    actualizarCampoPedidoFront={actualizarCampoPedidoFront}
+                                    actualizarEstatusRefFront={actualizarEstatusRefFront}
+                                    itemsDisponiblesDevolucion={itemsDisponiblesDevolucion}
+                                    setItemsDisponiblesDevolucion={setItemsDisponiblesDevolucion}
+                                    descuentoMetodoPagoAprobadoPorUuid={descuentoMetodoPagoAprobadoPorUuid}
+                                    metodosPagoAprobadosPorUuid={metodosPagoAprobadosPorUuid}
                                     setDescuentoTotal={setDescuentoTotal}
                                     setCantidadCarrito={setCantidadCarrito}
+                                    setCantidadCarritoFront={setCantidadCarritoFront}
                                     toggleAddPersona={toggleAddPersona}
                                     setToggleAddPersona={setToggleAddPersona}
                                     getPersona={getPersona}
@@ -8741,6 +9895,7 @@ export default function Facturar({
                             }
                             bancos={bancos}
                             addRefPago={addRefPago}
+                            onAutovalidarReferenciaSuccess={onAutovalidarReferenciaSuccess}
                             descripcion_referenciapago={
                                 descripcion_referenciapago
                             }
@@ -8759,43 +9914,102 @@ export default function Facturar({
                             montoTraido={monto_referenciapago}
                             tipoTraido={tipo_referenciapago}
                             pedidoData={pedidoData}
+                            referencias={refPago}
                         />
                     )}
                     
-                    {/* Modal POS Débito Físico - Múltiples Transacciones */}
-                    {showModalPosDebito && (
-                        <div 
+                    {/* Modal especial: montos no coinciden (setPagoPedido) */}
+                    {montosNoCoincidenDetalle && (
+                        <div
+                            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]"
+                            onClick={() => setMontosNoCoincidenDetalle(null)}
+                            role="dialog"
+                            aria-labelledby="montos-no-coinciden-title"
+                        >
+                            <div
+                                className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="bg-amber-500 text-white px-5 py-4">
+                                    <h2 id="montos-no-coinciden-title" className="text-lg font-bold flex items-center gap-2">
+                                        <span className="text-2xl" aria-hidden>⚠️</span>
+                                        Los montos no coinciden
+                                    </h2>
+                                    <p className="text-sm text-amber-100 mt-1">
+                                        El total del pedido y la suma de lo que ingresaste en métodos de pago no son iguales.
+                                    </p>
+                                </div>
+                                <div className="p-5 space-y-4">
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                        <span className="text-gray-600">Total del pedido:</span>
+                                        <span className="font-semibold text-right">{Number(montosNoCoincidenDetalle.total_pedido_usd).toFixed(2)} $</span>
+                                        <span className="text-gray-600">Total que ingresaste:</span>
+                                        <span className="font-semibold text-right">{Number(montosNoCoincidenDetalle.total_pagos_usd).toFixed(2)} $</span>
+                                        <span className="text-gray-700 font-medium">Diferencia:</span>
+                                        <span className={`font-bold text-right ${montosNoCoincidenDetalle.diferencia_usd > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                            {Number(montosNoCoincidenDetalle.diferencia_usd).toFixed(2)} $
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+                                        {montosNoCoincidenDetalle.diferencia_usd > 0
+                                            ? `Falta ingresar ${Number(montosNoCoincidenDetalle.diferencia_usd).toFixed(2)} $ en métodos de pago.`
+                                            : `Ingresaste ${Math.abs(Number(montosNoCoincidenDetalle.diferencia_usd)).toFixed(2)} $ de más. Ajusta los montos.`}
+                                    </p>
+                                    {montosNoCoincidenDetalle.total_pedido_bs != null && (
+                                        <div className="border-t pt-3 mt-3">
+                                            <p className="text-xs font-medium text-gray-500 mb-2">En bolívares (validación débito):</p>
+                                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-700">
+                                                <span>Pedido:</span>
+                                                <span className="text-right">{Number(montosNoCoincidenDetalle.total_pedido_bs).toFixed(2)} Bs</span>
+                                                <span>Pagos:</span>
+                                                <span className="text-right">{Number(montosNoCoincidenDetalle.total_pagos_bs).toFixed(2)} Bs</span>
+                                                <span>Diferencia:</span>
+                                                <span className={`text-right font-semibold ${(montosNoCoincidenDetalle.diferencia_bs || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                                    {Number(montosNoCoincidenDetalle.diferencia_bs || 0).toFixed(2)} Bs
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="px-5 py-4 bg-gray-50 border-t flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => setMontosNoCoincidenDetalle(null)}
+                                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors"
+                                    >
+                                        Entendido
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Modales POS Débito - una instancia por pedido (independientes) */}
+                    {Object.entries(modalesPosAbiertos).map(([instanceId, inst]) => (
+                        <div
+                            key={instanceId}
                             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-                            onKeyDown={(e) => {
-                                // Bloquear todos los atajos de teclado excepto Escape y Enter
-                                e.stopPropagation();
-                                
-                                if (e.key === 'Escape' && !posLoading) {
-                                    e.preventDefault();
-                                    setShowModalPosDebito(false);
-                                    setPosCedulaTitular("");
-                                    setPosTipoCuenta("CORRIENTE");
-                                    setPosPendingCallback(null);
-                                    setPosRespuesta(null);
-                                }
-                                
-                                // Enter para procesar pago
-                                if (e.key === 'Enter' && !posLoading) {
-                                    e.preventDefault();
-                                    const montoActual = parseFloat(posMontoDebito) || 0;
-                                    const totalAprobado = posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0);
-                                    const totalOriginal = parseFloat(posMontoTotalOriginal || 0);
-                                    
-                                    // Solo procesar si hay monto pendiente y cédula ingresada
-                                    if (posCedulaTitular && montoActual > 0 && totalAprobado < totalOriginal) {
-                                        enviarSolicitudPosDebito();
+                            onKeyDownCapture={(e) => {
+                                if (e.key === 'Enter' && !inst.loading) {
+                                    const montoActual = parseFloat(inst.montoDebito) || 0;
+                                    const totalAprobado = (inst.transaccionesAprobadas || []).reduce((sum, t) => sum + t.monto, 0);
+                                    const totalOriginal = parseFloat(inst.montoTotalOriginal || 0);
+                                    if (inst.cedulaTitular && montoActual > 0 && totalAprobado < totalOriginal) {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        enviarSolicitudPosDebito(instanceId, inst);
                                     }
                                 }
-                                
-                                // Bloquear Ctrl+Enter, F keys, etc. mientras el modal está abierto
-                                if (e.ctrlKey || e.altKey || e.key.startsWith('F')) {
+                            }}
+                            onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === 'Escape' && !inst.loading) {
                                     e.preventDefault();
+                                    setModalesPosAbiertos(prev => { const n = { ...prev }; delete n[instanceId]; return n; });
+                                    if (posTimeoutRef.current[instanceId]) { clearTimeout(posTimeoutRef.current[instanceId]); posTimeoutRef.current[instanceId] = null; }
+                                    posProcesandoRef.current[instanceId] = false;
                                 }
+                                if (e.ctrlKey || e.altKey || e.key.startsWith('F')) e.preventDefault();
                             }}
                             onKeyUp={(e) => e.stopPropagation()}
                             onKeyPress={(e) => e.stopPropagation()}
@@ -8809,46 +10023,28 @@ export default function Facturar({
                                         </svg>
                                         Punto de Venta - Débito
                                     </h3>
-                                    <p className="text-sm text-blue-100 mt-1">Pedido #{pedidoData.id} - Total: Bs {parseFloat(posMontoTotalOriginal || 0).toFixed(2)}</p>
+                                    <p className="text-sm text-blue-100 mt-1">Pedido #{inst.pedidoId} - Total: Bs {parseFloat(inst.montoTotalOriginal || 0).toFixed(2)}</p>
                                 </div>
                                 <div className="p-6 space-y-4 overflow-y-auto flex-1">
-                                    {/* Resumen de progreso */}
                                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                                         <div className="flex justify-between items-center text-sm">
                                             <span className="text-blue-700">Total a pagar:</span>
-                                            <span className="font-semibold text-blue-900">Bs {parseFloat(posMontoTotalOriginal || 0).toFixed(2)}</span>
+                                            <span className="font-semibold text-blue-900">Bs {parseFloat(inst.montoTotalOriginal || 0).toFixed(2)}</span>
                                         </div>
-                                        <div className="flex justify-between items-center text-sm mt-1">
-                                            <span className="text-green-700">Aprobado:</span>
-                                            <span className="font-semibold text-green-900">Bs {posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0).toFixed(2)}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-sm mt-1 pt-1 border-t border-blue-200">
-                                            <span className="text-gray-700">Restante:</span>
-                                            <span className={`font-bold ${parseFloat(posMontoDebito || 0) > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                                                Bs {parseFloat(posMontoDebito || 0).toFixed(2)}
-                                            </span>
-                                        </div>
-                                        {/* Barra de progreso */}
                                         <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                            <div 
+                                            <div
                                                 className="h-full bg-green-500 transition-all duration-300"
-                                                style={{ 
-                                                    width: `${Math.min(100, (posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0) / (parseFloat(posMontoTotalOriginal) || 1)) * 100)}%` 
-                                                }}
+                                                style={{ width: `${Math.min(100, ((inst.transaccionesAprobadas || []).reduce((sum, t) => sum + t.monto, 0) / (parseFloat(inst.montoTotalOriginal) || 1)) * 100)}%` }}
                                             />
                                         </div>
                                     </div>
-
-                                    {/* Lista de transacciones aprobadas */}
-                                    {posTransaccionesAprobadas.length > 0 && (
+                                    {(inst.transaccionesAprobadas || []).length > 0 && (
                                         <div className="border border-green-200 rounded-lg overflow-hidden">
                                             <div className="bg-green-50 px-3 py-2 border-b border-green-200">
-                                                <span className="text-sm font-medium text-green-800">
-                                                    Transacciones Aprobadas ({posTransaccionesAprobadas.length})
-                                                </span>
+                                                <span className="text-sm font-medium text-green-800">Transacciones Aprobadas ({(inst.transaccionesAprobadas || []).length})</span>
                                             </div>
                                             <div className="divide-y divide-green-100 max-h-32 overflow-y-auto">
-                                                {posTransaccionesAprobadas.map((trans, index) => (
+                                                {(inst.transaccionesAprobadas || []).map((trans, index) => (
                                                     <div key={index} className="flex items-center justify-between px-3 py-2 bg-white hover:bg-green-50">
                                                         <div className="flex-1">
                                                             <span className="text-sm font-medium text-gray-900">Bs {trans.monto.toFixed(2)}</span>
@@ -8857,8 +10053,8 @@ export default function Facturar({
                                                         </div>
                                                         <button
                                                             type="button"
-                                                            onClick={() => eliminarTransaccionPOS(index)}
-                                                            disabled={posLoading}
+                                                            onClick={() => eliminarTransaccionPOS(instanceId, inst, index)}
+                                                            disabled={inst.loading}
                                                             className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded disabled:opacity-50"
                                                             title="Eliminar transacción"
                                                         >
@@ -8871,49 +10067,41 @@ export default function Facturar({
                                             </div>
                                         </div>
                                     )}
-
-                                    {/* Formulario para nueva transacción (siempre visible si hay monto original y no se ha cubierto el total) */}
-                                    {(parseFloat(posMontoTotalOriginal || 0) > 0 && posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0) < parseFloat(posMontoTotalOriginal || 0)) && (
+                                    {parseFloat(inst.montoTotalOriginal || 0) > 0 && (inst.transaccionesAprobadas || []).reduce((sum, t) => sum + t.monto, 0) < parseFloat(inst.montoTotalOriginal || 0) && (
                                         <>
                                             <div className="border-t pt-4">
                                                 <p className="text-sm font-medium text-gray-700 mb-3">
-                                                    {posTransaccionesAprobadas.length > 0 ? 'Agregar otra tarjeta:' : 'Datos de la tarjeta:'}
+                                                    {(inst.transaccionesAprobadas || []).length > 0 ? 'Agregar otra tarjeta:' : 'Datos de la tarjeta:'}
                                                 </p>
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                    Cédula del Titular
-                                                </label>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Cédula del Titular</label>
                                                 <input
-                                                    id="pos-cedula-input"
+                                                    id={`pos-cedula-input-${instanceId}`}
                                                     type="text"
-                                                    value={posCedulaTitular}
-                                                    onChange={(e) => setPosCedulaTitular(e.target.value.replace(/\D/g, ''))}
+                                                    value={inst.cedulaTitular || ""}
+                                                    onChange={(e) => actualizarInstanciaPos(instanceId, { cedulaTitular: e.target.value.replace(/\D/g, '') })}
                                                     onKeyDown={(e) => {
                                                         if (e.key === 'Enter') {
                                                             e.preventDefault();
                                                             e.stopPropagation();
-                                                            const montoActual = parseFloat(posMontoDebito) || 0;
-                                                            if (posCedulaTitular && !posLoading && montoActual > 0) {
-                                                                enviarSolicitudPosDebito();
-                                                            }
+                                                            const montoActual = parseFloat(inst.montoDebito) || 0;
+                                                            if (inst.cedulaTitular && !inst.loading && montoActual > 0) enviarSolicitudPosDebito(instanceId, inst);
                                                         }
                                                     }}
                                                     placeholder="Ej: 12345678"
                                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                    disabled={posLoading}
+                                                    disabled={inst.loading}
                                                 />
                                             </div>
                                             <div className="grid grid-cols-2 gap-3">
                                                 <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                        Tipo de Cuenta
-                                                    </label>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Cuenta</label>
                                                     <select
-                                                        value={posTipoCuenta}
-                                                        onChange={(e) => setPosTipoCuenta(e.target.value)}
+                                                        value={inst.tipoCuenta || "CORRIENTE"}
+                                                        onChange={(e) => actualizarInstanciaPos(instanceId, { tipoCuenta: e.target.value })}
                                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                        disabled={posLoading}
+                                                        disabled={inst.loading}
                                                     >
                                                         <option value="CORRIENTE">CORRIENTE</option>
                                                         <option value="AHORROS">AHORROS</option>
@@ -8921,32 +10109,18 @@ export default function Facturar({
                                                     </select>
                                                 </div>
                                                 <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                        Monto (Bs)
-                                                    </label>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">Monto (Bs)</label>
                                                     <input
                                                         type="text"
-                                                        value={posMontoDebito}
-                                                        onChange={(e) => {
-                                                            const valorLimpio = e.target.value.replace(/[^0-9.,]/g, '');
-                                                            const valorNumerico = parseFloat(valorLimpio) || 0;
-                                                            // Obtener el total del pedido en bolívares
-                                                            const totalPedidoBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
-                                                            // Nunca permitir que el monto sea mayor al total del pedido
-                                                            const montoLimitado = Math.min(valorNumerico, totalPedidoBs);
-                                                            setPosMontoDebito(montoLimitado > 0 ? montoLimitado.toFixed(2) : valorLimpio);
-                                                        }}
+                                                        value={inst.montoDebito || ""}
+                                                        readOnly
                                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 font-semibold text-lg"
-                                                        disabled={true}
-                                                        readOnly={true}
                                                     />
                                                 </div>
                                             </div>
                                         </>
                                     )}
-
-                                    {/* Mensaje cuando el total está cubierto */}
-                                    {posTransaccionesAprobadas.length > 0 && posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0) >= parseFloat(posMontoTotalOriginal || 0) && (
+                                    {(inst.transaccionesAprobadas || []).length > 0 && (inst.transaccionesAprobadas || []).reduce((sum, t) => sum + t.monto, 0) >= parseFloat(inst.montoTotalOriginal || 0) && (
                                         <div className="bg-green-100 border border-green-300 rounded-lg p-4 text-center">
                                             <svg className="w-12 h-12 text-green-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -8955,14 +10129,10 @@ export default function Facturar({
                                             <p className="text-green-600 text-sm">El pago se procesará automáticamente</p>
                                         </div>
                                     )}
-
-                                    {/* Área de respuesta del POS */}
-                                    {posRespuesta && (
-                                        <div className={`p-4 rounded-lg text-center font-semibold ${posRespuesta.exito ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'}`}>
-                                            <p className="text-lg">{posRespuesta.mensaje}</p>
-                                            {!posRespuesta.exito && (
-                                                <p className="text-sm mt-2 font-normal">Puede reintentar o usar referencia manual</p>
-                                            )}
+                                    {inst.respuesta && (
+                                        <div className={`p-4 rounded-lg text-center font-semibold ${inst.respuesta.exito ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'}`}>
+                                            <p className="text-lg">{inst.respuesta.mensaje}</p>
+                                            {!inst.respuesta.exito && <p className="text-sm mt-2 font-normal">Puede reintentar o usar referencia manual</p>}
                                         </div>
                                     )}
                                 </div>
@@ -8970,21 +10140,11 @@ export default function Facturar({
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setShowModalPosDebito(false);
-                                            setPosCedulaTitular("");
-                                            setPosTipoCuenta("CORRIENTE");
-                                            setPosPendingCallback(null);
-                                            setPosRespuesta(null);
-                                            setPosTransaccionesAprobadas([]);
-                                            setPosMontoTotalOriginal("");
-                                            // Cancelar timeout si existe
-                                            if (posTimeoutRef.current) {
-                                                clearTimeout(posTimeoutRef.current);
-                                                posTimeoutRef.current = null;
-                                            }
-                                            posProcesandoRef.current = false;
+                                            setModalesPosAbiertos(prev => { const n = { ...prev }; delete n[instanceId]; return n; });
+                                            if (posTimeoutRef.current[instanceId]) { clearTimeout(posTimeoutRef.current[instanceId]); posTimeoutRef.current[instanceId] = null; }
+                                            posProcesandoRef.current[instanceId] = false;
                                         }}
-                                        disabled={posLoading}
+                                        disabled={inst.loading}
                                         className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
                                     >
                                         Cancelar
@@ -8992,42 +10152,28 @@ export default function Facturar({
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setShowModalPosDebito(false);
-                                            setPosCedulaTitular("");
-                                            setPosTipoCuenta("CORRIENTE");
-                                            setPosPendingCallback(null);
-                                            setPosRespuesta(null);
-                                            setPosTransaccionesAprobadas([]);
-                                            setPosMontoTotalOriginal("");
+                                            setModalesPosAbiertos(prev => { const n = { ...prev }; delete n[instanceId]; return n; });
                                             setForzarReferenciaManual(true);
-                                            // Cancelar timeout si existe
-                                            if (posTimeoutRef.current) {
-                                                clearTimeout(posTimeoutRef.current);
-                                                posTimeoutRef.current = null;
-                                            }
-                                            posProcesandoRef.current = false;
-                                            // Hacer foco en el campo de referencia después de cerrar el modal
+                                            if (posTimeoutRef.current[instanceId]) { clearTimeout(posTimeoutRef.current[instanceId]); posTimeoutRef.current[instanceId] = null; }
+                                            posProcesandoRef.current[instanceId] = false;
                                             setTimeout(() => {
                                                 const debitoRefInput = document.querySelector('[data-ref-input="true"]');
-                                                if (debitoRefInput) {
-                                                    debitoRefInput.focus();
-                                                }
+                                                if (debitoRefInput) debitoRefInput.focus();
                                             }, 100);
                                         }}
-                                        disabled={posLoading}
+                                        disabled={inst.loading}
                                         className="px-4 py-2 border border-orange-400 rounded-lg text-orange-600 hover:bg-orange-50 transition-colors disabled:opacity-50"
                                     >
                                         Ref. Manual
                                     </button>
-                                    {/* Botón Enviar al POS (solo si no se ha cubierto el total) */}
-                                    {posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0) < parseFloat(posMontoTotalOriginal || 0) && (
+                                    {(inst.transaccionesAprobadas || []).reduce((sum, t) => sum + t.monto, 0) < parseFloat(inst.montoTotalOriginal || 0) && (
                                         <button
                                             type="button"
-                                            onClick={enviarSolicitudPosDebito}
-                                            disabled={posLoading || !posCedulaTitular}
+                                            onClick={() => enviarSolicitudPosDebito(instanceId, inst)}
+                                            disabled={inst.loading || !inst.cedulaTitular}
                                             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                                         >
-                                            {posLoading ? (
+                                            {inst.loading ? (
                                                 <>
                                                     <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
@@ -9040,32 +10186,32 @@ export default function Facturar({
                                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                                     </svg>
-                                                    {posTransaccionesAprobadas.length > 0 ? 'Agregar Tarjeta' : 'Enviar al POS'}
+                                                    {(inst.transaccionesAprobadas || []).length > 0 ? 'Agregar Tarjeta' : 'Enviar al POS'}
                                                 </>
                                             )}
                                         </button>
                                     )}
-                                    {/* Botón Finalizar (solo si hay transacciones aprobadas y NO se cubrió el total) */}
-                                    {posTransaccionesAprobadas.length > 0 && posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0) < parseFloat(posMontoTotalOriginal || 0) && (
+                                    {(inst.transaccionesAprobadas || []).length > 0 && (inst.transaccionesAprobadas || []).reduce((sum, t) => sum + t.monto, 0) < parseFloat(inst.montoTotalOriginal || 0) && (
                                         <button
                                             type="button"
-                                            onClick={() => finalizarTransaccionesPOS(true)}
-                                            disabled={posLoading}
+                                            onClick={() => finalizarTransaccionesPOS(instanceId, inst, true)}
+                                            disabled={inst.loading}
                                             className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                                             title="Aplicar monto parcial al débito. Deberá completar con otros métodos de pago."
                                         >
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                             </svg>
-                                            Aplicar Parcial (Bs {posTransaccionesAprobadas.reduce((sum, t) => sum + t.monto, 0).toFixed(2)})
+                                            Aplicar Parcial (Bs {(inst.transaccionesAprobadas || []).reduce((sum, t) => sum + t.monto, 0).toFixed(2)})
                                         </button>
                                     )}
                                 </div>
                             </div>
                         </div>
-                    )}
+                    ))}
                 </>
             )}
+
         </div>
     );
 }

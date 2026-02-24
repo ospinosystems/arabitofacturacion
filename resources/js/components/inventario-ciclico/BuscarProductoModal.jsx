@@ -120,11 +120,11 @@ const BuscarProductoModal = ({ onClose, onProductoSelected, planillaId, sucursal
     };
 
     return (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-10 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white">
-                <div className="mt-3">
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-stretch p-2">
+            <div className="relative mx-auto w-full max-w-4xl border shadow-lg rounded-md bg-white flex flex-col h-[100vh] max-h-[100vh]">
+                <div className="flex-1 min-h-0 flex flex-col p-2">
                     {/* Header */}
-                    <div className="flex justify-between items-center mb-6">
+                    <div className="flex justify-between items-center mb-2 flex-shrink-0">
                         <h3 className="text-lg font-medium text-gray-900">
                             <i className="fa fa-search mr-2 text-blue-600"></i>
                             Buscar y Agregar Producto
@@ -137,15 +137,15 @@ const BuscarProductoModal = ({ onClose, onProductoSelected, planillaId, sucursal
                         </button>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0">
                         {/* Panel de búsqueda */}
-                        <div>
-                            <h4 className="text-md font-medium text-gray-900 mb-4">
+                        <div className="flex flex-col min-h-0">
+                            <h4 className="text-md font-medium text-gray-900 mb-1">
                                 Buscar Producto
                             </h4>
                             
                             {/* Campo de búsqueda */}
-                            <div className="mb-4">
+                            <div className="mb-2">
                                 <input
                                     type="text"
                                     placeholder="Buscar por nombre, código de barras o código proveedor..."
@@ -156,13 +156,13 @@ const BuscarProductoModal = ({ onClose, onProductoSelected, planillaId, sucursal
                             </div>
 
                             {/* Lista de productos */}
-                            <div className="border border-gray-200 rounded-md max-h-96 overflow-y-auto">
+                            <div className="border border-gray-200 rounded-md flex-1 min-h-0 overflow-y-auto">
                                 {loading ? (
-                                    <div className="flex justify-center items-center py-8">
+                                    <div className="flex justify-center items-center py-4">
                                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                                     </div>
                                 ) : productos.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-500">
+                                    <div className="text-center py-4 text-gray-500">
                                         {searchTerm.length >= 2 ? 'No se encontraron productos' : 'Ingresa al menos 2 caracteres para buscar'}
                                     </div>
                                 ) : (
@@ -170,7 +170,7 @@ const BuscarProductoModal = ({ onClose, onProductoSelected, planillaId, sucursal
                                         {productos.map((producto) => (
                                             <div
                                                 key={producto.id}
-                                                className={`p-3 cursor-pointer hover:bg-gray-50 ${
+                                                className={`p-2 cursor-pointer hover:bg-gray-50 ${
                                                     selectedProducto?.id === producto.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
                                                 }`}
                                                 onClick={() => handleProductoSelect(producto)}
@@ -204,19 +204,19 @@ const BuscarProductoModal = ({ onClose, onProductoSelected, planillaId, sucursal
                         </div>
 
                         {/* Panel de detalles del producto */}
-                        <div>
-                            <h4 className="text-md font-medium text-gray-900 mb-4">
+                        <div className="flex flex-col min-h-0 overflow-y-auto">
+                            <h4 className="text-md font-medium text-gray-900 mb-1">
                                 Detalles del Producto
                             </h4>
                             
                             {selectedProducto ? (
-                                <div className="space-y-4">
+                                <div className="space-y-2">
                                     {/* Información del producto */}
-                                    <div className="bg-gray-50 p-4 rounded-md">
-                                        <h5 className="font-medium text-gray-900 mb-2">
+                                    <div className="bg-gray-50 p-2 rounded-md">
+                                        <h5 className="font-medium text-gray-900 mb-1">
                                             {selectedProducto.descripcion}
                                         </h5>
-                                        <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div className="grid grid-cols-2 gap-2 text-sm">
                                             <div>
                                                 <span className="text-gray-600">Código de Barras:</span>
                                                 <p className="font-medium">{selectedProducto.codigo_barras}</p>
@@ -237,7 +237,7 @@ const BuscarProductoModal = ({ onClose, onProductoSelected, planillaId, sucursal
                                     </div>
 
                                     {/* Formulario para agregar */}
-                                    <form onSubmit={handleSubmit} className="space-y-4">
+                                    <form onSubmit={handleSubmit} className="space-y-2">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                                 Cantidad Física Encontrada *
@@ -266,7 +266,7 @@ const BuscarProductoModal = ({ onClose, onProductoSelected, planillaId, sucursal
                                         </div>
 
                                         {/* Diferencia calculada */}
-                                        <div className="bg-blue-50 p-3 rounded-md">
+                                        <div className="bg-blue-50 p-2 rounded-md">
                                             <p className="text-sm text-gray-600">
                                                 <strong>Diferencia:</strong> {parseInt(formData.cantidad_fisica || 0) - (selectedProducto.cantidad || 0)} unidades
                                             </p>
@@ -276,7 +276,7 @@ const BuscarProductoModal = ({ onClose, onProductoSelected, planillaId, sucursal
                                         </div>
 
                                         {mensajeAdicion && (
-                                            <div className="bg-amber-50 border border-amber-200 p-3 rounded-md">
+                                            <div className="bg-amber-50 border border-amber-200 p-2 rounded-md">
                                                 <p className="text-sm text-amber-800">
                                                     <i className="fa fa-info-circle mr-2"></i>
                                                     {mensajeAdicion}
@@ -285,7 +285,7 @@ const BuscarProductoModal = ({ onClose, onProductoSelected, planillaId, sucursal
                                         )}
 
                                         {/* Botones */}
-                                        <div className="flex justify-end space-x-3 pt-4">
+                                        <div className="flex justify-end space-x-2 pt-2">
                                             <button
                                                 type="button"
                                                 onClick={onClose}
@@ -305,7 +305,7 @@ const BuscarProductoModal = ({ onClose, onProductoSelected, planillaId, sucursal
                                     </form>
                                 </div>
                             ) : (
-                                <div className="text-center py-12 text-gray-500">
+                                <div className="text-center py-6 text-gray-500">
                                     <i className="fa fa-box text-4xl mb-4"></i>
                                     <p>Selecciona un producto de la lista para ver sus detalles</p>
                                 </div>

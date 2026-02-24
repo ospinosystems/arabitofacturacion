@@ -49,6 +49,7 @@ use Response;
 use DB;
 use Schema;
 use Hash;
+use Illuminate\Support\Facades\File;
 
 
 class sendCentral extends Controller
@@ -79,9 +80,9 @@ class sendCentral extends Controller
     {
         try {
             $codigoOrigen = $this->getOrigen();
-            $response = Http::timeout(30)->get($this->path() . "/api/garantias/solicitudes/{$id}", [
+            $response = $this->requestToCentral('get', "/api/garantias/solicitudes/{$id}", [
                 "codigo_origen" => $codigoOrigen
-            ]);
+            ], ['timeout' => 30]);
 
             if ($response->ok()) {
                 $data = $response->json();
@@ -123,7 +124,7 @@ class sendCentral extends Controller
     public function enviarSolicitudReverso($data)
     {
         try {
-            $response = Http::post($this->path() . "/api/solicitudes-reverso", $data);
+            $response = $this->requestToCentral('post', "/api/solicitudes-reverso", $data);
             
             if ($response->ok()) {
                 $result = $response->json();
@@ -172,7 +173,7 @@ class sendCentral extends Controller
             } */
             
             // Check if there are tasks before proceeding
-            $checkTasks = Http::get($this->path() . "/thereAreTasks", [
+            $checkTasks = $this->requestToCentral('get', "/thereAreTasks", [
                 "codigo_origen" => $this->getOrigen()
             ]);
 
@@ -201,7 +202,7 @@ class sendCentral extends Controller
             \Log::info('Enviando petición a central con código origen: ' . $codigo_origen);
             
             // Primera petición: Obtener datos
-            $response = Http::get($this->path() . "/getTareasEliminacionInventarioFromCentral", [
+            $response = $this->requestToCentral('get', "/getTareasEliminacionInventarioFromCentral", [
                 "codigo_origen" => $codigo_origen
             ]);
 
@@ -579,7 +580,7 @@ class sendCentral extends Controller
                     $base64Data = base64_encode($compressed);
 
                     // Segunda petición: Enviar resumen del proceso y datos actualizados
-                    $response2 = Http::post($this->path() . "/setInventarioFromCentral", [
+                    $response2 = $this->requestToCentral('post', "/setInventarioFromCentral", [
                         "codigo_origen" => $codigo_origen,
                         "inventarios" => $base64Data,
                         "tareas_procesadas" => [
@@ -674,8 +675,7 @@ class sendCentral extends Controller
 
     function removeVinculoCentral(Request $req) {
         $id = $req->id;
-        $response = Http::post(
-            $this->path() . "/removeVinculoCentral",[
+        $response = $this->requestToCentral('post', "/removeVinculoCentral", [
             "id" => $id,
         ]);
         if ($response->ok()) {
@@ -689,8 +689,7 @@ class sendCentral extends Controller
     }
 
     function getPedidoCentralImport($id_pedido) {
-        $response = Http::post(
-            $this->path() . "/getPedidoCentralImport",[
+        $response = $this->requestToCentral('post', "/getPedidoCentralImport", [
             "id_pedido" => $id_pedido,
         ]);
         if ($response->ok()) {
@@ -706,8 +705,7 @@ class sendCentral extends Controller
     function sendTareasPendientesCentral($data) {
         $codigo_origen = $this->getOrigen();
         
-        $response = Http::post(
-            $this->path() . "/sendTareasPendientesCentral",[
+        $response = $this->requestToCentral('post', "/sendTareasPendientesCentral", [
                 "codigo_origen" => $codigo_origen,
                 "data" => $data,
         ]);
@@ -724,7 +722,7 @@ class sendCentral extends Controller
     function getCatCajas()
     {
         try {
-            $response = Http::get($this->path() . "/getCatCajas");
+            $response = $this->requestToCentral('get', "/getCatCajas");
             if ($response->ok()) {
                 //Retorna respuesta solo si es Array
                 if ($response->json()) {
@@ -760,7 +758,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
 
-            $response = Http::get($this->path() . "/getControlEfectivoFromSucursal", [
+            $response = $this->requestToCentral('get', "/getControlEfectivoFromSucursal", [
                 "codigo_origen" => $codigo_origen,
                 "data" => $arr,
             ]);
@@ -838,7 +836,7 @@ class sendCentral extends Controller
                 ]);
             }
             
-            $response = Http::post($this->path() . "/sendNovedadCentral", $requestData);
+            $response = $this->requestToCentral('post', "/sendNovedadCentral", $requestData);
             
             if ($response->ok()) {
                 $resretur = $response->json();
@@ -857,8 +855,7 @@ class sendCentral extends Controller
     function resolveNovedadCentral($id) {
         try {
             $codigo_origen = $this->getOrigen();
-            $response = Http::post(
-                $this->path() . "/resolveNovedadCentralCheck", [
+            $response = $this->requestToCentral('post', "/resolveNovedadCentralCheck", [
                     "codigo_origen" => $codigo_origen,
                     "resolveNovedadId" => $id,
                 ]
@@ -923,6 +920,79 @@ class sendCentral extends Controller
         return sucursal::all()->first()->codigo;
     }
 
+    /**
+     * Ruta del archivo donde se persiste el API key de central (configuración mutua en primera conexión).
+     */
+    protected function centralApiKeyPath(): string
+    {
+        return storage_path('app/central_api_key.txt');
+    }
+
+    /**
+     * Obtiene el API key de central (archivo o env). Null si aún no se ha recibido de central.
+     */
+    public function getCentralApiKey(): ?string
+    {
+        $path = $this->centralApiKeyPath();
+        if (File::exists($path)) {
+            $key = trim(File::get($path));
+            if ($key !== '') {
+                return $key;
+            }
+        }
+        return config('central.api_key') ?: (env('CENTRAL_API_KEY') ?: null);
+    }
+
+    /**
+     * Guarda el API key recibido de central (primera conexión).
+     */
+    public function setCentralApiKey(string $key): void
+    {
+        $path = $this->centralApiKeyPath();
+        File::ensureDirectoryExists(dirname($path));
+        File::put($path, trim($key));
+    }
+
+    /**
+     * Envía una petición a central con codigo_origen y API key si existe.
+     * Si la respuesta trae X-Sucursal-Api-Key, lo guarda localmente (primera vez).
+     * $path: ruta sin base (ej. "/api/garantias/solicitudes/1").
+     * $params: query para GET, body para POST (se mezcla codigo_origen).
+     * $options: 'timeout' => int, 'asForm' => true, 'headers' => [], 'multipart' => ...
+     */
+    public function requestToCentral(string $method, string $path, array $params = [], array $options = []): \Illuminate\Http\Client\Response
+    {
+        $url = $this->path() . $path;
+        $params = array_merge(['codigo_origen' => $this->getOrigen()], $params);
+        $timeout = $options['timeout'] ?? 30;
+        $headers = $options['headers'] ?? [];
+        $apiKey = $this->getCentralApiKey();
+        if ($apiKey !== null) {
+            $headers['X-Sucursal-Api-Key'] = $apiKey;
+        }
+
+        $request = Http::timeout($timeout)->withHeaders($headers);
+
+        if (strtoupper($method) === 'GET') {
+            $response = $request->get($url, $params);
+        } else {
+            if (!empty($options['asForm'])) {
+                $response = $request->asForm()->post($url, $params);
+            } elseif (!empty($options['multipart'])) {
+                $response = $request->attach($options['multipart'])->post($url, $params);
+            } else {
+                $response = $request->post($url, $params);
+            }
+        }
+
+        $newKey = $response->header('X-Sucursal-Api-Key');
+        if ($newKey !== null && trim($newKey) !== '') {
+            $this->setCentralApiKey(trim($newKey));
+        }
+
+        return $response;
+    }
+
     /** ID sucursal (para inventario interno central) */
     public function getOrigenId()
     {
@@ -938,9 +1008,9 @@ class sendCentral extends Controller
             if (!$codigo_sucursal) {
                 return ['estado' => false, 'msj' => 'Sucursal no configurada', 'data' => []];
             }
-            $response = Http::timeout(30)->post($this->path() . '/inventario-interno/getInventarioSucursalRemoto', [
+            $response = $this->requestToCentral('post', '/inventario-interno/getInventarioSucursalRemoto', [
                 'codigo_sucursal' => $codigo_sucursal,
-            ]);
+            ], ['timeout' => 30]);
             if ($response->ok()) {
                 $data = $response->json();
                 return ['estado' => $data['estado'] ?? false, 'msj' => $data['msj'] ?? '', 'data' => $data['data'] ?? []];
@@ -958,9 +1028,9 @@ class sendCentral extends Controller
     public function buscarProductoEnCentralPorCodigo($codigo)
     {
         try {
-            $response = Http::timeout(15)->post($this->path() . '/buscarProductoPorCodigoSucursal13', [
+            $response = $this->requestToCentral('post', '/buscarProductoPorCodigoSucursal13', [
                 'codigo' => $codigo,
-            ]);
+            ], ['timeout' => 15]);
             $body = $response->json();
             if (!$response->ok() || empty($body['estado']) || empty($body['data'])) {
                 return ['estado' => false, 'msj' => $body['msj'] ?? 'Error al buscar en central'];
@@ -993,10 +1063,10 @@ class sendCentral extends Controller
     {
         try {
             $codigo_sucursal = $this->getOrigen();
-            $response = Http::timeout(30)->post($this->path() . '/inventario-interno/recibirOrden', [
+            $response = $this->requestToCentral('post', '/inventario-interno/recibirOrden', [
                 'id_orden' => $id_orden,
                 'codigo_sucursal_receptor' => $codigo_sucursal,
-            ]);
+            ], ['timeout' => 30]);
             if ($response->ok()) {
                 $data = $response->json();
                 return ['estado' => $data['estado'] ?? false, 'msj' => $data['msj'] ?? ''];
@@ -1015,10 +1085,10 @@ class sendCentral extends Controller
             if (!$codigo_sucursal) {
                 return ['estado' => false, 'msj' => 'Sucursal no configurada', 'data' => []];
             }
-            $response = Http::timeout(30)->post($this->path() . '/inventario-interno/getOrdenesDestinoSucursal', [
+            $response = $this->requestToCentral('post', '/inventario-interno/getOrdenesDestinoSucursal', [
                 'codigo_sucursal' => $codigo_sucursal,
                 'limit' => 80,
-            ]);
+            ], ['timeout' => 30]);
             if ($response->ok()) {
                 $data = $response->json();
                 return ['estado' => $data['estado'] ?? false, 'msj' => $data['msj'] ?? '', 'data' => $data['data'] ?? []];
@@ -1037,10 +1107,10 @@ class sendCentral extends Controller
             if (!$codigo_sucursal) {
                 return ['estado' => false, 'msj' => 'Sucursal no configurada', 'data' => null];
             }
-            $response = Http::timeout(30)->post($this->path() . '/inventario-interno/getOrdenDetalleDestinoSucursal', [
+            $response = $this->requestToCentral('post', '/inventario-interno/getOrdenDetalleDestinoSucursal', [
                 'codigo_sucursal' => $codigo_sucursal,
                 'id_orden' => (int) $id_orden,
-            ]);
+            ], ['timeout' => 30]);
             if ($response->ok()) {
                 $data = $response->json();
                 return ['estado' => $data['estado'] ?? false, 'msj' => $data['msj'] ?? '', 'data' => $data['data'] ?? null];
@@ -1081,7 +1151,7 @@ class sendCentral extends Controller
             if (!$codigo_sucursal) {
                 return ['estado' => false, 'msj' => 'Sucursal no configurada'];
             }
-            $response = Http::timeout(30)->post($this->path() . '/inventario-interno/registrarConsumoInventarioInterno', [
+            $response = $this->requestToCentral('post', '/inventario-interno/registrarConsumoInventarioInterno', [
                 'codigo_sucursal' => $codigo_sucursal,
                 'items' => $items,
             ]);
@@ -1129,7 +1199,7 @@ class sendCentral extends Controller
                 'codigo_sucursal' => $codigo_sucursal,
                 'limit' => 100,
             ], $params);
-            $response = Http::timeout(30)->post($this->path() . '/inventario-interno/getHistorialConsumoInventarioInterno', $payload);
+            $response = $this->requestToCentral('post', '/inventario-interno/getHistorialConsumoInventarioInterno', $payload, ['timeout' => 30]);
             if ($response->ok()) {
                 $data = $response->json();
                 return ['estado' => $data['estado'] ?? false, 'msj' => $data['msj'] ?? '', 'data' => $data['data'] ?? []];
@@ -1337,7 +1407,7 @@ class sendCentral extends Controller
     {
         try {
             return Cache::remember('sucursales', now()->addHours(6), function () {
-                $response = Http::get($this->path() . "/getSucursales");
+                $response = $this->requestToCentral('get', "/getSucursales");
                 if ($response->ok()) {
                     //Retorna respuesta solo si es Array 
                     if ($response->json()) {
@@ -1385,9 +1455,7 @@ class sendCentral extends Controller
                         "ids" => $ids,
                     ], $parametros);
 
-                    $response = Http::post(
-                        $this->path() . "/getInventarioSucursalFromCentral",
-                        array_merge([
+                    $response = $this->requestToCentral('post', "/getInventarioSucursalFromCentral", array_merge([
                             "type" => $type,
                             "codigo_origen" => $codigo_origen,
                             "codigo_destino" => $codigo_destino,
@@ -1396,9 +1464,7 @@ class sendCentral extends Controller
 
                     break;
                 case 'inventarioSucursalFromCentralmodify':
-                    $response = Http::post(
-                        $this->path() . "/getInventarioSucursalFromCentral",
-                        [
+                    $response = $this->requestToCentral('post', "/getInventarioSucursalFromCentral", [
                             "type" => $type,
                             "id_tarea" => $req->id_tarea,
                             "productos" => $req->productos,
@@ -1459,7 +1525,7 @@ class sendCentral extends Controller
             $codigo_destino = $req->codigo_destino; //Sucursal seleccionada para ver. Desde Centro de acopio
             $type = $req->type;
 
-            $response = Http::post($this->path() . "/setInventarioSucursalFromCentral", [
+            $response = $this->requestToCentral('post', "/setInventarioSucursalFromCentral", [
                 "codigo_origen" => $codigo_origen,
                 "codigo_destino" => $codigo_destino,
                 "type" => $type,
@@ -1496,7 +1562,7 @@ class sendCentral extends Controller
     {
         try {
             $codigo_origen = $this->getOrigen();
-            $response = Http::get($this->path() . "/getTareasCentral", [
+            $response = $this->requestToCentral('get', "/getTareasCentral", [
                 "codigo_origen" => $codigo_origen,
             ]);
             if ($response->ok()) {
@@ -1665,8 +1731,7 @@ class sendCentral extends Controller
         if ($type=="modificar") {
             $data = inventario::find($id);
         }
-        $response = Http::post(
-            $this->path() . "/notiNewInv",[
+        $response = $this->requestToCentral('post', "/notiNewInv", [
             "idinsucursal_producto" => $id,
             "type" => $type,
             "data" => $data,
@@ -1685,8 +1750,7 @@ class sendCentral extends Controller
         return false;
     }
     function toCentralResolveTarea($id_tarea) {
-        $response = Http::post(
-            $this->path() . "/resolveTareaCentral",[
+        $response = $this->requestToCentral('post', "/resolveTareaCentral", [
             "id_tarea" => $id_tarea
         ]);
         if ($response->ok()) {
@@ -1712,8 +1776,7 @@ class sendCentral extends Controller
     {
         try {
             $codigo_origen = $this->getOrigen();
-            $response = Http::post(
-                $this->path() . "/setPedidoInCentralFromMasters", [
+            $response = $this->requestToCentral('post', "/setPedidoInCentralFromMasters", [
                     "codigo_origen" => $codigo_origen,
                     "id_sucursal" => $id_sucursal,
                     "type" => $type,
@@ -1751,8 +1814,7 @@ class sendCentral extends Controller
     function sendItemsPedidosChecked($items) {
         try {
             $codigo_origen = $this->getOrigen();
-            $response = Http::post(
-                $this->path() . "/sendItemsPedidosChecked", [
+            $response = $this->requestToCentral('post', "/sendItemsPedidosChecked", [
                     "codigo_origen" => $codigo_origen,
                     "items" => $items,
                 ]
@@ -1772,8 +1834,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
 
-            $response = Http::get(
-                $this->path() . "/importarusers", [
+            $response = $this->requestToCentral('get', "/importarusers", [
                     "codigo_origen" => $codigo_origen,
                 ]
             );
@@ -1892,7 +1953,7 @@ class sendCentral extends Controller
             $codigo_origen = $this->getOrigen();
 
 
-            $response = Http::post($this->path() . '/respedidos', [
+            $response = $this->requestToCentral('post', '/respedidos', [
                 "codigo_origen" => $codigo_origen,
                 "qpedidoscentralq" => $req->qpedidoscentralq,
                 "qpedidocentrallimit" => $req->qpedidocentrallimit,
@@ -2046,7 +2107,7 @@ class sendCentral extends Controller
                 "items" => $items_clean
             ]];
 
-            $response = Http::post($this->path() . '/setPedidoInCentralFromMasters', [
+            $response = $this->requestToCentral('post', '/setPedidoInCentralFromMasters', [
                 "codigo_origen" => $codigo_origen,
                 'id_sucursal' => $req->id_destino,
                 "observaciones" => $req->observaciones,
@@ -2091,7 +2152,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
 
-            $response = Http::post($this->path() . '/reqMipedidos', [
+            $response = $this->requestToCentral('post', '/reqMipedidos', [
                 "codigo_origen" => $codigo_origen,
                 "qpedidoscentralq" => $req->q,
                 "qpedidocentrallimit" => $req->limit,
@@ -2179,7 +2240,7 @@ class sendCentral extends Controller
         }
 
         try {
-            $response = Http::post($this->path() . "/setComovamos", [
+            $response = $this->requestToCentral('post', "/setComovamos", [
                 "codigo_origen" => $codigo_origen,
                 "comovamos" => $comovamos,
                 "fecha" => $today,
@@ -2227,9 +2288,7 @@ class sendCentral extends Controller
 
     function getAllProveedores() {
         try {
-            $response = Http::post(
-                $this->path() . "/getAllProveedores", []
-            );
+            $response = $this->requestToCentral('post', "/getAllProveedores", []);
             if ($response->ok()) {
                 return $response->json();
             }
@@ -2245,13 +2304,22 @@ class sendCentral extends Controller
         $image = fopen($filename, 'r');
 
         //return $filename;
-        $response = Http::attach('imagen', $image)
+        $headers = [];
+        $apiKey = $this->getCentralApiKey();
+        if ($apiKey !== null) {
+            $headers['X-Sucursal-Api-Key'] = $apiKey;
+        }
+        $response = Http::withHeaders($headers)->attach('imagen', $image)
         ->post(
             $this->path() . "/sendFacturaCentral", [
                 "codigo_origen" => $codigo_origen,
                 "factura" => $factura,
             ]
         );
+        $newKey = $response->header('X-Sucursal-Api-Key');
+        if ($newKey !== null && trim($newKey) !== '') {
+            $this->setCentralApiKey(trim($newKey));
+        }
 
         if ($response->ok()) {
             if($response->json()){
@@ -2295,7 +2363,7 @@ class sendCentral extends Controller
         $data =  base64_encode(gzcompress(json_encode(inventario::all())));
         $codigo_origen = $this->getOrigen();
         
-        $setAll = Http::post($this->path() . "/invsucursal", [
+        $setAll = $this->requestToCentral('post', "/invsucursal", [
             "data" => $data,
             "codigo_origen" => $codigo_origen,
         ]);
@@ -2497,9 +2565,7 @@ class sendCentral extends Controller
         $id = $req->id;
         $type = $req->type;
         $codigo_origen = $this->getOrigen();
-        $response = Http::post(
-            $this->path() . "/aprobarRecepcionCaja",
-            [
+        $response = $this->requestToCentral('post', "/aprobarRecepcionCaja", [
                 "codigo_origen" => $codigo_origen,
                 "id" => $id,
                 "type" => $type,
@@ -2532,9 +2598,7 @@ class sendCentral extends Controller
 
 
         $codigo_origen = $this->getOrigen();
-        $response = Http::post(
-            $this->path() . "/verificarMovPenControlEfecTRANFTRABAJADOR",
-            [
+        $response = $this->requestToCentral('post', "/verificarMovPenControlEfecTRANFTRABAJADOR", [
                 "codigo_origen" => $codigo_origen,
             ]
         );
@@ -2571,9 +2635,7 @@ class sendCentral extends Controller
             $codigo_origen = $this->getOrigen();
             $today = (new PedidosController)->today();
 
-            $response = Http::post(
-                $this->path() . "/verificarMovPenControlEfec",
-                [
+            $response = $this->requestToCentral('post', "/verificarMovPenControlEfec", [
                     "codigo_origen" => $codigo_origen,
                 ]
             );
@@ -2751,8 +2813,7 @@ class sendCentral extends Controller
         $codigo_origen = $this->getOrigen();
         $today = (new PedidosController)->today();
 
-        $response = Http::post(
-            $this->path() . "/checkDelMovCaja",[
+        $response = $this->requestToCentral('post', "/checkDelMovCaja", [
                 "codigo_origen" => $codigo_origen,
                 "id" => $id,
         ]);
@@ -2772,9 +2833,7 @@ class sendCentral extends Controller
 
     function checkDelMovCajaCentral($idincentral) {
         $codigo_origen = $this->getOrigen();
-        $response = Http::post(
-            $this->path() . "/checkDelMovCajaCentral",
-            [
+        $response = $this->requestToCentral('post', "/checkDelMovCajaCentral", [
                 "codigo_origen" => $codigo_origen,
                 "idincentral" => $idincentral,  
             ]
@@ -2795,9 +2854,7 @@ class sendCentral extends Controller
     }
     function setPermisoCajas($data) {
         $codigo_origen = $this->getOrigen();
-        $response = Http::post(
-            $this->path() . "/setPermisoCajas",
-            [
+        $response = $this->requestToCentral('post', "/setPermisoCajas", [
                 "codigo_origen" => $codigo_origen,
                 "data" => $data,  
             ]
@@ -2819,12 +2876,10 @@ class sendCentral extends Controller
 
     function createCreditoAprobacion($data) {
         $codigo_origen = $this->getOrigen();
-        $response = Http::timeout(120)->post(
-            $this->path() . "/createCreditoAprobacion",
-            [
+        $response = $this->requestToCentral('post', "/createCreditoAprobacion", [
                 "codigo_origen" => $codigo_origen,
                 "data" => $data, 
-            ]
+            ], ['timeout' => 120]
         );
 
         if ($response->ok()) {
@@ -2837,9 +2892,7 @@ class sendCentral extends Controller
     function createTranferenciaAprobacion($data) {
         try {
             $codigo_origen = $this->getOrigen();
-            $response = Http::post(
-                $this->path() . "/createTranferenciaAprobacion",
-                [
+            $response = $this->requestToCentral('post', "/createTranferenciaAprobacion", [
                     "codigo_origen" => $codigo_origen,
                     "data" => $data, 
                 ]
@@ -2867,13 +2920,11 @@ class sendCentral extends Controller
                 'codigo_origen' => $codigo_origen
             ]);
 
-            $response = Http::timeout(30)->post(
-                $this->path() . "/deleteTranferenciaAprobacion",
-                [
+            $response = $this->requestToCentral('post', "/deleteTranferenciaAprobacion", [
                     "codigo_origen" => $codigo_origen,
                     "id_pedido" => $id_pedido,
                     "loteserial" => $loteserial, // referencia/descripcion de la transferencia
-                ]
+                ], ['timeout' => 30]
             );
 
             if ($response->ok()) {
@@ -2912,9 +2963,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
             
-            $response = Http::timeout(120)->post(
-                $this->path() . "/autovalidarTransferenciaSecuencial",
-                [
+            $response = $this->requestToCentral('post', "/autovalidarTransferenciaSecuencial", [
                     "codigo_origen" => $codigo_origen,
                     "referencia" => $data['referencia'],
                     "telefono" => $data['telefono'],
@@ -2923,7 +2972,7 @@ class sendCentral extends Controller
                     "monto" => $data['monto'],
                     "id_pedido" => $data['id_pedido'],
                     "cedula" => $data['cedula'] ?? null,
-                ]
+                ], ['timeout' => 120]
             );
 
             \Log::info("Respuesta de autovalidarTransferenciaCentral:", [
@@ -2950,9 +2999,7 @@ class sendCentral extends Controller
 
     function createAnulacionPedidoAprobacion($data) {
         $codigo_origen = $this->getOrigen();
-        $response = Http::post(
-            $this->path() . "/createAnulacionPedidoAprobacion",
-            [
+        $response = $this->requestToCentral('post', "/createAnulacionPedidoAprobacion", [
                 "codigo_origen" => $codigo_origen,
                 "data" => $data, 
             ]
@@ -3019,7 +3066,7 @@ class sendCentral extends Controller
         ])));
         $codigo_origen = $this->getOrigen();
 
-        $res = Http::post($this->path() . "/sendAllLotes", [
+        $res = $this->requestToCentral('post', "/sendAllLotes", [
             "data"=>$data,
             "codigo_origen" => $codigo_origen,
         ]);
@@ -3235,7 +3282,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
                 
-            $getLast = Http::get($this->path() . "/getLast", [
+            $getLast = $this->requestToCentral('get', "/getLast", [
                 "codigo_origen" => $codigo_origen,
             ]);
     
@@ -3255,7 +3302,7 @@ class sendCentral extends Controller
                         "movsinventario" => $movsBatches,
                         "codigo_origen" => $codigo_origen,
                     ];
-                    $setAll = Http::post($this->path() . "/sendAllMovs", $data);
+                    $setAll = $this->requestToCentral('post', "/sendAllMovs", $data);
                 } else {
                     // Si son múltiples lotes, enviar uno por uno
                     $results = [];
@@ -3268,7 +3315,7 @@ class sendCentral extends Controller
                                 "total_batches" => count($movsBatches)
                             ]
                         ];
-                        $setAll = Http::post($this->path() . "/sendAllMovs", $data);
+                        $setAll = $this->requestToCentral('post', "/sendAllMovs", $data);
                         
                         if (!$setAll->ok()) {
                             return "ERROR en lote " . ($index + 1) . ": " . $setAll;
@@ -3313,7 +3360,7 @@ class sendCentral extends Controller
                 "codigo_origen" => $codigo_origen,
             ];
 
-            $response = Http::post($this->path() . "/setAllInventario", $requestData);
+            $response = $this->requestToCentral('post', "/setAllInventario", $requestData);
 
             if ($response->ok()) {
                 if ($response->json()) {
@@ -3348,7 +3395,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
 
-            $response = Http::post($this->path() . "/getNomina", [
+            $response = $this->requestToCentral('post', "/getNomina", [
                 "codigo_origen" => $codigo_origen,
             ]);
 
@@ -3367,7 +3414,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
 
-            $response = Http::post($this->path() . "/getAlquileresSucursal", [
+            $response = $this->requestToCentral('post', "/getAlquileresSucursal", [
                 "codigo_origen" => $codigo_origen,
             ]);
 
@@ -3395,7 +3442,7 @@ class sendCentral extends Controller
 
 
         try {
-            $response = Http::post($this->path() . "/setEstadisticas", [
+            $response = $this->requestToCentral('post', "/setEstadisticas", [
                 "codigo_origen" => $codigo_origen,
                 "estadisticas" => (new InventarioController)->getEstadisticasFun($data),
 
@@ -3444,7 +3491,7 @@ class sendCentral extends Controller
     public function setNuevaTareaCentral(Request $req)
     {
         $type = $req->type;
-        $response = Http::post($this->path() . "/setNuevaTareaCentral", ["type" => $type]);
+        $response = $this->requestToCentral('post', "/setNuevaTareaCentral", ["type" => $type]);
 
         if ($response->ok()) {
             $res = $response->json();
@@ -3494,7 +3541,7 @@ class sendCentral extends Controller
     }
     public function changeExportStatus($pathcentral, $id)
     {
-        $response = Http::post($this->path() . "/changeExtraidoEstadoPed", ["id" => $id]);
+        $response = $this->requestToCentral('post', "/changeExtraidoEstadoPed", ["id" => $id]);
     }
     public function setnewtasainsucursal(Request $req)
     {
@@ -3504,7 +3551,7 @@ class sendCentral extends Controller
 
 
 
-        $response = Http::post($this->path() . "/setnewtasainsucursal", [
+        $response = $this->requestToCentral('post', "/setnewtasainsucursal", [
             "tipo" => $tipo,
             "valor" => $valor,
             "id_sucursal" => $id_sucursal,
@@ -3521,7 +3568,7 @@ class sendCentral extends Controller
     }
     public function changeEstatusProductoProceced($ids, $id_sucursal)
     {
-        $response = Http::post($this->path() . "/changeEstatusProductoProceced", [
+        $response = $this->requestToCentral('post', "/changeEstatusProductoProceced", [
             "ids" => $ids,
             "id_sucursal" => $id_sucursal,
         ]);
@@ -3544,7 +3591,7 @@ class sendCentral extends Controller
     }
     public function setCambiosInventarioSucursal(Request $req)
     {
-        $response = Http::post($this->path() . "/setCambiosInventarioSucursal", [
+        $response = $this->requestToCentral('post', "/setCambiosInventarioSucursal", [
             "productos" => $req->productos,
             "sucursal" => $req->sucursal,
         ]);
@@ -3564,7 +3611,7 @@ class sendCentral extends Controller
     public function getInventarioFromSucursal(Request $req)
     {
         $sucursal = $this->getOrigen();
-        $response = Http::post($this->path() . "/getInventarioFromSucursal", [
+        $response = $this->requestToCentral('post', "/getInventarioFromSucursal", [
             "sucursal" => $sucursal,
         ]);
 
@@ -3635,7 +3682,7 @@ class sendCentral extends Controller
             $sucursal = $this->getOrigen();
             $actually_version = $sucursal["app_version"];
 
-            $getVersion = Http::get($this->path . "/getVersionRemote");
+            $getVersion = $this->requestToCentral('get', "/getVersionRemote");
 
             if ($getVersion->ok()) {
 
@@ -3661,7 +3708,7 @@ class sendCentral extends Controller
     {
         try {
             $sucursal = $this->getOrigen();
-            $response = Http::post($this->path . '/getInventario', [
+            $response = $this->requestToCentral('post', '/getInventario', [
                 "sucursal_code" => $sucursal->codigo,
 
             ]);
@@ -3691,7 +3738,7 @@ class sendCentral extends Controller
             }
 
 
-            $response = Http::post($this->path . '/setConfirmFacturas', [
+            $response = $this->requestToCentral('post', '/setConfirmFacturas', [
                 "sucursal_code" => $sucursal->codigo,
                 "facturas" => $facturas
             ]);
@@ -3726,7 +3773,7 @@ class sendCentral extends Controller
         try {
             $sucursal = $this->getOrigen();
 
-            $response = Http::post($this->path() . '/getMonedaSucursal', ["codigo" => $sucursal->codigo]);
+            $response = $this->requestToCentral('post', '/getMonedaSucursal', ["codigo" => $sucursal->codigo]);
 
             if ($response->ok()) {
                 $res = $response->json();
@@ -3995,7 +4042,7 @@ class sendCentral extends Controller
                 $payload["solicitud"] = $data;
             }
             
-            $response = Http::timeout(60)->post($this->path() . $ruta, $payload);
+            $response = $this->requestToCentral('post', $ruta, $payload, ['timeout' => 60]);
 
             if ($response->ok()) {
                 return $response->json();
@@ -4022,7 +4069,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
             
-            $response = Http::timeout(30)->get($this->path() . "/api/garantias/solicitudes", [
+            $response = $this->requestToCentral('get', "/api/garantias/solicitudes", [
                 "codigo_origen" => $codigo_origen,
                 "estatus" => "APROBADA"
             ]);
@@ -4052,7 +4099,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
             
-            $response = Http::timeout(30)->get($this->path() . "/api/garantias/solicitudes/{$id}", [
+            $response = $this->requestToCentral('get', "/api/garantias/solicitudes/{$id}", [
                 "codigo_origen" => $codigo_origen
             ]);
 
@@ -4081,7 +4128,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
             
-            $response = Http::timeout(30)->post($this->path() . "/api/garantias/solicitudes/{$id}/finalizar", [
+            $response = $this->requestToCentral('post', "/api/garantias/solicitudes/{$id}/finalizar", [
                 "codigo_origen" => $codigo_origen,
                 "detalles_ejecucion" => $detalles_ejecucion
             ]);
@@ -4111,7 +4158,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
             
-            $response = Http::timeout(30)->get($this->path() . "/api/garantias/dashboard/estadisticas", [
+            $response = $this->requestToCentral('get', "/api/garantias/dashboard/estadisticas", [
                 "codigo_origen" => $codigo_origen
             ]);
 
@@ -4140,7 +4187,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
             
-            $response = Http::timeout(30)->get($this->path() . "/api/garantias/solicitudes", [
+            $response = $this->requestToCentral('get', "/api/garantias/solicitudes", [
                 "codigo_origen" => $codigo_origen,
                 "id_pedido_insucursal" => $id_pedido
             ]);
@@ -4173,7 +4220,7 @@ class sendCentral extends Controller
      */
     public function checkCentralConnection() {
         try {
-            $response = Http::timeout(10)->get($this->path() . "/api/health");
+            $response = $this->requestToCentral('get', "/api/health", [], ['timeout' => 10]);
             return $response->ok();
         } catch (\Exception $e) {
             \Log::error('Error de conectividad con arabitocentral: ' . $e->getMessage());
@@ -4190,7 +4237,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
             
-            $response = Http::timeout(30)->post($this->path() . "/api/responsables/search", [
+            $response = $this->requestToCentral('post', "/api/responsables/search", [
                 "codigo_origen" => $codigo_origen,
                 "tipo" => $data['tipo'],
                 "termino" => $data['termino'],
@@ -4224,7 +4271,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
             
-            $response = Http::timeout(30)->post($this->path() . "/api/responsables", [
+            $response = $this->requestToCentral('post', "/api/responsables", [
                 "codigo_origen" => $codigo_origen,
                 "tipo" => $data['tipo'],
                 "nombre" => $data['nombre'],
@@ -4261,7 +4308,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
             
-            $response = Http::timeout(30)->get($this->path() . "/api/responsables/{$id}", [
+            $response = $this->requestToCentral('get', "/api/responsables/{$id}", [
                 "codigo_origen" => $codigo_origen
             ]);
 
@@ -4292,7 +4339,7 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
             
-            $response = Http::timeout(30)->get($this->path() . "/api/responsables/tipo/{$tipo}", [
+            $response = $this->requestToCentral('get', "/api/responsables/tipo/{$tipo}", [
                 "codigo_origen" => $codigo_origen
             ]);
 
@@ -4323,14 +4370,14 @@ class sendCentral extends Controller
         try {
             $codigo_origen = $this->getOrigen();
             
-            $response = Http::timeout(60)->post($this->path() . "/api/garantias/reversar", [
+            $response = $this->requestToCentral('post', "/api/garantias/reversar", [
                 "codigo_origen" => $codigo_origen,
                 "solicitud_id" => $data['solicitud_id'],
                 "motivo_reversion" => $data['motivo_reversion'],
                 "detalles_reversion" => $data['detalles_reversion'],
                 "fecha_reversion" => $data['fecha_reversion'],
                 "usuario_reversion" => $data['usuario_reversion']
-            ]);
+            ], ['timeout' => 60]);
 
             if ($response->ok()) {
                 return $response->json();
@@ -4357,7 +4404,7 @@ class sendCentral extends Controller
      */
     public function getInventarioGarantiasCentral($data) {
         try {
-            $response = Http::get($this->path() . "/api/inventario-garantias", [
+            $response = $this->requestToCentral('get', "/api/inventario-garantias", [
                 'sucursal_codigo' => $this->getOrigen(),
                 'tipo_inventario' => $data['tipo_inventario'] ?? null,
                 'producto_search' => $data['producto_search'] ?? null,
@@ -4392,7 +4439,7 @@ class sendCentral extends Controller
      */
     public function searchInventarioGarantias($data) {
         try {
-            $response = Http::post($this->path() . "/api/inventario-garantias/search", [
+            $response = $this->requestToCentral('post', "/api/inventario-garantias/search", [
                 'sucursal_codigo' => $this->getOrigen(),
                 'search_term' => $data['search_term'],
                 'search_type' => $data['search_type'] ?? 'codigo_barras', // codigo_barras, descripcion, codigo_proveedor
@@ -4426,7 +4473,7 @@ class sendCentral extends Controller
      */
     public function transferirProductoGarantiaSucursal($data) {
         try {
-            $response = Http::post($this->path() . "/api/inventario-garantias/transferir-sucursal", [
+            $response = $this->requestToCentral('post', "/api/inventario-garantias/transferir-sucursal", [
                 'producto_id' => $data['producto_id'],
                 'sucursal_origen' => $this->getOrigen(),
                 'sucursal_destino' => $data['sucursal_destino'],
@@ -4464,7 +4511,7 @@ class sendCentral extends Controller
      */
     public function transferirGarantiaVentaNormal($data) {
         try {
-            $response = Http::post($this->path() . "/api/inventario-garantias/transferir-venta", [
+            $response = $this->requestToCentral('post', "/api/inventario-garantias/transferir-venta", [
                 'producto_id' => $data['producto_id'],
                 'sucursal_destino' => $data['sucursal_destino'],
                 'cantidad' => $data['cantidad'],
@@ -4501,7 +4548,7 @@ class sendCentral extends Controller
      */
     public function getTiposInventarioGarantia() {
         try {
-            $response = Http::get($this->path() . "/api/inventario-garantias/tipos");
+            $response = $this->requestToCentral('get', "/api/inventario-garantias/tipos");
             
             if ($response->ok()) {
                 return [
@@ -4530,7 +4577,7 @@ class sendCentral extends Controller
      */
     public function getEstadisticasInventarioGarantias($data) {
         try {
-            $response = Http::get($this->path() . "/api/inventario-garantias/estadisticas", [
+            $response = $this->requestToCentral('get', "/api/inventario-garantias/estadisticas", [
                 'sucursal_codigo' => $this->getOrigen(),
                 'fecha_desde' => $data['fecha_desde'] ?? null,
                 'fecha_hasta' => $data['fecha_hasta'] ?? null
@@ -4558,6 +4605,59 @@ class sendCentral extends Controller
         }
     }
 
+    /**
+     * Órdenes de transferencia de garantía - Central API (api/dashboard/garantias/ordenes-transferencia-garantia)
+     */
+    public function ordenesTransferenciaGarantiaIndex($params = []) {
+        $response = $this->requestToCentral('get', '/api/dashboard/garantias/ordenes-transferencia-garantia', $params, ['timeout' => 30]);
+        return $response->ok() ? ['success' => true, 'data' => $response->json()] : ['success' => false, 'error' => $response->body()];
+    }
+
+    public function ordenesTransferenciaGarantiaStore($data) {
+        $response = $this->requestToCentral('post', '/api/dashboard/garantias/ordenes-transferencia-garantia', $data, ['timeout' => 30]);
+        return $response->ok() ? ['success' => true, 'data' => $response->json()] : ['success' => false, 'error' => $response->body(), 'status' => $response->status()];
+    }
+
+    public function ordenesTransferenciaGarantiaShow($id) {
+        $response = $this->requestToCentral('get', '/api/dashboard/garantias/ordenes-transferencia-garantia/' . $id, [], ['timeout' => 30]);
+        return $response->ok() ? ['success' => true, 'data' => $response->json()] : ['success' => false, 'error' => $response->body()];
+    }
+
+    public function ordenesTransferenciaGarantiaAprobar($id, $data = []) {
+        $response = $this->requestToCentral('post', '/api/dashboard/garantias/ordenes-transferencia-garantia/' . $id . '/aprobar', $data, ['timeout' => 30]);
+        return $response->ok() ? ['success' => true, 'data' => $response->json()] : ['success' => false, 'error' => $response->body()];
+    }
+
+    public function ordenesTransferenciaGarantiaRechazar($id, $data = []) {
+        $response = $this->requestToCentral('post', '/api/dashboard/garantias/ordenes-transferencia-garantia/' . $id . '/rechazar', $data, ['timeout' => 30]);
+        return $response->ok() ? ['success' => true, 'data' => $response->json()] : ['success' => false, 'error' => $response->body()];
+    }
+
+    public function ordenesTransferenciaGarantiaAceptar($id, $data) {
+        $response = $this->requestToCentral('post', '/api/dashboard/garantias/ordenes-transferencia-garantia/' . $id . '/aceptar', $data, ['timeout' => 30]);
+        return $response->ok() ? ['success' => true, 'data' => $response->json()] : ['success' => false, 'error' => $response->body(), 'status' => $response->status()];
+    }
+
+    public function ordenesTransferenciaGarantiaRecibirItem($id, $data) {
+        $response = $this->requestToCentral('post', '/api/dashboard/garantias/ordenes-transferencia-garantia/' . $id . '/recibir-item', $data, ['timeout' => 30]);
+        return $response->ok() ? ['success' => true, 'data' => $response->json()] : ['success' => false, 'error' => $response->body(), 'status' => $response->status()];
+    }
+
+    public function ordenesTransferenciaGarantiaConfirmarDevolucionProveedor($id, $data) {
+        $response = $this->requestToCentral('post', '/api/dashboard/garantias/ordenes-transferencia-garantia/' . $id . '/confirmar-devolucion-proveedor', $data, ['timeout' => 30]);
+        return $response->ok() ? ['success' => true, 'data' => $response->json()] : ['success' => false, 'error' => $response->body(), 'status' => $response->status()];
+    }
+
+    public function ordenesTransferenciaGarantiaInventarioDisponible($params = []) {
+        $response = $this->requestToCentral('get', '/api/dashboard/garantias/ordenes-transferencia-garantia/inventario-disponible', $params, ['timeout' => 30]);
+        return $response->ok() ? ['success' => true, 'data' => $response->json()] : ['success' => false, 'error' => $response->body()];
+    }
+
+    public function ordenesTransferenciaGarantiaTipos() {
+        $response = $this->requestToCentral('get', '/api/dashboard/garantias/ordenes-transferencia-garantia/tipos', [], ['timeout' => 30]);
+        return $response->ok() ? ['success' => true, 'data' => $response->json()] : ['success' => false, 'error' => $response->body()];
+    }
+
     // =================== FIN MÉTODOS INVENTARIO DE GARANTÍAS ===================
 
     // =================== MÉTODOS SOLICITUDES DE DESCUENTOS ===================
@@ -4568,7 +4668,7 @@ class sendCentral extends Controller
     public function verificarSolicitudDescuento($data) {
         try {
             $codigo_origen = $this->getOrigen();
-            $response = Http::post($this->path() . "/api/solicitudes-descuentos/verificar", [
+            $response = $this->requestToCentral('post', "/api/solicitudes-descuentos/verificar", [
                 "codigo_origen" => $codigo_origen,
                 "id_sucursal" => $data['id_sucursal'],
                 "id_pedido" => $data['id_pedido'],
@@ -4594,7 +4694,7 @@ class sendCentral extends Controller
     public function crearSolicitudDescuento($data) {
         try {
             $codigo_origen = $this->getOrigen();
-            $response = Http::post($this->path() . "/api/solicitudes-descuentos", [
+            $response = $this->requestToCentral('post', "/api/solicitudes-descuentos", [
                 "codigo_origen" => $codigo_origen,
                 "id_sucursal" => $data['id_sucursal'],
                 "id_pedido" => $data['id_pedido'],
@@ -4625,6 +4725,70 @@ class sendCentral extends Controller
         } 
     }
 
+    /**
+     * Verificar si existe una solicitud de descuento para un pedido front (por UUID)
+     */
+    public function verificarSolicitudDescuentoFront($data) {
+        try {
+            $codigo_origen = $this->getOrigen();
+            $response = $this->requestToCentral('post', "/api/solicitudes-descuentos/verificar", [
+                "codigo_origen" => $codigo_origen,
+                "id_sucursal" => $data['id_sucursal'],
+                "uuid_pedido_front" => $data['uuid_pedido_front'],
+                "tipo_descuento" => $data['tipo_descuento']
+            ]);
+            if ($response->ok()) {
+                $resretur = $response->json();
+                if ($resretur) {
+                    return $resretur;
+                }
+            }
+            return $response;
+        } catch (\Exception $e) {
+            return Response::json(["msj" => "Error: " . $e->getMessage(), "estado" => false]);
+        }
+    }
+
+    /**
+     * Crear solicitud de descuento para pedido front (UUID). No guarda nada en facturación.
+     */
+    public function crearSolicitudDescuentoFront($data) {
+        try {
+            $codigo_origen = $this->getOrigen();
+            $payload = [
+                "codigo_origen" => $codigo_origen,
+                "id_sucursal" => $data['id_sucursal'],
+                "uuid_pedido_front" => $data['uuid_pedido_front'],
+                "fecha" => $data['fecha'],
+                "monto_bruto" => $data['monto_bruto'],
+                "monto_con_descuento" => $data['monto_con_descuento'],
+                "monto_descuento" => $data['monto_descuento'],
+                "porcentaje_descuento" => $data['porcentaje_descuento'],
+                "usuario_ensucursal" => $data['usuario_ensucursal'],
+                "metodos_pago" => $data['metodos_pago'] ?? [],
+                "ids_productos" => $data['ids_productos'],
+                "tipo_descuento" => $data['tipo_descuento'],
+                "observaciones" => $data['observaciones'] ?? ''
+            ];
+            if (isset($data['id_cliente'])) {
+                $payload['id_cliente'] = $data['id_cliente'];
+            }
+            if (!empty($data['data_cliente'])) {
+                $payload['data_cliente'] = $data['data_cliente'];
+            }
+            $response = $this->requestToCentral('post', "/api/solicitudes-descuentos", $payload);
+            if ($response->ok()) {
+                $resretur = $response->json();
+                if ($resretur) {
+                    return $resretur;
+                }
+            }
+            return $response;
+        } catch (\Exception $e) {
+            return Response::json(["msj" => "Error: " . $e->getMessage(), "estado" => false]);
+        }
+    }
+
     // =================== FIN MÉTODOS SOLICITUDES DE DESCUENTOS ===================
 
     // =================== MÉTODOS SOLICITUDES DE REVERSO ===================
@@ -4636,7 +4800,7 @@ class sendCentral extends Controller
         try {
             $codigoOrigen = $this->getOrigen();
             
-            $response = Http::timeout(30)->get($this->path() . "/api/solicitudes-reverso", [
+            $response = $this->requestToCentral('get', "/api/solicitudes-reverso", [
                 "codigo_origen" => $codigoOrigen,
                 "status" => "Aprobada"
             ]);
@@ -4690,7 +4854,7 @@ class sendCentral extends Controller
     {
         try {
             $codigo_origen = $this->getOrigen();
-            $response = Http::timeout(30)->get($this->path() . "/getLastDirect", [
+            $response = $this->requestToCentral('get', "/getLastDirect", [
                 "codigo_origen" => $codigo_origen,
             ]);
             
@@ -4813,7 +4977,7 @@ class sendCentral extends Controller
         
         while ($retryCount < $maxRetries) {
             try {
-                $response = Http::timeout($timeout)->post($this->path() . $endpoint, $data);
+                $response = $this->requestToCentral('post', $endpoint, $data, ['timeout' => $timeout]);
                 if ($response->ok()) {
                     return ['success' => true, 'data' => $response->json(), 'attempts' => $retryCount + 1];
                 }

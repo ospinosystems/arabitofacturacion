@@ -996,7 +996,7 @@ const GarantiaList = ({ garantias, onReload, sucursalConfig, db }) => {
                                                                     {garantia.solicitud_central_id && (
                                                                         <button
                                                                             className="btn btn-info btn-sm me-2"
-                                                                            onClick={() => window.open(`${sucursalConfig.central_url || 'https://phplaravel-1009655-3565285.cloudwaysapps.com'}/dashboard/garantias/${garantia.solicitud_central_id}`, '_blank')}
+                                                                            onClick={() => window.open(`/api/garantias/redirect-central-dashboard/${garantia.solicitud_central_id}`, '_blank')}
                                                                         >
                                                                             <i className="fa fa-external-link-alt me-1"></i>
                                                                             Ver en Central
@@ -1919,11 +1919,11 @@ const GarantiaList = ({ garantias, onReload, sucursalConfig, db }) => {
                                                         <div className="card">
                                                         <div className="position-relative">
                                                             <img 
-                                                                src={`${sucursalConfig.central_url || 'http://127.0.0.1:8001'}/storage/${selectedGarantia.foto_factura_url}`} 
+                                                                src={`/api/garantias/proxy-central-storage?path=${encodeURIComponent(selectedGarantia.foto_factura_url || '')}`} 
                                                                 alt="Foto de Factura"
                                                                     className="card-img-top"
                                                                     style={{ height: '200px', objectFit: 'cover', cursor: 'pointer' }}
-                                                                onClick={() => window.open(`${sucursalConfig.central_url || 'http://127.0.0.1:8001'}/storage/${selectedGarantia.foto_factura_url}`, '_blank')}
+                                                                onClick={() => window.open(`/api/garantias/proxy-central-storage?path=${encodeURIComponent(selectedGarantia.foto_factura_url || '')}`, '_blank')}
                                                                 onError={(e) => {
                                                                     e.target.style.display = 'none';
                                                                         e.target.nextElementSibling.style.display = 'flex';
@@ -1962,10 +1962,10 @@ const GarantiaList = ({ garantias, onReload, sucursalConfig, db }) => {
                                                         </h6>
                                                         <div className="row">
                                                             {selectedGarantia.fotos.map((foto, index) => {
-                                                                // Construir URL de la foto con múltiples alternativas
+                                                                // Construir URL de la foto vía proxy (conexión con Central siempre por backend)
                                                                 const fotoUrl = foto.url_completa || 
                                                                                foto.foto_url_completa || 
-                                                                               `${sucursalConfig.central_url || 'http://127.0.0.1:8001'}/storage/${foto.foto_url}`;
+                                                                               `/api/garantias/proxy-central-storage?path=${encodeURIComponent(foto.foto_url || '')}`;
                                                                 
                                                                 return (
                                                                     <div key={index} className="col-12 mb-3">

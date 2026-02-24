@@ -52,8 +52,10 @@ export default function ListProductosInterno({
   notificar,
   getPedido,
   addNewPedido,
+  addNewPedidoFront,
   // Props para navegación de pedidos
   pedidosFast,
+  pedidosFrontPendientesList = [],
   onClickEditPedido,
   togglereferenciapago,
 
@@ -149,15 +151,14 @@ export default function ListProductosInterno({
     }
     return orderBy === 'asc' ? <span className="text-orange-600">↑</span> : <span className="text-orange-600">↓</span>;
   };
-  //f1 - Crear nuevo pedido
+  //f1 - Crear nuevo pedido (solo front)
   useHotkeys(
     "f1",
     () => {
-      // Validar que existe la función addNewPedido
-      if (typeof addNewPedido === 'function') {
+      if (typeof addNewPedidoFront === 'function') {
+        addNewPedidoFront();
+      } else if (typeof addNewPedido === 'function') {
         addNewPedido();
-      } else {
-        console.warn('addNewPedido function not available');
       }
     },
     {
@@ -172,7 +173,13 @@ export default function ListProductosInterno({
   // F3: Abrir vista de pedidos
  
 
-  // TAB: Seleccionar primer pedido o siguiente
+  // Lista combinada: pedidos front (UUID) primero, luego pedidos backend (id numérico) para Tab/Shift+Tab
+  const listaPedidosCombinada = [
+    ...(Array.isArray(pedidosFrontPendientesList) ? pedidosFrontPendientesList.map((p) => ({ id: p.id, _frontOnly: true })) : []),
+    ...(Array.isArray(pedidosFast) ? pedidosFast.map((p) => ({ id: p.id, _frontOnly: false })) : []),
+  ];
+
+  // TAB: Seleccionar primer pedido o siguiente (incluye pedidos front y backend)
   useHotkeys(
     "tab",
     (event) => {
@@ -188,31 +195,25 @@ export default function ListProductosInterno({
       }
       
       event.preventDefault();
-      if (pedidosFast && pedidosFast.length > 0) {
-        if (pedidoData && pedidoData.id) {
-          // Si hay un pedido actual, ir al siguiente
-          const currentIndex = pedidosFast.findIndex(p => p.id == pedidoData.id);
+      if (listaPedidosCombinada.length > 0) {
+        if (pedidoData && pedidoData.id != null && pedidoData.id !== "") {
+          const currentIndex = listaPedidosCombinada.findIndex((p) => p.id == pedidoData.id);
           
-          if (currentIndex >= 0 && currentIndex < pedidosFast.length - 1) {
-            // Si hay un pedido siguiente, seleccionarlo
-            const pedidoSiguiente = pedidosFast[currentIndex + 1];
-            if (pedidoSiguiente && pedidoSiguiente.id) {
+          if (currentIndex >= 0 && currentIndex < listaPedidosCombinada.length - 1) {
+            const pedidoSiguiente = listaPedidosCombinada[currentIndex + 1];
+            if (pedidoSiguiente && pedidoSiguiente.id != null) {
               isNavigatingPedido.current = true;
               onClickEditPedido(null, pedidoSiguiente.id);
-              // Liberar el lock después de un delay
               setTimeout(() => {
                 isNavigatingPedido.current = false;
               }, 300);
             }
           }
-          // Si estamos en el último pedido, no hacer nada (no circular)
         } else {
-          // Si no hay pedido actual, seleccionar el primer pedido
-          const primerPedido = pedidosFast[0];
-          if (primerPedido && primerPedido.id) {
+          const primerPedido = listaPedidosCombinada[0];
+          if (primerPedido && primerPedido.id != null) {
             isNavigatingPedido.current = true;
             onClickEditPedido(null, primerPedido.id);
-            // Liberar el lock después de un delay
             setTimeout(() => {
               isNavigatingPedido.current = false;
             }, 300);
@@ -223,54 +224,45 @@ export default function ListProductosInterno({
     {
       enableOnTags: ["INPUT", "SELECT"],
       filter: (event) => {
-        // Solo activar si NO estamos en el input de cantidad
         return event.target !== inputCantidadCarritoref?.current;
       },
     },
-    [pedidosFast, pedidoData, onClickEditPedido, inputCantidadCarritoref, togglereferenciapago]
+    [pedidosFast, pedidosFrontPendientesList, pedidoData, onClickEditPedido, inputCantidadCarritoref, togglereferenciapago]
   );
 
-  // SHIFT+TAB: Seleccionar pedido anterior
+  // SHIFT+TAB: Seleccionar pedido anterior (incluye pedidos front y backend)
   useHotkeys(
     "shift+tab",
     (event) => {
-      // No ejecutar si el modal de referencia está abierto
       if (togglereferenciapago) {
-        return; // Permitir comportamiento por defecto del SHIFT+TAB
+        return;
       }
       
-      // Prevenir ejecución si ya se está navegando
       if (isNavigatingPedido.current) {
         event.preventDefault();
         return;
       }
       
       event.preventDefault();
-      if (pedidosFast && pedidosFast.length > 0) {
-        if (pedidoData && pedidoData.id) {
-          // Si hay un pedido actual, ir al anterior
-          const currentIndex = pedidosFast.findIndex(p => p.id == pedidoData.id);
+      if (listaPedidosCombinada.length > 0) {
+        if (pedidoData && pedidoData.id != null && pedidoData.id !== "") {
+          const currentIndex = listaPedidosCombinada.findIndex((p) => p.id == pedidoData.id);
           
           if (currentIndex > 0) {
-            // Si hay un pedido anterior, seleccionarlo
-            const pedidoAnterior = pedidosFast[currentIndex - 1];
-            if (pedidoAnterior && pedidoAnterior.id) {
+            const pedidoAnterior = listaPedidosCombinada[currentIndex - 1];
+            if (pedidoAnterior && pedidoAnterior.id != null) {
               isNavigatingPedido.current = true;
               onClickEditPedido(null, pedidoAnterior.id);
-              // Liberar el lock después de un delay
               setTimeout(() => {
                 isNavigatingPedido.current = false;
               }, 300);
             }
           }
-          // Si estamos en el primer pedido, no hacer nada (no circular)
         } else {
-          // Si no hay pedido actual, seleccionar el último pedido
-          const ultimoPedido = pedidosFast[pedidosFast.length - 1];
-          if (ultimoPedido && ultimoPedido.id) {
+          const ultimoPedido = listaPedidosCombinada[listaPedidosCombinada.length - 1];
+          if (ultimoPedido && ultimoPedido.id != null) {
             isNavigatingPedido.current = true;
             onClickEditPedido(null, ultimoPedido.id);
-            // Liberar el lock después de un delay
             setTimeout(() => {
               isNavigatingPedido.current = false;
             }, 300);
@@ -281,11 +273,10 @@ export default function ListProductosInterno({
     {
       enableOnTags: ["INPUT", "SELECT"],
       filter: (event) => {
-        // Solo activar si NO estamos en el input de cantidad
         return event.target !== inputCantidadCarritoref?.current;
       },
     },
-    [pedidosFast, pedidoData, onClickEditPedido, inputCantidadCarritoref, togglereferenciapago]
+    [pedidosFast, pedidosFrontPendientesList, pedidoData, onClickEditPedido, inputCantidadCarritoref, togglereferenciapago]
   );
 
 
@@ -444,12 +435,17 @@ export default function ListProductosInterno({
         setLastInputValue(null); // Resetear el valor del último input
         
         // Establecer productoSelectinternouno para que funcione con addCarritoRequestInterno
+        // Usar id_producto si existe (coincide con items_disponibles de la factura original); si no, id
+        const productIdForApi = product.id_producto != null ? product.id_producto : productId;
         setproductoSelectinternouno({
           descripcion: product.descripcion,
           precio: product.precio,
           unidad: product.unidad,
           cantidad: product.cantidad,
-          id: productId,
+          id: productIdForApi,
+          id_producto: product.id_producto ?? productId,
+          codigo_barras: product.codigo_barras ?? product.codigo_proveedor ?? "",
+          codigo_proveedor: product.codigo_proveedor ?? "",
         });
         
         // Enfocar el input de cantidad después de un pequeño delay
@@ -508,10 +504,12 @@ export default function ListProductosInterno({
     proceedWithAddToCart(carnetCode);
   };
 
-  // Función para proceder con la adición al carrito (con o sin carnet)
-  const proceedWithAddToCart = (carnetCode = null) => {
+  // Función para proceder con la adición al carrito (con o sin carnet). cantidadOverride = valor actual del input (p. ej. al pulsar Enter).
+  const proceedWithAddToCart = (carnetCode = null, cantidadOverride = null) => {
     if (selectedProduct) {
-      
+      const cantidadToUse = cantidadOverride !== undefined && cantidadOverride !== null && String(cantidadOverride).trim() !== "" ? cantidadOverride : cantidad;
+      const qtyNum = parseFloat(cantidadToUse) || 0;
+
       // Obtener el producto actual de la lista para tener el stock más reciente
       const currentProduct = productos.find(p => p.id === selectedProduct.id);
       if (!currentProduct) {
@@ -519,9 +517,37 @@ export default function ListProductosInterno({
         return;
       }
       
-      // Validar que la cantidad no supere el stock disponible
-      if (cantidad > currentProduct.cantidad) {
-        notificar(`No se puede agregar ${cantidad} unidades. Stock disponible: ${currentProduct.cantidad}`, "error");
+      // Validar que la cantidad no supere el stock disponible (solo para pedidos de backend)
+      if (!pedidoData?._frontOnly && qtyNum > currentProduct.cantidad) {
+        notificar(`No se puede agregar ${qtyNum} unidades. Stock disponible: ${currentProduct.cantidad}`, "error");
+        return;
+      }
+
+      if (pedidoData?._frontOnly && qtyNum === 0) {
+        notificar("Indique la cantidad", "error");
+        return;
+      }
+      
+      // Pedido solo en front: no llamar setCarrito; agregar directamente al pedido en state (vía addCarritoRequestInterno). No llamar setNum(10) para no disparar getProductos (inventario) innecesariamente.
+      if (pedidoData?._frontOnly) {
+        addCarritoRequestInterno(null, true, cantidadToUse);
+        setproductoSelectinternouno(null);
+        closeQuantityInput();
+        if (refaddfast?.current) {
+          if (searchDebounceRef.current) {
+            clearTimeout(searchDebounceRef.current);
+          }
+          refaddfast.current.select();
+          setFocusedRowIndex(null);
+          const checkAndFocus = () => {
+            if (searchCompleted && refaddfast?.current) {
+              refaddfast.current.focus();
+            } else {
+              setTimeout(checkAndFocus, 50);
+            }
+          };
+          setTimeout(checkAndFocus, 50);
+        }
         return;
       }
       
@@ -538,7 +564,7 @@ export default function ListProductosInterno({
         let params = {
           id: selectedProduct.id,
           type,
-          cantidad,
+          cantidad: qtyNum,
           numero_factura: pedidoData?.id || null,
           devolucionTipo: devolucionTipo,
           devolucionMotivo,
@@ -559,7 +585,7 @@ export default function ListProductosInterno({
         };
 
 
-        // Llamar directamente a db.setCarrito
+        // Llamar directamente a db.setCarrito (solo para pedidos de backend)
         db.setCarrito(params).then((res) => {
           if (res.data.msj) {
             notificar(res.data.msj);
@@ -567,7 +593,7 @@ export default function ListProductosInterno({
           getPedido();
           setproductoSelectinternouno(null);
           closeQuantityInput();
-          setNum(15);
+          setNum(10);
 
           // Limpiar input de búsqueda y hacer foco después de que termine la búsqueda
           if (refaddfast?.current) {
@@ -618,7 +644,7 @@ export default function ListProductosInterno({
   };
 
   // Función para agregar al carrito
-  const handleAddToCart = () => {
+  const handleAddToCart = (event = null) => {
     if (selectedProduct) {
       // Verificar si hay cantidades negativas en el pedido
       if (hasNegativeQuantities()) {
@@ -634,8 +660,9 @@ export default function ListProductosInterno({
         return;
       }
       
-      // Si no hay cantidades negativas, proceder normalmente
-      proceedWithAddToCart();
+      // Pasar valor del input cuando viene del Enter para agregar y cerrar en una
+      const cantidadFromInput = event?.target?.value;
+      proceedWithAddToCart(null, cantidadFromInput);
     }
   };
 
@@ -720,14 +747,14 @@ export default function ListProductosInterno({
     []
 );
 
-  // Enter para agregar al carrito desde el input de cantidad
+  // Enter en input de cantidad: agregar al carrito con el valor actual del input (un solo Enter agrega y cierra)
   useHotkeys(
     "enter",
     (event) => {
-      if (selectedProduct && event.target === inputCantidadCarritoref?.current && cantidad) {
+      if (selectedProduct && event.target === inputCantidadCarritoref?.current) {
         event.preventDefault();
         event.stopPropagation();
-        handleAddToCart();
+        handleAddToCart(event);
       }
     },
     {
@@ -735,7 +762,7 @@ export default function ListProductosInterno({
       keydown: true,
       keyup: false,
     },
-    [selectedProduct, cantidad, handleAddToCart]
+    [selectedProduct, handleAddToCart]
   );
 
   // Ref para controlar el enfoque después de Enter
@@ -855,6 +882,7 @@ export default function ListProductosInterno({
                   onChange={e => setNum(Number(e.target.value))}
                   title="Cantidad de registros a mostrar"
               >
+                  <option value={10}>10</option>
                   <option value={15}>15</option>
                   <option value={20}>20</option>
                   <option value={50}>50</option>
@@ -950,26 +978,19 @@ export default function ListProductosInterno({
                   ) : productos.length > 0 ? (
                       productos.map((e, i) => {
                           const isSelected = selectedProduct && selectedProduct.id == e.id;
+                          const isHighlighted = isSelected || countListInter == i || focusedRowIndex === i;
                           return (
                               <tr
-                                  tabIndex="-1"
-                                  className={`
-                                    ${
-                                        countListInter == i
-                                            ? "bg-orange-50  border-orange-400"
-                                            : ""
-                                    } 
-                                    bg-white cursor-pointer
-                                `}
-                                  style={{
-                                      outline: focusedRowIndex === i ? '2px solid rgb(251, 146, 60)' : 'none',
-                                      outlineOffset: focusedRowIndex === i ? '-2px' : '0',
-                                      backgroundColor: focusedRowIndex === i ? 'rgba(254, 243, 199, 0.5)' : undefined
-                                  }}
+                                  tabIndex={-1}
+                                  className={`bg-white cursor-pointer outline-none transition-colors focus:outline-none focus:ring-0 ${isHighlighted ? "bg-amber-50/80" : ""} focus-within:!bg-amber-100 hover:bg-gray-50/80`}
                                   key={e.id}
                                   onClick={() => handleProductSelection(e.id)}
                                   onFocus={() => setFocusedRowIndex(i)}
-                                  onBlur={() => setFocusedRowIndex(null)}
+                                  onBlur={(ev) => {
+                                      if (!ev.currentTarget.contains(ev.relatedTarget)) {
+                                          setFocusedRowIndex(null);
+                                      }
+                                  }}
                                   data-index={e.id}
                               >
                                   <td className="px-1 py-1 font-mono text-xs text-gray-700">
@@ -1001,52 +1022,52 @@ export default function ListProductosInterno({
                                           )}
                                       </div>
                                   </td>
-                                  <td className="px-1 py-1 text-center">
-                                      {isSelected ? (
-                                          <div className="flex items-center space-x-2">
+                                  <td className="px-1 py-1 text-center align-middle">
+                                      <div className="inline-block min-w-[3.5rem] w-14 text-center">
+                                          {isSelected ? (
                                               <input
                                                   type="number"
                                                   ref={inputCantidadCarritoref}
-                                                  className="w-16 px-1 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-orange-400 focus:border-orange-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                  className="w-full max-w-[3.5rem] min-w-[2.5rem] px-1 py-0.5 text-xs text-center border border-gray-300 rounded focus:ring-1 focus:ring-orange-400 focus:border-orange-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none box-border"
                                                   placeholder={`${e.cantidad}`}
                                                   min="1"
                                                   max={e.cantidad}
                                                   onKeyDown={(event) => {
-                                                      // Prevenir que las flechas arriba/abajo incrementen/decrementen el valor
                                                       if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
                                                           event.preventDefault();
+                                                      }
+                                                      if (event.key === 'Enter') {
+                                                          event.preventDefault();
+                                                          event.stopPropagation();
+                                                          handleAddToCart(event);
                                                       }
                                                   }}
                                                   onChange={(event) => {
                                                       const value = event.target.value;
-                                                      // Solo permitir números enteros positivos o vacío
-                                                      // Permitir números decimales positivos o vacío
                                                       if (value === '' || /^[-\d]*\.?\d*$/.test(value)) {
                                                           const numericValue = value === '' ? "" : parseFloat(value);
-                                                          // Validar que no supere el stock (usar e del map, no del event)
                                                           if (numericValue === "" || numericValue <= e.cantidad) {
                                                               setCantidad(numericValue);
                                                           } else {
-                                                              // Mostrar notificación si intenta superar el stock
                                                               notificar(`Cantidad máxima disponible: ${e.cantidad}`, "warning");
                                                           }
                                                       }
                                                   }}
                                                   value={cantidad}
                                               />
-                                          </div>
-                                      ) : (
-                                          <span
-                                              className={
-                                                  `inline-block px-1 py-0.5 border !border-orange-200 rounded text-xs formShowProductos cursor-pointer ` +
-                                                  (e.cantidad == 0
-                                                      ? "bg-red-100 text-red-700 border-red-300"
-                                                      : "bg-orange-50 text-orange-900")
-                                              }
-                                          >
-                                              {e.cantidad}
-                                          </span>
-                                      )}
+                                          ) : (
+                                              <span
+                                                  className={
+                                                      `inline-block px-1 py-0.5 border !border-orange-200 rounded text-xs formShowProductos cursor-pointer ` +
+                                                      (e.cantidad == 0
+                                                          ? "bg-red-100 text-red-700 border-red-300"
+                                                          : "bg-orange-50 text-orange-900")
+                                                  }
+                                              >
+                                                  {e.cantidad}
+                                              </span>
+                                          )}
+                                      </div>
                                   </td>
                                   <td className="px-0.5 py-1 text-center text-xs text-gray-600 whitespace-nowrap">
                                       <div className="text-xs">
@@ -1057,7 +1078,7 @@ export default function ListProductosInterno({
                                       {isSelected ? (
                                           <div className="flex items-center justify-end space-x-2">
                                               <div className="text-xs text-gray-600">
-                                                  <div>${moneda(cantidad * e.precio)}</div>
+                                                  <div className="text-green-800">${moneda(cantidad * e.precio)}</div>
                                                   <div>Bs.{moneda(cantidad * e.precio * dolar)}</div>
                                               </div>
                                               <div className="flex space-x-1">
@@ -1075,7 +1096,7 @@ export default function ListProductosInterno({
                                           </div>
                                       ) : (
                                           <div className="flex flex-col gap-1 sm:flex-row sm:gap-2 min-w-[180px]">
-                                              <span className="flex-1 px-1 py-0.5 bg-orange-50 text-orange-900 border !border-orange-200 text-lg font-medium rounded text-center whitespace-nowrap">
+                                              <span className="flex-1 px-1 py-0.5 bg-orange-50 text-green-800 border !border-orange-200 text-lg font-medium rounded text-center whitespace-nowrap">
                                                   ${moneda(e.precio)}
                                               </span>
                                               <span className="flex-1 px-1 py-0.5 bg-orange-50 text-orange-900 border !border-orange-200 text-lg rounded text-center whitespace-nowrap">

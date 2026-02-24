@@ -590,6 +590,25 @@ class PagosReferenciasController extends Controller
             
             $item->save();
 
+            // Para refs de categoría 'central' con modo_transferencia 'central',
+            // registrar el movimiento en central inmediatamente al guardar.
+            // Así, cuando el usuario intente eliminarla, central ya la conoce.
+            if ($categoria === 'central' && isset($sucursal) && $sucursal->modo_transferencia === 'central') {
+                try {
+                    $dataTransfe = [
+                        "refs"       => [$item->toArray()],
+                        "retenciones" => [],
+                    ];
+                    (new sendCentral)->createTranferenciaAprobacion($dataTransfe);
+                } catch (\Exception $eCentral) {
+                    \Log::warning("addRefPago: no se pudo registrar en central al guardar ref", [
+                        'id_ref'  => $item->id,
+                        'error'   => $eCentral->getMessage(),
+                    ]);
+                    // No bloqueamos la respuesta al usuario si central falla; la ref queda en BD
+                }
+            }
+
             return Response::json(["msj"=>"¡Éxito!","estado"=>true,"id_referencia"=>$item->id]);
             
         } catch (\Exception $e) {
@@ -600,6 +619,38 @@ class PagosReferenciasController extends Controller
     {
          try {
             $id = $req->id;
+            $descripcionFront = $req->descripcion_front ?? null; // Para refs de pedidos front sin ID en BD
+            $uuidPedidoFront   = $req->uuid_pedido_front ?? null;  // UUID del pedido front (id_pedido en Central)
+
+            // Modo pedido front: la referencia no existe aún en BD, solo necesitamos eliminarla en central
+            if (!$id && $descripcionFront) {
+                $sucursal = sucursal::first();
+                $modoTransferencia = $sucursal ? $sucursal->modo_transferencia : null;
+
+                \Log::info("Intentando eliminar referencia front (sin id BD)", [
+                    'descripcion'       => $descripcionFront,
+                    'uuid_pedido_front' => $uuidPedidoFront,
+                    'modo_transferencia' => $modoTransferencia
+                ]);
+
+                if ($modoTransferencia === 'central') {
+                    $resultCentral = (new sendCentral)->deleteTranferenciaAprobacion(
+                        $uuidPedidoFront, // El UUID que Central guardó como id_pedido al autovalidar
+                        $descripcionFront
+                    );
+
+                    \Log::info("Resultado eliminar ref front en central:", ['result' => $resultCentral]);
+
+                    if (!is_array($resultCentral) || !isset($resultCentral['estado']) || $resultCentral['estado'] !== true) {
+                        $errorMsg = is_array($resultCentral) ? ($resultCentral['msj'] ?? 'Central no confirmó la eliminación') : 'Respuesta inválida de central';
+                        return Response::json(["msj" => "No se pudo eliminar en central: " . $errorMsg, "estado" => false]);
+                    }
+                }
+
+                // Central confirmó (o no es modo central): confirmar al front que puede eliminar localmente
+                return Response::json(["msj" => "Referencia eliminada exitosamente", "estado" => true]);
+            }
+
             $pagos_referencias = pagos_referencias::find($id);
 
             if (!$pagos_referencias) {
@@ -827,6 +878,124 @@ class PagosReferenciasController extends Controller
       * Valida secuencialmente: pagomovil -> interbancaria -> banesco
       * Si es exitosa, crea registro en pagos_referencias con estatus aprobado
       */
+    /**
+     * Registra inmediatamente en central una referencia de tipo "central" proveniente
+     * de un pedido front-only (sin ID en BD). Así queda disponible para ser eliminada
+     * cuando el usuario use delRefPago antes de procesar el pago.
+     *
+     * Parámetros esperados: id_pedido (UUID), descripcion, banco, monto, cedula?, telefono?, tipo?
+     */
+    public function registrarRefCentralFront(Request $req)
+    {
+        try {
+            $sucursal = sucursal::first();
+            if (!$sucursal || $sucursal->modo_transferencia !== 'central') {
+                // No aplica el registro central en este modo; el front puede ignorarlo
+                return Response::json(["msj" => "No aplica", "estado" => true]);
+            }
+
+            // Construir el objeto ref con los datos del front-only (sin ID de BD)
+            $refData = [
+                "id"          => null,           // Sin ID de BD (es front-only)
+                "id_pedido"   => $req->id_pedido, // UUID del pedido front
+                "tipo"        => $req->tipo ?? 1,
+                "monto"       => $req->monto,
+                "descripcion" => $req->descripcion,
+                "banco"       => $req->banco,
+                "cedula"      => $req->cedula ?? null,
+                "telefono"    => $req->telefono ?? null,
+                "estatus"     => "pendiente",
+                "categoria"   => "central",
+            ];
+
+            $dataTransfe = [
+                "refs"        => [$refData],
+                "retenciones" => [],
+            ];
+
+            $resultado = (new sendCentral)->createTranferenciaAprobacion($dataTransfe);
+
+            \Log::info("registrarRefCentralFront: resultado de central", [
+                'id_pedido'   => $req->id_pedido,
+                'descripcion' => $req->descripcion,
+                'resultado'   => $resultado,
+            ]);
+
+            if (is_array($resultado)) {
+                // Registrado (pendiente) o aprobado — ambos casos son éxito para el front
+                return Response::json([
+                    "msj"    => $resultado['msj'] ?? "Referencia registrada en central",
+                    "estado" => true,
+                ]);
+            }
+
+            return Response::json(["msj" => "No se pudo registrar en central", "estado" => false]);
+
+        } catch (\Exception $e) {
+            \Log::error("registrarRefCentralFront error: " . $e->getMessage());
+            return Response::json(["msj" => "Error: " . $e->getMessage(), "estado" => false]);
+        }
+    }
+
+    /**
+     * Consulta el estado actual en central de una referencia tipo "central" de un pedido front-only.
+     * Llama a createTranferenciaAprobacion en central, que devuelve "APROBADO" (estado:true)
+     * si la referencia fue aprobada por el operador de central, o pendiente si aún no.
+     *
+     * Parámetros: id_pedido (UUID), descripcion, banco, monto, cedula?, telefono?, tipo?
+     * Respuesta:  { aprobada: bool, msj: string }
+     */
+    public function consultarRefCentralFront(Request $req)
+    {
+        try {
+            $sucursal = sucursal::first();
+            if (!$sucursal || $sucursal->modo_transferencia !== 'central') {
+                return Response::json(["aprobada" => false, "msj" => "Modo de transferencia no es central"]);
+            }
+
+            $refData = [
+                "id"          => null,
+                "id_pedido"   => $req->id_pedido,
+                "tipo"        => $req->tipo ?? 1,
+                "monto"       => $req->monto,
+                "descripcion" => $req->descripcion,
+                "banco"       => $req->banco,
+                "cedula"      => $req->cedula ?? null,
+                "telefono"    => $req->telefono ?? null,
+                "estatus"     => "pendiente",
+                "categoria"   => "central",
+            ];
+
+            $dataTransfe = [
+                "refs"        => [$refData],
+                "retenciones" => [],
+            ];
+
+            $resultado = (new sendCentral)->createTranferenciaAprobacion($dataTransfe);
+
+            \Log::info("consultarRefCentralFront: resultado", [
+                'id_pedido'   => $req->id_pedido,
+                'descripcion' => $req->descripcion,
+                'resultado'   => $resultado,
+            ]);
+
+            // Central devuelve estado:true + msj:"APROBADO" si la ref ya fue aprobada por el operador
+            $aprobada = is_array($resultado)
+                && isset($resultado['estado'])
+                && $resultado['estado'] === true
+                && strtoupper($resultado['msj'] ?? '') === 'APROBADO';
+
+            return Response::json([
+                "aprobada" => $aprobada,
+                "msj"      => $resultado['msj'] ?? ($aprobada ? "Aprobada" : "Pendiente de aprobación en central"),
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error("consultarRefCentralFront error: " . $e->getMessage());
+            return Response::json(["aprobada" => false, "msj" => "Error: " . $e->getMessage()]);
+        }
+    }
+
      public function autovalidarTransferencia(Request $req)
      {
          try {
@@ -922,56 +1091,15 @@ class PagosReferenciasController extends Controller
                  'cedula' => $cedula,
              ]);
 
-             // Si la validación fue exitosa, crear registro en pagos_referencias
+             // Si la validación fue exitosa, solo devolver datos; el registro en pagos_referencias se crea al enviar setPagoPedido
              if (isset($resultado['estado']) && $resultado['estado'] === true) {
-                 // Obtener la referencia completa del banco
-                 $referenciaBanco = $resultado['referencia_completa'] ?? $referencia;
-                 
-                 // Verificar que no exista ya una referencia con la referencia del banco
-                 // (evita duplicados cuando el usuario cambia los primeros dígitos)
-                 /* $existeRefBanco = pagos_referencias::where("descripcion", $referenciaBanco)
-                     ->where("estatus", "aprobada")
-                     ->first();
-                 if ($existeRefBanco) {
-                     \Log::warning("Referencia del banco ya existe en facturación", [
-                         'referencia_ingresada' => $referencia,
-                         'referencia_banco' => $referenciaBanco,
-                         'id_existente' => $existeRefBanco->id
-                     ]);
-                     return Response::json([
-                         "estado" => false,
-                         "msj" => "Esta transferencia ya fue registrada anteriormente. Referencia del banco: " . $referenciaBanco
-                     ]);
-                 } */
-                 
-                 // Crear registro de pago con estatus aprobado
-                 $pagoRef = new pagos_referencias();
-                 $pagoRef->tipo = 1; // Transferencia
-                 $pagoRef->monto = $monto;
-                 if ($esUuid) {
-                     $pagoRef->id_pedido = null;
-                     $pagoRef->uuid_pedido = $id_pedido;
-                 } else {
-                     $pagoRef->id_pedido = $id_pedido;
-                 }
-                 $pagoRef->cedula = $cedula;
-                 $pagoRef->descripcion = $resultado['referencia_completa'] ?? $referencia;
-                 $pagoRef->banco = $resultado['banco'] ?? "0134"; // Banco destino desde central
-                 $pagoRef->banco_origen = $banco_origen;
-                 $pagoRef->telefono = $telefono;
-                 $pagoRef->fecha_pago = $fecha_pago;
-                 $pagoRef->estatus = "aprobada";
-                 $pagoRef->categoria = "autovalidar";
-                 $pagoRef->response = json_encode($resultado);
-                 $pagoRef->save();
-
                  return Response::json([
                      "estado" => true,
                      "msj" => "¡Transferencia validada y aprobada exitosamente!",
                      "data" => [
                          "modalidad" => $resultado['modalidad'] ?? 'N/A',
                          "referencia_completa" => $resultado['referencia_completa'] ?? $referencia,
-                         "id_referencia" => $pagoRef->id,
+                         "banco" => $resultado['banco'] ?? "0134",
                          "response_central" => $resultado
                      ]
                  ]);

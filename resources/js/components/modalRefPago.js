@@ -9,6 +9,7 @@ const MODULOS = [
 
 export default function ModalRefPago({
     addRefPago,
+    onAutovalidarReferenciaSuccess,
     descripcion_referenciapago,
     setdescripcion_referenciapago,
     banco_referenciapago,
@@ -28,6 +29,7 @@ export default function ModalRefPago({
     montoTraido,
     tipoTraido,
     pedidoData,
+    referencias,
 }) {
     const [isrefbanbs, setisrefbanbs] = useState(true);
     const [errors, setErrors] = useState({});
@@ -61,8 +63,9 @@ export default function ModalRefPago({
     // Monto total del pedido en Bs
     const montoTotalPedido = parseFloat(pedidoData?.bs || 0);
     
-    // Calcular suma de referencias ya cargadas
-    const sumaReferencias = (pedidoData?.referencias || []).reduce((sum, ref) => {
+    // Calcular suma de referencias ya cargadas (refPago para pedidos front por uuid, pedidoData.referencias para backend)
+    const referenciasActuales = referencias ?? pedidoData?.referencias ?? [];
+    const sumaReferencias = referenciasActuales.reduce((sum, ref) => {
         return sum + parseFloat(ref.monto || 0);
     }, 0);
     
@@ -262,11 +265,27 @@ export default function ModalRefPago({
                     message: response.data.msj || '¡Transferencia validada y aprobada exitosamente!',
                     data: response.data.data
                 });
-                
-                // Recargar el pedido después de 1.5 segundos
-                setTimeout(() => {
-                    addRefPago("recargar");
-                }, 1500);
+                // Pedido front: guardar referencia en estado (IndexedDB) sin recargar desde servidor
+                if (pedidoData?._frontOnly && pedidoData?.id && typeof onAutovalidarReferenciaSuccess === 'function') {
+                    onAutovalidarReferenciaSuccess(response.data.data || {}, {
+                        monto: monto_referenciapago,
+                        descripcion: response.data.data?.referencia_completa || referenciaFormateada,
+                        telefono: formatearTelefono(telefonoPago),
+                        cedula: cedula_referenciapago,
+                        fecha_pago: fechaPago,
+                        banco_origen: codigoBancoOrigen,
+                        banco: response.data.data?.banco || '0134',
+                    });
+                    // Solo cerrar el modal; NO llamar "recargar" para evitar que el stale closure de getPedido sobreescriba las refs recién añadidas
+                    setTimeout(() => {
+                        addRefPago("cerrar");
+                    }, 1500);
+                } else {
+                    // Pedido normal (backend): recargar pedido para mostrar la referencia guardada en BD
+                    setTimeout(() => {
+                        addRefPago("recargar");
+                    }, 1500);
+                }
             } else if (response.data.monto_diferente) {
                 // Caso especial: referencia encontrada pero monto diferente
                 setResultadoValidacion({
@@ -437,16 +456,20 @@ export default function ModalRefPago({
 
     return (
         <>
-            {/* Overlay sutil que no bloquea la vista */}
+            {/* Overlay */}
             <div
                 className="fixed inset-0 z-40 transition-opacity bg-black opacity-60 backdrop-blur-[2px]"
                 onClick={handleClose}
             ></div>
 
-            {/* Modal full alto y full ancho */}
-            <div className="fixed inset-0 z-50 flex flex-col w-full h-full bg-white border border-gray-200 shadow-xl">
+            {/* Contenedor centrado */}
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 pointer-events-none">
+                <div
+                    className="pointer-events-auto w-full max-w-md max-h-[90vh] flex flex-col bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
+                    onClick={(e) => e.stopPropagation()}
+                >
                 {/* Header compacto */}
-                <div className="flex-shrink-0 px-3 py-2 border-b border-orange-100 bg-orange-50">
+                <div className="flex-shrink-0 px-3 py-1.5 border-b border-orange-100 bg-orange-50">
                     <div className="flex items-center justify-between gap-2">
                         <h3 className="flex items-center text-sm font-semibold text-gray-800">
                             <i className="mr-1.5 text-orange-500 fa fa-credit-card text-xs"></i>
@@ -454,7 +477,7 @@ export default function ModalRefPago({
                         </h3>
                         <button
                             onClick={handleClose}
-                            className="flex items-center justify-center w-10 h-10 text-lg font-bold text-gray-600 transition-colors rounded-full hover:text-gray-800 hover:bg-orange-200 border-2 border-orange-300 bg-white shadow-sm flex-shrink-0"
+                            className="flex items-center justify-center w-8 h-8 text-sm font-bold text-gray-600 transition-colors rounded-full hover:text-gray-800 hover:bg-orange-200 border border-orange-300 bg-white flex-shrink-0"
                             title="Cerrar (ESC)"
                         >
                             <i className="fa fa-times"></i>
@@ -462,7 +485,7 @@ export default function ModalRefPago({
                     </div>
 
                     {/* Selector de módulos */}
-                    <div className="flex flex-wrap gap-1 mt-2">
+                    <div className="flex flex-wrap gap-1 mt-1.5">
                         {MODULOS.map((modulo) => (
                             <button
                                 key={modulo.id}
@@ -485,7 +508,7 @@ export default function ModalRefPago({
                 <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
                     {/* Sección: Pedido a validar (lineal) */}
                     {pedidoData && (
-                        <div className="flex-shrink-0 mx-4 mt-3 py-2 px-3 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                        <div className="flex-shrink-0 mx-3 mt-2 py-1.5 px-2.5 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
                             <span className="flex items-center text-gray-700 font-medium">
                                 <i className="fa fa-shopping-cart mr-1.5 text-orange-500 text-xs"></i>
                                 Pedido a validar
@@ -510,7 +533,7 @@ export default function ModalRefPago({
                     )}
 
                 {/* Body del formulario */}
-                <form onSubmit={handleSubmit} className="p-4 space-y-3 flex-1">
+                <form onSubmit={handleSubmit} className="p-3 space-y-2.5 flex-1">
                     {/* Cédula - Solo para módulo Central */}
                     {moduloSeleccionado === 'Central' && (
                         <div>
@@ -882,14 +905,14 @@ export default function ModalRefPago({
                     )}
 
                     {/* Footer compacto */}
-                    <div className="pt-3 border-t border-gray-100">
+                    <div className="pt-2 border-t border-gray-100">
                         {moduloSeleccionado === 'AutoValidar' ? (
                             /* Botón grande para AutoValidar */
                             <button
                                 type="button"
                                 onClick={handleAutoValidar}
                                 disabled={autoValidando || resultadoValidacion?.success}
-                                className={`w-full flex items-center justify-center px-6 py-4 text-base font-semibold text-white transition-all rounded-lg shadow-lg ${
+                                className={`w-full flex items-center justify-center px-4 py-3 text-sm font-semibold text-white transition-all rounded-lg ${
                                     resultadoValidacion?.success
                                         ? 'bg-green-500 cursor-not-allowed'
                                         : autoValidando
@@ -899,17 +922,17 @@ export default function ModalRefPago({
                             >
                                 {autoValidando ? (
                                     <>
-                                        <i className="mr-3 text-xl fa fa-spinner fa-spin"></i>
-                                        <span>Validando transferencia...</span>
+                                        <i className="mr-2 fa fa-spinner fa-spin"></i>
+                                        <span>Validando...</span>
                                     </>
                                 ) : resultadoValidacion?.success ? (
                                     <>
-                                        <i className="mr-3 text-xl fa fa-check-circle"></i>
-                                        <span>¡Transferencia Aprobada!</span>
+                                        <i className="mr-2 fa fa-check-circle"></i>
+                                        <span>¡Aprobada!</span>
                                     </>
                                 ) : (
                                     <>
-                                        <i className="mr-3 text-xl fa fa-shield"></i>
+                                        <i className="mr-2 fa fa-shield"></i>
                                         <span>Autovalidar Transferencia</span>
                                     </>
                                 )}
@@ -945,6 +968,7 @@ export default function ModalRefPago({
                         )}
                     </div>
                 </form>
+                </div>
                 </div>
             </div>
         </>

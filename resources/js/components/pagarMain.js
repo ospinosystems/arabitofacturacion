@@ -62,6 +62,7 @@ export default function PagarMain({
 
     getPedidosFast,
     addNewPedido,
+    addNewPedidoFront,
     addRetencionesPago,
     delRetencionPago,
     user,
@@ -74,7 +75,9 @@ export default function PagarMain({
     delRefPago,
     refPago,
     pedidosFast,
+    pedidosFrontPendientesList = [],
     pedidoData,
+    lastAddedFrontItemId,
     getPedido,
     notificar,
     debito,
@@ -109,8 +112,23 @@ export default function PagarMain({
     delItemPedido,
     setDescuento,
     setDescuentoUnitario,
+    descuentoUnitarioEditingId = null,
+    descuentoUnitarioVerificandoId = null,
+    descuentoUnitarioTooltipAprobadoId = null,
+    descuentoUnitarioInputValue = "",
+    setDescuentoUnitarioInputValue,
+    pendientesDescuentoUnitario = {},
+    onDescuentoUnitarioSubmit,
+    onDescuentoUnitarioCancel,
+    pendienteDescuentoMetodoPago = {},
+    solicitarDescuentoMetodoPagoFront,
+    verificarDescuentoMetodoPagoFront,
+    descuentoMetodoPagoVerificando = false,
+    descuentoMetodoPagoAprobadoPorUuid = {},
+    metodosPagoAprobadosPorUuid = {},
     setDescuentoTotal,
     setCantidadCarrito,
+    setCantidadCarritoFront,
     toggleAddPersona,
     setToggleAddPersona,
     toggleImprimirTicket,
@@ -174,6 +192,10 @@ export default function PagarMain({
     showModalPosDebito,
     // Ref que el padre (facturar) usa para enfocar el campo Ref. cuando hay un solo débito sin referencia
     focusRefDebitoInputRef,
+    actualizarCampoPedidoFront,
+    actualizarEstatusRefFront,
+    itemsDisponiblesDevolucion = [],
+    setItemsDisponiblesDevolucion,
 }) {
     const [recibido_dolar, setrecibido_dolar] = useState("");
     const [recibido_bs, setrecibido_bs] = useState("");
@@ -203,9 +225,11 @@ export default function PagarMain({
     // Estados para modal de pedido original (devoluciones)
     const [showModalPedidoOriginal, setShowModalPedidoOriginal] = useState(false);
     const [pedidoOriginalInput, setPedidoOriginalInput] = useState("");
-    const [itemsDisponiblesDevolucion, setItemsDisponiblesDevolucion] = useState([]);
     const [pedidoOriginalAsignado, setPedidoOriginalAsignado] = useState(null);
     const pedidoOriginalInputRef = useRef(null);
+    const [editingCantidadFront, setEditingCantidadFront] = useState({});
+    const [editingCantidadFrontItemId, setEditingCantidadFrontItemId] = useState(null);
+    const quantityFrontInputRef = useRef(null);
     
     // Estado para modal de info de factura original
     const [showModalInfoFacturaOriginal, setShowModalInfoFacturaOriginal] = useState(false);
@@ -232,7 +256,14 @@ export default function PagarMain({
         };
         return () => { focusRefDebitoInputRef.current = null; };
     }, [focusRefDebitoInputRef, debitos.length]);
-    
+
+    useEffect(() => {
+        if (editingCantidadFrontItemId && quantityFrontInputRef.current) {
+            quantityFrontInputRef.current.focus();
+            quantityFrontInputRef.current.select();
+        }
+    }, [editingCantidadFrontItemId]);
+
     // Configuración de métodos de pago (cambiar aquí para mostrar/ocultar)
     const SHOW_BIOPAGO = false; // Cambiar a true para mostrar Biopago
     
@@ -263,6 +294,22 @@ export default function PagarMain({
     const calculadoraRef = useRef(null);
     const miniCalcRef = useRef(null);
     const calculadoraBtnRef = useRef(null);
+    const descuentoUnitarioInputRef = useRef(null);
+
+    const [descuentoUnitarioTick, setDescuentoUnitarioTick] = useState(0);
+    useEffect(() => {
+        const hasPendingUnitario = pendientesDescuentoUnitario && Object.keys(pendientesDescuentoUnitario).some((pid) => Object.keys(pendientesDescuentoUnitario[pid] || {}).length > 0);
+        const hasPendingMetodoPago = pendienteDescuentoMetodoPago && Object.keys(pendienteDescuentoMetodoPago).length > 0;
+        if (!hasPendingUnitario && !hasPendingMetodoPago) return;
+        const id = setInterval(() => setDescuentoUnitarioTick((t) => t + 1), 1000);
+        return () => clearInterval(id);
+    }, [pendientesDescuentoUnitario, pendienteDescuentoMetodoPago]);
+
+    useEffect(() => {
+        if (descuentoUnitarioEditingId && descuentoUnitarioInputRef.current) {
+            descuentoUnitarioInputRef.current.focus();
+        }
+    }, [descuentoUnitarioEditingId]);
 
     // Handler para ejecutar facturar_e_imprimir al presionar ENTER en inputs de pago
     // (guarda el pedido e imprime el ticket, igual que Ctrl+Enter)
@@ -975,24 +1022,17 @@ export default function PagarMain({
             return;
         }
         
-        // Validar que el monto no supere el total del pedido
         const tasaBsPedido = getTasaPromedioCarrito();
-        const totalPedidoBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
+        // Total del pedido en Bs (para front usar clean_total * tasa si no hay bs_clean)
+        let totalPedidoBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
+        if (!totalPedidoBs && pedidoData?.clean_total != null) {
+            totalPedidoBs = parseFloat(pedidoData.clean_total) * tasaBsPedido;
+        }
         
-        // Calcular débitos bloqueados (ya aprobados) - estos se restan del total
         const debitosBloqueados = debitos.filter(d => d.bloqueado);
         const totalDebitosBloqueadosBs = debitosBloqueados.reduce((sum, d) => sum + (parseFloat(d.monto) || 0), 0);
-        
-        // Calcular el total base EXCLUYENDO débitos bloqueados (ya aprobados)
         const totalPedidoAjustadoBs = totalPedidoBs - totalDebitosBloqueadosBs;
         
-        // Calcular el total de débitos NO bloqueados con el nuevo valor
-        const nuevosDebitos = [...debitos];
-        nuevosDebitos[index].monto = valor;
-        const debitosNoBloqueados = nuevosDebitos.filter(d => !d.bloqueado);
-        const nuevoTotalDebitosNoBloqueadosBs = debitosNoBloqueados.reduce((sum, d) => sum + (parseFloat(d.monto) || 0), 0);
-        
-        // Calcular otros pagos en Bs (excluyendo débitos)
         const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
         const otrosPagosUSD = parseFloat(efectivo_dolar || 0) + 
                               (parseFloat(efectivo_bs || 0) / tasaBsPedido) + 
@@ -1002,25 +1042,61 @@ export default function PagarMain({
                               parseFloat(biopago || 0);
         const otrosPagosBs = otrosPagosUSD * tasaBsPedido;
         
-        // Calcular total pagado en Bs (solo débitos no bloqueados + otros pagos)
-        const totalPagadoBs = nuevoTotalDebitosNoBloqueadosBs + otrosPagosBs;
-        
-        // Si el total pagado supera el total del pedido ajustado
-        const esDevolucion = totalPedidoBs < 0;
-        const excedeTotal = esDevolucion 
-            ? totalPagadoBs < totalPedidoAjustadoBs - 0.01
-            : totalPagadoBs > totalPedidoAjustadoBs + 0.01;
-        
-        // Con múltiples débitos: si excede, limpiar el campo. Con un solo débito: no limpiar;
-        // se llamará a syncPago para autorestar en los otros montos con valores.
-        if (excedeTotal && debitos.length !== 1) {
-            nuevosDebitos[index].monto = "";
-            setDebitos(nuevosDebitos);
-            if (pedidoData?.id && guardarDebitosPorPedido) {
-                guardarDebitosPorPedido(pedidoData.id, nuevosDebitos);
+        // Máximo total permitido en débitos (no bloqueados) = total pedido ajustado - otros pagos
+        const maxDebitosBs = Math.max(0, totalPedidoAjustadoBs - otrosPagosBs);
+
+        const valorNum = typeof valor === "string"
+            ? parseFloat(valor.replace(/[^0-9.,]/g, "").replace(",", "."))
+            : parseFloat(valor);
+
+        // Valor aceptado para este input: no puede superar el máximo TOTAL de débitos
+        const valorAceptado = (valor !== "" && valor !== null && !Number.isNaN(valorNum) && valorNum > maxDebitosBs)
+            ? maxDebitosBs
+            : (Number.isNaN(valorNum) ? 0 : valorNum);
+
+        const nuevosDebitos = debitos.map((d, i) => ({ ...d })); // copia profunda
+
+        // Si hay múltiples débitos y el nuevo valor excede el espacio disponible para este input,
+        // restar el exceso proporcionalmente de los otros débitos no bloqueados.
+        if (debitos.length > 1 && !Number.isNaN(valorNum) && valor !== "" && valor !== null) {
+            const otrosDebitosNoBloqueadosBs = debitos.reduce((sum, d, i) => {
+                if (i === index || d.bloqueado) return sum;
+                return sum + (parseFloat(d.monto) || 0);
+            }, 0);
+            const maxEsteDebitoBs = Math.max(0, maxDebitosBs - otrosDebitosNoBloqueadosBs);
+
+            if (valorAceptado > maxEsteDebitoBs) {
+                // Cuánto necesitamos restar de los otros débitos no bloqueados
+                const exceso = valorAceptado - maxEsteDebitoBs;
+                const totalOtrosReducibles = debitos.reduce((sum, d, i) => {
+                    if (i === index || d.bloqueado) return sum;
+                    return sum + (parseFloat(d.monto) || 0);
+                }, 0);
+
+                if (totalOtrosReducibles > 0) {
+                    // Distribuir la reducción proporcionalmente
+                    nuevosDebitos.forEach((d, i) => {
+                        if (i !== index && !d.bloqueado) {
+                            const montoActual = parseFloat(d.monto) || 0;
+                            if (montoActual > 0) {
+                                const reduccion = Math.min(montoActual, (montoActual / totalOtrosReducibles) * exceso);
+                                nuevosDebitos[i].monto = Math.max(0, montoActual - reduccion).toFixed(2);
+                            }
+                        }
+                    });
+                }
             }
-            return;
         }
+
+        // Guardar el valor final en el input actual (como string para preservar escritura en curso)
+        nuevosDebitos[index].monto = valor === "" ? "" : (
+            (!Number.isNaN(valorNum) && valorNum > maxDebitosBs)
+                ? maxDebitosBs.toFixed(2)
+                : valor
+        );
+
+        const debitosNoBloqueados = nuevosDebitos.filter(d => !d.bloqueado);
+        const nuevoTotalDebitosNoBloqueadosBs = debitosNoBloqueados.reduce((sum, d) => sum + (parseFloat(d.monto) || 0), 0);
         
         setDebitos(nuevosDebitos);
         
@@ -1029,8 +1105,6 @@ export default function PagarMain({
         }
         
         // Disparar el auto-corrector para redistribuir otros métodos de pago (autorestar en otros montos)
-        // Solo si no se está limpiando intencionalmente (skipSync = false).
-        // Con un solo débito siempre se llama a syncPago para autorestar en los otros montos con valores.
         if (!skipSync && (autoCorrector || debitos.length === 1)) {
             syncPago(nuevoTotalDebitosNoBloqueadosBs.toString(), "Debito");
         }
@@ -1287,6 +1361,51 @@ export default function PagarMain({
         setLastPaymentMethodCalled('transferencia');
     };
 
+    const getCreditoLocal = () => {
+        const tasaBsPedido = getTasaPromedioCarrito();
+        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+
+        // Calcular total de débitos NO bloqueados (excluir aprobados)
+        const debitosNoBloqueados = debitos.filter(d => !d.bloqueado);
+        const totalDebitosNoBloqueadosBs = debitosNoBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+
+        // Calcular débitos BLOQUEADOS
+        const debitosBloqueados = debitos.filter(d => d.bloqueado);
+        const totalDebitosBloqueadosBs = debitosBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+        const totalDebitosBloqueadosUSD = totalDebitosBloqueadosBs / tasaBsPedido;
+
+        // Calcular el total base excluyendo débitos bloqueados
+        const totalBaseUSD = parseFloat(pedidoData.clean_total) - totalDebitosBloqueadosUSD;
+
+        const otrosTotal =
+            parseFloat(efectivo_dolar || 0) +
+            (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
+            (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
+            parseFloat(transferencia || 0) +
+            (totalDebitosNoBloqueadosBs / tasaBsPedido) +
+            parseFloat(biopago || 0);
+
+        const montoCredito = otrosTotal === 0
+            ? totalBaseUSD.toFixed(2)
+            : Math.max(0, totalBaseUSD - otrosTotal).toFixed(2);
+
+        // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
+        if (lastPaymentMethodCalled === 'credito' && parseFloat(credito || 0).toFixed(2) === montoCredito) {
+            setCredito(totalBaseUSD.toFixed(2));
+            setEfectivo_dolar("");
+            setEfectivo_bs("");
+            setEfectivo_peso("");
+            setTransferencia("");
+            setDebito("");
+            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "" }]);
+            setBiopago("");
+        } else {
+            setCredito(montoCredito);
+        }
+
+        setLastPaymentMethodCalled('credito');
+    };
+
     const getBiopagoLocal = () => {
         return;
         const tasaBsPedido = getTasaPromedioCarrito();
@@ -1459,13 +1578,14 @@ export default function PagarMain({
         const totalPedidoAjustadoBs = totalPedidoBs - totalDebitosBloqueadosBs;
         const totalPagadoConNuevoValorBs = totalPagadoConNuevoValorUSD * tasaBsPedido;
         
-        // Si el total pagado supera el total del pedido, limpiar el campo
+        // Si el total pagado supera el total del pedido, verificar qué hacer
         const excedeTotal = esDevolucion 
             ? totalPagadoConNuevoValorBs < totalPedidoAjustadoBs - 0.01
             : totalPagadoConNuevoValorBs > totalPedidoAjustadoBs + 0.01;
 
-        // Con Débito (p. ej. un solo débito) no limpiar al exceder: se redistribuirá en los otros montos (autorestar)
-        if (excedeTotal && type !== "Debito") {
+        // Si excedeTotal Y autoCorrector está INACTIVO: limpiar el campo (comportamiento anterior)
+        // Si excedeTotal Y autoCorrector está ACTIVO: no limpiar, dejar que la redistribución lo maneje
+        if (excedeTotal && !autoCorrector && type !== "Debito") {
             if (type === "EfectivoUSD") setEfectivo_dolar("");
             else if (type === "EfectivoBs") setEfectivo_bs("");
             else if (type === "EfectivoCOP") setEfectivo_peso("");
@@ -1561,12 +1681,37 @@ export default function PagarMain({
         const restanteUSD = (totalParaDistribuir - valUSD) / divisor;
 
         // Verificar que el restante tenga el mismo signo que el total (o sea cero)
-        // Para pedidos positivos: restante no debe ser negativo
-        // Para devoluciones: restante no debe ser positivo
+        // Para pedidos positivos: si restante es negativo significa que el nuevo valor supera el total;
+        //   en ese caso redistribuir (auto-restar) fijando el restante en 0 (vaciar otros campos).
+        // Para devoluciones: restante no debe ser positivo.
         if (esDevolucion) {
-            if (restanteUSD > 0) return; // En devolución, restante debe ser negativo o cero
+            if (restanteUSD > 0) return;
         } else {
-            if (restanteUSD < 0) return; // En pedido normal, restante debe ser positivo o cero
+            if (restanteUSD < 0) {
+                // Autorestar: el valor ingresado supera lo disponible.
+                // Vaciar los otros campos que participan en la redistribución.
+                inputs.forEach((e) => {
+                    const debeVaciar = e.key !== type &&
+                        (e.key === "Debito" ? totalDebitosNoBloqueadosBs > 0 : esValorValido(e.val));
+                    if (debeVaciar) {
+                        if (e.key === "Debito") {
+                            // Reducir los débitos no bloqueados a 0
+                            if (debitos && debitos.length > 0) {
+                                const nuevosDebitos = debitos.map(d => d.bloqueado ? d : { ...d, monto: "0" });
+                                setDebitos(nuevosDebitos);
+                                if (pedidoData?.id && guardarDebitosPorPedido) {
+                                    guardarDebitosPorPedido(pedidoData.id, nuevosDebitos);
+                                }
+                            } else {
+                                setDebito("0");
+                            }
+                        } else {
+                            e.set("0");
+                        }
+                    }
+                });
+                return;
+            }
         }
 
         inputs.forEach((e) => {
@@ -1615,6 +1760,59 @@ export default function PagarMain({
     const [codigoGenerado, setCodigoGenerado] = useState("");
     const [claveIngresada, setClaveIngresada] = useState("");
     const [currentRefId, setCurrentRefId] = useState(null);
+
+    // Verifica una referencia front-only (sin id BD) contra central vía autovalidar-transferencia.
+    // Si central la aprueba, actualiza su estatus localmente a "aprobada".
+    const verificarRefFrontOnly = async (ref) => {
+        if (!ref?._localId || !pedidoData?.id) return;
+        const localId = ref._localId;
+        const esCentral = (ref.categoria || "central") === "central";
+        setValidatingRef(localId);
+        try {
+            if (esCentral) {
+                // Refs "Central": se aprueban manualmente en central (no son autovalidadas).
+                // Consultamos el estado actual en central re-enviando los datos;
+                // central devuelve "APROBADO" (estado:true) si ya fue aprobada, o sigue pendiente.
+                const response = await axios.post("/consultar-ref-central-front", {
+                    id_pedido:   pedidoData.id,
+                    descripcion: ref.descripcion,
+                    banco:       ref.banco ?? "",
+                    monto:       ref.monto ?? "",
+                    cedula:      ref.cedula ?? null,
+                    telefono:    ref.telefono ?? null,
+                    tipo:        ref.tipo ?? 1,
+                });
+                if (response.data?.aprobada) {
+                    actualizarEstatusRefFront(pedidoData.id, localId, "aprobada", response.data);
+                    notificar({ data: { msj: "Referencia aprobada por central.", estado: true } });
+                } else {
+                    notificar({ data: { msj: response.data?.msj || "La referencia aún está pendiente de aprobación en central.", estado: false } });
+                }
+            } else {
+                // Refs "AutoValidar": validan automáticamente contra registros bancarios.
+                const response = await axios.post("/autovalidar-transferencia", {
+                    descripcion: ref.descripcion,
+                    banco_origen: ref.banco_origen ?? ref.banco ?? "",
+                    telefono: ref.telefono ?? "",
+                    fecha_pago: ref.fecha_pago ?? null,
+                    monto: ref.monto ?? "",
+                    id_pedido: pedidoData.id,
+                });
+                if (response.data?.estado) {
+                    actualizarEstatusRefFront(pedidoData.id, localId, "aprobada", response.data);
+                    notificar({ data: { msj: "Referencia verificada y aprobada.", estado: true } });
+                } else {
+                    actualizarEstatusRefFront(pedidoData.id, localId, "error");
+                    notificar({ data: { msj: response.data?.msj || "Central no aprobó la referencia.", estado: false } });
+                }
+            }
+        } catch (err) {
+            if (!esCentral) actualizarEstatusRefFront(pedidoData.id, localId, "error");
+            notificar({ data: { msj: "Error al verificar: " + (err.response?.data?.msj || err.message), estado: false } });
+        } finally {
+            setValidatingRef(null);
+        }
+    };
 
     const sendRefToMerchant = (id_ref) => {
         setValidatingRef(id_ref);
@@ -1768,7 +1966,7 @@ export default function PagarMain({
         }
 
         db.asignarPedidoOriginalDevolucion({
-            id_pedido_devolucion: id,
+            id_pedido_devolucion: pedidoData?.id,
             id_pedido_original: pedidoOriginalInput,
         })
             .then((res) => {
@@ -1778,8 +1976,17 @@ export default function PagarMain({
                     setPedidoOriginalAsignado(pedidoOriginalInput);
                     setShowModalPedidoOriginal(false);
                     setPedidoOriginalInput("");
-                    // Refrescar pedido
-                    getPedido(null, null, false);
+                    // Para pedidos front-only: persiste isdevolucionOriginalid en estado local e IndexedDB
+                    if (res.data.front_only && pedidoData?._frontOnly && pedidoData?.id) {
+                        if (typeof actualizarCampoPedidoFront === "function") {
+                            actualizarCampoPedidoFront(pedidoData.id, {
+                                isdevolucionOriginalid: pedidoOriginalInput,
+                            });
+                        }
+                    } else {
+                        // Pedido real en BD: refrescar desde servidor
+                        getPedido(null, null, false);
+                    }
                 } else {
                     notificar(res.data);
                 }
@@ -1840,18 +2047,24 @@ export default function PagarMain({
             return;
         }
 
-        db.eliminarPedidoOriginalDevolucion({ id_pedido: id })
+        const uuid = pedidoData?.id;
+        db.eliminarPedidoOriginalDevolucion({ id_pedido: uuid })
             .then((res) => {
-                notificar(res);
-                if (res.data.estado) {
+                notificar(res.data || res);
+                if (res.data?.estado) {
                     setShowModalInfoFacturaOriginal(false);
                     setPedidoOriginalAsignado(null);
                     setItemsFacturaOriginal([]);
-                    getPedido(null, null, false);
+                    setItemsDisponiblesDevolucion([]);
+                    if (res.data.front_only && uuid && typeof actualizarCampoPedidoFront === "function") {
+                        actualizarCampoPedidoFront(uuid, { isdevolucionOriginalid: null });
+                    } else {
+                        getPedido(null, null, false);
+                    }
                 }
             })
             .catch((error) => {
-                notificar({ msj: "Error: " + error.message, estado: false });
+                notificar({ msj: "Error: " + (error.response?.data?.msj || error.message), estado: false });
             });
     };
 
@@ -1904,9 +2117,7 @@ export default function PagarMain({
         }
     }, [posTransaccionesPorPedido, pedidoData?.id, pedidoData?.bs_clean, pedidoData?.bs, facturar_e_imprimir]);
 
-    useEffect(() => {
-        getPedidosFast();
-    }, []);
+    // No llamar getPedidosFast al montar; se invoca tras getPedido, facturar, delpedido, etc.
 
     // Limpiar estados de factura original cuando cambie el pedido
     useEffect(() => {
@@ -1983,7 +2194,7 @@ export default function PagarMain({
             event.preventDefault();
             event.stopPropagation();
 
-            getCredito();
+            getCreditoLocal();
             // Hacer foco en el input de crédito
             setTimeout(() => {
                 if (creditoInputRef.current) {
@@ -2190,17 +2401,27 @@ export default function PagarMain({
         },
         [refaddfast, debitoInputRef, showModalPosDebito, togglereferenciapago]
     );
-    //f5
+    //f5 - ejecutar acción sin recargar la página (eliminar pedido). No permitir si hay débito aprobado o refs cargadas.
     useHotkeys(
         "f5",
-        () => {
-            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
+        (e) => {
+            e.preventDefault();
+            if (showModalPosDebito || togglereferenciapago) return;
+            const tieneDebitoAprobado = debitos && debitos.some((d) => d.bloqueado === true);
+            if (tieneDebitoAprobado) {
+                notificar({ data: { msj: "No se puede eliminar el pedido: tiene un débito aprobado.", estado: false } });
+                return;
+            }
+            if (refPago && refPago.length > 0) {
+                notificar({ data: { msj: "No se puede eliminar el pedido: tiene referencias bancarias cargadas. Elimínelas primero.", estado: false } });
+                return;
+            }
             del_pedido();
         },
         {
             enableOnTags: ["INPUT", "SELECT"],
         },
-        [showModalPosDebito, togglereferenciapago]
+        [showModalPosDebito, togglereferenciapago, debitos, del_pedido, notificar]
     );
     //f4
     useHotkeys(
@@ -2261,16 +2482,15 @@ export default function PagarMain({
         },
         [showModalPosDebito, togglereferenciapago]
     );
-    //f1 - Crear nuevo pedido
+    //f1 - Crear nuevo pedido (solo front)
     useHotkeys(
         "f1",
         () => {
             if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
-            // Validar que existe la función addNewPedido
-            if (typeof addNewPedido === "function") {
-                addNewPedido();
+            if (typeof addNewPedidoFront === "function") {
+                addNewPedidoFront();
             } else {
-                console.warn("addNewPedido function not available");
+                console.warn("addNewPedidoFront function not available");
             }
         },
         {
@@ -2377,6 +2597,17 @@ export default function PagarMain({
         monto_iva = 0,
     } = pedidoData;
 
+    // Totales para mostrar (Ref, Bs, Cop): cuando es pedido front usamos clean_total/bs y calculamos Cop por items/tasa
+    const totalRef = parseFloat(pedidoData?.clean_total ?? total) || 0;
+    const tasaBsDisplay = getTasaBsCalc();
+    const tasaCopDisplay = getTasaCopCalc();
+    const totalBs = (pedidoData?.bs != null && pedidoData?.bs !== "")
+        ? parseFloat(pedidoData.bs)
+        : (totalRef * tasaBsDisplay);
+    const totalCop = (pedidoData?.cop != null && pedidoData?.cop !== "")
+        ? parseFloat(pedidoData.cop)
+        : (totalRef * tasaCopDisplay);
+
     let ifnegative = items.filter((e) => e.cantidad < 0).length;
     return pedidoData ? (
         <div className="container-fluid h-100 ">
@@ -2419,7 +2650,9 @@ export default function PagarMain({
                         notificar={notificar}
                         getPedido={getPedido}
                         pedidosFast={pedidosFast}
+                        pedidosFrontPendientesList={pedidosFrontPendientesList}
                         onClickEditPedido={onClickEditPedido}
+                        addNewPedidoFront={addNewPedidoFront}
                         togglereferenciapago={togglereferenciapago}
                         orderColumn={orderColumn}
                         setOrderColumn={setOrderColumn}
@@ -2443,7 +2676,7 @@ export default function PagarMain({
                                             <div className="text-left">
                                                 
                                                 <div className="text-2xl font-bold text-green-500 md:text-4xl">
-                                                    {moneda(total)} <span className="text-xs">Ref</span>
+                                                    {moneda(totalRef)} <span className="text-xs">Ref</span>
                                                 </div>
                                             </div>
                                             <div className="h-12 border-l border-gray-300"></div>
@@ -2457,7 +2690,7 @@ export default function PagarMain({
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <div className="text-2xl font-bold text-orange-500 md:text-4xl">
-                                                        {moneda(pedidoData.bs)} <span className="text-xs">Bs</span>
+                                                        {moneda(totalBs)} <span className="text-xs">Bs</span>
                                                     </div>
                                                     {/* Botón Calculadora/Vueltos */}
                                                     <button
@@ -2479,10 +2712,7 @@ export default function PagarMain({
                                                             Total Cops
                                                         </div>
                                                         <div className="text-2xl font-bold text-blue-500 md:text-4xl">
-                                                            {moneda(
-                                                                pedidoData.clean_total *
-                                                                    peso
-                                                            )}
+                                                            {moneda(totalCop)}
                                                         </div>
                                                     </div>
                                                 </>
@@ -2499,6 +2729,53 @@ export default function PagarMain({
                                             {total_porciento}%
                                         </button>
                                     </div>
+
+                                    {/* Descuento por método de pago: solo se muestra cuando hay solicitud en espera (la solicitud se envía al guardar) */}
+                                    {pedidoData._frontOnly && pedidoData.id && (pedidoData.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0) && pendienteDescuentoMetodoPago[pedidoData.id] && (
+                                        <div className="mt-2 pt-2 border-t border-gray-200 flex flex-col gap-1.5">
+                                            <div className="flex items-center justify-between gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                                                <span className="text-xs font-medium">Descuento por método de pago en espera</span>
+                                                <span className="text-[10px] tabular-nums text-amber-600">
+                                                    {(() => {
+                                                        const submittedAt = pendienteDescuentoMetodoPago[pedidoData.id]?.submittedAt || 0;
+                                                        const elapsed = Math.floor((Date.now() - submittedAt) / 1000);
+                                                        const m = Math.floor(elapsed / 60);
+                                                        const s = elapsed % 60;
+                                                        return `${m}:${String(s).padStart(2, "0")}`;
+                                                    })()}
+                                                </span>
+                                            </div>
+                                            {(() => {
+                                                const metodos = pendienteDescuentoMetodoPago[pedidoData.id]?.metodos_pago || [];
+                                                const labels = { efectivo: "Efectivo", transferencia: "Transferencia", debito: "Débito", biopago: "Biopago", credito: "Crédito", adicional: "Bs/Pesos" };
+                                                const monedaF = (n) => (n == null || n === 0 ? "" : typeof n === "number" ? (n % 1 === 0 ? n : n.toFixed(2)) : String(n));
+                                                const list = metodos.map((m) => {
+                                                    const label = labels[m.tipo] || m.tipo;
+                                                    return m.monto != null && m.monto !== 0 ? `${label} Bs ${monedaF(m.monto)}` : label;
+                                                }).filter(Boolean);
+                                                return list.length > 0 ? (
+                                                    <div className="text-[10px] text-amber-700 bg-amber-50/80 rounded px-2 py-1">
+                                                        <span className="font-medium">Métodos enviados a validar:</span> {list.join(", ")}
+                                                    </div>
+                                                ) : null;
+                                            })()}
+                                            <button
+                                                type="button"
+                                                disabled={descuentoMetodoPagoVerificando}
+                                                onClick={() => verificarDescuentoMetodoPagoFront && verificarDescuentoMetodoPagoFront()}
+                                                className="w-full flex items-center justify-center gap-2 px-4 py-3 font-semibold text-orange-800 bg-orange-200 border-2 border-orange-400 rounded-lg hover:bg-orange-300 hover:border-orange-500 disabled:opacity-60 shadow-md"
+                                            >
+                                                {descuentoMetodoPagoVerificando ? (
+                                                    <>
+                                                        <span className="inline-block w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                                                        Verificando…
+                                                    </>
+                                                ) : (
+                                                    <>Verificar si ya está aprobado</>
+                                                )}
+                                            </button>
+                                        </div>
+                                    )}
 
                                     {/* Info del pedido abajo */}
                                     <div className="flex items-center justify-between mt-2">
@@ -2573,12 +2850,12 @@ export default function PagarMain({
                                                     data-type="cop"
                                                     className="font-bold text-gray-600 cursor-pointer"
                                                 >
-                                                    {cop}
+                                                    {moneda(totalCop)}
                                                 </span>
                                             </div>
                                         </div>
                                     )}
-                                    {pedidoData.clean_total < 0 ? (
+                                    {totalRef < 0 ? (
                                         <div className="p-2 mt-3 text-xs border border-yellow-200 rounded bg-yellow-50">
                                             <i className="mr-2 text-yellow-600 fa fa-exclamation-triangle"></i>
                                             <span className="text-yellow-800">
@@ -2600,7 +2877,7 @@ export default function PagarMain({
                                                 <col className="!w-[10%]" />
                                                 <col className="!w-[10%]" />
                                                 <col className="!w-[10%]" />
-                                                {editable && (
+                                                {(editable || pedidoData._frontOnly) && (
                                                     <col className="!w-[10%]" />
                                                 )}
                                             </colgroup>
@@ -2624,7 +2901,7 @@ export default function PagarMain({
                                                     <th className="px-2 py-1 text-xs font-medium tracking-wider text-right text-gray-600">
                                                         Total
                                                     </th>
-                                                    {editable && (
+                                                    {(editable || pedidoData._frontOnly) && (
                                                         <th className="px-2 py-1 text-xs font-medium tracking-wider text-center text-gray-600"></th>
                                                     )}
                                                 </tr>
@@ -2670,12 +2947,11 @@ export default function PagarMain({
                                                         <tr
                                                             key={e.id}
                                                             title={showTittlePrice(
-                                                                e.producto
-                                                                    .precio,
+                                                                e.producto?.precio ?? e.precio_unitario ?? e.precio ?? 0,
                                                                 e.total,
                                                                 e.tasa
                                                             )}
-                                                            className="hover:bg-gray-50"
+                                                            className={`hover:bg-gray-50 ${lastAddedFrontItemId === e.id ? "carrito-item-just-added" : ""}`}
                                                         >
                                                             <td className="px-2 py-1">
                                                                 <div className="flex items-center space-x-2">
@@ -2688,7 +2964,7 @@ export default function PagarMain({
                                                                                 </span>
                                                                             ) : null}
                                                                             {e.condicion ==
-                                                                                2 ||
+                                                                            2 ||
                                                                             e.condicion ==
                                                                                 0 ? (
                                                                                 <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">
@@ -2704,24 +2980,19 @@ export default function PagarMain({
                                                                         }
                                                                     >
                                                                         <div className="font-mono text-gray-600">
-                                                                            {
-                                                                                e
-                                                                                    .producto
-                                                                                    .codigo_barras
-                                                                            }
+                                                                            {(() => {
+                                                                                const cb = e.producto?.codigo_barras ?? e.producto?.codigo_proveedor ?? e.codigo_barras ?? e.codigo_proveedor;
+                                                                                return (cb != null && String(cb).trim() !== "") ? String(cb).trim() : "—";
+                                                                            })()}
                                                                         </div>
                                                                         <div
                                                                             className="font-medium text-gray-900 "
                                                                             title={
-                                                                                e
-                                                                                    .producto
-                                                                                    .descripcion
+                                                                                e.producto?.descripcion ?? e.descripcion ?? "Producto no disponible"
                                                                             }
                                                                         >
                                                                             {
-                                                                                e
-                                                                                    .producto
-                                                                                    .descripcion
+                                                                                e.producto?.descripcion ?? e.descripcion ?? "Producto no disponible"
                                                                             }
                                                                         </div>
                                                                     </span>
@@ -2733,49 +3004,101 @@ export default function PagarMain({
                                                                 </div>
                                                             </td>
                                                             <td
-                                                                className="px-2 py-1 text-center cursor-pointer"
+                                                                className={`px-2 py-1 text-center ${e.descuento != null && parseFloat(e.descuento) > 0 ? "text-gray-500" : ""}`}
                                                                 onClick={
-                                                                    e.condicion ==
-                                                                    1
-                                                                        ? null
-                                                                        : setCantidadCarrito
+                                                                    (e.descuento != null && parseFloat(e.descuento) > 0)
+                                                                        ? undefined
+                                                                        : !pedidoData._frontOnly && e.condicion != 1
+                                                                        ? setCantidadCarrito
+                                                                        : undefined
                                                                 }
-                                                                data-index={
-                                                                    e.id
-                                                                }
+                                                                data-index={pedidoData._frontOnly ? undefined : e.id}
+                                                                title={e.descuento != null && parseFloat(e.descuento) > 0 ? "No se puede editar cantidad: el ítem tiene descuento aprobado" : undefined}
                                                             >
-                                                                <div className="flex items-center justify-center space-x-1">
-                                                                    {ifnegative ? (
-                                                                        e.cantidad <
-                                                                        0 ? (
-                                                                            <span className="px-1 py-0.5 bg-green-100 text-green-800 rounded text-xs">
-                                                                                <i className="fa fa-arrow-down"></i>
+                                                                {pedidoData._frontOnly ? (
+                                                                    (e.descuento != null && parseFloat(e.descuento) > 0) ? (
+                                                                        <span className="text-xs">
+                                                                            {Number(e.cantidad) % 1 === 0
+                                                                                ? Number(e.cantidad)
+                                                                                : Number(e.cantidad).toFixed(2)}
+                                                                        </span>
+                                                                    ) : editingCantidadFrontItemId === e.id ? (
+                                                                        <input
+                                                                            ref={quantityFrontInputRef}
+                                                                            type="number"
+                                                                            className="w-14 px-1 py-0.5 text-xs text-center border border-gray-300 rounded focus:ring-1 focus:ring-orange-400 focus:border-orange-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                            value={editingCantidadFront[e.id] !== undefined ? editingCantidadFront[e.id] : e.cantidad}
+                                                                            min="0"
+                                                                            onClick={(ev) => ev.stopPropagation()}
+                                                                            onChange={(ev) => {
+                                                                                const v = ev.target.value;
+                                                                                if (v === "" || /^\d*\.?\d*$/.test(v)) setEditingCantidadFront((prev) => ({ ...prev, [e.id]: v }));
+                                                                            }}
+                                                                            onBlur={(ev) => {
+                                                                                const v = ev.target.value === "" ? "0" : ev.target.value;
+                                                                                setCantidadCarritoFront(e.id, v);
+                                                                                setEditingCantidadFrontItemId(null);
+                                                                                setEditingCantidadFront((prev) => {
+                                                                                    const next = { ...prev };
+                                                                                    delete next[e.id];
+                                                                                    return next;
+                                                                                });
+                                                                            }}
+                                                                            onKeyDown={(ev) => {
+                                                                                if (ev.key === "Enter") {
+                                                                                    ev.target.blur();
+                                                                                    ev.preventDefault();
+                                                                                }
+                                                                                if (ev.key === "Escape") {
+                                                                                    setEditingCantidadFrontItemId(null);
+                                                                                    setEditingCantidadFront((prev) => {
+                                                                                        const next = { ...prev };
+                                                                                        delete next[e.id];
+                                                                                        return next;
+                                                                                    });
+                                                                                    ev.target.blur();
+                                                                                    ev.preventDefault();
+                                                                                }
+                                                                            }}
+                                                                        />
+                                                                    ) : (
+                                                                        <div
+                                                                            className="flex items-center justify-center cursor-pointer hover:bg-amber-50 rounded px-1 py-0.5 min-h-[1.5rem]"
+                                                                            onClick={(ev) => {
+                                                                                ev.stopPropagation();
+                                                                                setEditingCantidadFrontItemId(e.id);
+                                                                            }}
+                                                                            title="Click para editar cantidad"
+                                                                        >
+                                                                            <span className="text-xs">
+                                                                                {Number(e.cantidad) % 1 === 0
+                                                                                    ? Number(e.cantidad)
+                                                                                    : Number(e.cantidad).toFixed(2)}
                                                                             </span>
-                                                                        ) : (
-                                                                            <span className="px-1 py-0.5 bg-red-100 text-red-800 rounded text-xs">
-                                                                                <i className="fa fa-arrow-up"></i>
-                                                                            </span>
-                                                                        )
-                                                                    ) : null}
-                                                                    <span className="text-xs">
-                                                                        {Number(
-                                                                            e.cantidad
-                                                                        ) %
-                                                                            1 ===
-                                                                        0
-                                                                            ? Number(
-                                                                                  e.cantidad
-                                                                              )
-                                                                            : Number(
-                                                                                  e.cantidad
-                                                                              ).toFixed(
-                                                                                  2
-                                                                              )}
-                                                                    </span>
-                                                                </div>
+                                                                        </div>
+                                                                    )
+                                                                ) : (
+                                                                    <div className="flex items-center justify-center space-x-1 cursor-pointer">
+                                                                        {ifnegative ? (
+                                                                            e.cantidad < 0 ? (
+                                                                                <span className="px-1 py-0.5 bg-green-100 text-green-800 rounded text-xs">
+                                                                                    <i className="fa fa-arrow-down"></i>
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="px-1 py-0.5 bg-red-100 text-red-800 rounded text-xs">
+                                                                                    <i className="fa fa-arrow-up"></i>
+                                                                                </span>
+                                                                            )
+                                                                        ) : null}
+                                                                        <span className="text-xs">
+                                                                            {Number(e.cantidad) % 1 === 0
+                                                                                ? Number(e.cantidad)
+                                                                                : Number(e.cantidad).toFixed(2)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
                                                             </td>
-                                                            {e.producto
-                                                                .precio1 ? (
+                                                            {(e.producto?.precio1) ? (
                                                                 <td
                                                                     className="px-2 py-1 text-xs text-right text-green-600 cursor-pointer"
                                                                     data-iditem={
@@ -2786,7 +3109,7 @@ export default function PagarMain({
                                                                     }
                                                                 >
                                                                     <div>
-                                                                        {moneda(e.producto.precio, 4)}
+                                                                        {moneda(e.producto?.precio ?? e.precio_unitario ?? e.precio ?? 0, 4)}
                                                                     </div>
                                                                     {/* Mostrar tasa original en devoluciones */}
                                                                     {e.cantidad < 0 && e.tasa && (
@@ -2799,9 +3122,7 @@ export default function PagarMain({
                                                                 <td className="px-2 py-1 text-xs text-right cursor-pointer">
                                                                     <div>
                                                                         {moneda(
-                                                                            e
-                                                                                .producto
-                                                                                .precio,
+                                                                            e.producto?.precio ?? e.precio_unitario ?? e.precio ?? 0,
                                                                             4
                                                                         )}
                                                                     </div>
@@ -2814,37 +3135,129 @@ export default function PagarMain({
                                                                 </td>
                                                             )}
                                                             <td
-                                                                onClick={setDescuentoUnitario}
-                                                                data-index={e.id}
-                                                                className={`px-2 py-1 text-xs text-right cursor-pointer hover:bg-orange-50 ${
-                                                                    e.descuento && parseFloat(e.descuento) > 0 
-                                                                        ? 'bg-orange-100 text-orange-700 font-semibold' 
-                                                                        : 'text-gray-400'
+                                                                className={`relative px-2 py-1 text-xs text-right ${
+                                                                    descuentoUnitarioVerificandoId != null && String(e.id) === String(descuentoUnitarioVerificandoId)
+                                                                        ? "align-middle bg-gray-50"
+                                                                        : descuentoUnitarioEditingId != null && String(e.id) === String(descuentoUnitarioEditingId)
+                                                                        ? "align-middle"
+                                                                        : `cursor-pointer hover:bg-orange-50 ${
+                                                                            e.descuento && parseFloat(e.descuento) > 0
+                                                                                ? "bg-orange-100 text-orange-700 font-semibold"
+                                                                                : "text-gray-400"
+                                                                          }`
                                                                 }`}
-                                                                title="Click para aplicar descuento"
+                                                                title={
+                                                                    (descuentoUnitarioVerificandoId != null && String(e.id) === String(descuentoUnitarioVerificandoId)) ||
+                                                                    (descuentoUnitarioEditingId != null && String(e.id) === String(descuentoUnitarioEditingId)) ||
+                                                                    (descuentoUnitarioTooltipAprobadoId != null && String(e.id) === String(descuentoUnitarioTooltipAprobadoId))
+                                                                        ? undefined
+                                                                        : "Click para aplicar descuento"
+                                                                }
+                                                                onClick={
+                                                                    descuentoUnitarioVerificandoId != null || (descuentoUnitarioEditingId != null && String(e.id) === String(descuentoUnitarioEditingId))
+                                                                        ? undefined
+                                                                        : setDescuentoUnitario
+                                                                }
+                                                                data-index={e.id}
                                                             >
-                                                                {e.descuento && parseFloat(e.descuento) > 0 ? (
-                                                                    <span className="flex items-center justify-end gap-1">
-                                                                        <i className="fa fa-tag text-[10px]"></i>
-                                                                        {e.descuento}%
+                                                                {((descuentoUnitarioVerificandoId != null && String(e.id) === String(descuentoUnitarioVerificandoId)) ||
+                                                                  (descuentoUnitarioEditingId != null && String(e.id) === String(descuentoUnitarioEditingId)) ||
+                                                                  (descuentoUnitarioTooltipAprobadoId != null && String(e.id) === String(descuentoUnitarioTooltipAprobadoId))) ? (
+                                                                    <span
+                                                                        className="absolute left-1/2 top-full -translate-x-1/2 mt-1 px-3 py-2 text-xs min-w-[280px] max-w-[360px] text-center rounded-lg shadow-lg bg-gray-800 text-white pointer-events-none z-[9999] leading-snug"
+                                                                        role="tooltip"
+                                                                    >
+                                                                        {descuentoUnitarioTooltipAprobadoId != null && String(e.id) === String(descuentoUnitarioTooltipAprobadoId)
+                                                                            ? (
+                                                                                <>
+                                                                                    Se aprobó un descuento en este ítem.
+                                                                                    <br />
+                                                                                    Para reversarlo: pida al aprobador que revierta la aprobación, elimine el ítem del carrito y vuelva a enviar la solicitud.
+                                                                                </>
+                                                                            )
+                                                                            : descuentoUnitarioVerificandoId != null && String(e.id) === String(descuentoUnitarioVerificandoId)
+                                                                            ? "Comprobando solicitud…"
+                                                                            : (
+                                                                                <>
+                                                                                    Escriba el monto final.
+                                                                                    <br />
+                                                                                    0 = quitar descuento.
+                                                                                    <br />
+                                                                                    <span className="text-gray-300">Enter aplicar · Esc cancelar</span>
+                                                                                </>
+                                                                            )}
                                                                     </span>
-                                                                ) : (
-                                                                    <span className="text-gray-300">-</span>
-                                                                )}
+                                                                ) : null}
+                                                                {descuentoUnitarioVerificandoId != null && String(e.id) === String(descuentoUnitarioVerificandoId) ? (
+                                                                    <span className="flex w-full justify-center">
+                                                                        <span className="inline-block w-3 h-3 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                                                                    </span>
+                                                                ) : descuentoUnitarioEditingId != null && String(e.id) === String(descuentoUnitarioEditingId) ? (
+                                                                    <input
+                                                                        ref={descuentoUnitarioInputRef}
+                                                                        type="text"
+                                                                        className="w-full max-w-[72px] px-1.5 py-0.5 text-right text-xs border border-orange-300 rounded focus:ring-1 focus:ring-orange-400 focus:border-orange-400"
+                                                                        placeholder="0"
+                                                                        value={descuentoUnitarioInputValue}
+                                                                        onChange={(ev) => setDescuentoUnitarioInputValue && setDescuentoUnitarioInputValue(ev.target.value)}
+                                                                        onBlur={() => {
+                                                                            const v = (descuentoUnitarioInputValue || "").trim();
+                                                                            if (v !== "") onDescuentoUnitarioSubmit && onDescuentoUnitarioSubmit(v);
+                                                                            else onDescuentoUnitarioCancel && onDescuentoUnitarioCancel();
+                                                                        }}
+                                                                        onKeyDown={(ev) => {
+                                                                            if (ev.key === "Enter") {
+                                                                                ev.preventDefault();
+                                                                                const v = (descuentoUnitarioInputValue || "").trim();
+                                                                                onDescuentoUnitarioSubmit && onDescuentoUnitarioSubmit(v);
+                                                                            }
+                                                                            if (ev.key === "Escape") {
+                                                                                ev.preventDefault();
+                                                                                onDescuentoUnitarioCancel && onDescuentoUnitarioCancel();
+                                                                            }
+                                                                        }}
+                                                                        onClick={(ev) => ev.stopPropagation()}
+                                                                    />
+                                                                ) : (() => {
+                                                                    const pending = pedidoData?.id && pendientesDescuentoUnitario?.[pedidoData.id]?.[String(e.id)];
+                                                                    if (pending) {
+                                                                        const elapsed = Math.floor((Date.now() - (pending.submittedAt || 0)) / 1000);
+                                                                        const m = Math.floor(elapsed / 60);
+                                                                        const s = elapsed % 60;
+                                                                        return (
+                                                                            <span className="flex flex-col items-end gap-0.5 text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5" title="En espera de aprobación (solo referencia visual)">
+                                                                                <span className="text-[10px] font-medium">{pending.montoFinal}</span>
+                                                                                <span className="text-[9px] text-amber-600 tabular-nums">{m}:{String(s).padStart(2, "0")}</span>
+                                                                            </span>
+                                                                        );
+                                                                    }
+                                                                    return e.descuento && parseFloat(e.descuento) > 0 ? (
+                                                                        <span className="flex items-center justify-end gap-1">
+                                                                            <i className="fa fa-tag text-[10px]"></i>
+                                                                            {e.descuento}%
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-gray-300">-</span>
+                                                                    );
+                                                                })()}
                                                             </td>
                                                             <td className="px-2 py-1 text-xs font-bold text-right">
                                                                 {moneda(e.total)}
                                                             </td>
-                                                            {editable ? (
+                                                            {(editable || pedidoData._frontOnly) ? (
                                                                 <td className="px-2 py-1 text-center">
                                                                     <i
-                                                                        onClick={
-                                                                            delItemPedido
-                                                                        }
-                                                                        data-index={
-                                                                            e.id
-                                                                        }
-                                                                        className="text-red-500 cursor-pointer fa fa-times hover:text-red-700"
+                                                                        onClick={(ev) => {
+                                                                            ev.stopPropagation();
+                                                                            if (pedidoData._frontOnly) {
+                                                                                delItemPedido({ currentTarget: { attributes: { "data-index": { value: e.id } } } });
+                                                                            } else {
+                                                                                delItemPedido(ev);
+                                                                            }
+                                                                        }}
+                                                                        data-index={e.id}
+                                                                        className={`cursor-pointer hover:opacity-80 ${pedidoData._frontOnly ? "text-red-500 fa fa-trash hover:text-red-700" : "text-red-500 fa fa-times hover:text-red-700"}`}
+                                                                        title={pedidoData._frontOnly ? "Eliminar del pedido" : "Quitar ítem"}
                                                                     ></i>
                                                                 </td>
                                                             ) : null}
@@ -2942,7 +3355,37 @@ export default function PagarMain({
                                         </div>
                                     </div>
                                 ) : pedidoData?.estado !== 1 ? (
-                                <div className="mb-3 space-y-2">
+                                <div className="mb-3 space-y-2 relative">
+                                    {/* Capa blanca semitransparente cuando pago bloqueado (debajo del mensaje); bloquea clics en el formulario */}
+                                    {pedidoData._frontOnly && pedidoData.id && (pedidoData.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0) && pendienteDescuentoMetodoPago[pedidoData.id] && (
+                                        <div className="absolute inset-0 bg-white/70 rounded-lg z-[5]" aria-hidden="true" />
+                                    )}
+                                    {/* Banner: Descuento por método de pago aprobado — use exactamente estos métodos y montos */}
+                                    {pedidoData._frontOnly && pedidoData.id && (pedidoData.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0) && descuentoMetodoPagoAprobadoPorUuid[pedidoData.id] && (() => {
+                                        const metodos = metodosPagoAprobadosPorUuid[pedidoData.id] || [];
+                                        const labels = { efectivo: "Efectivo", transferencia: "Transferencia", debito: "Débito", biopago: "Biopago", credito: "Crédito", adicional: "Bs/Pesos" };
+                                        const monedaF = (n) => (n == null ? "" : typeof n === "number" ? (n % 1 === 0 ? n : n.toFixed(2)) : String(n));
+                                        const list = metodos.map((m) => `${labels[m.tipo] || m.tipo} Bs ${monedaF(m.monto)}`).filter(Boolean);
+                                        return list.length > 0 ? (
+                                            <div className="mb-2 flex items-center gap-2 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-green-800">
+                                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-200">
+                                                    <i className="fa fa-check text-xs text-green-700" />
+                                                </span>
+                                                <div className="min-w-0 flex-1">
+                                                    <span className="text-xs font-semibold">Descuento aprobado para: </span>
+                                                    <span className="text-xs">{list.join(", ")}</span>
+                                                    <p className="mt-0.5 text-[10px] text-green-700">Use exactamente estos métodos y montos para facturar.</p>
+                                                </div>
+                                            </div>
+                                        ) : null;
+                                    })()}
+                                    {pedidoData._frontOnly && pedidoData.id && (pedidoData.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0) && pendienteDescuentoMetodoPago[pedidoData.id] && (
+                                        <div className="absolute inset-0 z-[20] flex flex-col items-center justify-start pt-4 gap-2 bg-amber-50 border-2 border-amber-300 rounded-lg pointer-events-none">
+                                            <span className="text-sm font-semibold text-amber-900 bg-amber-100 border border-amber-400 rounded-lg px-4 py-3 shadow-md text-center max-w-md">
+                                                Pago bloqueado hasta que la solicitud de descuento por método de pago esté aprobada. Use el botón <strong>&quot;Verificar si ya está aprobado&quot;</strong> en la tarjeta del pedido (lista izquierda).
+                                            </span>
+                                        </div>
+                                    )}
                                     {/* ══════════ GRUPO DÉBITO ══════════ */}
                                     <div className="flex flex-col gap-1">
                                         <div className="flex items-center gap-2">
@@ -2962,7 +3405,6 @@ export default function PagarMain({
                                         <div className="flex flex-col gap-1.5">
                                                 {debitos.map((debito, index) => (
                                                     <div key={index} className={`flex gap-2 items-stretch ${debito.bloqueado ? 'opacity-75' : ''}`}>
-                                                        <span className="text-[10px] text-orange-600 font-medium w-4 flex items-center">#{index + 1}</span>
                                                         {/* Monto */}
                                                         <div className={`flex-1 flex border rounded ${debito.bloqueado ? "bg-green-50 border-green-300" : debito.monto ? "bg-white border-orange-300" : "bg-white border-gray-200"}`}>
                                                             <label className={`flex items-center justify-center w-8 border-r border-gray-200 rounded-l ${debito.bloqueado ? "text-green-600 bg-green-100" : "text-orange-500 bg-orange-100"}`}>
@@ -3214,11 +3656,12 @@ export default function PagarMain({
                                                 />
                                                 <span className="flex items-center px-1 text-lg font-bold text-blue-700">$</span>
                                                 <span
-                                                    className="flex items-center px-2 text-blue-500 cursor-pointer hover:text-blue-600"
+                                                    role="button"
+                                                    className="flex items-center justify-center min-w-[2.5rem] min-h-[2rem] px-3 py-2 text-blue-500 cursor-pointer hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
                                                     onClick={() => addRefPago("toggle", transferencia, "1")}
-                                                    title="Agregar referencia"
+                                                    title="Agregar referencia de pago"
                                                 >
-                                                    <i className="text-xs fa fa-plus-circle"></i>
+                                                    <i className="text-sm fa fa-plus-circle"></i>
                                                 </span>
                                                 <span
                                                     className="flex items-center px-2 py-1.5 text-xs font-medium text-white bg-blue-500 rounded-r cursor-pointer hover:bg-blue-600"
@@ -3254,11 +3697,12 @@ export default function PagarMain({
                                                     />
                                                     <span className="flex items-center px-1 text-lg font-bold text-purple-700">$</span>
                                                     <span
-                                                        className="flex items-center px-2 text-purple-500 cursor-pointer hover:text-purple-600"
+                                                        role="button"
+                                                        className="flex items-center justify-center min-w-[2.5rem] min-h-[2rem] px-3 py-2 text-purple-500 cursor-pointer hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
                                                         onClick={() => addRefPago("toggle", biopago, "5")}
-                                                        title="Agregar referencia"
+                                                        title="Agregar referencia de pago"
                                                     >
-                                                        <i className="text-xs fa fa-plus-circle"></i>
+                                                        <i className="text-sm fa fa-plus-circle"></i>
                                                     </span>
                                                     <span
                                                         className="flex items-center px-2 py-1.5 text-xs font-medium text-white bg-purple-500 rounded-r cursor-pointer hover:bg-purple-600"
@@ -3280,7 +3724,7 @@ export default function PagarMain({
                                                 <div className="flex items-stretch">
                                                     <label
                                                         className="flex items-center justify-center w-8 text-yellow-500 border-r border-gray-200 rounded-l cursor-pointer bg-yellow-100"
-                                                        onClick={getCredito}
+                                                        onClick={getCreditoLocal}
                                                         title="Crédito"
                                                     >
                                                         <i className="text-xs fa fa-dollar"></i>
@@ -3330,15 +3774,15 @@ export default function PagarMain({
                                         <div className="p-2 space-y-2">
                                             {refPago.map((e) => (
                                                 <div
-                                                    key={e.id}
+                                                    key={e.id ?? e._localId}
                                                     className={`relative bg-white border rounded-lg p-1.5 transition-all duration-200 ${
-                                                        validatingRef === e.id
+                                                        validatingRef === (e.id ?? e._localId)
                                                             ? "border-blue-300 bg-blue-50 "
                                                             : "border-gray-200 hover:border-gray-300 hover:"
                                                     }`}
                                                 >
                                                     {/* Loader overlay */}
-                                                    {validatingRef === e.id && (
+                                                    {validatingRef === (e.id ?? e._localId) && (
                                                         <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-blue-50/80 backdrop-blur-sm">
                                                             <div className="flex items-center space-x-2">
                                                                 <div className="w-4 h-4 border-2 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
@@ -3535,25 +3979,22 @@ export default function PagarMain({
                                                                     <button
                                                                         className="flex items-center justify-center w-6 h-6 text-blue-600 transition-colors bg-blue-100 rounded hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                                                         onClick={() =>
-                                                                            sendRefToMerchant(
-                                                                                e.id
-                                                                            )
+                                                                            e._localId && !e.id
+                                                                                ? verificarRefFrontOnly(e)
+                                                                                : sendRefToMerchant(e.id)
                                                                         }
                                                                         disabled={
-                                                                            validatingRef ===
-                                                                            e.id
+                                                                            validatingRef === (e.id ?? e._localId)
                                                                         }
                                                                         title={
-                                                                            e.estatus ===
-                                                                            "error"
+                                                                            e.estatus === "error"
                                                                                 ? "Reintentar Validación"
                                                                                 : "Validar Referencia"
                                                                         }
                                                                     >
                                                                         <i
                                                                             className={`text-xs fa ${
-                                                                                e.estatus ===
-                                                                                "error"
+                                                                                e.estatus === "error"
                                                                                     ? "fa-refresh"
                                                                                     : "fa-paper-plane"
                                                                             }`}
@@ -3563,7 +4004,7 @@ export default function PagarMain({
                                                                 <button
                                                                     className="flex items-center justify-center w-6 h-6 text-red-600 transition-colors bg-red-100 rounded hover:bg-red-200"
                                                                     data-id={
-                                                                        e.id
+                                                                        e.id ?? e._localId
                                                                     }
                                                                     onClick={
                                                                         delRefPago
@@ -3916,7 +4357,7 @@ export default function PagarMain({
                             <div className="mb-3">
                                 {showHeaderAndMenu && (
                                     <div className="flex flex-wrap gap-1.5 justify-center mt-2">
-                                        {editable && (
+                                        {editable ? (
                                             <>
                                                 <button
                                                     className="flex items-center gap-1 px-2 py-1 text-xs text-green-700 transition-colors border !border-green-300 rounded bg-green-100 hover:bg-green-200"
@@ -3959,7 +4400,7 @@ export default function PagarMain({
                                                     <span>Impr.</span>
                                                 </button>
                                             </>
-                                        )}
+                                        ):null}
 
                                         <button
                                             className="flex items-center gap-1 px-2 py-1 text-xs text-indigo-700 transition-colors border !border-indigo-300 rounded bg-indigo-100 hover:bg-indigo-200"

@@ -184,6 +184,7 @@ class SessionManager
             5 => 4, // SUPERVISOR DE CAJA
             6 => 1, // SUPERADMIN
             7 => 3, // DICI
+            10 => 6, // PORTERO
             default => 0
         };
     }
@@ -199,6 +200,7 @@ class SessionManager
             5 => 'SUPERVISOR DE CAJA',
             6 => 'SUPERADMIN',
             7 => 'DICI',
+            10 => 'Portero',
             default => 'Usuario'
         };
     }

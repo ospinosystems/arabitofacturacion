@@ -148,3 +148,29 @@
         }
     }
 }
+
+/* Animación: ítem recién agregado al carrito (pedido front) */
+@keyframes carrito-item-inserted {
+    0% {
+        opacity: 0;
+        transform: translateX(24px);
+        background-color: rgb(254 243 199); /* amber-100 */
+        box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.6);
+    }
+    40% {
+        opacity: 1;
+        transform: translateX(0);
+        background-color: rgb(254 243 199);
+        box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.6);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+        background-color: rgb(255 255 255);
+        box-shadow: none;
+    }
+}
+
+.carrito-item-just-added {
+    animation: carrito-item-inserted 0.7s ease-out forwards;
+}

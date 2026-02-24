@@ -10,12 +10,12 @@ use App\Models\pago_pedidos;
 use App\Models\clientes;
 use App\Models\sucursal;
 use App\Models\catcajas;
-
-
+use App\Models\tareaslocal;
 
 use Illuminate\Http\Request;
 
 use App\Http\Controllers\PedidosController;
+use App\Http\Controllers\InventarioController;
 use App\Http\Controllers\sendCentral;
 use Response;
 
@@ -119,6 +119,115 @@ class PagoPedidosController extends Controller
         
 
         try {
+            // Reintento tras aprobación de clave (front + crédito): reutilizar el pedido ya creado en lugar de crear otro
+            if ($req->front_only && $req->id_tarea_aprobado) {
+                $tarea = tareaslocal::find($req->id_tarea_aprobado);
+                if ($tarea && $tarea->tipo === 'credito' && (int) $tarea->estado === 1 && $tarea->id_pedido) {
+                    $req->merge(['id' => $tarea->id_pedido]);
+                }
+            }
+
+            // Pedido solo en front: crear pedido en BD, cargar items en lote (setCarrito por ítem) y continuar con el pago (salvo si ya venimos de id_tarea_aprobado)
+            if ($req->front_only && $req->items && is_array($req->items) && count($req->items) > 0 && !$req->id_tarea_aprobado) {
+                $pedidosCtrl = new PedidosController();
+                $id_pedido = $pedidosCtrl->addNewPedido();
+                if ($id_pedido instanceof \Illuminate\Http\JsonResponse) {
+                    \DB::rollBack();
+                    return $id_pedido;
+                }
+                $pedido = pedidos::find($id_pedido);
+                if (!$pedido) {
+                    \DB::rollBack();
+                    return Response::json(['estado' => false, 'msj' => 'Error al crear pedido'], 500);
+                }
+                if ($req->uuid) {
+                    $pedido->uuid = $req->uuid;
+                    $pedido->save();
+                }
+                if ($req->fecha_inicio) {
+                    $pedido->fecha_inicio = $req->fecha_inicio;
+                }
+                if ($req->fecha_vence) {
+                    $pedido->fecha_vence = $req->fecha_vence;
+                }
+                if (isset($req->formato_pago)) {
+                    $pedido->formato_pago = (int) $req->formato_pago;
+                }
+                // Devolución front: asignar el pedido original si viene en el request
+                if ($req->isdevolucionOriginalid && is_numeric($req->isdevolucionOriginalid)) {
+                    $pedidoOriginalExiste = pedidos::where('id', (int) $req->isdevolucionOriginalid)->exists();
+                    if ($pedidoOriginalExiste) {
+                        $pedido->isdevolucionOriginalid = (int) $req->isdevolucionOriginalid;
+                    }
+                }
+                if ($req->fecha_inicio || $req->fecha_vence || isset($req->formato_pago) || $req->isdevolucionOriginalid) {
+                    $pedido->save();
+                }
+                $id_cliente = $req->id_cliente ?? 1;
+                $personaReq = Request::create('/internal', 'POST', [
+                    'numero_factura' => $id_pedido,
+                    'id_cliente' => $id_cliente,
+                ]);
+                $personaReq->setLaravelSession($req->session());
+                $prevRequest = app('request');
+                app()->instance('request', $personaReq);
+                try {
+                    $personaResp = $pedidosCtrl->setpersonacarrito($personaReq);
+                } finally {
+                    app()->instance('request', $prevRequest);
+                }
+                if ($personaResp instanceof \Illuminate\Http\JsonResponse && isset($personaResp->getData()->estado) && !$personaResp->getData()->estado) {
+                    \DB::rollBack();
+                    return $personaResp;
+                }
+                $invCtrl = new InventarioController();
+                foreach ($req->items as $item) {
+                    $id_producto = (int) ($item['id'] ?? 0);
+                    $cantidad = (float) ($item['cantidad'] ?? 1);
+                    if ($id_producto <= 0) {
+                        continue;
+                    }
+                    $carritoReq = Request::create('/internal', 'GET', [
+                        'numero_factura' => $id_pedido,
+                        'id' => $id_producto,
+                        'cantidad' => $cantidad,
+                        'type' => null,
+                        // Bypass de clave para ítems negativos: la autoría ya fue validada en el front
+                        'front_only_bypass' => true,
+                    ]);
+                    $carritoReq->setLaravelSession($req->session());
+                    $prevRequest = app('request');
+                    app()->instance('request', $carritoReq);
+                    try {
+                        $carritoResp = $invCtrl->setCarrito($carritoReq);
+                    } finally {
+                        app()->instance('request', $prevRequest);
+                    }
+                    if ($carritoResp instanceof \Illuminate\Http\JsonResponse) {
+                        $data = $carritoResp->getData();
+                        if (isset($data->estado) && $data->estado === false) {
+                            \DB::rollBack();
+                            return $carritoResp;
+                        }
+                    }
+                }
+                // Aplicar descuentos por ítem antes de validar montos (por id_producto por si hay updateOrCreate que une líneas)
+                foreach ($req->items as $item) {
+                    $id_producto = (int) ($item['id'] ?? 0);
+                    if ($id_producto <= 0) {
+                        continue;
+                    }
+                    $descuento = isset($item['descuento']) ? (float) $item['descuento'] : 0;
+                    if ($descuento < 0) {
+                        $descuento = 0;
+                    }
+                    items_pedidos::where('id_pedido', $id_pedido)
+                        ->where('id_producto', $id_producto)
+                        ->update(['descuento' => $descuento]);
+                }
+                $req->merge(['id' => $id_pedido]);
+            }
+
             $metodos_pago = [];
             if ($req->efectivo && floatval($req->efectivo)) {
                 $metodos_pago[] = ['tipo' => 'efectivo', 'monto' => floatval($req->efectivo)];
@@ -240,7 +349,10 @@ class PagoPedidosController extends Controller
             } 
 
 
-            $total_real = $ped->clean_total;
+            // Pedidos front_only: usar total que envía el front para validar (evita diferencias por precio/tasa/retención)
+            $total_real = ($req->front_only && $req->has('total_pedido_usd') && $req->total_pedido_usd !== '' && $req->total_pedido_usd !== null)
+                ? (float) $req->total_pedido_usd
+                : $ped->clean_total;
             
             // Obtener tasas del primer ítem del pedido (tasa histórica al momento de facturar)
             $primerItem = items_pedidos::where("id_pedido", $req->id)->first();
@@ -327,79 +439,12 @@ class PagoPedidosController extends Controller
         
             $res = $total_real - $total_ins;
 
-            // Tolerancia por redondeo: aceptar si la diferencia es mínima (ej. 0.3 por redondeo Bs/USD)
-            $toleranciaMontos = 0.5;
-            $montosCoinciden = (abs($res) <= $toleranciaMontos)
-                || (abs(round($total_real, 2) - round($total_ins, 2)) <= $toleranciaMontos);
-            
-            // Validación adicional en bolívares cuando hay débito (simple o múltiple)
-            $validacionBolivaresOk = true;
-            $tieneDebito = ($req->debito && floatval($req->debito) > 0) || ($req->debitos && is_array($req->debitos) && count($req->debitos) > 0);
-            
-            if ($tieneDebito) {
-                // Usar el total del pedido en bolívares ya calculado por getPedido
-                $totalPedidoBs = $ped->bs_clean;
-                
-                // Calcular total de pagos en bolívares
-                $totalPagosBs = 0;
-                
-                // Débito: puede ser simple o múltiple
-                if ($req->debitos && is_array($req->debitos)) {
-                    // Múltiples débitos: sumar todos
-                    foreach ($req->debitos as $debitoItem) {
-                        $totalPagosBs += floatval($debitoItem['monto']);
-                    }
-                } else {
-                    // Débito simple
-                    $totalPagosBs += floatval($req->debito);
-                }
-                
-                // Efectivo en dólares convertido a Bs
-                $totalPagosBs += floatval($req->efectivo) * $tasaDolar;
-                
-                // Transferencia en dólares convertida a Bs
-                $totalPagosBs += floatval($req->transferencia) * $tasaDolar;
-                
-                // Biopago en dólares convertido a Bs
-                $totalPagosBs += floatval($req->biopago) * $tasaDolar;
-                
-                // Crédito en dólares convertido a Bs
-                $totalPagosBs += floatval($req->credito) * $tasaDolar;
-                
-                // Pagos adicionales
-                if ($req->pagosAdicionales && is_array($req->pagosAdicionales)) {
-                    foreach ($req->pagosAdicionales as $pagoAdicional) {
-                        if (isset($pagoAdicional['moneda']) && isset($pagoAdicional['monto_original'])) {
-                            $monto = floatval($pagoAdicional['monto_original']);
-                            
-                            if ($pagoAdicional['moneda'] === 'bs') {
-                                $totalPagosBs += $monto;
-                            } elseif ($pagoAdicional['moneda'] === 'peso') {
-                                // Convertir peso a dólares y luego a Bs
-                                $totalPagosBs += ($monto / $tasaPeso) * $tasaDolar;
-                            } elseif ($pagoAdicional['moneda'] === 'dolar') {
-                                $totalPagosBs += $monto * $tasaDolar;
-                            }
-                        }
-                    }
-                }
-                
-                $resBs = $totalPedidoBs - $totalPagosBs;
-                
-                // Tolerancia en Bs: 1 Bs (ajustable según necesidad)
-                if ($resBs < -1 || $resBs > 1) {
-                    $validacionBolivaresOk = false;
-                }
-                
-                \Log::info("Validación en bolívares - Pedido: {$req->id}", [
-                    'total_pedido_bs' => round($totalPedidoBs, 2),
-                    'total_pagos_bs' => round($totalPagosBs, 2),
-                    'diferencia_bs' => round($resBs, 2),
-                    'validacion_ok' => $validacionBolivaresOk
-                ]);
-            }
+            // Tolerancia por redondeo en USD: hasta 0.1 dólares de diferencia no detiene el flujo (solo validación en dólares)
+            $toleranciaMontosUsd = 0.1;
+            $montosCoinciden = (abs($res) <= $toleranciaMontosUsd)
+                || (abs(round($total_real, 2) - round($total_ins, 2)) <= $toleranciaMontosUsd);
         
-            if ($montosCoinciden && $validacionBolivaresOk) {
+            if ($montosCoinciden) {
                 // 1 Transferencia
                 // 2 Debito 
                 // 3 Efectivo 
@@ -414,6 +459,26 @@ class PagoPedidosController extends Controller
                     }
                     // Validación de transferencias
                     if ($req->transferencia) {
+                        // Pedido front_only: crear referencias en BD desde el request (el front las guardó por uuid y las envía aquí)
+                        if ($req->front_only && $req->referencias && is_array($req->referencias) && count($req->referencias) > 0) {
+                            foreach ($req->referencias as $refData) {
+                                $refItem = new pagos_referencias;
+                                $refItem->id_pedido = $req->id;
+                                $refItem->tipo = $refData['tipo'] ?? 1;
+                                $refItem->monto = $refData['monto'] ?? 0;
+                                $refItem->descripcion = $refData['descripcion'] ?? null;
+                                $refItem->banco = $refData['banco'] ?? null;
+                                $refItem->cedula = $refData['cedula'] ?? null;
+                                $refItem->telefono = $refData['telefono'] ?? null;
+                                $refItem->categoria = $refData['categoria'] ?? 'central';
+                                $refItem->estatus = $refData['estatus'] ?? 'aprobada';
+                                $refItem->fecha_pago = $refData['fecha_pago'] ?? null;
+                                $refItem->banco_origen = $refData['banco_origen'] ?? null;
+                                $refItem->monto_real = isset($refData['monto_real']) ? $refData['monto_real'] : null;
+                                $refItem->save();
+                            }
+                        }
+
                         $monto_tra = floatval($req->transferencia);
                         $montodolares = 0.0;
                         $bs = (new PedidosController)->get_moneda()["bs"];
@@ -515,9 +580,15 @@ class PagoPedidosController extends Controller
                             "retenciones" => $retenciones,
                         ];
 
-                        // Verificar que todas las referencias de este pedido tengan estatus "aprobada"
+                        // Verificar que las referencias de pago de validación automática estén aprobadas.
+                        // Las de categoría 'central' se validan a posteriori en central, por lo que
+                        // pueden estar en estado 'pendiente' y aun así permitir el procesamiento del pago.
                         $todasAprobadas = true;
                         foreach ($refs as $ref) {
+                            $categoria = strtolower($ref->categoria ?? 'central');
+                            if ($categoria === 'central') {
+                                continue; // Las refs centrales se aprueban después; no bloquear
+                            }
                             if (strtolower($ref->estatus) !== "aprobada") {
                                 $todasAprobadas = false;
                                 break;
@@ -529,7 +600,7 @@ class PagoPedidosController extends Controller
                                 "estado" => false
                             ]);
                         }else{
-                            $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $req->transferencia, $metodos_pago, $cuenta, 1);
+                            $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $req->transferencia, $metodos_pago, $cuenta, 1, $req->front_only ? ($req->uuid ?? null) : null);
                             if ($resultadoValidacion !== true) {
                                 return $resultadoValidacion;
                             }
@@ -623,7 +694,7 @@ class PagoPedidosController extends Controller
                         
                         // Validar descuentos con el total de débitos
                         if ($totalDebitoUSD > 0) {
-                            $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $totalDebitoUSD, $metodos_pago, $cuenta, 2);
+                            $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $totalDebitoUSD, $metodos_pago, $cuenta, 2, $req->front_only ? ($req->uuid ?? null) : null);
                             if ($resultadoValidacion !== true) {
                                 return $resultadoValidacion;
                             }
@@ -645,7 +716,7 @@ class PagoPedidosController extends Controller
                         
                         // Validar descuentos solo para débito positivo (no para devoluciones)
                         if ($montoDebito > 0) {
-                            $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $montoDebito, $metodos_pago, $cuenta, 2);
+                            $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $montoDebito, $metodos_pago, $cuenta, 2, $req->front_only ? ($req->uuid ?? null) : null);
                             if ($resultadoValidacion !== true) {
                                 return $resultadoValidacion;
                             }
@@ -732,6 +803,18 @@ class PagoPedidosController extends Controller
                                 "deuda" => $this->getDeudaFun(false,$id_cliente),
                                 "fecha_ultimopago" => $this->getDeudaFechaPago($id_cliente)
                             ];
+                            if ($req->uuid) {
+                                $dataCredito["uuid_pedido_front"] = $req->uuid;
+                            }
+                            if ($req->fecha_inicio) {
+                                $dataCredito["fecha_inicio"] = $req->fecha_inicio;
+                            }
+                            if ($req->fecha_vence) {
+                                $dataCredito["fecha_vence"] = $req->fecha_vence;
+                            }
+                            if (isset($req->formato_pago)) {
+                                $dataCredito["formato_pago"] = (int) $req->formato_pago;
+                            }
 
                             $creditoResult = (new sendCentral)->createCreditoAprobacion($dataCredito);
         
@@ -746,13 +829,21 @@ class PagoPedidosController extends Controller
 
                     }
                     if($req->biopago) {
-                        $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $req->biopago, $metodos_pago, $cuenta, 5);
+                        $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $req->biopago, $metodos_pago, $cuenta, 5, $req->front_only ? ($req->uuid ?? null) : null);
                         if ($resultadoValidacion !== true) {
                             return $resultadoValidacion;
                         }
                     }
                     
-                    $pedido = pedidos::find($req->id);
+                    // Para pedidos front_only, $id_pedido contiene el id numérico del pedido recién creado
+                    // (queda en scope de PHP tras el bloque if). Para pedidos normales, $req->id es el id numérico.
+                    $idParaBuscar = isset($id_pedido) && $req->front_only ? (int) $id_pedido : $req->id;
+                    $pedido = pedidos::find($idParaBuscar);
+
+                    if (!$pedido) {
+                        \DB::rollback();
+                        return Response::json(["msj" => "Error: No se encontró el pedido al procesar pago", "estado" => false]);
+                    }
 
                     if ($pedido->estado==0) {
                         $pedido->estado = 1;
@@ -760,18 +851,20 @@ class PagoPedidosController extends Controller
 
                         // Commit de transacción solo cuando cambie el estado del pedido
                         \DB::commit();
+                        // Usar siempre el id del pedido persistido (importante para pedidos front_only recién creados)
+                        $idPedidoProcesado = (int) $pedido->id;
                         $isFullFiscal = (new SucursalController)->isFullFiscal();
 
                         if ($isFullFiscal) {
                             try {
-                                (new tickera)->sendReciboFiscalFun($req->id);
+                                (new tickera)->sendReciboFiscalFun($idPedidoProcesado);
                             } catch (\Exception $e) {
                                 \Log::error('Error al enviar recibo fiscal: ' . $e->getMessage());
                             }
                         } else {
                             if ($req->debito && !$req->efectivo && !$req->transferencia) {
                                 try {
-                                    (new tickera)->sendReciboFiscalFun($req->id);
+                                    (new tickera)->sendReciboFiscalFun($idPedidoProcesado);
                                 } catch (\Exception $e) {
                                     \Log::error('Error al enviar recibo fiscal: ' . $e->getMessage());
                                 }
@@ -779,7 +872,35 @@ class PagoPedidosController extends Controller
                         }
                     }
 
-                    return Response::json(["msj"=>"Éxito","estado"=>true]);
+                    // Imprimir ticket en la misma petición tras crear la orden (evita race con /imprimirTicked)
+                    $imprimirTicketOk = false;
+                    $imprimirTicketMsj = '';
+                    if ($req->imprimir_ticket && $idParaBuscar) {
+                        try {
+                            $opts = $req->input('imprimir_ticket_opciones', []);
+                            $printReq = Request::create('/internal', 'POST', array_merge([
+                                'id' => $idParaBuscar,
+                                'moneda' => is_array($opts) ? ($opts['moneda'] ?? 'bs') : 'bs',
+                                'printer' => is_array($opts) ? ($opts['printer'] ?? null) : null,
+                            ], is_array($opts) ? $opts : []));
+                            $printReq->setLaravelSession($req->session());
+                            $resp = (new tickera)->imprimir($printReq);
+                            $data = $resp->getData(true);
+                            $imprimirTicketOk = !empty($data['estado']);
+                            $imprimirTicketMsj = $data['msj'] ?? '';
+                        } catch (\Exception $e) {
+                            $imprimirTicketMsj = 'Error al imprimir: ' . $e->getMessage();
+                            \Log::error('setPagoPedido imprimir_ticket: ' . $e->getMessage());
+                        }
+                    }
+
+                    return Response::json([
+                        "msj" => "Éxito",
+                        "estado" => true,
+                        "id_pedido" => $idParaBuscar,
+                        "imprimir_ticket_ok" => $imprimirTicketOk,
+                        "imprimir_ticket_msj" => $imprimirTicketMsj,
+                    ]);
                 } catch (\Exception $e) {
                     \DB::rollback();
                     return Response::json(["msj"=>"Error: ".$e->getMessage(),"estado"=>false]);
@@ -810,48 +931,22 @@ class PagoPedidosController extends Controller
                 }
 
                 $detalle[] = "Total pagos: ".round($total_ins,4)." $";
-                $detalle[] = "Diferencia: ".round($res,4)." $ (Pedido - Pagos)";
-                
-                // Agregar detalle de validación en bolívares si aplica
-                if (!$validacionBolivaresOk && $tieneDebito) {
-                    $totalPedidoBs = $ped->bs_clean;
-                    $totalPagosBs = 0;
-                    
-                    // Débito: simple o múltiple
-                    if ($req->debitos && is_array($req->debitos)) {
-                        foreach ($req->debitos as $debitoItem) {
-                            $totalPagosBs += floatval($debitoItem['monto']);
-                        }
-                    } else {
-                        $totalPagosBs += floatval($req->debito);
-                    }
-                    $totalPagosBs += floatval($req->efectivo) * $tasaDolar;
-                    $totalPagosBs += floatval($req->transferencia) * $tasaDolar;
-                    $totalPagosBs += floatval($req->biopago) * $tasaDolar;
-                    $totalPagosBs += floatval($req->credito) * $tasaDolar;
-                    
-                    if ($req->pagosAdicionales && is_array($req->pagosAdicionales)) {
-                        foreach ($req->pagosAdicionales as $pagoAdicional) {
-                            if (isset($pagoAdicional['moneda']) && isset($pagoAdicional['monto_original'])) {
-                                $monto = floatval($pagoAdicional['monto_original']);
-                                if ($pagoAdicional['moneda'] === 'bs') {
-                                    $totalPagosBs += $monto;
-                                } elseif ($pagoAdicional['moneda'] === 'peso') {
-                                    $totalPagosBs += ($monto / $tasaPeso) * $tasaDolar;
-                                } elseif ($pagoAdicional['moneda'] === 'dolar') {
-                                    $totalPagosBs += $monto * $tasaDolar;
-                                }
-                            }
-                        }
-                    }
-                    
-                    $resBs = $totalPedidoBs - $totalPagosBs;
-                    $detalle[] = "VALIDACIÓN Bs: Pedido=".round($totalPedidoBs,2)." Bs, Pagos=".round($totalPagosBs,2)." Bs, Diferencia=".round($resBs,2)." Bs";
-                }
+                $detalle[] = "Diferencia: ".round($res,4)." $ (Pedido - Pagos). Tolerancia: 0.1 USD.";
 
                 $msj = "Error. Montos no coinciden. ".implode(" || ", $detalle);
 
-                return Response::json(["msj"=>$msj,"estado"=>false]);
+                $montosDetalle = [
+                    'total_pedido_usd' => round($total_real, 2),
+                    'total_pagos_usd'  => round($total_ins, 2),
+                    'diferencia_usd'   => round($res, 2),
+                ];
+
+                return Response::json([
+                    'msj' => $msj,
+                    'estado' => false,
+                    'montos_no_coinciden' => true,
+                    'montos_detalle' => $montosDetalle,
+                ]);
             }
         } catch (\Exception $e) {
             \DB::rollback();
@@ -1462,9 +1557,10 @@ class PagoPedidosController extends Controller
      * @param array $metodos_pago Array de métodos de pago
      * @param int $cuenta Tipo de cuenta
      * @param int $tipo_pago Tipo de pago (1=transferencia, 2=débito, 3=efectivo, 4=crédito, 5=biopago)
+     * @param string|null $uuid_pedido_front UUID del pedido front (solo cuando front_only); si se pasa, se verifica por UUID y no se crea solicitud
      * @return mixed true si la validación es exitosa, Response::json si hay error
      */
-    private function validarDescuentosPorMetodoPago($id_pedido, $monto_pago, $metodos_pago, $cuenta, $tipo_pago = 3)
+    private function validarDescuentosPorMetodoPago($id_pedido, $monto_pago, $metodos_pago, $cuenta, $tipo_pago = 3, $uuid_pedido_front = null)
     {
         // Si es una devolución (monto negativo), no aplicar validación de descuentos
         if (floatval($monto_pago) < 0) {
@@ -1483,7 +1579,7 @@ class PagoPedidosController extends Controller
                 return Response::json(["msj"=>"Error: Debe registrar un cliente para aplicar descuentos en efectivo","estado"=>false]);
             }
         
-            // Hay descuento y hay cliente, proceder con la solicitud
+            // Hay descuento y hay cliente
             $monto_bruto = $items_pedido->sum('monto');
             $monto_pago = floatval($monto_pago);
             
@@ -1499,7 +1595,46 @@ class PagoPedidosController extends Controller
             
             $porcentaje_descuento = $monto_bruto > 0 ? ($monto_descuento_real / $monto_bruto) * 100 : 0;
             
-            // Verificar si ya existe una solicitud para este pedido
+            // Pedido front: la solicitud se envía desde la vista; solo verificar por UUID (no crear)
+            if ($uuid_pedido_front !== null && $uuid_pedido_front !== '') {
+                $solicitudExistente = (new sendCentral)->verificarSolicitudDescuentoFront([
+                    'id_sucursal' => (new sendCentral)->getOrigen(),
+                    'uuid_pedido_front' => $uuid_pedido_front,
+                    'tipo_descuento' => 'metodo_pago'
+                ]);
+                if (!$solicitudExistente || !isset($solicitudExistente['existe']) || !$solicitudExistente['existe']) {
+                    return Response::json(["msj"=>"Debe solicitar el descuento por método de pago desde la vista antes de pagar","estado"=>false]);
+                }
+                if ($solicitudExistente['data']['estado'] === 'enviado') {
+                    return Response::json(["msj"=>"La solicitud de descuento por método de pago está en espera de aprobación","estado"=>false]);
+                }
+                if ($solicitudExistente['data']['estado'] === 'rechazado') {
+                    return Response::json(["msj"=>"La solicitud de descuento por método de pago fue rechazada","estado"=>false]);
+                }
+                if ($solicitudExistente['data']['estado'] === 'aprobado') {
+                    $porcentaje_aprobado = isset($solicitudExistente['data']['porcentaje_descuento'])
+                        ? floatval($solicitudExistente['data']['porcentaje_descuento'])
+                        : $porcentaje_descuento;
+                    if (abs($porcentaje_descuento - $porcentaje_aprobado) > 0.01) {
+                        return Response::json([
+                            "msj"=>"Error: El porcentaje de descuento debe coincidir con el aprobado ({$porcentaje_aprobado}%)",
+                            "estado"=>false
+                        ]);
+                    }
+                    $metodos_aprobados = $solicitudExistente['data']['metodos_pago'] ?? [];
+                    if (!is_array($metodos_aprobados)) {
+                        $metodos_aprobados = [];
+                    }
+                    if (!$this->validarMetodosPago($metodos_pago, $metodos_aprobados)) {
+                        return Response::json(["msj"=>"Error: Los métodos de pago deben ser exactos a los aprobados en la solicitud","estado"=>false]);
+                    }
+                    pago_pedidos::updateOrCreate(["id_pedido"=>$id_pedido,"tipo"=>$tipo_pago],["cuenta"=>$cuenta,"monto"=>floatval($monto_pago)]);
+                    return true;
+                }
+                return Response::json(["msj"=>"Estado de solicitud no reconocido","estado"=>false]);
+            }
+            
+            // Pedido backend: verificar por id_pedido (flujo existente)
             $solicitudExistente = (new sendCentral)->verificarSolicitudDescuento([
                 'id_sucursal' => (new sendCentral)->getOrigen(),
                 'id_pedido' => $id_pedido,
@@ -1511,7 +1646,9 @@ class PagoPedidosController extends Controller
                     return Response::json(["msj"=>"Ya existe una solicitud de descuento por método de pago en espera de aprobación","estado"=>false]);
                 } elseif ($solicitudExistente['data']['estado'] === 'aprobado') {
                     // Validar que el porcentaje de descuento sea exactamente igual al aprobado
-                    $porcentaje_aprobado = floatval($solicitudExistente['data']['porcentaje_descuento']);
+                    $porcentaje_aprobado = isset($solicitudExistente['data']['porcentaje_descuento'])
+                        ? floatval($solicitudExistente['data']['porcentaje_descuento'])
+                        : $porcentaje_descuento;
                     if (abs($porcentaje_descuento - $porcentaje_aprobado) > 0.01) {
                         return Response::json([
                             "msj"=>"Error: El porcentaje de descuento calculado ({$porcentaje_descuento}%) debe ser exactamente igual al aprobado ({$porcentaje_aprobado}%)",
@@ -1519,7 +1656,10 @@ class PagoPedidosController extends Controller
                         ]);
                     }
                     // Validar que los métodos de pago sean exactos a los aprobados
-                    $metodos_aprobados = $solicitudExistente['data']['metodos_pago'];
+                    $metodos_aprobados = $solicitudExistente['data']['metodos_pago'] ?? [];
+                    if (!is_array($metodos_aprobados)) {
+                        $metodos_aprobados = [];
+                    }
                     if (!$this->validarMetodosPago($metodos_pago, $metodos_aprobados)) {
                         return Response::json(["msj"=>"Error: Los métodos de pago deben ser exactos a los aprobados en la solicitud","estado"=>false]);
                     }

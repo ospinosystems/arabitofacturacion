@@ -28,9 +28,11 @@ function Header({
     subViewInventario,
     // Props para pedidos
     pedidosFast,
+    pedidosFrontPendientesList = [],
     onClickEditPedido,
     currentPedidoId,
     addNewPedido,
+    addNewPedidoFront,
     pedidoData,
 }) {
     const [updatingDollar, setUpdatingDollar] = useState(false);
@@ -501,7 +503,7 @@ function Header({
             </div>
 
             {/* Header unificado */}
-            <header className="fixed top-0 left-0 right-0 z-50 w-full bg-white border-b border-orange-200">
+            <header className="fixed top-0 left-0 right-0 z-40 w-full bg-white border-b border-orange-200">
                 <div className="px-3 py-2">
                     <div className="flex items-center gap-3">
                         {/* Botón hamburguesa y sucursal */}
@@ -523,7 +525,9 @@ function Header({
                         <div className="flex-1 min-w-0">
                             <BarraPedLateral
                                 addNewPedido={addNewPedido}
+                                addNewPedidoFront={addNewPedidoFront}
                                 pedidosFast={pedidosFast}
+                                pedidosFrontPendientesList={pedidosFrontPendientesList}
                                 onClickEditPedido={onClickEditPedido}
                                 pedidoData={pedidoData}
                             />

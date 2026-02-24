@@ -132,6 +132,8 @@ function Usuarios({
 									<option value="5">SUPERVISOR DE CAJA</option>
 									<option value="6">SUPERADMIN</option>
 									<option value="7">DICI</option>
+									<option value="8">Pasillero</option>
+									<option value="10">Portero (PPR)</option>
 
 								</select>
 							</div>

@@ -46,6 +46,9 @@ const db = {
 
   setDescuentoUnitario: data=>axios.post(host+"setDescuentoUnitario",data),
   setDescuentoTotal: data=>axios.post(host+"setDescuentoTotal",data),
+  solicitudDescuentoFrontCrear: data=>axios.post(host+"solicitudDescuentoFrontCrear",data),
+  solicitudDescuentoFrontVerificar: data=>axios.post(host+"solicitudDescuentoFrontVerificar",data),
+  solicitudCreditoFrontCrear: data=>axios.post(host+"solicitudCreditoFrontCrear",data),
 
   setCantidad: data=>axios.post(host+"setCantidad",data),
   setPrecioAlternoCarrito: data=>axios.post(host+"setPrecioAlternoCarrito",data),
@@ -285,6 +288,7 @@ const db = {
   
   addRefPago: data => axios.post(host + "addRefPago", data),
   delRefPago: data=>axios.post(host+"delRefPago",data),
+  registrarRefCentralFront: data => axios.post(host + "registrar-ref-central-front", data),
 
   addRetencionesPago: data => axios.post(host + "addRetencionesPago", data),
   delRetencionPago: data=>axios.post(host+"delRetencionPago",data),
@@ -317,7 +321,18 @@ const db = {
   // Ejecutar una garantía aprobada localmente
   ejecutarGarantia: (id, id_caja) => axios.post(host + `api/garantias/${id}/ejecutar`, { id_caja }),
     ejecutarSolicitudGarantiaModerna: (solicitud_id, id_caja) => axios.post(host + `api/garantias/ejecutar-solicitud-moderna`, { solicitud_id, id_caja }),
-  
+
+  // Órdenes de transferencia de garantía
+  getOrdenesTransferenciaGarantia: (params = {}) => axios.get(host + "api/garantias/transferencias-ordenes", { params }),
+  createOrdenTransferenciaGarantia: (data) => axios.post(host + "api/garantias/transferencias-ordenes", data),
+  getOrdenTransferenciaGarantia: (id) => axios.get(host + `api/garantias/transferencias-ordenes/${id}`),
+  aceptarOrdenTransferenciaGarantia: (id, data) => axios.post(host + `api/garantias/transferencias-ordenes/${id}/aceptar`, data),
+  recibirItemTransferenciaGarantia: (ordenId, data) => axios.post(host + `api/garantias/transferencias-ordenes/${ordenId}/recibir-item`, data),
+  confirmarDevolucionProveedorTransferenciaGarantia: (id, data) => axios.post(host + `api/garantias/transferencias-ordenes/${id}/confirmar-devolucion-proveedor`, data),
+  inventarioDisponibleTransferenciaGarantia: (params = {}) => axios.get(host + "api/garantias/transferencias-ordenes/inventario-disponible", { params }),
+tiposInventarioTransferenciaGarantia: () => axios.get(host + "api/garantias/transferencias-ordenes/tipos"),
+  getProveedoresGarantia: () => axios.get(host + "api/garantias/proveedores"),
+
   delGastos: data=>axios.post(host+"delGastos",data),
   getGastos: data=>axios.post(host+"getGastos",data),
   setGasto: data=>axios.post(host+"setGasto",data),

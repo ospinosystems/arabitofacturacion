@@ -134,7 +134,7 @@ export default function Modaladdproductocarrito({
                           : "hover:bg-gray-50"
                       }`}
                       key={e.id} 
-                      onClick={setPersonas} 
+                      onClick={() => setPersonas(e)}
                       data-index={e.id}
                     >
                       <div className="font-mono text-sm text-gray-700">

@@ -41,12 +41,42 @@ Route::prefix('garantias')->middleware(['auth.user:api'])->group(function () {
     Route::get('connection-status', function (Request $request) {
         $sendCentral = new App\Http\Controllers\sendCentral();
         $connected = $sendCentral->checkCentralConnection();
-        
+        $sucursalCodigo = '';
+        try {
+            $sucursalCodigo = $sendCentral->getOrigen() ?? '';
+        } catch (\Throwable $e) {
+            // Si no hay sucursal en BD o falla getOrigen(), se devuelve vacío
+        }
         return response()->json([
             'connected' => $connected,
             'central_url' => $sendCentral->path(),
+            'sucursal_codigo' => $sucursalCodigo,
             'timestamp' => now()
         ]);
+    });
+
+    // Redirigir al dashboard de Central (toda conexión con Central vía backend, nunca desde la vista)
+    Route::get('redirect-central-dashboard/{id}', function ($id) {
+        $sendCentral = new App\Http\Controllers\sendCentral();
+        $url = rtrim($sendCentral->path(), '/') . '/dashboard/garantias/' . (int) $id;
+        return redirect()->away($url);
+    });
+
+    // Proxy de archivos de storage de Central (la vista no llama a Central directamente)
+    Route::get('proxy-central-storage', function (Request $request) {
+        $path = $request->query('path');
+        if (empty($path) || preg_match('#\.\.|\\\\#', $path)) {
+            return response()->json(['error' => 'Invalid path'], 400);
+        }
+        $path = ltrim(preg_replace('#^storage/#', '', $path), '/');
+        $sendCentral = new App\Http\Controllers\sendCentral();
+        $url = rtrim($sendCentral->path(), '/') . '/storage/' . $path;
+        $response = Http::timeout(15)->get($url);
+        if (!$response->successful()) {
+            return response()->json(['error' => 'Not found'], 404);
+        }
+        $contentType = $response->header('Content-Type') ?: 'application/octet-stream';
+        return response($response->body(), $response->status(), ['Content-Type' => $contentType]);
     });
 
     // Obtener estadísticas de garantías
@@ -193,6 +223,18 @@ Route::prefix('garantias')->middleware(['auth.user:api'])->group(function () {
     
     // Reversar en central
     Route::post('reversar-central', [App\Http\Controllers\GarantiaController::class, 'reversarGarantiaCentral']);
+
+    // ================ ÓRDENES DE TRANSFERENCIA DE GARANTÍA ================
+    Route::get('transferencias-ordenes', [App\Http\Controllers\TransferenciaGarantiaController::class, 'index']);
+    Route::post('transferencias-ordenes', [App\Http\Controllers\TransferenciaGarantiaController::class, 'store']);
+    Route::get('transferencias-ordenes/inventario-disponible', [App\Http\Controllers\TransferenciaGarantiaController::class, 'inventarioDisponible']);
+    Route::get('transferencias-ordenes/tipos', [App\Http\Controllers\TransferenciaGarantiaController::class, 'tipos']);
+    Route::get('transferencias-ordenes/{id}', [App\Http\Controllers\TransferenciaGarantiaController::class, 'show']);
+    Route::post('transferencias-ordenes/{id}/aprobar', [App\Http\Controllers\TransferenciaGarantiaController::class, 'aprobar']);
+    Route::post('transferencias-ordenes/{id}/rechazar', [App\Http\Controllers\TransferenciaGarantiaController::class, 'rechazar']);
+    Route::post('transferencias-ordenes/{id}/aceptar', [App\Http\Controllers\TransferenciaGarantiaController::class, 'aceptar']);
+    Route::post('transferencias-ordenes/{id}/recibir-item', [App\Http\Controllers\TransferenciaGarantiaController::class, 'recibirItem']);
+    Route::post('transferencias-ordenes/{id}/confirmar-devolucion-proveedor', [App\Http\Controllers\TransferenciaGarantiaController::class, 'confirmarDevolucionProveedor']);
 
     // ================ RUTAS DE INVENTARIO DE GARANTÍAS ================
     

@@ -135,10 +135,11 @@ class HomeController extends Controller
       $selectRedirect = "/";
         switch(session("tipo_usuario")){
             case 1:
-                $selectRedirect = '/admin';
-                break;
             case 2:
-                $selectRedirect = '/cajero';
+                $selectRedirect = '/';
+                break;
+            case 10:
+                $selectRedirect = '/ppr';
                 break;
             default:
                 $selectRedirect = '/login';
@@ -208,6 +209,9 @@ class HomeController extends Controller
                 break;
             case '4':
                 return "Cajero Vendedor";
+                break;
+            case '10':
+                return "Portero";
                 break;
             
             default:
@@ -286,7 +290,8 @@ class HomeController extends Controller
                     "msj" => "¡Inicio exitoso! Bienvenido/a, ".$d->nombre,
                     "session_token" => $sessionData['session_token'],
                     "dollar_info" => $dollarUpdate,
-                    "redirect_to_warehouse" => $redirectToWarehouse
+                    "redirect_to_warehouse" => $redirectToWarehouse,
+                    "redirect_url" => $estado,
                 ]);
                 
             } else {

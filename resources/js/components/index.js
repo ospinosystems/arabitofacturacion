@@ -47,7 +47,7 @@ function Index() {
     const [loading, setLoading] = useState(false)
     const [showHeaderAndMenu, setShowHeaderAndMenu] = useState(true)
 
-    // Verificar sesión al cargar la página
+    // Verificar sesión al cargar la página (no redirigir a /ppr sin validar en servidor para evitar bucle)
     React.useEffect(() => {
         const savedUser = localStorage.getItem('user_data');
         const sessionToken = localStorage.getItem('session_token');
@@ -55,29 +55,33 @@ function Index() {
         if (savedUser && sessionToken) {
             try {
                 const userData = JSON.parse(savedUser);
-                setUser(userData);
-                setLoginActive(true);
+                const tipo = userData.tipo_usuario;
                 
-                // Verificar si la sesión sigue siendo válida
+                // Verificar primero en el servidor si la sesión sigue válida
                 axios.post('/verificarLogin')
                     .then(response => {
                         if (!response.data.estado) {
-                            // Sesión expirada, limpiar datos
                             localStorage.removeItem('user_data');
                             localStorage.removeItem('session_token');
                             setLoginActive(false);
                             setUser([]);
+                            return;
                         }
+                        // Solo redirigir a /ppr si el servidor confirmó sesión y es portero (evita bucle cuando sesión expiró)
+                        if (tipo === 10 || tipo === '10') {
+                            window.location.href = '/ppr';
+                            return;
+                        }
+                        setUser(userData);
+                        setLoginActive(true);
                     })
                     .catch(() => {
-                        // Error en verificación, limpiar datos
                         localStorage.removeItem('user_data');
                         localStorage.removeItem('session_token');
                         setLoginActive(false);
                         setUser([]);
                     });
             } catch (error) {
-                // Error al parsear datos, limpiar
                 localStorage.removeItem('user_data');
                 localStorage.removeItem('session_token');
                 setLoginActive(false);
@@ -99,6 +103,11 @@ function Index() {
                 // Verificar si debe redirigir a gestión de almacén (Galpón Valencia 1)
                 if (res.data.redirect_to_warehouse) {
                     window.location.href = '/warehouse-inventory';
+                    return;
+                }
+                // Redirigir por tipo de usuario (ej: portero -> /ppr)
+                if (res.data.redirect_url && res.data.redirect_url !== '/' && res.data.redirect_url !== '/login') {
+                    window.location.href = res.data.redirect_url;
                     return;
                 }
                 

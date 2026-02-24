@@ -6,9 +6,11 @@ import GarantiaConfig from './garantias/GarantiaConfig';
 import GarantiaInventario from './garantias/GarantiaInventario';
 import GarantiaReverso from './garantias/GarantiaReverso';
 import GarantiaReversoAprobadas from './garantias/GarantiaReversoAprobadas';
+import TransferenciaGarantia from './garantias/TransferenciaGarantia';
 
 const GarantiaModule = () => {
-    const [currentView, setCurrentView] = useState('list'); // 'list', 'wizard', 'config', 'inventario', 'reverso', 'reverso-aprobadas'
+    const [currentView, setCurrentView] = useState('list'); // 'list', 'wizard', 'config', 'inventario', 'reverso', 'transferencias'
+    const [reversoSubTab, setReversoSubTab] = useState('solicitar'); // 'solicitar' | 'aprobados' (dentro de Reverso)
     const [garantias, setGarantias] = useState([]);
     const [loading, setLoading] = useState(false);
     const [limiteResultados, setLimiteResultados] = useState(10);
@@ -54,19 +56,13 @@ const GarantiaModule = () => {
                 setSucursalConfig(prevConfig => ({
                     ...prevConfig,
                     connected: data.connected || false,
-                    central_url: data.central_url || prevConfig.central_api_url
+                    central_url: data.central_url || prevConfig.central_api_url,
+                    codigo: data.sucursal_codigo ?? prevConfig.codigo
                 }));
             }
         } catch (error) {
             console.error('Error al cargar configuración:', error);
         }
-    };
-
-    const estadisticas = {
-        total: garantias.length,
-        pendientes: garantias.filter(g => g.estatus === 'PENDIENTE').length,
-        aprobadas: garantias.filter(g => g.estatus === 'APROBADA' && !g.ejecutada).length,
-        ejecutadas: garantias.filter(g => g.ejecutada).length,
     };
 
     return (
@@ -84,30 +80,6 @@ const GarantiaModule = () => {
                             <p className="text-xs md:text-sm text-gray-600 mt-1">
                                 {sucursalConfig.nombre}
                             </p>
-                        </div>
-                        
-                        {/* Estadísticas rápidas */}
-                        <div className="grid grid-cols-5 gap-1 sm:gap-2 md:gap-4">
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-1 sm:p-2 md:p-3 text-center">
-                                <div className="text-lg md:text-xl font-bold text-blue-600">{estadisticas.total}</div>
-                                <div className="text-xs text-gray-600">Total</div>
-                            </div>
-                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-1 sm:p-2 md:p-3 text-center">
-                                <div className="text-lg md:text-xl font-bold text-yellow-600">{estadisticas.pendientes}</div>
-                                <div className="text-xs text-gray-600">Pendientes</div>
-                            </div>
-                            <div className="bg-green-50 border border-green-200 rounded-lg p-1 sm:p-2 md:p-3 text-center">
-                                <div className="text-lg md:text-xl font-bold text-green-600">{estadisticas.aprobadas}</div>
-                                <div className="text-xs text-gray-600">Por Ejecutar</div>
-                            </div>
-                            <div className="bg-red-50 border border-red-200 rounded-lg p-1 sm:p-2 md:p-3 text-center">
-                                <div className="text-lg md:text-xl font-bold text-red-600">{estadisticas.ejecutadas}</div>
-                                <div className="text-xs text-gray-600">Ejecutadas</div>
-                            </div>
-                            <div className="bg-gray-50 border border-gray-200 rounded-lg p-1 sm:p-2 md:p-3 text-center">
-                                <div className="text-lg md:text-xl font-bold text-gray-600">{estadisticas.ejecutadas}</div>
-                                <div className="text-xs text-gray-600">Finalizadas</div>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -167,16 +139,16 @@ const GarantiaModule = () => {
                                 <span className="sm:hidden">Rev</span>
                             </button>
                             <button
-                                onClick={() => setCurrentView('reverso-aprobadas')}
+                                onClick={() => setCurrentView('transferencias')}
                                 className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium text-xs md:text-sm transition-all duration-200 ${
-                                    currentView === 'reverso-aprobadas'
+                                    currentView === 'transferencias'
                                         ? 'bg-white text-blue-600 shadow-sm border border-blue-200'
                                         : 'border-transparent text-gray-600 hover:text-gray-800 hover:bg-white/50'
                                 }`}
                             >
-                                <i className="fa fa-check-circle text-sm"></i>
-                                <span className="hidden sm:inline">Reversos Aprobados</span>
-                                <span className="sm:hidden">Aprob</span>
+                                <i className="fa fa-exchange-alt text-sm"></i>
+                                <span className="hidden sm:inline">Transferencia Garantía</span>
+                                <span className="sm:hidden">Transf</span>
                             </button>
                         </nav>
                         
@@ -247,11 +219,39 @@ const GarantiaModule = () => {
                 )}
 
                 {!loading && currentView === 'reverso' && (
-                    <GarantiaReverso />
+                    <div>
+                        {/* Sub-tabs dentro de Reverso */}
+                        <div className="mb-4 flex gap-2 border-b border-gray-200 pb-2">
+                            <button
+                                onClick={() => setReversoSubTab('solicitar')}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-all ${
+                                    reversoSubTab === 'solicitar'
+                                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                        : 'text-gray-600 hover:bg-gray-100 border border-transparent'
+                                }`}
+                            >
+                                <i className="fa fa-undo text-sm"></i>
+                                Solicitar Reverso
+                            </button>
+                            <button
+                                onClick={() => setReversoSubTab('aprobados')}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-all ${
+                                    reversoSubTab === 'aprobados'
+                                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                        : 'text-gray-600 hover:bg-gray-100 border border-transparent'
+                                }`}
+                            >
+                                <i className="fa fa-check-circle text-sm"></i>
+                                Reversos Aprobados
+                            </button>
+                        </div>
+                        {reversoSubTab === 'solicitar' && <GarantiaReverso />}
+                        {reversoSubTab === 'aprobados' && <GarantiaReversoAprobadas />}
+                    </div>
                 )}
 
-                {!loading && currentView === 'reverso-aprobadas' && (
-                    <GarantiaReversoAprobadas />
+                {!loading && currentView === 'transferencias' && (
+                    <TransferenciaGarantia sucursalConfig={sucursalConfig} db={db} />
                 )}
             </div>
         </div>

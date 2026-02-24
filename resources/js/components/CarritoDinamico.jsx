@@ -383,23 +383,28 @@ const CarritoDinamico = ({
             }
         }
 
-        const precioOriginal = parseFloat(producto.precio) || 0;
-        
+        // Entrada: usar precio de la factura original. Salida: usar precio actual del producto.
+        const productoFacturadoForPrecio = !modoTrasladoInterno ? productosFacturados.find(p => p.id === producto.id) : null;
+        const precioActualProducto = parseFloat(producto.precio) || 0;
+        const precioFactura = productoFacturadoForPrecio ? (parseFloat(productoFacturadoForPrecio.precio_unitario) || 0) : precioActualProducto;
+        const precioParaItem = tipo === 'entrada' && productoFacturadoForPrecio ? precioFactura : precioActualProducto;
+
         const nuevoItem = {
             id: producto.id,
             descripcion: producto.descripcion,
             codigo_barras: producto.codigo_barras || '',
             codigo_proveedor: producto.codigo_proveedor || '',
-            precio: precioOriginal,
-            precio_original: precioOriginal, // Guardar precio original para validaciones
+            precio: precioParaItem,
+            precio_original: precioParaItem,
+            precio_factura: tipo === 'entrada' ? precioFactura : null,
+            precio_actual: tipo === 'entrada' ? precioActualProducto : precioActualProducto,
             stock_disponible: parseInt(producto.stock) || 0,
             cantidad: 1,
             estado: estado, // 'BUENO', 'DAÑADO', 'DEFECTUOSO'
-            subtotal: precioOriginal,
+            subtotal: precioParaItem,
             tipo: tipo, // 'entrada' o 'salida'
             categoria: producto.categoria || '',
             proveedor: producto.proveedor || '',
-            // Agregar información de la factura si está disponible
             cantidad_facturada: tipo === 'entrada' ? productosFacturados.find(p => p.id === producto.id)?.cantidad || 0 : null
         };
 
@@ -510,7 +515,19 @@ const CarritoDinamico = ({
                                         Categoría: {producto.categoria || 'Sin categoría'}
                                     </p>
                                     <p className="text-xs text-gray-500 mt-1">
-                                        Precio: ${(parseFloat(producto.precio) || 0).toFixed(2)} | Stock: {producto.stock || 'N/A'}
+                                        {!modoTrasladoInterno && estaEnFactura && productoFacturado ? (
+                                            <>
+                                                <span className="text-green-700 font-medium">Precio factura: ${(parseFloat(productoFacturado.precio_unitario) || 0).toFixed(2)}</span>
+                                                <span className="mx-1">|</span>
+                                                <span>Precio actual: ${(parseFloat(producto.precio) || 0).toFixed(2)}</span>
+                                                {(parseFloat(productoFacturado.precio_unitario) || 0).toFixed(2) !== (parseFloat(producto.precio) || 0).toFixed(2) && (
+                                                    <span className="ml-1 text-amber-600">(diferente)</span>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <>Precio: ${(parseFloat(producto.precio) || 0).toFixed(2)}</>
+                                        )}
+                                        {' | '}Stock: {producto.stock || 'N/A'}
                                         {!modoTrasladoInterno && estaEnFactura && (
                                             <span className="ml-2 text-green-600 font-medium">
                                                 | Facturado: {cantidadFacturada} uds
@@ -613,7 +630,19 @@ const CarritoDinamico = ({
                                         Categoría: {producto.categoria || 'Sin categoría'}
                                     </div>
                                     <div className="text-xs text-gray-500">
-                                        Precio: ${(parseFloat(producto.precio) || 0).toFixed(2)} | Stock: {producto.stock || 'N/A'}
+                                        {!modoTrasladoInterno && estaEnFactura && productoFacturado ? (
+                                            <>
+                                                <span className="text-green-700 font-medium">Precio factura: ${(parseFloat(productoFacturado.precio_unitario) || 0).toFixed(2)}</span>
+                                                <span className="mx-1">|</span>
+                                                <span>Precio actual: ${(parseFloat(producto.precio) || 0).toFixed(2)}</span>
+                                                {(parseFloat(productoFacturado.precio_unitario) || 0).toFixed(2) !== (parseFloat(producto.precio) || 0).toFixed(2) && (
+                                                    <span className="ml-1 text-amber-600">(diferente)</span>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <>Precio: ${(parseFloat(producto.precio) || 0).toFixed(2)}</>
+                                        )}
+                                        {' | '}Stock: {producto.stock || 'N/A'}
                                         {!modoTrasladoInterno && estaEnFactura && (
                                             <span className="ml-2 text-green-600 font-medium">
                                                 | Facturado: {cantidadFacturada} uds
@@ -783,7 +812,10 @@ const CarritoDinamico = ({
                                             />
                                         </td>
                                         <td className="border border-gray-200 px-4 py-3 text-center text-sm font-medium">
-                                            ${(parseFloat(item.precio) || 0).toFixed(2)}
+                                            <div>${(parseFloat(item.precio) || 0).toFixed(2)}</div>
+                                            {item.precio_factura != null && item.precio_actual != null && Math.abs(parseFloat(item.precio_factura) - parseFloat(item.precio_actual)) > 0.001 && (
+                                                <div className="text-xs text-gray-500 mt-0.5">Factura: ${(parseFloat(item.precio_factura) || 0).toFixed(2)} | Actual: ${(parseFloat(item.precio_actual) || 0).toFixed(2)}</div>
+                                            )}
                                         </td>
                                         <td className="border border-gray-200 px-4 py-3 text-center text-sm font-semibold">
                                             ${(parseFloat(item.subtotal) || 0).toFixed(2)}
@@ -863,10 +895,13 @@ const CarritoDinamico = ({
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Precio Unit.</label>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Precio Unit. (factura)</label>
                                         <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded text-center text-sm font-medium">
                                             ${(parseFloat(item.precio) || 0).toFixed(2)}
                                         </div>
+                                        {item.precio_factura != null && item.precio_actual != null && Math.abs(parseFloat(item.precio_factura) - parseFloat(item.precio_actual)) > 0.001 && (
+                                            <div className="text-xs text-gray-500 mt-1">Actual: ${(parseFloat(item.precio_actual) || 0).toFixed(2)}</div>
+                                        )}
                                     </div>
                                 </div>
 

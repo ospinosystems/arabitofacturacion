@@ -118,6 +118,8 @@
                 @php
                     $dif = ($tarea['cantidad_fisica'] ?? 0) - ($tarea['cantidad_sistema'] ?? 0);
                     $prod = $tarea['producto'] ?? [];
+                    $precioVenta = (float) ($prod['precio'] ?? 0);
+                    $valorDif = $dif * $precioVenta;
                 @endphp
                 <tr>
                     <td>{{ $tarea['id'] ?? '' }}</td>
@@ -127,8 +129,8 @@
                     <td class="text-right">{{ number_format($tarea['cantidad_sistema'] ?? 0) }}</td>
                     <td class="text-right">{{ number_format($tarea['cantidad_fisica'] ?? 0) }}</td>
                     <td class="text-right {{ $dif > 0 ? 'diff-pos' : ($dif < 0 ? 'diff-neg' : '') }}">{{ $dif > 0 ? '+' : '' }}{{ number_format($dif) }}</td>
-                    <td class="text-right">${{ number_format($prod['precio'] ?? 0, 2) }}</td>
-                    <td class="text-right {{ ($tarea['diferencia_valor'] ?? 0) != 0 ? (($tarea['diferencia_valor'] ?? 0) > 0 ? 'diff-pos' : 'diff-neg') : '' }}">${{ number_format($tarea['diferencia_valor'] ?? 0, 2) }}</td>
+                    <td class="text-right">${{ number_format($precioVenta, 2) }}</td>
+                    <td class="text-right {{ $valorDif != 0 ? ($valorDif > 0 ? 'diff-pos' : 'diff-neg') : '' }}">${{ number_format($valorDif, 2) }}</td>
                 </tr>
                 @endforeach
             </tbody>

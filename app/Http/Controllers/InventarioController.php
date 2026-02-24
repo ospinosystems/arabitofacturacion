@@ -13,7 +13,6 @@ use App\Models\inventarios_novedades;
 use App\Models\items_factura;
 use App\Models\items_movimiento;
 use App\Models\items_pedidos;
-use App\Models\marcas;
 use App\Models\moneda;
 use App\Models\movimientos;
 use App\Models\pago_pedidos;
@@ -302,11 +301,11 @@ class InventarioController extends Controller
             ->get();
     }
 
-    public function hacer_pedido($id, $id_pedido, $cantidad, $type, $typeafter = null, $usuario = null, $devolucionTipo = 0, $arrgarantia = null, $valinputsetclaveadmin = null)
+    public function hacer_pedido($id, $id_pedido, $cantidad, $type, $typeafter = null, $usuario = null, $devolucionTipo = 0, $arrgarantia = null, $valinputsetclaveadmin = null, $frontOnlyBypass = false)
     {
         // Ejecutar sendComovamos solo cada 30 minutos
         try {
-            return DB::transaction(function () use ($id, $id_pedido, $cantidad, $type, $typeafter, $usuario, $devolucionTipo, $arrgarantia, $valinputsetclaveadmin) {
+            return DB::transaction(function () use ($id, $id_pedido, $cantidad, $type, $typeafter, $usuario, $devolucionTipo, $arrgarantia, $valinputsetclaveadmin, $frontOnlyBypass) {
             $cantidad = !$cantidad ? 1 : $cantidad;
             // Validar que la cantidad sea un número positivo o negativo, pero no cero, y que su valor absoluto sea al menos 0.1
             if (!is_numeric($cantidad) || abs($cantidad) < 0.1) {
@@ -323,30 +322,34 @@ class InventarioController extends Controller
             if ($cantidad < 0) {
                 $cantidades_cero =items_pedidos::where('cantidad', '<', 0)->where('id_pedido', $id_pedido)->get();
                 if ($cantidades_cero->count() == 0) {
-                    $auth = false;
-                    $valinputsetclaveadmin = preg_replace( '/[^a-z0-9 ]/i', '', strtolower($valinputsetclaveadmin));
+                    // Bypass: cuando viene de setPagoPedido (pedido front_only), la autoría ya fue
+                    // validada en el front al agregar el ítem negativo; no pedir clave de nuevo.
+                    if (!$frontOnlyBypass) {
+                        $auth = false;
+                        $valinputsetclaveadmin = preg_replace( '/[^a-z0-9 ]/i', '', strtolower($valinputsetclaveadmin));
 
-                    if (!$valinputsetclaveadmin) {
-                        throw new \Exception('Clave no es valida', 1);
-                    }
-                    // Se permite la clave original como viene, sin modificarla
-                    $u = usuarios::all();
-                    foreach ($u as $i => $usuario) {
-                        //1 GERENTE
-                        //5 SUPERVISOR DE CAJA
-                        //6 SUPERADMIN
-                        //7 DICI
+                        if (!$valinputsetclaveadmin) {
+                            throw new \Exception('Clave no es valida', 1);
+                        }
+                        // Se permite la clave original como viene, sin modificarla
+                        $u = usuarios::all();
+                        foreach ($u as $i => $usuario) {
+                            //1 GERENTE
+                            //5 SUPERVISOR DE CAJA
+                            //6 SUPERADMIN
+                            //7 DICI
 
-                        if ($usuario->tipo_usuario=="7") {
-                            //DICI
-                            if (Hash::check($valinputsetclaveadmin, $usuario->clave)) {
-                                $auth = true;
-                                break;
+                            if ($usuario->tipo_usuario=="7") {
+                                //DICI
+                                if (Hash::check($valinputsetclaveadmin, $usuario->clave)) {
+                                    $auth = true;
+                                    break;
+                                }
                             }
                         }
-                    }
-                    if (!$auth) {
-                        throw new \Exception('No tiene permisos para agregar productos con cantidad negativa', 1);
+                        if (!$auth) {
+                            throw new \Exception('No tiene permisos para agregar productos con cantidad negativa', 1);
+                        }
                     }
                 }
                 
@@ -372,7 +375,13 @@ class InventarioController extends Controller
                     $loquehabra = $pro->cantidad - $cantidad;
 
                     if ($loquehabra < 0) {
-                        throw new \Exception('No hay disponible la cantidad solicitada', 1);
+                        $nombre = $pro->descripcion ?? 'ID ' . $id;
+                        throw new \Exception(
+                            'No hay disponible la cantidad solicitada. Producto: ' . $nombre .
+                            '. Solicitado: ' . $cantidad .
+                            '. Disponible: ' . max(0, (float) $pro->cantidad) . '.',
+                            1
+                        );
                     }
 
                     $id_pedido = (new PedidosController)->addNewPedido();
@@ -623,7 +632,15 @@ class InventarioController extends Controller
         }
 
         if ($cantidad < 0) {
-            throw new \Exception('No hay disponible la cantidad solicitada', 1);
+            $nombre = $inv->descripcion ?? 'ID ' . $id_producto;
+            $solicitado = $ct1 - $cantidad; // cantidad que se intentó descontar
+            $disponible = max(0, (float) $ct1);
+            throw new \Exception(
+                'No hay disponible la cantidad solicitada. Producto: ' . $nombre .
+                '. Solicitado: ' . $solicitado .
+                '. Disponible: ' . $disponible . '.',
+                1
+            );
         }
         $pendingTransfers = (new TransferenciasInventarioController)->sumPendingTransfers($id_producto);
         if ($cantidad < $pendingTransfers) {
@@ -1046,10 +1063,6 @@ class InventarioController extends Controller
 
         // Base query with eager loading
         $query = inventario::with([
-            'proveedor:id,descripcion',
-            'categoria:id,descripcion',
-            'marca:id,descripcion',
-            'deposito:id,descripcion'
         ])
             ->where('activo', 1)
             ->selectRaw("*, @bs := (inventarios.precio*$bs) as bs, @cop := (inventarios.precio*$cop) as cop");
@@ -1179,6 +1192,7 @@ class InventarioController extends Controller
         $numero_factura = $req->numero_factura;
         $devolucionTipo = isset($req->devolucionTipo) ? $req->devolucionTipo : 0;
         $valinputsetclaveadmin = $req->valinputsetclaveadmin;
+        $frontOnlyBypass = !empty($req->front_only_bypass);
         $arrgarantia = [
             'motivo' => $req->devolucionMotivo,
             'cantidad_salida' => $req->devolucion_cantidad_salida,
@@ -1219,7 +1233,7 @@ class InventarioController extends Controller
 
             $id_return = $id == 'nuevo' ? 'nuevo' : $id;
 
-            return $this->hacer_pedido($id_producto, $id_return, $cantidad, 'ins', $type, $usuario, $devolucionTipo, $arrgarantia, $valinputsetclaveadmin);
+            return $this->hacer_pedido($id_producto, $id_return, $cantidad, 'ins', $type, $usuario, $devolucionTipo, $arrgarantia, $valinputsetclaveadmin, $frontOnlyBypass);
         }
     }
 
@@ -2057,18 +2071,21 @@ class InventarioController extends Controller
                     ];
                 }
 
-                // Obtener productos que se llevó el cliente
+                // Obtener productos que se llevó el cliente (precio de la factura original, no precio actual)
                 $productos = [];
                 foreach ($pedido->items as $item) {
                     if ($item->producto) {
+                        $precioFactura = $item->precio_unitario !== null && $item->precio_unitario != ''
+                            ? floatval($item->precio_unitario)
+                            : floatval($item->producto->precio);
                         $productos[] = [
                             'id' => $item->producto->id,
                             'descripcion' => $item->producto->descripcion,
                             'codigo_barras' => $item->producto->codigo_barras ?? '',
                             'codigo_proveedor' => $item->producto->codigo_proveedor ?? '',
                             'cantidad' => floatval($item->cantidad),
-                            'precio_unitario' => floatval($item->producto->precio),
-                            'subtotal' => floatval($item->monto * $item->cantidad),
+                            'precio_unitario' => $precioFactura,
+                            'subtotal' => $precioFactura * floatval($item->cantidad),
                             'categoria' => $item->producto->categoria ?? '',
                             'marca' => $item->producto->marca ?? ''
                         ];

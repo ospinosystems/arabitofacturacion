@@ -1,0 +1,123 @@
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { usePprKeyboard } from './PprKeyboardContext';
+
+const INPUT_ID = 'buscar-pedido-id';
+
+export default function BuscarPedido({ onBuscar, loading }) {
+  const [idInput, setIdInput] = useState('');
+  const scanInputRef = useRef(null);
+  const bufferRef = useRef('');
+  const { register, unregister, activeInput, updateValue } = usePprKeyboard();
+
+  useEffect(() => {
+    if (activeInput?.id === INPUT_ID) updateValue(idInput);
+  }, [idInput, activeInput?.id, updateValue]);
+
+  useEffect(() => {
+    scanInputRef.current?.focus();
+  }, []);
+
+  const handleBuscar = useCallback(() => {
+    const id = (bufferRef.current || idInput).toString().trim().replace(/\D/g, '').slice(0, 8);
+    if (!id) return;
+    bufferRef.current = '';
+    setIdInput('');
+    onBuscar(parseInt(id, 10));
+  }, [idInput, onBuscar]);
+
+  useEffect(() => {
+    const onDocKeyDown = (e) => {
+      if (e.target === scanInputRef.current) return;
+      if (e.key === 'Enter') {
+        const buf = bufferRef.current.replace(/\D/g, '').slice(0, 8);
+        if (buf) {
+          e.preventDefault();
+          e.stopPropagation();
+          onBuscar(parseInt(buf, 10));
+          bufferRef.current = '';
+          setIdInput('');
+        }
+        return;
+      }
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        bufferRef.current = (bufferRef.current + e.key).slice(0, 8);
+        setIdInput(bufferRef.current);
+      }
+    };
+    document.addEventListener('keydown', onDocKeyDown, true);
+    return () => document.removeEventListener('keydown', onDocKeyDown, true);
+  }, [onBuscar]);
+
+  const handleFocus = () => {
+    bufferRef.current = idInput;
+    // No abrir teclado en pantalla al hacer foco; solo con el botón "Teclado"
+  };
+
+  const handleBlur = () => {
+    unregister(INPUT_ID);
+  };
+
+  const abrirTeclado = () => {
+    bufferRef.current = idInput;
+    register(INPUT_ID, {
+      type: 'numeric',
+      value: idInput,
+      onChange: (v) => {
+        bufferRef.current = v;
+        setIdInput(v);
+      },
+      maxLength: 8,
+    });
+  };
+
+  return (
+    <div className="flex flex-col h-full max-w-md mx-auto">
+      <input
+        ref={scanInputRef}
+        type="text"
+        inputMode="none"
+        autoComplete="off"
+        readOnly
+        value={idInput}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        className="absolute opacity-0 h-0 w-0 -left-[9999px] focus:opacity-0"
+        aria-label="Escanear código de barras o ingresar número de pedido"
+      />
+      <div className="p-4">
+        <label className="block text-sm font-medium text-gray-600 mb-2">Nº de pedido (escanear o teclear)</label>
+        <div className="flex gap-2 items-stretch">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => scanInputRef.current?.focus()}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') scanInputRef.current?.focus(); }}
+            className="flex-1 min-h-[48px] px-4 py-3 text-2xl font-mono bg-white border-2 border-gray-300 rounded-xl text-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-sinapsis ring-offset-2"
+            aria-readonly
+          >
+            {idInput || '—'}
+          </div>
+          <button
+            type="button"
+            onClick={abrirTeclado}
+            className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium text-sm border border-gray-300 focus:outline-none focus:ring-2 focus:ring-sinapsis ring-offset-2"
+            title="Abrir teclado en pantalla"
+          >
+            Teclado
+          </button>
+        </div>
+      </div>
+      <div className="p-4 pt-2">
+        <button
+          type="button"
+          onClick={handleBuscar}
+          disabled={!idInput.trim() || loading}
+          className="w-full py-4 rounded-xl btn-sinapsis text-lg font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+        >
+          {loading ? 'Buscando…' : 'Buscar pedido'}
+        </button>
+      </div>
+    </div>
+  );
+}

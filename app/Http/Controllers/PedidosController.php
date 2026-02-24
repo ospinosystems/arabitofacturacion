@@ -137,7 +137,8 @@ class PedidosController extends Controller
             $ret->whereIn("id_vendedor", $vendedor);
         }
 
-        return $ret->limit(12)
+        return $ret->limit(6)
+            ->orderBy("estado", "asc")
             ->orderBy("id", "desc")
             ->get(["id", "estado"]);
     }
@@ -959,8 +960,28 @@ class PedidosController extends Controller
         }   
 
     }
+    /** TTL en segundos para cache de pedidos procesados (24 horas) */
+    const CACHE_PEDIDO_PROCESADO_TTL = 86400;
+    /** Solo cachear pedidos creados en los últimos N días (evita llenar cache con cientos de pedidos viejos) */
+    const CACHE_PEDIDO_PROCESADO_DIAS_RECIENTES = 7;
+
     public function getPedidoFun($id_pedido, $filterMetodoPagoToggle = "todos", $cop = 1, $bs = 1, $factor = 1, $clean = false)
     {
+        $id_pedido = (int) $id_pedido;
+        $cacheKey = 'pedido_procesado_' . $id_pedido . '_' . $cop . '_' . $bs . '_' . $factor . '_' . ($clean ? '1' : '0');
+
+        // Solo cachear pedidos procesados (estado != 0) y recientes: consulta ligera
+        $row = pedidos::where('id', $id_pedido)->select('estado', 'created_at')->first();
+        if ($row && (int) $row->estado !== 0) {
+            $limiteReciente = now()->subDays(self::CACHE_PEDIDO_PROCESADO_DIAS_RECIENTES);
+            if ($row->created_at && $row->created_at >= $limiteReciente) {
+                $cached = Cache::get($cacheKey);
+                if ($cached !== null) {
+                    return $cached;
+                }
+            }
+        }
+
         // Optimize eager loading with specific columns
         $pedido = pedidos::with([
             'retenciones',
@@ -1123,9 +1144,17 @@ class PedidosController extends Controller
         $pedido->cop_clean = round($totals['total_ped'] * $tasaCopItems, 2);
         $pedido->bs_clean = round($totals['total_ped'] * $tasaBsItems, 2);
         
-       
+        $result = $clean ? $pedido->makeHidden('items') : $pedido;
 
-        return $clean ? $pedido->makeHidden('items') : $pedido;
+        // Guardar en cache solo si está procesado y es reciente (evita saturar cache)
+        if ((int) $pedido->estado !== 0) {
+            $limiteReciente = now()->subDays(self::CACHE_PEDIDO_PROCESADO_DIAS_RECIENTES);
+            if ($pedido->created_at && $pedido->created_at >= $limiteReciente) {
+                Cache::put($cacheKey, $result, self::CACHE_PEDIDO_PROCESADO_TTL);
+            }
+        }
+
+        return $result;
     }
     public function getPedido(Request $req, $factor = 1)
     {
@@ -3225,8 +3254,8 @@ class PedidosController extends Controller
                 $objcierres->efecadiccajafdolar = floatval($req->efecadiccajafdolar ?? 0);
                 $objcierres->efecadiccajafeuro = floatval($req->efecadiccajafeuro ?? 0);
 
-                $objcierres->inventariobase = floatval($req->inventariobase ?? 0);
-                $objcierres->inventarioventa = floatval($req->inventarioventa ?? 0);
+                $objcierres->inventariobase = floatval($calculos['total_inventario_base'] ?? $req->inventariobase ?? 0);
+                $objcierres->inventarioventa = floatval($calculos['total_inventario'] ?? $req->inventarioventa ?? 0);
 
                 $objcierres->credito = floatval($req->credito ?? 0);
                 $objcierres->creditoporcobrartotal = floatval($req->creditoporcobrartotal ?? 0);
@@ -4789,12 +4818,17 @@ class PedidosController extends Controller
     public function asignarPedidoOriginalDevolucion(Request $req)
     {
         $id_pedido_devolucion = $req->id_pedido_devolucion;
-        $id_pedido_original = $req->id_pedido_original;
+        $id_pedido_original   = $req->id_pedido_original;
 
-        // Validar que el pedido de devolución exista
-        $pedidoDevolucion = pedidos::find($id_pedido_devolucion);
-        if (!$pedidoDevolucion) {
-            return Response::json(["msj" => "El pedido de devolución no existe", "estado" => false]);
+        // Detectar si el pedido de devolución es front-only (UUID string, no numérico)
+        $esFrontOnly = !is_numeric($id_pedido_devolucion);
+
+        // Solo buscar en BD si NO es front-only
+        if (!$esFrontOnly) {
+            $pedidoDevolucion = pedidos::find($id_pedido_devolucion);
+            if (!$pedidoDevolucion) {
+                return Response::json(["msj" => "El pedido de devolución no existe", "estado" => false]);
+            }
         }
 
         // Validar que el pedido original exista
@@ -4803,20 +4837,18 @@ class PedidosController extends Controller
             return Response::json(["msj" => "El pedido original #$id_pedido_original no existe", "estado" => false]);
         }
 
-        // Validar que el pedido original no sea una devolución (debe tener monto positivo)
-        $montoTotal = items_pedidos::where('id_pedido', $id_pedido_original)->sum('monto');
-       /*  if ($montoTotal <= 0) {
-            return Response::json(["msj" => "El pedido #$id_pedido_original no es válido como factura original (monto no positivo)", "estado" => false]);
-        } */
-
         // Validar que el pedido original esté facturado (estado > 0)
         if ($pedidoOriginal->estado == 0) {
             return Response::json(["msj" => "El pedido #$id_pedido_original no ha sido facturado aún", "estado" => false]);
         }
 
-        // Asignar el pedido original
-        $pedidoDevolucion->isdevolucionOriginalid = $id_pedido_original;
-        $pedidoDevolucion->save();
+        // Si es un pedido real en BD, guardar la asignación ahora mismo
+        if (!$esFrontOnly) {
+            $pedidoDevolucion->isdevolucionOriginalid = $id_pedido_original;
+            $pedidoDevolucion->save();
+        }
+        // Si es front-only, el front almacenará isdevolucionOriginalid en su estado local
+        // y lo enviará junto con los datos al crear el pedido en setPagoPedido.
 
         // Obtener cantidades disponibles para devolución (restando devoluciones previas)
         $itemsDisponibles = $this->getItemsDisponiblesDevolucion($id_pedido_original);
@@ -4824,6 +4856,7 @@ class PedidosController extends Controller
         return Response::json([
             "msj" => "Pedido original #$id_pedido_original asignado correctamente",
             "estado" => true,
+            "front_only" => $esFrontOnly,
             "pedido_original" => $pedidoOriginal,
             "items_disponibles" => $itemsDisponibles
         ]);
@@ -4984,6 +5017,15 @@ class PedidosController extends Controller
     public function eliminarPedidoOriginalDevolucion(Request $req)
     {
         $id_pedido = $req->id_pedido;
+
+        // Pedido front-only (UUID): no existe en BD; el front quita la asignación en estado local
+        if ($id_pedido && !is_numeric($id_pedido)) {
+            return Response::json([
+                "msj" => "Asignación de factura original eliminada",
+                "estado" => true,
+                "front_only" => true,
+            ]);
+        }
 
         $pedido = pedidos::find($id_pedido);
         if (!$pedido) {
