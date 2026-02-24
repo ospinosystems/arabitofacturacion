@@ -175,7 +175,7 @@ export default function ModalPosDebito({
           <div className="p-6 space-y-5 overflow-y-auto flex-1">
             {/* Instrucción simple y clara */}
             <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
-              <p className="text-base text-slate-700 leading-relaxed">
+              <p className="text-slate-700 leading-relaxed">
                 {posLoading ? (
                   <>Enviando al datáfono… confirme el monto e introduzca su clave en el lector.</>
                 ) : (
@@ -213,7 +213,7 @@ export default function ModalPosDebito({
                   <select
                     value={posTipoCuenta}
                     onChange={(e) => setPosTipoCuenta(e.target.value)}
-                    className="w-full px-4 py-3 text-base text-gray-900 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white"
+                    className="w-full px-4 py-3 text-gray-900 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white"
                     disabled={posLoading}
                   >
                     <option value="CORRIENTE">Corriente</option>
@@ -277,7 +277,7 @@ export default function ModalPosDebito({
                   }}
                   maxLength={campoActivo === 'cedula' ? 8 : 15}
                   allowDecimal={campoActivo === 'monto'}
-                  accentColor="#475569"
+                  accentColor="#f26d0a"
                 />
               </div>
             )}
@@ -321,7 +321,8 @@ export default function ModalPosDebito({
               type="button"
               onClick={enviarSolicitudPosDebito}
               disabled={posLoading || !posCedulaTitular}
-              className="w-full py-4 px-6 rounded-xl disabled:opacity-50 flex items-center justify-center gap-2 font-semibold text-lg bg-slate-700 text-white hover:bg-slate-800 focus:ring-2 focus:ring-slate-400 focus:outline-none transition-colors"
+              className="w-full py-4 px-6 rounded-xl disabled:opacity-50 flex items-center justify-center gap-2 font-semibold text-lg text-white hover:opacity-90 focus:ring-2 focus:ring-orange-400 focus:outline-none transition-colors"
+              style={{ backgroundColor: '#f26d0a' }}
             >
               {posLoading ? (
                 <>

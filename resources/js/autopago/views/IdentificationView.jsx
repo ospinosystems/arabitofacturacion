@@ -34,7 +34,7 @@ export default function IdentificationView({ idValue, onIdChange, onConfirm, onB
         type="text"
         value={idValue}
         readOnly
-        className="w-full max-w-md py-5 px-6 text-3xl font-semibold text-center border-2 border-gray-200 rounded-xl mb-8 bg-white mx-auto placeholder-gray-300 focus:outline-none shadow-sm"
+        className="w-full max-w-xs py-3 px-4 text-2xl font-semibold text-center border-2 border-gray-200 rounded-lg mb-6 bg-white mx-auto placeholder-gray-300 focus:outline-none shadow-sm"
         placeholder="Número de cédula"
       />
       <div className="flex-1 flex flex-col justify-center min-h-0">
@@ -44,7 +44,7 @@ export default function IdentificationView({ idValue, onIdChange, onConfirm, onB
         type="button"
         onClick={onConfirm}
         disabled={!idValue.trim() || loading}
-        className="w-full max-w-2xl py-8 rounded-2xl text-4xl font-bold text-white tracking-tight transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed mb-16 mx-auto kiosk-btn-primary flex items-center justify-center gap-3 shadow-lg"
+        className="w-full max-w-xs py-5 rounded-xl text-2xl font-bold text-white tracking-tight transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed mb-10 mx-auto kiosk-btn-primary flex items-center justify-center gap-2 shadow-lg"
         style={{ backgroundColor: 'rgba(242, 109, 10, 0.95)' }}
       >
         {loading ? (

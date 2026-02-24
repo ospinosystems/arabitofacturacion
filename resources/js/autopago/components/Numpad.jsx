@@ -20,18 +20,18 @@ export default function Numpad({ value, onChange, maxLength = 20 }) {
   };
 
   return (
-    <div className="w-full max-w-xl mx-auto">
-      <div className="grid grid-cols-3 gap-5">
+    <div className="w-full max-w-xs mx-auto">
+      <div className="grid grid-cols-3 gap-2">
         {keys.flat().map((key, i) =>
           key ? (
             <button
               key={i}
               type="button"
               onClick={() => handleKey(key)}
-              className="h-28 rounded-xl flex items-center justify-center text-4xl font-semibold text-white transition-all active:scale-95 shadow-sm"
+              className="h-14 rounded-lg flex items-center justify-center text-2xl font-semibold text-white transition-all active:scale-95 shadow-sm"
               style={{ backgroundColor: BRAND_COLOR }}
             >
-              {key === 'back' ? <Delete size={44} strokeWidth={2.5} /> : key}
+              {key === 'back' ? <Delete size={26} strokeWidth={2.5} /> : key}
             </button>
           ) : (
             <div key={i} />
