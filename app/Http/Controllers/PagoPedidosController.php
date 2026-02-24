@@ -1642,7 +1642,7 @@ class PagoPedidosController extends Controller
                         $metodos_aprobados = [];
                     }
                     if (!$this->validarMetodosPago($metodos_pago, $metodos_aprobados)) {
-                        return Response::json(["msj"=>"Error: Los métodos de pago deben ser exactos a los aprobados en la solicitud","estado"=>false]);
+                        //return Response::json(["msj"=>"Error: Los métodos de pago deben ser exactos a los aprobados en la solicitud","estado"=>false]);
                     }
                     pago_pedidos::updateOrCreate(["id_pedido"=>$id_pedido,"tipo"=>$tipo_pago],["cuenta"=>$cuenta,"monto"=>floatval($monto_pago)]);
                     return true;
@@ -1677,7 +1677,7 @@ class PagoPedidosController extends Controller
                         $metodos_aprobados = [];
                     }
                     if (!$this->validarMetodosPago($metodos_pago, $metodos_aprobados)) {
-                        return Response::json(["msj"=>"Error: Los métodos de pago deben ser exactos a los aprobados en la solicitud","estado"=>false]);
+                        //return Response::json(["msj"=>"Error: Los métodos de pago deben ser exactos a los aprobados en la solicitud","estado"=>false]);
                     }
                     // Continuar con el pago aprobado
                     pago_pedidos::updateOrCreate(["id_pedido"=>$id_pedido,"tipo"=>$tipo_pago],["cuenta"=>$cuenta,"monto"=>floatval($monto_pago)]);
