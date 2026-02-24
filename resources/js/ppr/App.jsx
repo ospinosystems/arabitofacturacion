@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import BuscarPedido from './BuscarPedido';
 import DespachoRapido from './DespachoRapido';
@@ -14,8 +14,9 @@ const TAB_HISTORICO = 'historico';
 function AppContent() {
   const { activeInput } = usePprKeyboard();
   const [tab, setTab] = useState(TAB_DESPACHAR);
-  const [step, setStep] = useState('buscar'); // 'buscar' | 'confirmar_rapido' | 'despachar'
+  const [step, setStep] = useState('buscar'); // 'buscar' | 'confirmar_rapido' | 'despachar' | 'despachado_ok'
   const [pedido, setPedido] = useState(null);
+  const [lastDespachadoId, setLastDespachadoId] = useState(null);
 
   const [clienteEsCF, setClienteEsCF] = useState(false);
   const [clienteAnclado, setClienteAnclado] = useState(false);
@@ -26,6 +27,7 @@ function AppContent() {
   const [success, setSuccess] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [entregaParcialSolicitada, setEntregaParcialSolicitada] = useState(false);
+  const despachadoOkSpokenRef = useRef(false);
 
   const buscarPedido = (id) => {
     setError('');
@@ -81,12 +83,14 @@ function AppContent() {
   const volverABuscar = () => {
     setStep('buscar');
     setPedido(null);
+    setLastDespachadoId(null);
     setClienteAnclado(false);
     setYaDespachadoCompleto(false);
     setFechaUltimoDespacho('');
     setEntregaParcialSolicitada(false);
     setError('');
     setSuccess('');
+    despachadoOkSpokenRef.current = false;
   };
 
   const confirmarEntrega = (body) => {
@@ -98,9 +102,11 @@ function AppContent() {
         const d = res.data;
         if (d.estado) {
           playExitoSound();
+          setLastDespachadoId(body.id_pedido ?? null);
           setSuccess(d.msj || 'Listo.');
-          setStep('buscar');
+          setStep('despachado_ok');
           setPedido(null);
+          despachadoOkSpokenRef.current = false;
         } else {
           setError(d.msj || 'Error al registrar');
         }
@@ -111,6 +117,20 @@ function AppContent() {
       })
       .finally(() => setLoading(false));
   };
+
+  // Leer en voz alta al mostrar pantalla de despachado
+  useEffect(() => {
+    if (step !== 'despachado_ok' || despachadoOkSpokenRef.current) return;
+    despachadoOkSpokenRef.current = true;
+    const id = lastDespachadoId != null ? lastDespachadoId : '';
+    const texto = id ? `Factura ${id} despachada. Puede despachar otra.` : 'Despachado. Puede despachar otra.';
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      const u = new SpeechSynthesisUtterance(texto);
+      u.lang = 'es-VE';
+      u.rate = 0.95;
+      window.speechSynthesis.speak(u);
+    }
+  }, [step, lastDespachadoId]);
 
   const cerrarSesion = () => {
     setMenuOpen(false);
@@ -178,8 +198,32 @@ function AppContent() {
         )}
       </header>
 
-      <main className={`flex-1 min-h-0 overflow-auto py-4 ${(error || success) ? 'pb-24' : ''} ${activeInput ? 'pb-72' : ''}`}>
+      <main className={`flex-1 min-h-0 overflow-auto py-4 ${(error || (success && step !== 'despachado_ok')) ? 'pb-24' : ''} ${activeInput ? 'pb-72' : ''}`}>
         {tab === TAB_HISTORICO && <Historico />}
+        {tab === TAB_DESPACHAR && step === 'despachado_ok' && (
+          <div className="flex flex-col flex-1 min-h-0 items-center justify-center px-6 py-8 text-center">
+            <div className="flex flex-col items-center justify-center max-w-md w-full">
+              <div className="w-24 h-24 rounded-full bg-green-500 flex items-center justify-center shadow-lg mb-6" aria-hidden="true">
+                <svg className="w-14 h-14 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Factura {lastDespachadoId != null ? lastDespachadoId : '—'} despachada
+              </h2>
+              <p className="text-lg text-gray-600 mb-8">
+                Puede despachar otra factura.
+              </p>
+              <button
+                type="button"
+                onClick={volverABuscar}
+                className="w-full max-w-xs mx-auto py-4 px-6 rounded-xl bg-sinapsis hover:bg-sinapsis-dark text-white text-xl font-semibold shadow-lg active:scale-[0.98] transition-colors"
+              >
+                Despachar otra
+              </button>
+            </div>
+          </div>
+        )}
         {tab === TAB_DESPACHAR && step === 'buscar' && (
           <BuscarPedido
             onBuscar={buscarPedido}
@@ -213,14 +257,14 @@ function AppContent() {
         )}
       </main>
 
-      {(error || success) && (
+      {(error || (success && step !== 'despachado_ok')) && (
         <div className="fixed bottom-0 left-0 right-0 safe-area-padding p-3 pb-4 bg-gray-100/95 backdrop-blur-sm border-t border-gray-200 shadow-lg z-50">
           {error && (
             <div className="mx-auto max-w-md p-3 rounded-xl bg-red-100 text-red-800 text-sm">
               {error}
             </div>
           )}
-          {success && (
+          {success && step !== 'despachado_ok' && (
             <div className="mx-auto max-w-md p-3 rounded-xl bg-green-100 text-green-800 text-sm">
               {success}
             </div>

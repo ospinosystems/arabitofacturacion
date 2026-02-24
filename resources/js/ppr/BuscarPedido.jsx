@@ -25,9 +25,9 @@ export default function BuscarPedido({ onBuscar, loading, entregaParcialSolicita
     onBuscar(parseInt(id, 10));
   }, [idInput, onBuscar]);
 
+  // Capturar escaneo desde cualquier parte de la vista (no requiere foco en el input)
   useEffect(() => {
     const onDocKeyDown = (e) => {
-      if (e.target === scanInputRef.current) return;
       if (e.key === 'Enter') {
         const buf = bufferRef.current.replace(/\D/g, '').slice(0, 8);
         if (buf) {
@@ -41,6 +41,7 @@ export default function BuscarPedido({ onBuscar, loading, entregaParcialSolicita
       }
       if (/^[0-9]$/.test(e.key)) {
         e.preventDefault();
+        e.stopPropagation();
         bufferRef.current = (bufferRef.current + e.key).slice(0, 8);
         setIdInput(bufferRef.current);
       }
@@ -89,6 +90,18 @@ export default function BuscarPedido({ onBuscar, loading, entregaParcialSolicita
         className="absolute opacity-0 h-0 w-0 -left-[9999px] focus:opacity-0"
         aria-label="Escanear código de barras o ingresar número de pedido"
       />
+      {loading && (
+        <div className="mx-4 mt-2 p-3 rounded-xl bg-sinapsis text-white text-center font-semibold shadow-lg flex items-center justify-center gap-2" role="status" aria-live="polite">
+          <svg className="animate-spin h-5 w-5 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          Buscando pedido…
+        </div>
+      )}
+      <p className="px-4 pt-2 text-xs text-gray-500 text-center">
+        Escanee el código de barras desde cualquier parte de la pantalla o use el teclado.
+      </p>
       <div className="p-4">
         {onEntregaParcialChange && (
           <div className="mb-4 p-3 rounded-xl border-2 bg-white border-gray-200">

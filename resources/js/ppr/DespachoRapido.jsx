@@ -124,7 +124,7 @@ export default function DespachoRapido({ pedido, yaDespachadoCompleto, fechaUlti
         </div>
       )}
       <div className="flex-1 overflow-y-auto p-3">
-        <p className="text-sm font-semibold text-gray-700 mb-2">Productos del pedido</p>
+        <p className="text-sm font-semibold text-gray-700 mb-2">Productos del pedido (entregados y pendientes)</p>
         <div className="space-y-2 mb-4">
           {items.map((item) => {
             const cant = parseFloat(item.cantidad, 10);
