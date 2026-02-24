@@ -2895,7 +2895,8 @@ export default function Facturar({
                                 ) {
                                     resetPrintingState(params.id);
                                 }
-                            } else {
+                            } else if (res.data.id_tarea) {
+                                // Reimpresión: requiere clave de administrador
                                 setLastDbRequest({
                                     dbFunction: db.imprimirTicked,
                                     params,
@@ -2931,7 +2932,8 @@ export default function Facturar({
                                 ) {
                                     resetPrintingState(params.id);
                                 }
-                            } else {
+                            } else if (res.data.id_tarea) {
+                                // Reimpresión: requiere clave de administrador
                                 setLastDbRequest({
                                     dbFunction: db.imprimirTicked,
                                     params,

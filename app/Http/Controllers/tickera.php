@@ -300,32 +300,34 @@ class tickera extends Controller
                     }
                     $fecha_creada = date("Y-m-d",strtotime($pedido->fecha_factura ?? $pedido->created_at));
                     $today = (new PedidosController)->today();
-                    // PPR: no pedir aprobación para reimpresión; imprimir directo
-                    if (!$fromPpr && ($fecha_creada != $today || ($fecha_creada == $today && $pedido->ticked))) {
+                    // Pedido de otro día o reimpresión (mismo día y ya imprimió): exigir aprobación admin. Usar ticked de $pedidoBlock (lectura fresca) para no depender del cache de getPedido.
+                    // PPR: no pedir aprobación; imprimir directo.
+                    $requiereAprobacion = $fecha_creada != $today || (($fecha_creada == $today) && (int) $pedidoBlock->ticked > 0);
+                    if (!$fromPpr && $requiereAprobacion) {
                         $isPermiso = (new TareaslocalController)->checkIsResolveTarea([
                             "id_pedido" => $req->id,
                             "tipo" => "tickera",
                         ]);
                         if ((new UsuariosController)->isAdmin()) {
                             // Avanza
-                        }elseif($isPermiso["permiso"]){
-                            if ($isPermiso["valoraprobado"]==1) {
+                        } elseif ($isPermiso["permiso"]) {
+                            if ($isPermiso["valoraprobado"] == 1) {
                                 // Avanza
-                            }else{
+                            } else {
+                                pedidos::where('id', $pedidoBlock->id)->update(['is_printing' => false]);
                                 throw new \Exception("Error: Valor no aprobado");
                             }
-                        }else{
+                        } else {
                             $nuevatarea = (new TareaslocalController)->createTareaLocal([
-                                "id_pedido" =>  $req->id,
+                                "id_pedido" => $req->id,
                                 "valoraprobado" => 1,
                                 "tipo" => "tickera",
                                 "descripcion" => "Solicitud de Reimpresion COPIA",
                             ]);
                             if ($nuevatarea) {
-                                // Limpiar is_printing antes de commit: la petición se pausó para aprobación, no está imprimiendo
                                 pedidos::where('id', $pedidoBlock->id)->update(['is_printing' => false]);
                                 \DB::commit();
-                                return Response::json(["id_tarea"=>$nuevatarea->id,"msj"=>"Debe esperar aprobacion del Administrador","estado"=>false]);
+                                return Response::json(["id_tarea" => $nuevatarea->id, "msj" => "Debe esperar aprobacion del Administrador", "estado" => false]);
                             }
                         }
                     }
@@ -369,13 +371,14 @@ class tickera extends Controller
                 ]);
 
         } catch (\Exception $e) {
-            // Hacer rollback primero; luego limpiar is_printing con UPDATE directo (fuera de la transacción revertida)
-            \DB::rollback();
-            if (!empty($req->id)) {
-                try {
-                    pedidos::where('id', $req->id)->update(['is_printing' => false]);
-                } catch (\Throwable $ignore) {}
+            // En caso de error, asegurarse de marcar el pedido como no imprimiendo
+            $pedidoBlock = pedidos::where('id', $req->id)->lockForUpdate()->first();
+
+            if (isset($pedidoBlock)) {
+                $pedidoBlock->is_printing = false;
+                $pedidoBlock->save();
             }
+            \DB::rollback();
             return Response::json([
                 "msj" => "Error: " . $this->sanitizeUtf8ForJson($e->getMessage()),
                 "estado" => false
