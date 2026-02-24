@@ -76,6 +76,15 @@ class PedidosController extends Controller
     public function setexportpedido(Request $req)
     {
         $id = $req->id;
+        $front_only = $req->boolean('front_only');
+        $uuid = $req->input('uuid');
+        $items = $req->input('items', []);
+
+        if ($front_only && $uuid && is_array($items) && count($items) > 0) {
+            // Pedido solo en front: crear en central con estado=0 (pendiente), sin método de pago
+            $central = (new sendCentral)->setPedidoFrontInCentral($uuid, $req->transferirpedidoa, $items);
+            return $central;
+        }
 
         $isPermiso = (new TareaslocalController)->checkIsResolveTarea([
             "id_pedido" => $id,

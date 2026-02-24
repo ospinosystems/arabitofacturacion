@@ -3756,16 +3756,47 @@ export default function Facturar({
                         "?"
                 )
             ) {
-                let params = { transferirpedidoa, id: pedidoData.id };
+                const esFront = !!(pedidoData && pedidoData._frontOnly);
+                const itemsParaCentral = esFront && Array.isArray(pedidoData.items) && pedidoData.items.length > 0
+                    ? pedidoData.items.map((it) => {
+                        const prod = it.producto || {};
+                        return {
+                            producto: {
+                                id: prod.id ?? it.id_producto,
+                                precio_base: parseFloat(prod.precio_base) || 0,
+                                precio: parseFloat(prod.precio) || 0,
+                                descripcion: prod.descripcion ?? "",
+                            },
+                            cantidad: parseFloat(it.cantidad) || 0,
+                            descuento: parseFloat(it.descuento) || 0,
+                            monto: parseFloat(it.monto) || 0,
+                        };
+                    }).filter((it) => it.producto.id && it.cantidad > 0)
+                    : [];
+
+                let params = esFront
+                    ? {
+                        front_only: true,
+                        uuid: pedidoData.id,
+                        transferirpedidoa,
+                        items: itemsParaCentral,
+                    }
+                    : { transferirpedidoa, id: pedidoData.id };
+
+                if (esFront && itemsParaCentral.length === 0) {
+                    notificar({ data: { msj: "El pedido no tiene ítems para transferir.", estado: false } });
+                    return;
+                }
+
                 db.setexportpedido(params).then((res) => {
                     notificar(res);
                     if (res.data.estado) {
                         setView("pagar");
                         getProductos();
                         setSelectItem(null);
-                        db.openTransferenciaPedido(pedidoData.id);
+                        if (!esFront) db.openTransferenciaPedido(pedidoData.id);
                     }
-                    if (res.data.estado === false) {
+                    if (res.data.estado === false && res.data.id_tarea) {
                         setLastDbRequest({
                             dbFunction: db.setexportpedido,
                             params,
