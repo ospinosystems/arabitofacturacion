@@ -322,6 +322,8 @@ class tickera extends Controller
                                 "descripcion" => "Solicitud de Reimpresion COPIA",
                             ]);
                             if ($nuevatarea) {
+                                // Limpiar is_printing antes de commit: la petición se pausó para aprobación, no está imprimiendo
+                                pedidos::where('id', $pedidoBlock->id)->update(['is_printing' => false]);
                                 \DB::commit();
                                 return Response::json(["id_tarea"=>$nuevatarea->id,"msj"=>"Debe esperar aprobacion del Administrador","estado"=>false]);
                             }
@@ -367,14 +369,13 @@ class tickera extends Controller
                 ]);
 
         } catch (\Exception $e) {
-            // En caso de error, asegurarse de marcar el pedido como no imprimiendo
-            $pedidoBlock = pedidos::where('id', $req->id)->lockForUpdate()->first();
-
-            if (isset($pedidoBlock)) {
-                $pedidoBlock->is_printing = false;
-                $pedidoBlock->save();
-            }
+            // Hacer rollback primero; luego limpiar is_printing con UPDATE directo (fuera de la transacción revertida)
             \DB::rollback();
+            if (!empty($req->id)) {
+                try {
+                    pedidos::where('id', $req->id)->update(['is_printing' => false]);
+                } catch (\Throwable $ignore) {}
+            }
             return Response::json([
                 "msj" => "Error: " . $this->sanitizeUtf8ForJson($e->getMessage()),
                 "estado" => false

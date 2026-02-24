@@ -727,6 +727,15 @@ class PedidosController extends Controller
         //$this->checkPedidoAuth($req->id);
         $this->delPedidoFun($req->id, $req->motivo);
     }
+
+    // TEMPORAL: eliminar pedido forzado solo para usuario admin
+    public function delPedidoAdminTemp(Request $req)
+    {
+        if (session('usuario') !== 'admin') {
+            return Response::json(['estado' => false, 'msj' => 'No autorizado']);
+        }
+        return $this->delPedidoFun($req->id, $req->motivo ?? 'Eliminacion forzada por admin');
+    }
     public function delpedido(Request $req)
     {
         try {
