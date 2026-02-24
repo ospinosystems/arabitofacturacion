@@ -139,6 +139,7 @@ class AutopagoController extends Controller
             $debitosArray = [];
             $transferenciaUsd = 0.0;
             $efectivoUsd = 0.0;
+            $referenciasTransfer = [];
             foreach ($payments as $p) {
                 $monto = (float) ($p['amount'] ?? 0);
                 if ($monto <= 0) {
@@ -167,6 +168,19 @@ class AutopagoController extends Controller
                         $transferenciaUsd += $monto;
                     } else {
                         $transferenciaUsd += $tasaDolar > 0 ? $monto / $tasaDolar : 0;
+                    }
+                    $refDesc = isset($p['referencia']) ? (string) $p['referencia'] : '';
+                    $refBanco = isset($p['banco']) ? (string) $p['banco'] : '0134';
+                    if ($refDesc !== '') {
+                        $montoRefBs = $currency === 'usd' ? round($monto * $tasaDolar, 4) : $monto;
+                        $referenciasTransfer[] = [
+                            'tipo' => 1,
+                            'monto' => $montoRefBs,
+                            'descripcion' => $refDesc,
+                            'banco' => $refBanco,
+                            'estatus' => 'aprobada',
+                            'categoria' => 'central',
+                        ];
                     }
                 } elseif (($p['type'] ?? '') === 'manual') {
                     // Pago manual (efectivo/caja): setPagoPedido espera efectivo en DÓLARES
@@ -226,6 +240,10 @@ class AutopagoController extends Controller
                 $pagoParams['debito'] = 0;
             } else {
                 $pagoParams['debito'] = 0;
+            }
+            if ($transferenciaUsd > 0 && count($referenciasTransfer) > 0) {
+                $pagoParams['front_only'] = true;
+                $pagoParams['referencias'] = $referenciasTransfer;
             }
 
             $pagoReq = Request::create('/internal', 'POST', $pagoParams);

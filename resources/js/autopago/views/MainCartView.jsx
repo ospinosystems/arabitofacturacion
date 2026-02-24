@@ -81,6 +81,10 @@ function CartContent({ onPaymentSuccess, onBack, userData, sessionUser, onLogout
             base.posData = p.posData;
           }
         }
+        if (p.type === 'transfer') {
+          if (p.referencia) base.referencia = p.referencia;
+          if (p.banco) base.banco = p.banco;
+        }
         return base;
       });
 

@@ -163,6 +163,7 @@ export default function ModalTransferencia({
             amount: parseFloat(monto),
             status: 'validated',
             referencia: response.data.data?.referencia_completa || referenciaFormateada,
+            banco: response.data.data?.banco || '0134',
           });
           onClose();
         }, 1500);
