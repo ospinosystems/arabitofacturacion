@@ -157,6 +157,7 @@ class GarantiaController extends Controller
             $new_pedido->estado = 0; // Pendiente
             $new_pedido->id_cliente = $cliente_id;
             $new_pedido->id_vendedor = $usuario_id;
+            $new_pedido->fecha_factura = now();
             $new_pedido->created_at = now();
             $new_pedido->updated_at = now();
             $new_pedido->save();
@@ -951,6 +952,7 @@ class GarantiaController extends Controller
         $new_pedido->id_cliente = 1; // Cliente por defecto
         $new_pedido->id_vendedor = $usuario_id;
         $new_pedido->observaciones = 'Garantía/Devolución - Aprobada por Central ID: ' . ($datos_aprobacion['aprobacion_id'] ?? 'N/A');
+        $new_pedido->fecha_factura = now();
         $new_pedido->created_at = now();
         $new_pedido->updated_at = now();
         $new_pedido->save();

@@ -968,6 +968,9 @@ class SyncProgressController extends Controller
             Log::info(">>> Procesando lote de {$nombreTabla}: " . count($registros) . " registros");
             // Si hay función de transformación, aplicarla
             $transformar = $config['transformar'] ?? null;
+            if ($nombreTabla === 'pedidos') {
+                $registros->load('vendedor');
+            }
             
             $data = $registros->map(function($r, $index) use ($config, $transformar, $nombreTabla) {
                 // Obtener todos los campos requeridos, asegurando que se incluyan incluso si son null o 0
@@ -1011,6 +1014,9 @@ class SyncProgressController extends Controller
                         $valor = $r->getAttribute($campo);
                         $registro[$campo] = $valor !== null ? $valor : null;
                     }
+                }
+                if ($nombreTabla === 'pedidos') {
+                    $registro['nombre_vendedor'] = $r->vendedor ? ($r->vendedor->nombre ?? null) : null;
                 }
                 
                 // Log para cierres después de procesar
