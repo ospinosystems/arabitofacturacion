@@ -157,7 +157,17 @@ export default function DespacharPedido({ pedido, clienteEsCF, clienteAnclado, y
           Este pedido tiene entregas parciales. Abajo se muestra lo ya entregado y lo pendiente por ítem.
         </div>
       )}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      {!yaDespachadoCompleto && items.length > 0 && (
+        <div className="flex-shrink-0 px-3 py-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between gap-2">
+          <p className="text-xs text-gray-600">
+            Toque el campo &quot;Cantidad a entregar&quot; de un ítem para abrir el teclado y escribir.
+          </p>
+          <span className="flex-shrink-0 text-sm font-semibold text-gray-700 bg-white px-2 py-1 rounded border border-slate-300">
+            {items.length} {items.length === 1 ? 'ítem' : 'ítems'}
+          </span>
+        </div>
+      )}
+      <div className="flex-1 min-h-0 flex flex-col p-3">
         {yaDespachadoCompleto && (
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <div className="w-28 h-28 rounded-full bg-red-500 flex items-center justify-center shadow-xl mb-6 flex-shrink-0" aria-hidden="true">
@@ -178,7 +188,9 @@ export default function DespacharPedido({ pedido, clienteEsCF, clienteAnclado, y
             </button>
           </div>
         )}
-        {items.map((item, i) => {
+        {!yaDespachadoCompleto && items.length > 0 && (
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-2 -mx-1 px-1">
+            {items.map((item, i) => {
           const cant = parseFloat(item.cantidad, 10);
           const pend = item.pendiente != null ? item.pendiente : cant;
           const aEntregar = parseFloat(entregar[i], 10) || 0;
@@ -304,10 +316,11 @@ export default function DespacharPedido({ pedido, clienteEsCF, clienteAnclado, y
             </button>
           </div>
         )}
+          </div>
+        )}
       </div>
 
-      <div className="p-3 border-t bg-white">
-        <p className="text-xs text-gray-500 py-2">Toque el campo &quot;Cantidad a entregar&quot; de un ítem para abrir el teclado y escribir.</p>
+      <div className="flex-shrink-0 p-3 border-t bg-white">
         <button
           type="button"
           onClick={handleConfirmar}
