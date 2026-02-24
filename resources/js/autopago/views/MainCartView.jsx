@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { ArrowLeft, CreditCard, Smartphone, AlertCircle, Search, HandCoins } from 'lucide-react';
+import { ArrowLeft, CreditCard, Smartphone, AlertCircle, Search } from 'lucide-react';
 import BarcodeHandler from '../components/BarcodeHandler';
 import GuideSection from '../components/GuideSection';
 import EmptyCartState from '../components/EmptyCartState';
@@ -132,20 +132,6 @@ function CartContent({ onPaymentSuccess, onBack, userData, sessionUser, onLogout
 
   const handleConfirmarPago = () => {
     if (isTotalCubierto) onPaymentSuccess();
-  };
-
-  const handleProcesarOrdenManual = () => {
-    if (items.length === 0 || totalRestante <= 0) return;
-    setValidatedPayments((prev) => [
-      ...prev,
-      {
-        type: 'manual',
-        amount: totalRestante,
-        currency: 'bs',
-        status: PAYMENT_STATUS.VALIDATED,
-        description: 'Pago manual / caja',
-      },
-    ]);
   };
 
   return (
@@ -401,16 +387,6 @@ function CartContent({ onPaymentSuccess, onBack, userData, sessionUser, onLogout
                           );
                         })}
                       </div>
-
-                      <button
-                        type="button"
-                        onClick={handleProcesarOrdenManual}
-                        disabled={items.length === 0 || isTotalCubierto}
-                        className="w-full flex items-center justify-center gap-3 py-4 px-4 rounded-xl border-2 border-gray-300 bg-gray-100 text-gray-700 font-bold text-xl hover:bg-gray-200 hover:border-gray-400 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all mt-2"
-                      >
-                        <HandCoins size={28} strokeWidth={2} />
-                        Procesar orden manualmente
-                      </button>
 
                       {isTotalCubierto ? (
                         <div className="w-full py-4 text-center">
