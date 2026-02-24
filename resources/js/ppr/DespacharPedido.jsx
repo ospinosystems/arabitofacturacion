@@ -135,63 +135,71 @@ export default function DespacharPedido({ pedido, clienteEsCF, clienteAnclado, y
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 max-w-md mx-auto pb-4 overflow-hidden">
-      <div className="flex items-center justify-between p-3 border-b bg-white sticky top-0 z-10">
-        <button
-          type="button"
-          onClick={onVolver}
-          className="px-3 py-2 text-gray-600 font-medium"
-        >
-          ← Volver
-        </button>
-        <span className="font-semibold text-gray-800">Pedido #{pedido.id}</span>
-        <span className="w-12" />
+    <div className="max-w-md mx-auto">
+      {/* ── Bloque fijo arriba: nav + info + banner (sticky en el scroll del main) ── */}
+      <div className="sticky top-0 z-20 shadow-sm">
+        {/* Barra de navegación */}
+        <div className="flex items-center justify-between p-3 border-b bg-white">
+          <button
+            type="button"
+            onClick={onVolver}
+            className="px-3 py-2 text-gray-600 font-medium"
+          >
+            ← Volver
+          </button>
+          <span className="font-semibold text-gray-800">Pedido #{pedido.id}</span>
+          <span className="w-12" />
+        </div>
+        {/* Info usuario/hora */}
+        <div className="px-3 py-2 bg-gray-50 border-b text-sm text-gray-600">
+          <span>Usuario: <strong>{usuarioPedido}</strong></span>
+          <span className="mx-2">·</span>
+          <span>Hora pedido: <strong>{horaPedido}</strong></span>
+        </div>
+        {/* Banner ya despachado */}
+        {yaDespachadoCompleto && (
+          <div className="p-3 border-b-2 border-red-300 bg-red-50">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-14 h-14 rounded-full bg-red-500 flex items-center justify-center shadow-lg mb-2" aria-hidden="true">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </div>
+              <p className="text-base font-bold text-red-900 leading-tight">Este pedido ya fue despachado completamente.</p>
+              <p className="mt-1 text-sm font-medium text-red-700">Fecha del despacho: <strong className="text-red-900">{fechaUltimoDespacho || '—'}</strong></p>
+              <button
+                type="button"
+                onClick={onVolver}
+                className="w-full max-w-sm mt-3 py-3 rounded-xl bg-sinapsis hover:bg-sinapsis-dark text-white font-bold shadow-lg active:scale-[0.98] border-0"
+              >
+                Volver al inicio — Empezar de nuevo
+              </button>
+            </div>
+          </div>
+        )}
+        {/* Banner instrucción + contador de ítems */}
+        {!yaDespachadoCompleto && items.length > 0 && (
+          <div className="px-3 py-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between gap-2">
+            <p className="text-xs text-gray-600">
+              Toque el campo &quot;Cantidad a entregar&quot; de un ítem para abrir el teclado y escribir.
+            </p>
+            <span className="flex-shrink-0 text-sm font-semibold text-gray-700 bg-white px-2 py-1 rounded border border-slate-300">
+              {items.length} {items.length === 1 ? 'ítem' : 'ítems'}
+            </span>
+          </div>
+        )}
       </div>
-      <div className="px-3 py-2 bg-gray-50 border-b text-sm text-gray-600">
-        <span>Usuario: <strong>{usuarioPedido}</strong></span>
-        <span className="mx-2">·</span>
-        <span>Hora pedido: <strong>{horaPedido}</strong></span>
-      </div>
+
+      {/* Aviso entregas parciales (no sticky, fluye con el contenido) */}
       {!yaDespachadoCompleto && items.some((i) => i.entregado_hasta != null && i.entregado_hasta > 0) && (
-        <div className="mx-3 mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium flex-shrink-0">
+        <div className="mx-3 mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium">
           Este pedido tiene entregas parciales. Abajo se muestra lo ya entregado y lo pendiente por ítem.
         </div>
       )}
-      {/* Mensaje fijo arriba: ya despachado o instrucción de despacho */}
-      {yaDespachadoCompleto ? (
-        <div className="flex-shrink-0 p-3 border-b border-red-200 bg-red-50">
-          <div className="flex flex-col items-center text-center">
-            <div className="w-16 h-16 rounded-full bg-red-500 flex items-center justify-center shadow-lg mb-3 flex-shrink-0" aria-hidden="true">
-              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </div>
-            <p className="text-lg font-bold text-red-900 leading-tight">Este pedido ya fue despachado completamente.</p>
-            <p className="mt-2 text-sm font-medium text-red-700">Fecha del despacho: <strong className="text-red-900">{fechaUltimoDespacho || '—'}</strong></p>
-            <button
-              type="button"
-              onClick={onVolver}
-              className="w-full max-w-md mt-4 py-3 rounded-xl bg-sinapsis hover:bg-sinapsis-dark text-white font-bold shadow-lg active:scale-[0.98] border-0"
-            >
-              Volver al inicio — Empezar de nuevo
-            </button>
-          </div>
-        </div>
-      ) : items.length > 0 ? (
-        <div className="flex-shrink-0 px-3 py-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between gap-2">
-          <p className="text-xs text-gray-600">
-            Toque el campo &quot;Cantidad a entregar&quot; de un ítem para abrir el teclado y escribir.
-          </p>
-          <span className="flex-shrink-0 text-sm font-semibold text-gray-700 bg-white px-2 py-1 rounded border border-slate-300">
-            {items.length} {items.length === 1 ? 'ítem' : 'ítems'}
-          </span>
-        </div>
-      ) : null}
-      {/* Lista de ítems con scroll propio (siempre debajo del mensaje) */}
-      <div className="flex-1 min-h-0 flex flex-col p-3">
-        {items.length > 0 ? (
-          <div className="flex-1 min-h-0 overflow-y-auto space-y-2 -mx-1 px-1">
-            {items.map((item, i) => {
+
+      {/* ── Lista de ítems: fluye normalmente; el scroll lo maneja el main de App ── */}
+      <div className="p-3 space-y-2 pb-28">
+        {items.map((item, i) => {
           const cant = parseFloat(item.cantidad, 10);
           const pend = item.pendiente != null ? item.pendiente : cant;
           const aEntregar = parseFloat(entregar[i], 10) || 0;
@@ -317,17 +325,16 @@ export default function DespacharPedido({ pedido, clienteEsCF, clienteAnclado, y
             </button>
           </div>
         )}
-          </div>
-        ) : null}
       </div>
 
+      {/* Botón confirmar — sticky al pie, solo cuando no está despachado */}
       {!yaDespachadoCompleto && (
-        <div className="flex-shrink-0 p-3 border-t bg-white">
+        <div className="sticky bottom-0 z-20 p-3 border-t bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
           <button
             type="button"
             onClick={handleConfirmar}
             disabled={!canConfirm || loading}
-            className="w-full py-4 mt-2 rounded-xl btn-sinapsis text-lg font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+            className="w-full py-4 rounded-xl btn-sinapsis text-lg font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
           >
             {loading ? 'Enviando…' : 'Confirmar entrega e imprimir ticket'}
           </button>

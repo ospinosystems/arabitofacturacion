@@ -246,7 +246,7 @@ function AppContent() {
         )}
       </header>
 
-      <main className={`flex-1 min-h-0 flex flex-col overflow-auto py-4 ${(error || (success && step !== 'despachado_ok')) ? 'pb-24' : ''} ${activeInput ? 'pb-72' : ''}`}>
+      <main className={`flex-1 min-h-0 overflow-auto py-4 ${(error || (success && step !== 'despachado_ok')) ? 'pb-24' : ''} ${activeInput ? 'pb-72' : ''}`}>
         {tab === TAB_HISTORICO && <Historico />}
         {tab === TAB_DESPACHAR && step === 'despachado_ok' && (
           <div className="flex flex-col flex-1 min-h-0 items-center px-6 py-8 text-center">
@@ -311,8 +311,7 @@ function AppContent() {
           />
         )}
         {tab === TAB_DESPACHAR && step === 'despachar' && pedido && (
-          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            <DespacharPedido
+          <DespacharPedido
             pedido={pedido}
             clienteEsCF={clienteEsCF}
             clienteAnclado={clienteAnclado}
@@ -322,7 +321,6 @@ function AppContent() {
             onVolver={volverABuscar}
             loading={loading}
           />
-          </div>
         )}
       </main>
 

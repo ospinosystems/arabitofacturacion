@@ -196,6 +196,15 @@ export default function Facturar({
 
     // useEffect para guardar y restaurar débitos al cambiar de pedido
     useEffect(() => {
+        // Limpiar montos de métodos de pago al cambiar de pedido
+        setEfectivo("");
+        setEfectivo_bs("");
+        setEfectivo_dolar("");
+        setEfectivo_peso("");
+        setTransferencia("");
+        setCredito("");
+        setBiopago("");
+
         if (pedidoData?.id) {
             // Guardar débitos del pedido anterior si había uno
             const pedidoAnteriorId = Object.keys(debitosPorPedido).find(id => 
