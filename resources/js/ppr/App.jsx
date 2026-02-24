@@ -17,6 +17,7 @@ function AppContent() {
   const [step, setStep] = useState('buscar'); // 'buscar' | 'confirmar_rapido' | 'despachar' | 'despachado_ok'
   const [pedido, setPedido] = useState(null);
   const [lastDespachadoId, setLastDespachadoId] = useState(null);
+  const [lastDespachadoItems, setLastDespachadoItems] = useState([]);
 
   const [clienteEsCF, setClienteEsCF] = useState(false);
   const [clienteAnclado, setClienteAnclado] = useState(false);
@@ -28,6 +29,7 @@ function AppContent() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [entregaParcialSolicitada, setEntregaParcialSolicitada] = useState(false);
   const despachadoOkSpokenRef = useRef(false);
+  const scanBufferOnSuccessRef = useRef('');
 
   const buscarPedido = (id) => {
     setError('');
@@ -66,7 +68,7 @@ function AppContent() {
             id_pedido: p.id,
             items: payload,
             retiro_total: true,
-          });
+          }, p);
         } else {
           setError(d.msj || 'Pedido no encontrado');
         }
@@ -84,6 +86,7 @@ function AppContent() {
     setStep('buscar');
     setPedido(null);
     setLastDespachadoId(null);
+    setLastDespachadoItems([]);
     setClienteAnclado(false);
     setYaDespachadoCompleto(false);
     setFechaUltimoDespacho('');
@@ -93,7 +96,7 @@ function AppContent() {
     despachadoOkSpokenRef.current = false;
   };
 
-  const confirmarEntrega = (body) => {
+  const confirmarEntrega = (body, pedidoRef) => {
     setError('');
     setSuccess('');
     setLoading(true);
@@ -103,6 +106,16 @@ function AppContent() {
         if (d.estado) {
           playExitoSound();
           setLastDespachadoId(body.id_pedido ?? null);
+          const itemsPayload = body.items || [];
+          const pedidoItems = (pedidoRef?.items || []).filter((i) => i.producto);
+          const itemsToShow = itemsPayload.map((bi) => {
+            const found = pedidoItems.find((i) => i.id === bi.id_item_pedido);
+            return {
+              descripcion: found?.producto?.descripcion || '—',
+              unidades_entregadas: bi.unidades_entregadas,
+            };
+          });
+          setLastDespachadoItems(itemsToShow);
           setSuccess(d.msj || 'Listo.');
           setStep('despachado_ok');
           setPedido(null);
@@ -131,6 +144,40 @@ function AppContent() {
       window.speechSynthesis.speak(u);
     }
   }, [step, lastDespachadoId]);
+
+  // Volver al home (buscar) tras 10 s sin actividad en pantalla "Factura despachada"
+  useEffect(() => {
+    if (step !== 'despachado_ok') return;
+    const t = setTimeout(() => volverABuscar(), 10000);
+    return () => clearTimeout(t);
+  }, [step]);
+
+  // En pantalla "Factura despachada": escuchar escáner (dígitos + Enter) para buscar otra factura sin tocar "Despachar otra"
+  useEffect(() => {
+    if (tab !== TAB_DESPACHAR || step !== 'despachado_ok') return;
+    scanBufferOnSuccessRef.current = '';
+    const onKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        const buf = scanBufferOnSuccessRef.current.replace(/\D/g, '').slice(0, 8);
+        if (buf) {
+          e.preventDefault();
+          e.stopPropagation();
+          const id = parseInt(buf, 10);
+          scanBufferOnSuccessRef.current = '';
+          volverABuscar();
+          buscarPedido(id);
+        }
+        return;
+      }
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        e.stopPropagation();
+        scanBufferOnSuccessRef.current = (scanBufferOnSuccessRef.current + e.key).slice(0, 8);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [tab, step]);
 
   const cerrarSesion = () => {
     setMenuOpen(false);
@@ -201,7 +248,7 @@ function AppContent() {
       <main className={`flex-1 min-h-0 overflow-auto py-4 ${(error || (success && step !== 'despachado_ok')) ? 'pb-24' : ''} ${activeInput ? 'pb-72' : ''}`}>
         {tab === TAB_HISTORICO && <Historico />}
         {tab === TAB_DESPACHAR && step === 'despachado_ok' && (
-          <div className="flex flex-col flex-1 min-h-0 items-center justify-center px-6 py-8 text-center">
+          <div className="flex flex-col flex-1 min-h-0 items-center px-6 py-8 text-center">
             <div className="flex flex-col items-center justify-center max-w-md w-full">
               <div className="w-24 h-24 rounded-full bg-green-500 flex items-center justify-center shadow-lg mb-6" aria-hidden="true">
                 <svg className="w-14 h-14 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
@@ -211,8 +258,24 @@ function AppContent() {
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 Factura {lastDespachadoId != null ? lastDespachadoId : '—'} despachada
               </h2>
-              <p className="text-lg text-gray-600 mb-8">
+              {lastDespachadoItems.length > 0 && (
+                <div className="w-full mb-6 text-left">
+                  <p className="text-sm font-semibold text-gray-700 mb-2">Items despachados:</p>
+                  <ul className="space-y-1.5 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                    {lastDespachadoItems.map((item, idx) => (
+                      <li key={idx} className="flex justify-between items-center text-sm text-gray-800">
+                        <span className="flex-1 min-w-0 truncate mr-2">{item.descripcion}</span>
+                        <span className="font-mono font-semibold text-green-700 shrink-0">{item.unidades_entregadas}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <p className="text-lg text-gray-600 mb-1">
                 Puede despachar otra factura.
+              </p>
+              <p className="text-sm text-gray-500 mb-8">
+                Escanee otra factura aquí o toque el botón.
               </p>
               <button
                 type="button"
@@ -237,7 +300,7 @@ function AppContent() {
             pedido={pedido}
             yaDespachadoCompleto={yaDespachadoCompleto}
             fechaUltimoDespacho={fechaUltimoDespacho}
-            onEntregarTodo={confirmarEntrega}
+            onEntregarTodo={(body) => confirmarEntrega(body, pedido)}
             onDespacharPorItems={() => setStep('despachar')}
             onVolver={volverABuscar}
             loading={loading}
@@ -250,7 +313,7 @@ function AppContent() {
             clienteAnclado={clienteAnclado}
             yaDespachadoCompleto={yaDespachadoCompleto}
             fechaUltimoDespacho={fechaUltimoDespacho}
-            onConfirmar={confirmarEntrega}
+            onConfirmar={(body) => confirmarEntrega(body, pedido)}
             onVolver={volverABuscar}
             loading={loading}
           />
