@@ -635,6 +635,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('respedidos', [sendCentral::class,"respedidos"]);
 	
 		Route::post('setexportpedido', [PedidosController::class,"setexportpedido"]);
+		Route::post('transferirPedidoFrontSucursal', [PedidosController::class,"transferirPedidoFrontSucursal"]);
 		
 		Route::get("/recibedSocketEvent",[sendCentral::class,"recibedSocketEvent"]);
 		

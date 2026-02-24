@@ -240,6 +240,7 @@ const db = {
   changeIdVinculacionCentral: data => axios.post(host + "changeIdVinculacionCentral", data),
   
   setexportpedido: data => axios.post(host + "setexportpedido", data),
+  transferirPedidoFrontSucursal: data => axios.post(host + "transferirPedidoFrontSucursal", data),
   
   getmastermachine: data=>axios.post(host+"getmastermachine",data),
   getStatusCierre: data=>axios.post(host+"getStatusCierre",data),

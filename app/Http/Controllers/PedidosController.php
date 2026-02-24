@@ -76,15 +76,6 @@ class PedidosController extends Controller
     public function setexportpedido(Request $req)
     {
         $id = $req->id;
-        $front_only = $req->boolean('front_only');
-        $uuid = $req->input('uuid');
-        $items = $req->input('items', []);
-
-        if ($front_only && $uuid && is_array($items) && count($items) > 0) {
-            // Pedido solo en front: crear en central con estado=0 (pendiente), sin método de pago
-            $central = (new sendCentral)->setPedidoFrontInCentral($uuid, $req->transferirpedidoa, $items);
-            return $central;
-        }
 
         $isPermiso = (new TareaslocalController)->checkIsResolveTarea([
             "id_pedido" => $id,
@@ -115,6 +106,101 @@ class PedidosController extends Controller
             return $central;
         }
     }
+    /**
+     * Crea un pedido pendiente (estado=0) desde un pedido front-only para transferirlo a sucursal.
+     * No llama a arabitocentral. Solo crea el pedido e items en arabitofacturacion.
+     * Retorna el ID generado para que el frontend pueda referenciarlo.
+     */
+    public function transferirPedidoFrontSucursal(Request $req)
+    {
+        \DB::beginTransaction();
+        try {
+            $uuid     = $req->uuid;
+            $items    = $req->items ?? [];
+            $id_cliente = (int) ($req->id_cliente ?? 1);
+            if ($id_cliente <= 0) $id_cliente = 1;
+
+            // Si ya existe un pedido con este UUID, devolver el ID existente sin duplicar
+            if ($uuid) {
+                $existing = pedidos::where('uuid', $uuid)->first();
+                if ($existing) {
+                    \DB::rollBack();
+                    return Response::json([
+                        'estado' => false,
+                        'msj'    => 'Este pedido ya fue registrado.',
+                        'id'     => $existing->id,
+                    ]);
+                }
+            }
+
+            $usuario = session('id_usuario');
+
+            // Crear pedido con estado=0 (pendiente, sin método de pago)
+            $nuevo = new pedidos;
+            $nuevo->estado       = 0;
+            $nuevo->id_cliente   = $id_cliente;
+            $nuevo->id_vendedor  = $usuario;
+            $nuevo->fecha_factura = now();
+            if ($uuid) {
+                $nuevo->uuid = $uuid;
+            }
+            $nuevo->save();
+            $id_pedido = $nuevo->id;
+
+            // Si se envió un cliente distinto al genérico, actualizar vínculo
+            if ($id_cliente > 1) {
+                $personaReq = Request::create('/internal', 'POST', [
+                    'numero_factura' => $id_pedido,
+                    'id_cliente'     => $id_cliente,
+                ]);
+                $personaReq->setLaravelSession($req->session());
+                $prevRequest = app('request');
+                app()->instance('request', $personaReq);
+                try {
+                    $this->setpersonacarrito($personaReq);
+                } finally {
+                    app()->instance('request', $prevRequest);
+                }
+            }
+
+            // Crear items directamente sin afectar inventario (estado=0 pendiente)
+            foreach ($items as $item) {
+                $producto   = $item['producto'] ?? [];
+                $id_producto = (int) ($producto['id'] ?? $item['id'] ?? 0);
+                if ($id_producto <= 0) continue;
+
+                $cantidad       = (float) ($item['cantidad'] ?? 1);
+                $precio         = (float) ($item['precio'] ?? $producto['precio'] ?? 0);
+                $descuento      = (float) ($item['descuento'] ?? 0);
+                $monto          = (float) ($item['total'] ?? ($cantidad * $precio));
+                $tasa           = (float) ($item['tasa'] ?? 0);
+                $tasa_cop       = (float) ($item['tasa_cop'] ?? 0);
+
+                $nuevo_item                = new items_pedidos;
+                $nuevo_item->id_pedido     = $id_pedido;
+                $nuevo_item->id_producto   = $id_producto;
+                $nuevo_item->cantidad      = $cantidad;
+                $nuevo_item->descuento     = $descuento;
+                $nuevo_item->monto         = $monto;
+                $nuevo_item->precio_unitario = $precio;
+                $nuevo_item->tasa          = $tasa;
+                $nuevo_item->tasa_cop      = $tasa_cop;
+                $nuevo_item->save();
+            }
+
+            \DB::commit();
+            return Response::json([
+                'estado' => true,
+                'id'     => $id_pedido,
+                'uuid'   => $uuid,
+                'msj'    => 'Pedido creado en pendiente (#' . $id_pedido . '). Sin método de pago asignado.',
+            ]);
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            return Response::json(['estado' => false, 'msj' => 'Error: ' . $e->getMessage()]);
+        }
+    }
+
     public function getPedidosFast(Request $req)
     {
 

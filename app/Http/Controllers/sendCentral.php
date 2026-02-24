@@ -1811,41 +1811,6 @@ class sendCentral extends Controller
             return Response::json(["msj" => "Error: " . $e->getMessage(), "estado" => false]);
         }
     }
-
-    /**
-     * Transfiere un pedido solo front (UUID) a central como pedido pendiente (estado=0).
-     * Crea solo el pedido y los ítems, sin método de pago.
-     *
-     * @param string $uuid UUID del pedido front
-     * @param int $id_sucursal ID sucursal destino en central
-     * @param array $items Items con formato: [ ["producto" => ["id", "precio_base", "precio", "descripcion"], "cantidad", "descuento", "monto"], ... ]
-     */
-    public function setPedidoFrontInCentral($uuid, $id_sucursal, $items)
-    {
-        try {
-            $codigo_origen = $this->getOrigen();
-            $pedidos = [[
-                'id' => $uuid,
-                'items' => $items,
-            ]];
-            $response = $this->requestToCentral('post', '/setPedidoInCentralFromMasters', [
-                'codigo_origen' => $codigo_origen,
-                'id_sucursal' => $id_sucursal,
-                'type' => 'add',
-                'es_pedido_front' => true,
-                'pedidos' => $pedidos,
-            ]);
-
-            if ($response->ok()) {
-                $res = $response->json();
-                return Response::json($res);
-            }
-            return Response::json(["msj" => "Error en respuesta de central", "estado" => false]);
-        } catch (\Exception $e) {
-            return Response::json(["msj" => "Error: " . $e->getMessage(), "estado" => false]);
-        }
-    }
-
     function sendItemsPedidosChecked($items) {
         try {
             $codigo_origen = $this->getOrigen();
