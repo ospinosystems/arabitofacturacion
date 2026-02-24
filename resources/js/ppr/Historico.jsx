@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { usePprKeyboard } from './PprKeyboardContext';
 
@@ -36,7 +36,8 @@ export default function Historico() {
   });
   const [fechaHasta, setFechaHasta] = useState(() => new Date().toISOString().slice(0, 10));
   const [idPedidoFilter, setIdPedidoFilter] = useState('');
-  const { register, unregister, activeInput, updateValue } = usePprKeyboard();
+  const [keyboardTarget, setKeyboardTarget] = useState('historico-fecha-desde');
+  const { register, unregister, close, activeInput, updateValue } = usePprKeyboard();
 
   useEffect(() => {
     if (!activeInput) return;
@@ -44,6 +45,36 @@ export default function Historico() {
     else if (activeInput.id === 'historico-fecha-hasta') updateValue(isoToDateDigits(fechaHasta));
     else if (activeInput.id === 'historico-id-pedido') updateValue(idPedidoFilter);
   }, [activeInput?.id, fechaDesde, fechaHasta, idPedidoFilter, updateValue]);
+
+  const idsHistorico = ['historico-fecha-desde', 'historico-fecha-hasta', 'historico-id-pedido'];
+  const abrirTeclado = useCallback(() => {
+    if (activeInput && idsHistorico.includes(activeInput.id)) {
+      close();
+      return;
+    }
+    if (keyboardTarget === 'historico-fecha-desde') {
+      register('historico-fecha-desde', {
+        type: 'numeric',
+        value: isoToDateDigits(fechaDesde),
+        onChange: (v) => setFechaDesde(dateDigitsToIso(v)),
+        maxLength: 8,
+      });
+    } else if (keyboardTarget === 'historico-fecha-hasta') {
+      register('historico-fecha-hasta', {
+        type: 'numeric',
+        value: isoToDateDigits(fechaHasta),
+        onChange: (v) => setFechaHasta(dateDigitsToIso(v)),
+        maxLength: 8,
+      });
+    } else {
+      register('historico-id-pedido', {
+        type: 'numeric',
+        value: idPedidoFilter,
+        onChange: setIdPedidoFilter,
+        maxLength: 10,
+      });
+    }
+  }, [keyboardTarget, fechaDesde, fechaHasta, idPedidoFilter, register, activeInput?.id, close]);
 
   const fetchHistorico = () => {
     setLoading(true);
@@ -69,19 +100,14 @@ export default function Historico() {
   };
 
   return (
-    <div className="flex flex-col max-w-md mx-auto p-4 pb-8">
-      <div className="flex flex-wrap gap-2 mb-4">
+    <div className="flex flex-col max-w-4xl mx-auto p-4 pb-8 w-full">
+      <div className="flex flex-wrap gap-2 mb-4 items-center">
         <input
           type="text"
           inputMode="none"
           readOnly
           value={fechaDesde}
-          onFocus={() => register('historico-fecha-desde', {
-            type: 'numeric',
-            value: isoToDateDigits(fechaDesde),
-            onChange: (v) => setFechaDesde(dateDigitsToIso(v)),
-            maxLength: 8,
-          })}
+          onFocus={() => setKeyboardTarget('historico-fecha-desde')}
           onBlur={() => unregister('historico-fecha-desde')}
           placeholder="YYYY-MM-DD"
           className="px-3 py-2 rounded-lg border w-32"
@@ -91,12 +117,7 @@ export default function Historico() {
           inputMode="none"
           readOnly
           value={fechaHasta}
-          onFocus={() => register('historico-fecha-hasta', {
-            type: 'numeric',
-            value: isoToDateDigits(fechaHasta),
-            onChange: (v) => setFechaHasta(dateDigitsToIso(v)),
-            maxLength: 8,
-          })}
+          onFocus={() => setKeyboardTarget('historico-fecha-hasta')}
           onBlur={() => unregister('historico-fecha-hasta')}
           placeholder="YYYY-MM-DD"
           className="px-3 py-2 rounded-lg border w-32"
@@ -107,15 +128,18 @@ export default function Historico() {
           readOnly
           placeholder="Nº pedido"
           value={idPedidoFilter}
-          onFocus={() => register('historico-id-pedido', {
-            type: 'numeric',
-            value: idPedidoFilter,
-            onChange: setIdPedidoFilter,
-            maxLength: 10,
-          })}
+          onFocus={() => setKeyboardTarget('historico-id-pedido')}
           onBlur={() => unregister('historico-id-pedido')}
           className="px-3 py-2 rounded-lg border w-24"
         />
+        <button
+          type="button"
+          onClick={abrirTeclado}
+          className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium text-sm border border-gray-300"
+          title="Abrir teclado en pantalla"
+        >
+          Teclado
+        </button>
         <button
           type="button"
           onClick={fetchHistorico}

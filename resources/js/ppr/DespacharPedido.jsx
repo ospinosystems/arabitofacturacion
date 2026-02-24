@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { playDespachadoAlert, playAlertaPendienteSound } from './soundAlert';
 import { usePprKeyboard } from './PprKeyboardContext';
 
@@ -6,9 +6,40 @@ export default function DespacharPedido({ pedido, clienteEsCF, clienteAnclado, y
   const items = pedido?.items?.filter((i) => i.producto) || [];
   const [entregar, setEntregar] = useState(() => items.map(() => ''));
   const [cf, setCf] = useState({ nombreCompleto: '', cedula: '', telefono: '' });
+  const [cfKeyboardTarget, setCfKeyboardTarget] = useState('despachar-cf-nombre');
   const alertPlayedRef = useRef(false);
   const inputRefs = useRef([]);
-  const { register, unregister, activeInput, updateValue } = usePprKeyboard();
+  const { register, unregister, close, activeInput, updateValue } = usePprKeyboard();
+
+  const idsCF = ['despachar-cf-nombre', 'despachar-cf-cedula', 'despachar-cf-telefono'];
+  const abrirTecladoCF = useCallback(() => {
+    if (activeInput && idsCF.includes(activeInput.id)) {
+      close();
+      return;
+    }
+    if (cfKeyboardTarget === 'despachar-cf-nombre') {
+      register('despachar-cf-nombre', {
+        type: 'alpha',
+        value: cf.nombreCompleto,
+        onChange: (v) => setCf((s) => ({ ...s, nombreCompleto: v })),
+        maxLength: 120,
+      });
+    } else if (cfKeyboardTarget === 'despachar-cf-cedula') {
+      register('despachar-cf-cedula', {
+        type: 'numeric',
+        value: cf.cedula,
+        onChange: (v) => setCf((s) => ({ ...s, cedula: v.replace(/\D/g, '').slice(0, 15) })),
+        maxLength: 15,
+      });
+    } else {
+      register('despachar-cf-telefono', {
+        type: 'numeric',
+        value: cf.telefono,
+        onChange: (v) => setCf((s) => ({ ...s, telefono: v.replace(/\D/g, '').slice(0, 15) })),
+        maxLength: 15,
+      });
+    }
+  }, [cfKeyboardTarget, cf.nombreCompleto, cf.cedula, cf.telefono, register, activeInput?.id, close]);
 
   useEffect(() => {
     if (!activeInput) return;
@@ -224,18 +255,14 @@ export default function DespacharPedido({ pedido, clienteEsCF, clienteAnclado, y
         {exigeDatosCF && (
           <div className="mt-4 p-3 rounded-xl border-2 border-amber-200 bg-amber-50">
             <div className="text-sm font-semibold text-amber-800 mb-2">Cliente CF — retiro parcial: complete datos</div>
+            <p className="text-xs text-amber-700 mb-2">Seleccione el campo y pulse &quot;Teclado&quot; para escribir.</p>
             <label className="block text-xs text-amber-700 mb-1">Nombre y apellido</label>
             <input
               type="text"
               inputMode="none"
               readOnly
               value={cf.nombreCompleto}
-              onFocus={() => register('despachar-cf-nombre', {
-                type: 'alpha',
-                value: cf.nombreCompleto,
-                onChange: (v) => setCf((s) => ({ ...s, nombreCompleto: v })),
-                maxLength: 120,
-              })}
+              onFocus={() => setCfKeyboardTarget('despachar-cf-nombre')}
               onBlur={() => unregister('despachar-cf-nombre')}
               placeholder="Nombre y apellido"
               className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-white mb-2 text-gray-800"
@@ -246,12 +273,7 @@ export default function DespacharPedido({ pedido, clienteEsCF, clienteAnclado, y
               inputMode="none"
               readOnly
               value={cf.cedula}
-              onFocus={() => register('despachar-cf-cedula', {
-                type: 'numeric',
-                value: cf.cedula,
-                onChange: (v) => setCf((s) => ({ ...s, cedula: v.replace(/\D/g, '').slice(0, 15) })),
-                maxLength: 15,
-              })}
+              onFocus={() => setCfKeyboardTarget('despachar-cf-cedula')}
               onBlur={() => unregister('despachar-cf-cedula')}
               placeholder="Cédula"
               className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-white mb-2 text-gray-800 font-mono"
@@ -262,22 +284,25 @@ export default function DespacharPedido({ pedido, clienteEsCF, clienteAnclado, y
               inputMode="none"
               readOnly
               value={cf.telefono}
-              onFocus={() => register('despachar-cf-telefono', {
-                type: 'numeric',
-                value: cf.telefono,
-                onChange: (v) => setCf((s) => ({ ...s, telefono: v.replace(/\D/g, '').slice(0, 15) })),
-                maxLength: 15,
-              })}
+              onFocus={() => setCfKeyboardTarget('despachar-cf-telefono')}
               onBlur={() => unregister('despachar-cf-telefono')}
               placeholder="Teléfono"
-              className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-white text-gray-800 font-mono"
+              className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-white mb-2 text-gray-800 font-mono"
             />
+            <button
+              type="button"
+              onClick={abrirTecladoCF}
+              className="w-full py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium text-sm border border-gray-300"
+              title="Abrir teclado en pantalla"
+            >
+              Teclado
+            </button>
           </div>
         )}
       </div>
 
       <div className="p-3 border-t bg-white">
-        <p className="text-xs text-gray-500 py-2">Toque un ítem o su campo para indicar la cantidad a entregar (se abrirá el teclado numérico).</p>
+        <p className="text-xs text-gray-500 py-2">Toque el campo &quot;Cantidad a entregar&quot; de un ítem para abrir el teclado y escribir.</p>
         <button
           type="button"
           onClick={handleConfirmar}

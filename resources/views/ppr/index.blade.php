@@ -9,6 +9,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#1e3a5f">
     <link rel="icon" type="image/ico" href="{{ asset('images/icon.ico') }}">
+    <link rel="manifest" href="{{ url('ppr-manifest.json') }}">
     <title>PPR - Pendiente por Retirar</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

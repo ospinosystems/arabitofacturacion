@@ -8,7 +8,7 @@ export default function DespachoRapido({ pedido, yaDespachadoCompleto, fechaUlti
   const scanInputRef = useRef(null);
   const [scanValue, setScanValue] = useState('');
   const alertPlayedRef = useRef(false);
-  const { register, unregister, activeInput, updateValue } = usePprKeyboard();
+  const { register, unregister, close, activeInput, updateValue } = usePprKeyboard();
 
   useEffect(() => {
     if (activeInput?.id === SCAN_INPUT_ID) updateValue(scanValue);
@@ -51,16 +51,24 @@ export default function DespachoRapido({ pedido, yaDespachadoCompleto, fechaUlti
   };
 
   const onScanFocus = () => {
+    // No abrir teclado solo al hacer foco; solo con el botón "Teclado"
+  };
+
+  const onScanBlur = () => {
+    unregister(SCAN_INPUT_ID);
+  };
+
+  const abrirTeclado = () => {
+    if (activeInput?.id === SCAN_INPUT_ID) {
+      close();
+      return;
+    }
     register(SCAN_INPUT_ID, {
       type: 'numeric',
       value: scanValue,
       onChange: setScanValue,
       maxLength: 8,
     });
-  };
-
-  const onScanBlur = () => {
-    unregister(SCAN_INPUT_ID);
   };
 
   const handleEntregarTodo = () => {
@@ -176,6 +184,14 @@ export default function DespachoRapido({ pedido, yaDespachadoCompleto, fechaUlti
             <div className="rounded-2xl bg-green-50 border-2 border-green-200 p-6 w-full max-w-sm mx-auto text-center">
               <p className="text-lg font-semibold text-green-800 mb-1">Despacho rápido</p>
               <p className="text-gray-700 mb-4">Pedido #{pedido.id} listo. Escanee el código de nuevo o pulse el botón para entregar todo.</p>
+              <button
+                type="button"
+                onClick={abrirTeclado}
+                className="w-full mb-3 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium text-sm border border-gray-300"
+                title="Abrir teclado en pantalla"
+              >
+                Teclado
+              </button>
               <button
                 type="button"
                 onClick={handleEntregarTodo}

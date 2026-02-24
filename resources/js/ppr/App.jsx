@@ -25,21 +25,46 @@ function AppContent() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [entregaParcialSolicitada, setEntregaParcialSolicitada] = useState(false);
 
   const buscarPedido = (id) => {
     setError('');
     setSuccess('');
     setLoading(true);
+    let delegadoAConfirmar = false;
     axios.get(`/ppr/pedido/${id}`)
       .then((res) => {
         const d = res.data;
         if (d.estado && d.pedido) {
-          setPedido(d.pedido);
+          const p = d.pedido;
+          setPedido(p);
           setClienteEsCF(!!d.cliente_es_cf);
           setClienteAnclado(!!d.cliente_anclado);
           setYaDespachadoCompleto(!!d.ya_despachado_completo);
           setFechaUltimoDespacho(d.fecha_ultimo_despacho || '');
-          setStep('confirmar_rapido');
+
+          if (entregaParcialSolicitada) {
+            setStep('despachar');
+            return;
+          }
+          const items = (p.items || []).filter((i) => i.producto);
+          const pendienteVal = (item) => (item.pendiente != null ? item.pendiente : parseFloat(item.cantidad, 10));
+          const payload = items
+            .filter((i) => pendienteVal(i) > 0)
+            .map((i) => ({
+              id_item_pedido: i.id,
+              unidades_entregadas: pendienteVal(i),
+            }));
+          if (payload.length === 0) {
+            setStep('confirmar_rapido');
+            return;
+          }
+          delegadoAConfirmar = true;
+          confirmarEntrega({
+            id_pedido: p.id,
+            items: payload,
+            retiro_total: true,
+          });
         } else {
           setError(d.msj || 'Pedido no encontrado');
         }
@@ -48,7 +73,9 @@ function AppContent() {
         const msg = err.response?.data?.msj || err.message || 'Error al buscar pedido';
         setError(msg);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!delegadoAConfirmar) setLoading(false);
+      });
   };
 
   const volverABuscar = () => {
@@ -57,6 +84,7 @@ function AppContent() {
     setClienteAnclado(false);
     setYaDespachadoCompleto(false);
     setFechaUltimoDespacho('');
+    setEntregaParcialSolicitada(false);
     setError('');
     setSuccess('');
   };
@@ -153,7 +181,12 @@ function AppContent() {
       <main className={`flex-1 min-h-0 overflow-auto py-4 ${(error || success) ? 'pb-24' : ''} ${activeInput ? 'pb-72' : ''}`}>
         {tab === TAB_HISTORICO && <Historico />}
         {tab === TAB_DESPACHAR && step === 'buscar' && (
-          <BuscarPedido onBuscar={buscarPedido} loading={loading} />
+          <BuscarPedido
+            onBuscar={buscarPedido}
+            loading={loading}
+            entregaParcialSolicitada={entregaParcialSolicitada}
+            onEntregaParcialChange={setEntregaParcialSolicitada}
+          />
         )}
         {tab === TAB_DESPACHAR && step === 'confirmar_rapido' && pedido && (
           <DespachoRapido

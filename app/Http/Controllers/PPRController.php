@@ -215,6 +215,15 @@ class PPRController extends Controller
                     ])->values()->toArray(),
                 ];
             }
+            // Si todos los productos tienen por entregar (pendiente) cero, no imprimir ticket
+            $todosPendienteCero = collect($pprDetalle)->every(fn ($r) => (float) ($r['pendiente'] ?? 0) <= 0);
+            if ($todosPendienteCero) {
+                DB::commit();
+                return Response::json([
+                    'estado' => true,
+                    'msj' => 'Entrega registrada. No se imprime ticket (pedido ya entregado por completo).',
+                ]);
+            }
             $imprimirReq = new Request([
                 'id' => $id_pedido,
                 'nombres' => $nombres,

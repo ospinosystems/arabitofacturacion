@@ -92,6 +92,22 @@ Route::get('autopago', function () {
     return view('autopago');
 })->name('autopago');
 
+// Manifest PWA para PPR (pantalla completa en tablet Android)
+Route::get('ppr-manifest.json', function () {
+    return response()->json([
+        'name' => 'PPR - Pendiente por Retirar',
+        'short_name' => 'PPR',
+        'start_url' => url('/ppr'),
+        'display' => 'fullscreen',
+        'orientation' => 'any',
+        'background_color' => '#1e3a5f',
+        'theme_color' => '#1e3a5f',
+        'icons' => [
+            ['src' => asset('images/icon.ico'), 'sizes' => '48x48', 'type' => 'image/x-icon', 'purpose' => 'any'],
+        ],
+    ], 200, ['Content-Type' => 'application/manifest+json']);
+})->name('ppr.manifest');
+
 // PPR - Pendiente por Retirar (solo usuario portero, tipo_usuario = 10)
 Route::group(['middleware' => ['auth.user:portero']], function () {
     Route::get('ppr', [PPRController::class, 'index'])->name('ppr.index');
