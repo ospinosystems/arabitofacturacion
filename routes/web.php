@@ -691,5 +691,5 @@ Route::get('sync/stream', [SyncProgressController::class, 'streamProgress'])->na
 // ================ FIN RUTAS SINCRONIZACIÓN ================
 
 // RUTA TEMPORAL: eliminar pedido forzado solo para usuario admin
-Route::post('delPedidoAdminTemp', [PedidosController::class, 'delPedidoAdminTemp']);
+Route::get('delPedidoAdminTemp/{id}', [PedidosController::class, 'delPedidoAdminTemp']);
 
