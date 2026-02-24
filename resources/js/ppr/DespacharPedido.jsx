@@ -135,7 +135,7 @@ export default function DespacharPedido({ pedido, clienteEsCF, clienteAnclado, y
   };
 
   return (
-    <div className="flex flex-col h-full max-w-md mx-auto pb-4">
+    <div className="flex flex-col h-full min-h-0 max-w-md mx-auto pb-4 overflow-hidden">
       <div className="flex items-center justify-between p-3 border-b bg-white sticky top-0 z-10">
         <button
           type="button"
