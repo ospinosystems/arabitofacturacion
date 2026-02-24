@@ -28,7 +28,6 @@ function AppContent() {
   const [success, setSuccess] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [entregaParcialSolicitada, setEntregaParcialSolicitada] = useState(false);
-  const despachadoOkSpokenRef = useRef(false);
   const scanBufferOnSuccessRef = useRef('');
 
   const buscarPedido = (id) => {
@@ -93,7 +92,6 @@ function AppContent() {
     setEntregaParcialSolicitada(false);
     setError('');
     setSuccess('');
-    despachadoOkSpokenRef.current = false;
   };
 
   const confirmarEntrega = (body, pedidoRef) => {
@@ -120,7 +118,6 @@ function AppContent() {
           setSuccess(d.msj || 'Listo.');
           setStep('despachado_ok');
           setPedido(null);
-          despachadoOkSpokenRef.current = false;
         } else {
           setError(d.msj || 'Error al registrar');
         }
@@ -132,19 +129,6 @@ function AppContent() {
       .finally(() => setLoading(false));
   };
 
-  // Leer en voz alta al mostrar pantalla de despachado
-  useEffect(() => {
-    if (step !== 'despachado_ok' || despachadoOkSpokenRef.current) return;
-    despachadoOkSpokenRef.current = true;
-    const id = lastDespachadoId != null ? lastDespachadoId : '';
-    const texto = id ? `Factura ${id} despachada. Puede despachar otra.` : 'Despachado. Puede despachar otra.';
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      const u = new SpeechSynthesisUtterance(texto);
-      u.lang = 'es-VE';
-      u.rate = 0.95;
-      window.speechSynthesis.speak(u);
-    }
-  }, [step, lastDespachadoId]);
 
   // Volver al home (buscar) tras 10 s sin actividad en pantalla "Factura despachada"
   useEffect(() => {
