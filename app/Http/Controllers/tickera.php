@@ -294,6 +294,9 @@ class tickera extends Controller
                     // Marcar el pedidoBlock como en proceso de impresión
                     $pedidoBlock->is_printing = true;
                     $pedidoBlock->save();
+
+                    // Usar ticked fresco del DB (evita que getPedido cacheado muestre siempre ORIGINAL)
+                    $pedido->ticked = $pedidoBlock->ticked;
     
                     if (!(new PedidosController)->checksipedidoprocesado($req->id)) {
                         throw new \Exception("¡Debe procesar el pedido para imprimir!", 1);
@@ -590,6 +593,12 @@ class tickera extends Controller
         
         // Imprimir COPIA (para la empresa)
       //  $this->imprimirTicketDevolucionFormato($printer, $pedido, $negativeItems, $positiveItems, $nombres, $identificacion, $sucursal, $dolar, $totalDevolucion, $totalEntrada, $saldoFinal, $tieneProductosMixtos);
+
+        // Registrar que se imprimió una copia (igual que en imprimirTicketNormal)
+        $updateprint = pedidos::find($pedido->id);
+        $updateprint->ticked = !$updateprint->ticked ? 1 : $updateprint->ticked + 1;
+        $updateprint->is_printing = false;
+        $updateprint->save();
     }
 
     /**

@@ -112,6 +112,7 @@ function AppContent() {
             const found = pedidoItems.find((i) => i.id === bi.id_item_pedido);
             return {
               descripcion: found?.producto?.descripcion || '—',
+              codigo_barras: found?.producto?.codigo_barras || '—',
               unidades_entregadas: bi.unidades_entregadas,
             };
           });
@@ -261,10 +262,13 @@ function AppContent() {
               {lastDespachadoItems.length > 0 && (
                 <div className="w-full mb-6 text-left">
                   <p className="text-sm font-semibold text-gray-700 mb-2">Items despachados:</p>
-                  <ul className="space-y-1.5 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                  <ul className="space-y-2 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
                     {lastDespachadoItems.map((item, idx) => (
-                      <li key={idx} className="flex justify-between items-center text-sm text-gray-800">
-                        <span className="flex-1 min-w-0 truncate mr-2">{item.descripcion}</span>
+                      <li key={idx} className="flex justify-between items-start gap-2 text-sm text-gray-800">
+                        <div className="flex-1 min-w-0">
+                          <span className="block truncate font-medium">{item.descripcion}</span>
+                          <span className="block text-xs font-mono text-gray-500 mt-0.5">Cód. barras: {item.codigo_barras}</span>
+                        </div>
                         <span className="font-mono font-semibold text-green-700 shrink-0">{item.unidades_entregadas}</span>
                       </li>
                     ))}
