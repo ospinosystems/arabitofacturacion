@@ -445,6 +445,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		
 		
 		Route::get('delpedidoforce', [PedidosController::class,"delpedidoForce"]);
+		Route::get('delpedidoadmin', [PedidosController::class,"delpedidoAdmin"]); // TEMPORAL
 		Route::get('reversarCierre', [CierresController::class,"reversarCierre"]);
 		
 		
@@ -689,7 +690,4 @@ Route::get('sync/desmarcar', [SyncProgressController::class, 'desmarcarSincroniz
 // SSE para progreso en tiempo real
 Route::get('sync/stream', [SyncProgressController::class, 'streamProgress'])->name('sync.stream');
 // ================ FIN RUTAS SINCRONIZACIÓN ================
-
-// RUTA TEMPORAL: eliminar pedido forzado solo para usuario admin
-Route::get('delPedidoAdminTemp/{id}', [PedidosController::class, 'delPedidoAdminTemp']);
 
