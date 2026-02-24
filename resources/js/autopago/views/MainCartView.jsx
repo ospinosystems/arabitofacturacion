@@ -24,11 +24,13 @@ function FlashOverlay({ show }) {
   );
 }
 
-function CartContent({ onPaymentSuccess, onBack, userData, sessionUser, onLogout }) {
+function CartContent({ onPaymentSuccess, onBack, userData, sessionUser, onLogout, validatedPayments: validatedPaymentsProp, setValidatedPayments: setValidatedPaymentsProp }) {
   const { items, orderId, tryAddItem, stockExceededMessage } = useCart();
   const [flash, setFlash] = useState(false);
   const [barcodeNotFound, setBarcodeNotFound] = useState(null);
-  const [validatedPayments, setValidatedPayments] = useState([]);
+  const [validatedPaymentsFallback, setValidatedPaymentsFallback] = useState([]);
+  const validatedPayments = validatedPaymentsProp !== undefined ? validatedPaymentsProp : validatedPaymentsFallback;
+  const setValidatedPayments = setValidatedPaymentsProp || setValidatedPaymentsFallback;
   const [showModalPos, setShowModalPos] = useState(false);
   const [showModalTransfer, setShowModalTransfer] = useState(false);
   const [showModalBuscar, setShowModalBuscar] = useState(false);
@@ -451,7 +453,7 @@ function CartContent({ onPaymentSuccess, onBack, userData, sessionUser, onLogout
   );
 }
 
-export default function MainCartView({ onPaymentSuccess, onBack, userData, sessionUser, onLogout }) {
+export default function MainCartView({ onPaymentSuccess, onBack, userData, sessionUser, onLogout, validatedPayments, setValidatedPayments }) {
   return (
     <CartContent
       onPaymentSuccess={onPaymentSuccess}
@@ -459,6 +461,8 @@ export default function MainCartView({ onPaymentSuccess, onBack, userData, sessi
       userData={userData}
       sessionUser={sessionUser}
       onLogout={onLogout}
+      validatedPayments={validatedPayments}
+      setValidatedPayments={setValidatedPayments}
     />
   );
 }

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useReducer, useState, useCallback, useEffect } from 'react';
+import { getSession } from '../services/persistence';
 
 /** Genera UUID v4 para id de orden */
 const generateOrderId = () => {
@@ -17,6 +18,7 @@ export const ADD_ITEM = 'ADD_ITEM';
 export const DECREMENT_ITEM = 'DECREMENT_ITEM';
 export const REMOVE_ITEM = 'REMOVE_ITEM';
 export const CLEAR = 'CLEAR';
+export const HYDRATE = 'HYDRATE';
 
 function getStock(productOrItem) {
   const s = productOrItem?.stock;
@@ -81,6 +83,10 @@ const cartReducer = (state, action) => {
     }
     case CLEAR:
       return { ...state, items: [], orderId: null };
+    case HYDRATE: {
+      const { items = [], orderId = null } = action.payload || {};
+      return { ...state, items: Array.isArray(items) ? items : [], orderId: orderId || null };
+    }
     default:
       return state;
   }
@@ -91,6 +97,18 @@ const CartContext = createContext(null);
 export const CartProvider = ({ children }) => {
   const [state, dispatch] = useReducer(cartReducer, { items: [], orderId: null });
   const [stockExceededMessage, setStockExceededMessage] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSession().then((session) => {
+      if (cancelled || !session?.cart) return;
+      const { items, orderId } = session.cart;
+      if (Array.isArray(items) && items.length > 0) {
+        dispatch({ type: HYDRATE, payload: { items, orderId: orderId || null } });
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!stockExceededMessage) return;

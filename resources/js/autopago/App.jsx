@@ -7,6 +7,7 @@ import RegisterView from './views/RegisterView';
 import MainCartView from './views/MainCartView';
 import SuccessView from './views/SuccessView';
 import { api } from './services/api';
+import { getSession, setSession, clearSession } from './services/persistence';
 
 const STEPS = {
   LOGIN: 'login',
@@ -26,7 +27,8 @@ function AppContent() {
     sessionUser: null,
     userData: { id: '', nombre: '', telefono: '' },
   });
-  const { items, clearCart } = useCart();
+  const { items, orderId, clearCart } = useCart();
+  const [validatedPayments, setValidatedPayments] = useState([]);
   const inactivityTimerRef = useRef(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [idConfirmLoading, setIdConfirmLoading] = useState(false);
@@ -38,6 +40,8 @@ function AppContent() {
 
   const resetAll = useCallback(() => {
     clearCart();
+    setValidatedPayments([]);
+    clearSession();
     dispatch({ type: 'RESET' });
   }, [clearCart]);
 
@@ -52,6 +56,7 @@ function AppContent() {
 
   const handleLogout = useCallback(() => {
     api.logout().catch(() => {});
+    clearSession();
     try {
       localStorage.removeItem(STORAGE_USER);
       localStorage.removeItem(STORAGE_TOKEN);
@@ -74,6 +79,7 @@ function AppContent() {
             const user = JSON.parse(savedUser);
             dispatch({ type: 'SET_SESSION_USER', payload: user });
             goToStep(STEPS.WELCOME);
+            return getSession();
           } catch (_) {
             localStorage.removeItem(STORAGE_USER);
             localStorage.removeItem(STORAGE_TOKEN);
@@ -81,6 +87,17 @@ function AppContent() {
         } else {
           localStorage.removeItem(STORAGE_USER);
           localStorage.removeItem(STORAGE_TOKEN);
+        }
+      })
+      .then((session) => {
+        if (session?.currentStep && session.currentStep !== STEPS.LOGIN) {
+          dispatch({ type: 'SET_STEP', payload: session.currentStep });
+          if (session.userData && typeof session.userData === 'object') {
+            dispatch({ type: 'SET_USER_DATA', payload: session.userData });
+          }
+          if (Array.isArray(session.validatedPayments)) {
+            setValidatedPayments(session.validatedPayments);
+          }
         }
       })
       .catch(() => {
@@ -176,6 +193,7 @@ function AppContent() {
   }, [goToStep, state.userData]);
 
   const handlePaymentSuccess = useCallback(() => {
+    clearSession();
     goToStep(STEPS.SUCCESS);
   }, [goToStep]);
 
@@ -215,6 +233,24 @@ function AppContent() {
       };
     }
   }, [state.currentStep, startInactivityTimer]);
+
+  const saveSessionRef = useRef(null);
+  useEffect(() => {
+    if (state.currentStep === STEPS.LOGIN || state.currentStep === STEPS.SUCCESS || !state.sessionUser) return;
+    if (saveSessionRef.current) clearTimeout(saveSessionRef.current);
+    saveSessionRef.current = setTimeout(() => {
+      setSession({
+        cart: { items, orderId },
+        userData: state.userData,
+        currentStep: state.currentStep,
+        validatedPayments,
+      });
+      saveSessionRef.current = null;
+    }, 400);
+    return () => {
+      if (saveSessionRef.current) clearTimeout(saveSessionRef.current);
+    };
+  }, [state.currentStep, state.sessionUser, state.userData, items, orderId, validatedPayments]);
 
   const renderStep = () => {
     if (checkingAuth) {
@@ -263,6 +299,8 @@ function AppContent() {
             userData={state.userData}
             sessionUser={state.sessionUser}
             onLogout={handleLogout}
+            validatedPayments={validatedPayments}
+            setValidatedPayments={setValidatedPayments}
           />
         );
       case STEPS.SUCCESS:
