@@ -298,6 +298,37 @@ class tickera extends Controller
                     if (!(new PedidosController)->checksipedidoprocesado($req->id)) {
                         throw new \Exception("¡Debe procesar el pedido para imprimir!", 1);
                     }
+                    $fecha_creada = date("Y-m-d",strtotime($pedido->fecha_factura ?? $pedido->created_at));
+                    $today = (new PedidosController)->today();
+                    // PPR: no pedir aprobación para reimpresión; imprimir directo
+                    if (!$fromPpr && ($fecha_creada != $today || ($fecha_creada == $today && $pedido->ticked))) {
+                        $isPermiso = (new TareaslocalController)->checkIsResolveTarea([
+                            "id_pedido" => $req->id,
+                            "tipo" => "tickera",
+                        ]);
+                        if ((new UsuariosController)->isAdmin()) {
+                            // Avanza
+                        }elseif($isPermiso["permiso"]){
+                            if ($isPermiso["valoraprobado"]==1) {
+                                // Avanza
+                            }else{
+                                throw new \Exception("Error: Valor no aprobado");
+                            }
+                        }else{
+                            $nuevatarea = (new TareaslocalController)->createTareaLocal([
+                                "id_pedido" =>  $req->id,
+                                "valoraprobado" => 1,
+                                "tipo" => "tickera",
+                                "descripcion" => "Solicitud de Reimpresion COPIA",
+                            ]);
+                            if ($nuevatarea) {
+                                \DB::commit();
+                                return Response::json(["id_tarea"=>$nuevatarea->id,"msj"=>"Debe esperar aprobacion del Administrador","estado"=>false]);
+                            }
+                        }
+                    }
+                    
+        
                     // Si hay items con cantidad negativa, imprimir ticket de devolución
                     if ($hasNegativeItems) {
                         $this->imprimirTicketDevolucion($printer, $pedido, $negativeItems, $positiveItems, $nombres, $identificacion, $sucursal, $dolar, $totalDevolucion, $totalEntrada, $saldoFinal, $tieneProductosMixtos);
@@ -321,10 +352,9 @@ class tickera extends Controller
                 $printer->pulse();
                 $printer->close();
 
-                // Marcar pedido como no imprimiendo tras éxito (evita bloquear reimpresión o siguiente PPR)
+                // Marcar pedido como no imprimiendo (solo is_printing, para no sobreescribir ticked que ya actualizó imprimirTicketNormal/Devolucion)
                 if (isset($pedidoBlock)) {
-                    $pedidoBlock->is_printing = false;
-                    $pedidoBlock->save();
+                    pedidos::where('id', $pedidoBlock->id)->update(['is_printing' => false]);
                 }
 
                 \DB::commit();
