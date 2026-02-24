@@ -138,6 +138,7 @@ class AutopagoController extends Controller
 
             $debitosArray = [];
             $transferenciaUsd = 0.0;
+            $efectivoUsd = 0.0;
             foreach ($payments as $p) {
                 $monto = (float) ($p['amount'] ?? 0);
                 if ($monto <= 0) {
@@ -167,9 +168,17 @@ class AutopagoController extends Controller
                     } else {
                         $transferenciaUsd += $tasaDolar > 0 ? $monto / $tasaDolar : 0;
                     }
+                } elseif (($p['type'] ?? '') === 'manual') {
+                    // Pago manual (efectivo/caja): setPagoPedido espera efectivo en DÓLARES
+                    if ($currency === 'usd') {
+                        $efectivoUsd += $monto;
+                    } else {
+                        $efectivoUsd += $tasaDolar > 0 ? $monto / $tasaDolar : 0;
+                    }
                 }
             }
             $transferenciaUsd = round($transferenciaUsd, 4);
+            $efectivoUsd = round($efectivoUsd, 4);
 
             // Ajustar pagos al total real del pedido (el quiosco puede usar otra tasa y enviar más/menos)
             $pedidoReq = Request::create('/internal', 'GET', ['id' => $id_pedido]);
@@ -188,7 +197,7 @@ class AutopagoController extends Controller
                 $sumDebitoBs += (float) ($d['monto'] ?? 0);
             }
             $totalDebitoUsd = $tasaDolar > 0 ? $sumDebitoBs / $tasaDolar : 0;
-            $totalInsUsd = $totalDebitoUsd + $transferenciaUsd;
+            $totalInsUsd = $totalDebitoUsd + $transferenciaUsd + $efectivoUsd;
 
             $tolerancia = 0.02;
             if ($totalRealUsd > 0 && $totalInsUsd > $totalRealUsd + $tolerancia && $sumDebitoBs > 0) {
@@ -207,7 +216,7 @@ class AutopagoController extends Controller
 
             $pagoParams = [
                 'id' => $id_pedido,
-                'efectivo' => 0,
+                'efectivo' => $efectivoUsd,
                 'transferencia' => $transferenciaUsd,
                 'credito' => 0,
                 'biopago' => 0,

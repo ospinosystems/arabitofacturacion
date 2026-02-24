@@ -50,6 +50,15 @@ export const PAYMENT_METHOD_COLORS = {
     text: '#431407',        // orange-950 - máximo contraste
     textOnBg: '#ffffff',    // texto blanco sobre header
   },
+  manual: {
+    bg: '#475569',          // slate-600
+    bgLight: '#f1f5f9',     // slate-100
+    bgOverlay: 'rgba(148, 163, 184, 0.3)',
+    border: 'rgba(100, 116, 139, 0.5)',
+    hover: '#334155',       // slate-700
+    text: '#0f172a',        // slate-900
+    textOnBg: '#ffffff',
+  },
 };
 
 /** Instrucciones para pago con tarjeta (lector / terminal) */
