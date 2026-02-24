@@ -4920,12 +4920,12 @@ export default function Facturar({
                     }
                     if (descuentoMetodoPagoAprobadoPorUuid[uuid]) {
                         const aprobados = metodosPagoAprobadosPorUuid[uuid];
-                        if (!metodosPagoCoincidenConAprobados(metodos, aprobados)) {
+                       /*  if (!metodosPagoCoincidenConAprobados(metodos, aprobados)) {
                             const labels = { efectivo: "Efectivo", transferencia: "Transferencia", debito: "Débito", biopago: "Biopago", credito: "Crédito", adicional: "Bs/Pesos" };
                             const list = (aprobados || []).map((m) => `${labels[m.tipo] || m.tipo} $${m.monto}`).join(", ");
                             notificar({ data: { msj: `Debe usar exactamente los métodos y montos aprobados: ${list || "—"}.`, estado: false } });
                             return;
-                        }
+                        } */
                         procesarPagoInterno(callback, null, options || null);
                         return;
                     }
