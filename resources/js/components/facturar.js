@@ -4386,8 +4386,10 @@ export default function Facturar({
             notificar({ msj: "Cantidad inválida", estado: false });
             return;
         }
+        // Validar contra la cantidad disponible registrada al agregar el ítem (si no está el producto en lista, se usa esa propiedad)
+        const disponibleEnItem = item.cantidad_disponible_al_agregar != null && item.cantidad_disponible_al_agregar !== "";
         const productInList = productos.find((p) => p.id == item.producto.id);
-        const disponible = productInList != null ? parseFloat(productInList.cantidad) || 0 : 0;
+        const disponible = disponibleEnItem ? (parseFloat(item.cantidad_disponible_al_agregar) || 0) : (productInList != null ? parseFloat(productInList.cantidad) || 0 : 0);
         const qtyCapped = Math.min(qty, Math.max(0, disponible));
         if (qtyCapped < qty && disponible >= 0) {
             notificar({ msj: "Solo hay " + disponible + " disponible(s). Se actualizó al máximo.", estado: true });
@@ -4730,6 +4732,7 @@ export default function Facturar({
                         cantidad: newCantidad,
                         total: newTotal,
                         total_des: newTotal,
+                        cantidad_disponible_al_agregar: disponible,
                     };
                 } else {
                     let qtyToAdd;
@@ -4765,6 +4768,7 @@ export default function Facturar({
                         descuento: 0,
                         total: qtyToAdd * precio,
                         total_des: qtyToAdd * precio,
+                        cantidad_disponible_al_agregar: disponible,
                     };
                     newItems = [...items, newItem];
                 }

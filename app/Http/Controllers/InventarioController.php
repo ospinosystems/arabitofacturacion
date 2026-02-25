@@ -1119,7 +1119,7 @@ class InventarioController extends Controller
         if ($view == 'inventario') {
             return $query->get()->map(function ($item) {
                 $item->ppr = 0;
-                $item->garantia = garantia::where('id_producto', $item->id)->sum('cantidad');
+                $item->garantia = 0;
                 $item->pendiente_enviar = (new TransferenciasInventarioController)->sumPendingTransfers($item->id);
                 return $item;
             });
@@ -2160,7 +2160,7 @@ class InventarioController extends Controller
             }
 
             // Construir la consulta base
-            $query = inventario::with(['proveedor', 'categoria', 'marca']);
+            $query = inventario::with([]);
             // ->where('cantidad', '>', 0); // Solo productos con stock
 
             // Aplicar filtro por sucursal si se especifica
