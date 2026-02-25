@@ -1929,9 +1929,7 @@ class sendCentral extends Controller
             "cliente",
             "items" => function ($q) {
                 $q->with([
-                    "producto" => function ($q) {
-                        $q->with(["proveedor", "categoria"]);
-                    }
+                    "producto"
                 ]);
             }
         ])
