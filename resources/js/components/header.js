@@ -396,6 +396,23 @@ function Header({
                                     Cierre
                                 </button>
 
+                                {auth("super") && (
+                                    <button
+                                        className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
+                                            view === "historialVentasCierre"
+                                                ? "bg-orange-100 text-orange-800 border-l-4 border-orange-800"
+                                                : "text-gray-700 hover:bg-gray-100"
+                                        }`}
+                                        onClick={() => {
+                                            setView("historialVentasCierre");
+                                            setSidebarOpen(false);
+                                        }}
+                                    >
+                                        <i className="w-4 mr-2 fa fa-history"></i>
+                                        Historial ventas por cierre
+                                    </button>
+                                )}
+
                                 {auth(1) && (
                                     <button
                                         className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${

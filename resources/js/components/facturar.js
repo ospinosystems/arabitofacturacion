@@ -30,6 +30,7 @@ import PedidosCentralComponent from "../components/pedidosCentral";
 
 import Cierres from "../components/cierre";
 import CierreV2 from "../components/CierreV2";
+import HistorialVentasCierre from "../components/HistorialVentasCierre";
 import Inventario from "../components/inventario";
 
 import Seleccionar from "../components/seleccionar";
@@ -8763,7 +8764,11 @@ export default function Facturar({
                            {/*  {view == "cierres" ? (
                                 <CierreV2 totalizarcierre={totalizarcierre} onClose={() => setView("ventas")} bancos={bancos} />
                             ) : null} */}
-                    {view == "cierres" ? (
+                    {view == "historialVentasCierre" ? (
+                        <HistorialVentasCierre
+                            onClose={() => setView("ventas")}
+                        />
+                    ) : view == "cierres" ? (
                         <Cierres
                             bancos={bancos}
                             dataPuntosAdicionales={dataPuntosAdicionales}
