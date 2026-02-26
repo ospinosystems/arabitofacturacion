@@ -3061,11 +3061,11 @@ export default function PagarMain({
                                                                             {pedidoData._frontOnly && e.condicion != 1 && e.condicion != 2 && e.condicion != 0 ? (
                                                                                 e.cantidad < 0 ? (
                                                                                     <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs">
-                                                                                        Salida
+                                                                                        Entrada
                                                                                     </span>
                                                                                 ) : (
                                                                                     <span className="px-2 py-0.5 bg-red-100 text-red-800 rounded text-xs">
-                                                                                        Entrada
+                                                                                        Salida
                                                                                     </span>
                                                                                 )
                                                                             ) : null}

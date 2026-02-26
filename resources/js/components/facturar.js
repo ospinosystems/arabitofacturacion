@@ -4655,7 +4655,7 @@ export default function Facturar({
                 const qtyRaw = cantidadOverride ?? cantidad;
                 const qty = parseFloat(qtyRaw) ?? 0;
                 const esDevolucion = qty < 0;
-                const precio = parseFloat(productoSelectinternouno.precio) || 0;
+                let precio = parseFloat(productoSelectinternouno.precio) || 0;
                 const productInList = productos.find((p) => p.id == productoSelectinternouno.id);
                 const disponible = productInList != null ? parseFloat(productInList.cantidad) || 0 : 0;
                 const items = pedidoData.items || [];
@@ -4682,6 +4682,8 @@ export default function Facturar({
                         notificar({ data: { msj: "Este producto no fue facturado en la factura original #" + idOriginal + ". Solo puede devolver ítems de esa factura.", estado: false } });
                         return;
                     }
+                    // Usar el precio original de la factura validada, no el precio actual del producto
+                    precio = parseFloat(itemDisponible.precio_unitario) || precio;
                     const cantidadDisponibleDevolucion = parseFloat(itemDisponible.cantidad_disponible) || 0;
                     // Ya devuelto en este pedido (otras líneas del mismo producto con cantidad negativa), sin contar la línea que estamos editando
                     const yaDevueltoOtrasLineas = items.reduce((sum, it, idx) => {
