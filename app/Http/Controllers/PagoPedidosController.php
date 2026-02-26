@@ -17,7 +17,6 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\PedidosController;
 use App\Http\Controllers\InventarioController;
 use App\Http\Controllers\sendCentral;
-use App\Jobs\ImprimirTicketJob;
 use Response;
 
 class PagoPedidosController extends Controller
@@ -889,30 +888,26 @@ class PagoPedidosController extends Controller
                         }
                     }
 
-                    // Imprimir ticket en background para no retrasar la respuesta de setPagoPedido
+                    // Imprimir ticket en la misma petición tras crear la orden (evita race con /imprimirTicked)
                     $imprimirTicketOk = false;
                     $imprimirTicketMsj = '';
                     if ($req->imprimir_ticket && $idParaBuscar) {
-                        $opts = is_array($req->input('imprimir_ticket_opciones', [])) ? $req->input('imprimir_ticket_opciones', []) : [];
-                        $sessionData = [
-                            'usuario' => $req->session()->get('usuario'),
-                            'id_usuario' => $req->session()->get('id_usuario'),
-                            'nombre_usuario' => $req->session()->get('nombre_usuario'),
-                        ];
-                        $imprimirTicketOk = true;
-                        $imprimirTicketMsj = 'Enviado a imprimir';
-
-                        // Despachar después de enviar la respuesta para no bloquear setPagoPedido
-                        $idParaBuscarCopy = $idParaBuscar;
-                        $optsCopy = $opts;
-                        $sessionDataCopy = $sessionData;
-                        register_shutdown_function(function () use ($idParaBuscarCopy, $optsCopy, $sessionDataCopy) {
-                            try {
-                                ImprimirTicketJob::dispatch($idParaBuscarCopy, $optsCopy, $sessionDataCopy);
-                            } catch (\Throwable $e) {
-                                \Log::error('setPagoPedido dispatch ImprimirTicketJob: ' . $e->getMessage());
-                            }
-                        });
+                        try {
+                            $opts = $req->input('imprimir_ticket_opciones', []);
+                            $printReq = Request::create('/internal', 'POST', array_merge([
+                                'id' => $idParaBuscar,
+                                'moneda' => is_array($opts) ? ($opts['moneda'] ?? 'bs') : 'bs',
+                                'printer' => is_array($opts) ? ($opts['printer'] ?? null) : null,
+                            ], is_array($opts) ? $opts : []));
+                            $printReq->setLaravelSession($req->session());
+                            $resp = (new tickera)->imprimir($printReq);
+                            $data = $resp->getData(true);
+                            $imprimirTicketOk = !empty($data['estado']);
+                            $imprimirTicketMsj = $data['msj'] ?? '';
+                        } catch (\Exception $e) {
+                            $imprimirTicketMsj = 'Error al imprimir: ' . $e->getMessage();
+                            \Log::error('setPagoPedido imprimir_ticket: ' . $e->getMessage());
+                        }
                     }
 
                     return Response::json([
