@@ -1306,7 +1306,7 @@ class sendCentral extends Controller
         $nombreUsuario = $vendedor ? ($vendedor->usuario ?? $vendedor->nombre ?? 'user') : 'user';
         $nombreUsuario = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) $nombreUsuario);
         $pedidoId = (int) $pago->id_pedido;
-        $pedidoUUID = $pago->uuid;
+        $pedidoUUID = $pedido->uuid;
         $montoEntero = (int) round((float) ($pago->monto_original ?? 0) * 100);
         $hermanos = pago_pedidos::where('id_pedido', $pago->id_pedido)
             ->where('tipo', 2)
