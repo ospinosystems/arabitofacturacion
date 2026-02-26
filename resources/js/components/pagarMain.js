@@ -2204,44 +2204,6 @@ export default function PagarMain({
 
     //esc
 
-    //c
-    useHotkeys(
-        "c",
-        (event) => {
-            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
-            // No ejecutar si estamos en el input de búsqueda de productos
-            if (event.target === refaddfast?.current) {
-                return;
-            }
-
-            // No ejecutar si estamos en el modal de carnet
-            if (event.target?.getAttribute("data-carnet-input") === "true") {
-                return;
-            }
-
-            // No ejecutar si estamos en el input de referencia de pago
-            /* if (event.target?.getAttribute("data-ref-input") === "true") {
-                return;
-            } */
-
-            event.preventDefault();
-            event.stopPropagation();
-
-            getCreditoLocal();
-            // Hacer foco en el input de crédito
-            setTimeout(() => {
-                if (creditoInputRef.current) {
-                    creditoInputRef.current.focus();
-                    creditoInputRef.current.select();
-                }
-            }, 50);
-        },
-        {
-            enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
-        },
-        [refaddfast, showModalPosDebito, togglereferenciapago]
-    );
-
     useHotkeys(
         "t",
         (event) => {

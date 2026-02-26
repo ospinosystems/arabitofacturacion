@@ -1,4 +1,5 @@
 import "../../css/modal.css";
+import { v4 as uuidv4 } from "uuid";
 
 import { useHotkeys } from "react-hotkeys-hook";
 import { Html5QrcodeScanner } from "html5-qrcode";
@@ -1377,7 +1378,7 @@ export default function Facturar({
 
     // Crear nuevo pedido solo en front (UUID); se muestra en tab azul y se agregan productos localmente
     const addNewPedidoFront = () => {
-        const uuid = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : "front-" + Date.now() + "-" + Math.random().toString(36).slice(2, 11);
+        const uuid = uuidv4();
         const created_at = new Date().toISOString().slice(0, 19).replace("T", " ");
         const pedidoFront = {
             id: uuid,
@@ -5035,9 +5036,28 @@ export default function Facturar({
     const debitosPorPedidoRef = useRef({});
     const debitosRef = useRef([]);
     const pedidoDataRef = useRef(null);
+    // Refs de montos de pago: evitan closure obsoleta al enviar setPagoPedido (timeout 300ms)
+    const efectivo_dolarRef = useRef("");
+    const efectivo_bsRef = useRef("");
+    const efectivo_pesoRef = useRef("");
+    const transferenciaRef = useRef("");
+    const creditoRef = useRef("");
+    const biopagoRef = useRef("");
+    const debitoRefRef = useRef("");
+    const debitoMontoRef = useRef("");
+    const vueltoRef = useRef("");
     useEffect(() => { debitosPorPedidoRef.current = debitosPorPedido; }, [debitosPorPedido]);
     useEffect(() => { debitosRef.current = debitos; }, [debitos]);
     useEffect(() => { pedidoDataRef.current = pedidoData; }, [pedidoData]);
+    useEffect(() => { efectivo_dolarRef.current = efectivo_dolar; }, [efectivo_dolar]);
+    useEffect(() => { efectivo_bsRef.current = efectivo_bs; }, [efectivo_bs]);
+    useEffect(() => { efectivo_pesoRef.current = efectivo_peso; }, [efectivo_peso]);
+    useEffect(() => { transferenciaRef.current = transferencia; }, [transferencia]);
+    useEffect(() => { creditoRef.current = credito; }, [credito]);
+    useEffect(() => { biopagoRef.current = biopago; }, [biopago]);
+    useEffect(() => { debitoRefRef.current = debitoRef; }, [debitoRef]);
+    useEffect(() => { debitoMontoRef.current = debito; }, [debito]);
+    useEffect(() => { vueltoRef.current = vuelto; }, [vuelto]);
     const showModalPosDebito = Object.keys(modalesPosAbiertos).length > 0;
     const setPagoPedidoTimeoutRef = useRef(null);
     const focusRefDebitoInputRef = useRef(null);
@@ -5053,10 +5073,14 @@ export default function Facturar({
         setPagoPedidoTimeoutRef.current = setTimeout(() => {
             // Limpiar el ref del timeout
             setPagoPedidoTimeoutRef.current = null;
-            
+            // Usar refs para validar con los mismos datos que se enviarán (evita montos obsoletos)
+            const pedidoActual = pedidoDataRef.current;
+            const debitosActuales = debitosRef.current || [];
+            const debitoMontoActual = debitoMontoRef.current;
+
             // Validar que si hay descuentos en algún ítem, debe haber un cliente registrado (distinto al por defecto id=1)
-            const tieneDescuentos = pedidoData?.items?.some(item => item.descuento && parseFloat(item.descuento) > 0);
-            const clientePorDefecto = !pedidoData?.id_cliente || pedidoData.id_cliente == 1;
+            const tieneDescuentos = pedidoActual?.items?.some(item => item.descuento && parseFloat(item.descuento) > 0);
+            const clientePorDefecto = !pedidoActual?.id_cliente || pedidoActual.id_cliente == 1;
             
             if (tieneDescuentos && clientePorDefecto) {
                 alert("Error: El pedido tiene descuentos aplicados. Debe registrar un cliente antes de procesar el pago.");
@@ -5064,12 +5088,12 @@ export default function Facturar({
             }
             
             // Si hay débito pero sucursaldata está vacío o es string, intentar recargar datos de sucursal
-            if (debito && parseFloat(debito) > 0 && (!sucursaldata || typeof sucursaldata === 'string')) {
+            if (debitoMontoActual && parseFloat(debitoMontoActual) > 0 && (!sucursaldata || typeof sucursaldata === 'string')) {
                 getSucursalFun();
             }
             
             // Verificar si hay débitos en el array
-            const debitosValidos = debitos.filter(d => parseFloat(d.monto) > 0);
+            const debitosValidos = debitosActuales.filter(d => parseFloat(d.monto) > 0);
             
             // Si hay débitos y la sucursal tiene PINPAD activo (y NO está forzando manual)
             if (debitosValidos.length > 0 && sucursaldata?.pinpad && !forzarReferenciaManual) {
@@ -5078,7 +5102,7 @@ export default function Facturar({
                 
                 if (debitoSinProcesar) {
                     // Encontrar el índice del débito sin procesar
-                    const index = debitos.findIndex(d => d === debitoSinProcesar);
+                    const index = debitosActuales.findIndex(d => d === debitoSinProcesar);
                     // Abrir modal POS para este débito específico
                     // Nota: El flag se mantiene activo porque el pago continuará después del POS
                     abrirModalPosDebitoConMonto(debitoSinProcesar.monto, index);
@@ -5089,18 +5113,18 @@ export default function Facturar({
             // Validar referencias de débitos obligatorias (si NO hay PINPAD o si está forzando manual)
             if (debitosValidos.length > 0) {
                 for (let i = 0; i < debitosValidos.length; i++) {
-                    const debito = debitosValidos[i];
-                    if (!debito.referencia) {
+                    const d = debitosValidos[i];
+                    if (!d.referencia) {
                         const esUnSoloDebito = debitosValidos.length === 1;
                         if (esUnSoloDebito && focusRefDebitoInputRef?.current) {
                             focusRefDebitoInputRef.current();
                         } else {
-                            alert(`Error: Debe ingresar la referencia para la tarjeta #${debitos.indexOf(debito) + 1}`);
+                            alert(`Error: Debe ingresar la referencia para la tarjeta #${debitosActuales.indexOf(d) + 1}`);
                         }
                         return;
                     }
-                    if (debito.referencia.length !== 4) {
-                        alert(`Error: La referencia de la tarjeta #${debitos.indexOf(debito) + 1} debe tener exactamente 4 dígitos.`);
+                    if (d.referencia.length !== 4) {
+                        alert(`Error: La referencia de la tarjeta #${debitosActuales.indexOf(d) + 1} debe tener exactamente 4 dígitos.`);
                         return;
                     }
                 }
@@ -5121,14 +5145,15 @@ export default function Facturar({
                 return;
             }
 
-            if (transferencia && !refPago.filter((e) => e.tipo == 1).length) {
+            const transferenciaActualCheck = transferenciaRef.current;
+            if (transferenciaActualCheck && !refPago.filter((e) => e.tipo == 1).length) {
                 alert(
                     "Error: Debe cargar referencia de transferencia electrónica."
                 );
             } else {
                 // Pedido front con ítems con descuento aprobado: regla 1) Solo efectivo USD → libera. 2) Cualquier otro método → protocolo solicitud aprobación.
-                const isFrontConDescuento = pedidoData?._frontOnly && pedidoData?.id && (pedidoData?.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0);
-                const uuid = pedidoData?.id;
+                const isFrontConDescuento = pedidoActual?._frontOnly && pedidoActual?.id && (pedidoActual?.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0);
+                const uuid = pedidoActual?.id;
                 if (isFrontConDescuento && uuid) {
                     const metodos = buildMetodosPagoFront();
                     if (metodos.length === 0) {
@@ -5169,30 +5194,34 @@ export default function Facturar({
     // posOverrides: { debitoOverride, debitosOverride } - evita closure obsoleto cuando se llama desde flujo POS
     const procesarPagoInterno = (callback = null, refOverride = null, posOverrides = null) => {
         setLoading(true);
+        // Leer siempre de refs los montos actuales (evita closure obsoleta por setTimeout 300ms y re-renders)
+        const efectivoBsActual = efectivo_bsRef.current;
+        const efectivoPesoActual = efectivo_pesoRef.current;
+        const pedidoActual = pedidoDataRef.current;
         // Construir pagos adicionales de efectivo (Bs y COP)
         let pagosAdicionales = [];
-        if (efectivo_bs && parseFloat(efectivo_bs) != 0) {
+        if (efectivoBsActual && parseFloat(efectivoBsActual) != 0) {
             pagosAdicionales.push({ 
                 moneda: 'bs', 
-                monto_original: parseFloat(efectivo_bs)
+                monto_original: parseFloat(efectivoBsActual)
             });
         }
-        if (efectivo_peso && parseFloat(efectivo_peso) != 0) {
+        if (efectivoPesoActual && parseFloat(efectivoPesoActual) != 0) {
             pagosAdicionales.push({ 
                 moneda: 'peso', 
-                monto_original: parseFloat(efectivo_peso)
+                monto_original: parseFloat(efectivoPesoActual)
             });
         }
         
-        // Usar overrides del POS cuando existen (evita closure obsoleto con debito/debitos)
-        const debitoVal = posOverrides?.debitoOverride != null ? parseFloat(posOverrides.debitoOverride) : parseFloat(debito) || 0;
+        // Usar overrides del POS cuando existen; si no, leer montos actuales de refs
+        const debitoVal = posOverrides?.debitoOverride != null ? parseFloat(posOverrides.debitoOverride) : parseFloat(debitoMontoRef.current) || 0;
         const debitoBs = !Number.isNaN(debitoVal) ? debitoVal : 0;
-        const efectivoDolarVal = parseFloat(efectivo_dolar) || 0;
+        const efectivoDolarVal = parseFloat(efectivo_dolarRef.current) || 0;
         
-        // Usar refOverride si viene del POS, sino usar el estado debitoRef
-        const refFinal = refOverride !== null ? refOverride : debitoRef;
+        // Usar refOverride si viene del POS, sino el valor actual de la ref
+        const refFinal = refOverride !== null ? refOverride : debitoRefRef.current;
         
-        // Preparar débitos: usar posOverrides.debitosOverride si existe, sino el estado debitos
+        // Preparar débitos: posOverrides o ref actual
         let debitoParam = null;
         let debitoRefParam = null;
         let debitosParam = null;
@@ -5200,7 +5229,7 @@ export default function Facturar({
         
         const debitosParaUsar = (posOverrides?.debitosOverride && Array.isArray(posOverrides.debitosOverride))
             ? posOverrides.debitosOverride
-            : debitos;
+            : (debitosRef.current || []);
         
         // Débito simple: enviar siempre que sea distinto de 0 (incluye negativos)
         if (debitoBs !== 0) {
@@ -5218,10 +5247,10 @@ export default function Facturar({
             }));
         }
         
-        const isFrontOnly = !!(pedidoData && pedidoData._frontOnly);
-        const frontUuid = isFrontOnly ? pedidoData.id : null;
-        const frontItems = isFrontOnly && Array.isArray(pedidoData.items) && pedidoData.items.length > 0
-            ? pedidoData.items.map((it) => ({
+        const isFrontOnly = !!(pedidoActual && pedidoActual._frontOnly);
+        const frontUuid = isFrontOnly ? pedidoActual.id : null;
+        const frontItems = isFrontOnly && Array.isArray(pedidoActual.items) && pedidoActual.items.length > 0
+            ? pedidoActual.items.map((it) => ({
                 id: it.producto?.id ?? it.id_producto,
                 cantidad: parseFloat(it.cantidad) || 0,
                 descuento: parseFloat(it.descuento) || 0,
@@ -5247,26 +5276,32 @@ export default function Facturar({
               }))
             : undefined;
 
+        // Montos actuales desde refs (transferencia, credito, biopago, vuelto)
+        const transferenciaActual = transferenciaRef.current;
+        const creditoActual = creditoRef.current;
+        const biopagoActual = biopagoRef.current;
+        const vueltoActual = vueltoRef.current;
+
         let params = {
-            id: isFrontOnly ? null : pedidoData.id,
+            id: isFrontOnly ? null : (pedidoActual && pedidoActual.id),
             front_only: isFrontOnly || undefined,
             uuid: frontUuid || undefined,
-            total_pedido_usd: (isFrontOnly && pedidoData.clean_total != null) ? parseFloat(pedidoData.clean_total) : undefined,
-            id_cliente: isFrontOnly ? (pedidoData.id_cliente != null ? pedidoData.id_cliente : 1) : undefined,
-            data_cliente: (isFrontOnly && pedidoData.cliente && typeof pedidoData.cliente === "object") ? pedidoData.cliente : undefined,
-            fecha_inicio: (isFrontOnly && pedidoData.fecha_inicio) ? pedidoData.fecha_inicio : undefined,
-            fecha_vence: (isFrontOnly && pedidoData.fecha_vence) ? pedidoData.fecha_vence : undefined,
-            formato_pago: (isFrontOnly && pedidoData.formato_pago != null) ? pedidoData.formato_pago : undefined,
+            total_pedido_usd: (isFrontOnly && pedidoActual && pedidoActual.clean_total != null) ? parseFloat(pedidoActual.clean_total) : undefined,
+            id_cliente: isFrontOnly ? (pedidoActual && pedidoActual.id_cliente != null ? pedidoActual.id_cliente : 1) : undefined,
+            data_cliente: (isFrontOnly && pedidoActual && pedidoActual.cliente && typeof pedidoActual.cliente === "object") ? pedidoActual.cliente : undefined,
+            fecha_inicio: (isFrontOnly && pedidoActual && pedidoActual.fecha_inicio) ? pedidoActual.fecha_inicio : undefined,
+            fecha_vence: (isFrontOnly && pedidoActual && pedidoActual.fecha_vence) ? pedidoActual.fecha_vence : undefined,
+            formato_pago: (isFrontOnly && pedidoActual && pedidoActual.formato_pago != null) ? pedidoActual.formato_pago : undefined,
             items: frontItems || undefined,
             debito: debitoParam,
             debitoRef: debitoRefParam,
             debitos: debitosParam,
             posData: posDataParam, // Este ya no se usa para múltiples débitos
             efectivo: efectivoDolarVal != 0 ? efectivoDolarVal : null,
-            transferencia,
-            biopago,
-            credito,
-            vuelto,
+            transferencia: transferenciaActual,
+            biopago: biopagoActual,
+            credito: creditoActual,
+            vuelto: vueltoActual,
             pagosAdicionales: pagosAdicionales.length > 0 ? pagosAdicionales : null,
             referencias: referenciasFront,
         };
