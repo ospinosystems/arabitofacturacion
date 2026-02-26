@@ -1580,7 +1580,10 @@ class PagoPedidosController extends Controller
     {
         // Si es una devolución (monto negativo), no aplicar validación de descuentos
         if (floatval($monto_pago) < 0) {
-            pago_pedidos::updateOrCreate(["id_pedido"=>$id_pedido,"tipo"=>$tipo_pago],["cuenta"=>$cuenta,"monto"=>floatval($monto_pago)]);
+            // Tipo 2 (débito): setPagoPedido ya persiste las filas de débito; no sobrescribir aquí (evita duplicar monto con múltiples débitos)
+            if ($tipo_pago != 2) {
+                pago_pedidos::updateOrCreate(["id_pedido"=>$id_pedido,"tipo"=>$tipo_pago],["cuenta"=>$cuenta,"monto"=>floatval($monto_pago)]);
+            }
             return true;
         }
         
@@ -1644,7 +1647,10 @@ class PagoPedidosController extends Controller
                     if (!$this->validarMetodosPago($metodos_pago, $metodos_aprobados)) {
                         //return Response::json(["msj"=>"Error: Los métodos de pago deben ser exactos a los aprobados en la solicitud","estado"=>false]);
                     }
-                    pago_pedidos::updateOrCreate(["id_pedido"=>$id_pedido,"tipo"=>$tipo_pago],["cuenta"=>$cuenta,"monto"=>floatval($monto_pago)]);
+                    // Tipo 2 (débito): setPagoPedido ya creó una fila por cada débito; no sobrescribir con el total
+                    if ($tipo_pago != 2) {
+                        pago_pedidos::updateOrCreate(["id_pedido"=>$id_pedido,"tipo"=>$tipo_pago],["cuenta"=>$cuenta,"monto"=>floatval($monto_pago)]);
+                    }
                     return true;
                 }
                 return Response::json(["msj"=>"Estado de solicitud no reconocido","estado"=>false]);
@@ -1679,8 +1685,10 @@ class PagoPedidosController extends Controller
                     if (!$this->validarMetodosPago($metodos_pago, $metodos_aprobados)) {
                         //return Response::json(["msj"=>"Error: Los métodos de pago deben ser exactos a los aprobados en la solicitud","estado"=>false]);
                     }
-                    // Continuar con el pago aprobado
-                    pago_pedidos::updateOrCreate(["id_pedido"=>$id_pedido,"tipo"=>$tipo_pago],["cuenta"=>$cuenta,"monto"=>floatval($monto_pago)]);
+                    // Tipo 2 (débito): setPagoPedido ya creó una fila por cada débito; no sobrescribir con el total
+                    if ($tipo_pago != 2) {
+                        pago_pedidos::updateOrCreate(["id_pedido"=>$id_pedido,"tipo"=>$tipo_pago],["cuenta"=>$cuenta,"monto"=>floatval($monto_pago)]);
+                    }
                 } elseif ($solicitudExistente['data']['estado'] === 'rechazado') {
                     return Response::json(["msj"=>"La solicitud de descuento por método de pago fue rechazada","estado"=>false]);
                 }
@@ -1728,7 +1736,10 @@ class PagoPedidosController extends Controller
             }
         } else {
             // No hay items con descuento, proceder normalmente con el pago
-            pago_pedidos::updateOrCreate(["id_pedido"=>$id_pedido,"tipo"=>$tipo_pago],["cuenta"=>$cuenta,"monto"=>floatval($monto_pago)]);
+            // Tipo 2 (débito): setPagoPedido ya creó las filas de débito (una o varias); no sobrescribir
+            if ($tipo_pago != 2) {
+                pago_pedidos::updateOrCreate(["id_pedido"=>$id_pedido,"tipo"=>$tipo_pago],["cuenta"=>$cuenta,"monto"=>floatval($monto_pago)]);
+            }
         }
         
         return true;

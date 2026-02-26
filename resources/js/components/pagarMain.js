@@ -1122,8 +1122,8 @@ export default function PagarMain({
             guardarDebitosPorPedido(pedidoData.id, nuevosDebitos);
         }
         
-        // Disparar el auto-corrector para redistribuir otros métodos de pago (autorestar en otros montos)
-        if (!skipSync && (autoCorrector || debitos.length === 1)) {
+        // Disparar el auto-corrector para redistribuir otros métodos de pago solo cuando Auto resta está ON
+        if (!skipSync && autoCorrector) {
             syncPago(nuevoTotalDebitosNoBloqueadosBs.toString(), "Debito");
         }
     };
@@ -1613,8 +1613,8 @@ export default function PagarMain({
             return;
         }
 
-        // Si autoCorrector está DESACTIVADO, limitar el valor si excede (excepto Débito: siempre autorestar)
-        if (!autoCorrector && type !== "Debito") {
+        // Si autoCorrector está DESACTIVADO, limitar el valor si excede (todos los métodos, incluido Débito)
+        if (!autoCorrector) {
             const excede = esDevolucion 
                 ? valUSD < maxPermitidoUSD - 0.01
                 : valUSD > maxPermitidoUSD + 0.01;
@@ -1625,8 +1625,23 @@ export default function PagarMain({
                 if (monedaActual === "bs") valLimitado = valLimitadoUSD * tasaBsPedido;
                 else if (monedaActual === "cop") valLimitado = valLimitadoUSD * tasaCopPedido;
                 
-                if (type === "Debito") setDebito(valLimitado.toFixed(2));
-                else if (type === "EfectivoUSD") setEfectivo_dolar(valLimitado.toFixed(2));
+                if (type === "Debito") {
+                    const limitadoBs = valLimitadoUSD * tasaBsPedido;
+                    if (debitos?.length > 0) {
+                        const totalActualBs = (debitos.filter(d => !d.bloqueado).reduce((s, d) => s + (parseFloat(d.monto) || 0), 0));
+                        if (totalActualBs > limitadoBs + 0.01) {
+                            const firstUnblockedIdx = debitos.findIndex(d => !d.bloqueado);
+                            const nuevosDebitos = debitos.map((d, i) => {
+                                if (d.bloqueado) return d;
+                                return { ...d, monto: i === firstUnblockedIdx ? Math.max(0, limitadoBs).toFixed(2) : "0" };
+                            });
+                            setDebitos(nuevosDebitos);
+                            if (pedidoData?.id && guardarDebitosPorPedido) guardarDebitosPorPedido(pedidoData.id, nuevosDebitos);
+                        }
+                    } else {
+                        setDebito(limitadoBs.toFixed(2));
+                    }
+                } else if (type === "EfectivoUSD") setEfectivo_dolar(valLimitado.toFixed(2));
                 else if (type === "EfectivoBs") setEfectivo_bs(valLimitado.toFixed(2));
                 else if (type === "EfectivoCOP") setEfectivo_peso(valLimitado.toFixed(2));
                 else if (type === "Transferencia") setTransferencia(valLimitado.toFixed(2));
