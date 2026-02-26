@@ -163,29 +163,19 @@ class PedidosController extends Controller
                 }
             }
 
-            // Crear items directamente sin afectar inventario (estado=0 pendiente)
+            $invController = new InventarioController;
             foreach ($items as $item) {
-                $producto   = $item['producto'] ?? [];
+                $producto    = $item['producto'] ?? [];
                 $id_producto = (int) ($producto['id'] ?? $item['id'] ?? 0);
                 if ($id_producto <= 0) continue;
 
-                $cantidad       = (float) ($item['cantidad'] ?? 1);
-                $precio         = (float) ($item['precio'] ?? $producto['precio'] ?? 0);
-                $descuento      = (float) ($item['descuento'] ?? 0);
-                $monto          = (float) ($item['total'] ?? ($cantidad * $precio));
-                $tasa           = (float) ($item['tasa'] ?? 0);
-                $tasa_cop       = (float) ($item['tasa_cop'] ?? 0);
+                $cantidad = (float) ($item['cantidad'] ?? 1);
 
-                $nuevo_item                = new items_pedidos;
-                $nuevo_item->id_pedido     = $id_pedido;
-                $nuevo_item->id_producto   = $id_producto;
-                $nuevo_item->cantidad      = $cantidad;
-                $nuevo_item->descuento     = $descuento;
-                $nuevo_item->monto         = $monto;
-                $nuevo_item->precio_unitario = $precio;
-                $nuevo_item->tasa          = $tasa;
-                $nuevo_item->tasa_cop      = $tasa_cop;
-                $nuevo_item->save();
+                $result = $invController->hacer_pedido($id_producto, $id_pedido, $cantidad, 'ins', null, $usuario);
+
+                if (is_array($result) && ($result['estado'] ?? '') !== 'ok') {
+                    throw new \Exception($result['msj'] ?? 'Error al agregar item al pedido', 1);
+                }
             }
 
             \DB::commit();
@@ -193,7 +183,7 @@ class PedidosController extends Controller
                 'estado' => true,
                 'id'     => $id_pedido,
                 'uuid'   => $uuid,
-                'msj'    => 'Pedido creado en pendiente (#' . $id_pedido . '). Sin método de pago asignado.',
+                'msj'    => 'Pedido creado en pendiente (#' . $id_pedido . '). Inventario descontado. Sin método de pago asignado.',
             ]);
         } catch (\Exception $e) {
             \DB::rollBack();
