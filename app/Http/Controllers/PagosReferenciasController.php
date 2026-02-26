@@ -1050,9 +1050,9 @@ class PagosReferenciasController extends Controller
                  ]);
              }
 
-             // Si viene un UUID (autopago/kiosk), omitir validación de pedido en BD
-             $esUuid = preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id_pedido) === 1;
-             if (!$esUuid) {
+             // Si es id de pedido front-only (UUID o formato "front-timestamp-random"), no existe en BD local; omitir validación
+             $esIdFrontOnly = !is_numeric($id_pedido);
+             if (!$esIdFrontOnly) {
                  $pedido = pedidos::find($id_pedido);
                  if (!$pedido) {
                      return Response::json([
