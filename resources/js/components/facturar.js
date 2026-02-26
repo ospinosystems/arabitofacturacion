@@ -5085,6 +5085,7 @@ export default function Facturar({
             const clientePorDefecto = !pedidoActual?.id_cliente || pedidoActual.id_cliente == 1;
             
             if (tieneDescuentos && clientePorDefecto) {
+                console.log("[setPagoPedido] BLOQUEADO: descuentos en ítems pero sin cliente registrado", { pedidoActual });
                 alert("Error: El pedido tiene descuentos aplicados. Debe registrar un cliente antes de procesar el pago.");
                 return;
             }
@@ -5105,6 +5106,7 @@ export default function Facturar({
                 if (debitoSinProcesar) {
                     // Encontrar el índice del débito sin procesar
                     const index = debitosActuales.findIndex(d => d === debitoSinProcesar);
+                    console.log("[setPagoPedido] BLOQUEADO: débito sin procesar por PINPAD → abriendo modal POS", { debitoSinProcesar, index });
                     // Abrir modal POS para este débito específico
                     // Nota: El flag se mantiene activo porque el pago continuará después del POS
                     abrirModalPosDebitoConMonto(debitoSinProcesar.monto, index);
@@ -5117,6 +5119,7 @@ export default function Facturar({
                 for (let i = 0; i < debitosValidos.length; i++) {
                     const d = debitosValidos[i];
                     if (!d.referencia) {
+                        console.log("[setPagoPedido] BLOQUEADO: referencia de débito faltante", { tarjeta: debitosActuales.indexOf(d) + 1, debito: d });
                         const esUnSoloDebito = debitosValidos.length === 1;
                         if (esUnSoloDebito && focusRefDebitoInputRef?.current) {
                             focusRefDebitoInputRef.current();
@@ -5126,6 +5129,7 @@ export default function Facturar({
                         return;
                     }
                     if (d.referencia.length !== 4) {
+                        console.log("[setPagoPedido] BLOQUEADO: referencia de débito con longitud incorrecta", { tarjeta: debitosActuales.indexOf(d) + 1, referencia: d.referencia });
                         alert(`Error: La referencia de la tarjeta #${debitosActuales.indexOf(d) + 1} debe tener exactamente 4 dígitos.`);
                         return;
                     }
@@ -5138,6 +5142,7 @@ export default function Facturar({
             // Bloquear si alguna referencia bancaria está pendiente de aprobación
             const refsPendientes = refPago.filter((e) => e.estatus === "pendiente");
             if (refsPendientes.length > 0) {
+                console.log("[setPagoPedido] BLOQUEADO: referencias bancarias pendientes de aprobación en central", { refsPendientes });
                 notificar({
                     data: {
                         msj: `No se puede procesar el pago: la referencia "${refsPendientes[0].descripcion || refsPendientes[0]._localId}" está pendiente de aprobación en central. Verifíquela antes de continuar.`,
@@ -5149,6 +5154,7 @@ export default function Facturar({
 
             const transferenciaActualCheck = transferenciaRef.current;
             if (transferenciaActualCheck && !refPago.filter((e) => e.tipo == 1).length) {
+                console.log("[setPagoPedido] BLOQUEADO: transferencia indicada pero sin referencia cargada", { transferencia: transferenciaActualCheck, refPago });
                 alert(
                     "Error: Debe cargar referencia de transferencia electrónica."
                 );
@@ -5159,21 +5165,25 @@ export default function Facturar({
                 if (isFrontConDescuento && uuid) {
                     const metodos = buildMetodosPagoFront();
                     if (metodos.length === 0) {
+                        console.log("[setPagoPedido] BLOQUEADO: pedido front con descuento pero sin métodos de pago", { uuid, pedidoActual });
                         notificar({ data: { msj: "Indique al menos un método de pago antes de guardar.", estado: false } });
                         return;
                     }
                     // Solo efectivo USD: no requiere aprobación, avanza directo
                     if (isSoloEfectivoUsd(metodos)) {
+                        console.log("[setPagoPedido] Pedido front con descuento → solo efectivo USD → avanza directo", { uuid, metodos });
                         procesarPagoInterno(callback, null, options || null);
                         return;
                     }
                     // Hay método distinto a efectivo USD: activar protocolo
                     if (pendienteDescuentoMetodoPago[uuid]) {
+                        console.log("[setPagoPedido] BLOQUEADO: descuento por método de pago pendiente de aprobación", { uuid, pendienteDescuentoMetodoPago });
                         notificar({ data: { msj: "Descuento por método de pago en espera. Use 'Verificar si ya está aprobado' y luego vuelva a guardar.", estado: false } });
                         return;
                     }
                     if (descuentoMetodoPagoAprobadoPorUuid[uuid]) {
                         const aprobados = metodosPagoAprobadosPorUuid[uuid];
+                        console.log("[setPagoPedido] Pedido front con descuento → aprobado por central → avanza", { uuid, aprobados, metodos });
                        /*  if (!metodosPagoCoincidenConAprobados(metodos, aprobados)) {
                             const labels = { efectivo: "Efectivo", transferencia: "Transferencia", debito: "Débito", biopago: "Biopago", credito: "Crédito", adicional: "Bs/Pesos" };
                             const list = (aprobados || []).map((m) => `${labels[m.tipo] || m.tipo} $${m.monto}`).join(", ");
@@ -5183,9 +5193,11 @@ export default function Facturar({
                         procesarPagoInterno(callback, null, options || null);
                         return;
                     }
+                    console.log("[setPagoPedido] BLOQUEADO: pedido front con descuento → solicitando aprobación de descuento por método de pago", { uuid, metodos });
                     solicitarDescuentoMetodoPagoFront();
                     return;
                 }
+                console.log("[setPagoPedido] Avanzando a procesarPagoInterno", { pedidoActual });
                 procesarPagoInterno(callback, null, options || null);
             }
         }, 300); // Delay de 0.3 segundos (300ms) para el debouncing
@@ -5195,6 +5207,7 @@ export default function Facturar({
     // refOverride: permite pasar la referencia directamente (para cuando viene del POS)
     // posOverrides: { debitoOverride, debitosOverride } - evita closure obsoleto cuando se llama desde flujo POS
     const procesarPagoInterno = (callback = null, refOverride = null, posOverrides = null) => {
+        console.log("[procesarPagoInterno] Iniciando construcción de params...");
         setLoading(true);
         // Leer siempre de refs los montos actuales (evita closure obsoleta por setTimeout 300ms y re-renders)
         const efectivoBsActual = efectivo_bsRef.current;
@@ -5317,7 +5330,9 @@ export default function Facturar({
             };
         }
         
+        console.log("[procesarPagoInterno] Enviando setPagoPedido →", params);
         db.setPagoPedido(params).then((res) => {
+            console.log("[setPagoPedido] Respuesta del backend →", res.data);
             setLoading(false);
             if (res.data.montos_no_coinciden && res.data.montos_detalle) {
                 setMontosNoCoincidenDetalle(res.data.montos_detalle);
@@ -5380,6 +5395,44 @@ export default function Facturar({
                 }
             }
             if (res.data.estado === false) {
+                // Pedido front ya procesado en el backend (UUID duplicado): limpiar estado local igual que si hubiera tenido éxito
+                if (res.data.uuid_ya_procesado && params.front_only && params.uuid) {
+                    setRefPagoPorPedidoFront((prev) => {
+                        const next = { ...prev };
+                        delete next[params.uuid];
+                        return next;
+                    });
+                    setPedidosFrontPendientes((prev) => {
+                        const next = { ...prev };
+                        delete next[params.uuid];
+                        return next;
+                    });
+                    setPendienteDescuentoMetodoPago((prev) => {
+                        const next = { ...prev };
+                        delete next[params.uuid];
+                        return next;
+                    });
+                    setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
+                        const next = { ...prev };
+                        delete next[params.uuid];
+                        return next;
+                    });
+                    setMetodosPagoAprobadosPorUuid((prev) => {
+                        const next = { ...prev };
+                        delete next[params.uuid];
+                        return next;
+                    });
+                    getPedidosFront().then((obj) => {
+                        const next = { ...(obj || {}) };
+                        delete next[params.uuid];
+                        setPedidosFront(next);
+                    });
+                    getPedidosFast();
+                    setPedidoData({});
+                    setSelectItem(null);
+                    setviewconfigcredito(false);
+                    return;
+                }
                 // Crédito pendiente de aprobación: backend ya registró la orden (estado 0) y envió solicitud a central → quitar pedido del front y refrescar lista
                 if (res.data.id_tarea && params.front_only && params.uuid) {
                     setPedidosFrontPendientes((prev) => {
@@ -5414,6 +5467,7 @@ export default function Facturar({
                 openValidationTarea(res.data.id_tarea);
             }
         }).catch((error) => {
+            console.error("[setPagoPedido] Error en la petición (catch):", error?.response?.status, error?.response?.data ?? error?.message ?? error);
             setLoading(false);
         });
     };

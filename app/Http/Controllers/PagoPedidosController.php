@@ -136,7 +136,8 @@ class PagoPedidosController extends Controller
                     if ($pedidoExistente) {
                         if ((int) $pedidoExistente->estado === 1) {
                             \DB::rollBack();
-                            return Response::json(['estado' => false, 'msj' => 'Este pedido ya fue registrado anteriormente.'], 409);
+                            // HTTP 200 (no 409) para que Axios vaya al .then() y el front pueda limpiar el pedido local
+                            return Response::json(['estado' => false, 'msj' => 'Este pedido ya fue registrado anteriormente.', 'uuid_ya_procesado' => true]);
                         }
                         $req->merge(['id' => $pedidoExistente->id]);
                         $pedido_ya_existia = true;
