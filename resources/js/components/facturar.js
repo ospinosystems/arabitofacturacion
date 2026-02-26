@@ -5153,7 +5153,7 @@ export default function Facturar({
             }
 
             const transferenciaActualCheck = transferenciaRef.current;
-            if (transferenciaActualCheck && !refPago.filter((e) => e.tipo == 1).length) {
+            if (transferenciaActualCheck && !refPago.filter((e) => e.tipo == 1 || e.tipo == 2).length) {
                 console.log("[setPagoPedido] BLOQUEADO: transferencia indicada pero sin referencia cargada", { transferencia: transferenciaActualCheck, refPago });
                 alert(
                     "Error: Debe cargar referencia de transferencia electrónica."
