@@ -1064,7 +1064,7 @@ export default function PagarMain({
         const maxDebitosBs = Math.max(0, totalPedidoAjustadoBs - otrosPagosBs);
 
         const valorNum = typeof valor === "string"
-            ? parseFloat(valor.replace(/[^0-9.,]/g, "").replace(",", "."))
+            ? parseFloat(valor.replace(/[^0-9.,-]/g, "").replace(",", "."))
             : parseFloat(valor);
 
         // Valor aceptado para este input: no puede superar el máximo TOTAL de débitos
