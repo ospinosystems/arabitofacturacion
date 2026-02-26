@@ -213,17 +213,28 @@ function Pedidos({
 										<i className="mr-1 fa fa-cube"></i>
 										PROD
 									</button>
-									<button 
-										className={`px-2 py-1 text-xs font-medium rounded-r border transition-colors ${
-											tipobusquedapedido === "cliente" 
-												? "bg-orange-500 text-white border-orange-500" 
-												: "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-										}`}
-										onClick={() => setTipoBusqueda("cliente")}
-									>
-										<i className="mr-1 fa fa-user"></i>
-										CLI
-									</button>
+								<button 
+									className={`px-2 py-1 text-xs font-medium border-t border-b transition-colors ${
+										tipobusquedapedido === "cliente" 
+											? "bg-orange-500 text-white border-orange-500" 
+											: "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+									}`}
+									onClick={() => setTipoBusqueda("cliente")}
+								>
+									<i className="mr-1 fa fa-user"></i>
+									CLI
+								</button>
+								<button 
+									className={`px-2 py-1 text-xs font-medium rounded-r border transition-colors ${
+										tipobusquedapedido === "uuid" 
+											? "bg-orange-500 text-white border-orange-500" 
+											: "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+									}`}
+									onClick={() => setTipoBusqueda("uuid")}
+								>
+									<i className="mr-1 fa fa-fingerprint"></i>
+									UUID
+								</button>
 								</div>
 
 								{/* Búsqueda y Fechas */}
@@ -649,26 +660,36 @@ function Pedidos({
 												"bg-yellow-50"
 											}`}
 										>
-											{/* ID y Estado */}
-											<td className="w-24 p-2">
-												<div className="flex flex-col items-center space-y-1">
-													<button 
-														className="w-full px-2 py-1 text-xs font-medium text-white transition-colors bg-orange-500 rounded shadow-sm hover:bg-orange-600"
-														data-id={e.id} 
-														onClick={onClickEditPedido}
+										{/* ID y Estado */}
+										<td className="w-24 p-2">
+											<div className="flex flex-col items-center space-y-1">
+												<button 
+													className="w-full px-2 py-1 text-xs font-medium text-white transition-colors bg-orange-500 rounded shadow-sm hover:bg-orange-600"
+													data-id={e.id} 
+													onClick={onClickEditPedido}
+												>
+													<i className="mr-1 fa fa-hashtag"></i>
+													{e.id}
+												</button>
+												<span className={`w-full px-1 py-0.5 text-xs font-medium rounded text-center ${
+													e.estado === 1 ? "bg-green-100 text-green-800" : 
+													e.estado === 2 ? "bg-red-100 text-red-800" : 
+													"bg-yellow-100 text-yellow-800"
+												}`}>
+													{e.estado === 1 ? "Proc" : e.estado === 2 ? "Anul" : "Pend"}
+												</span>
+												{e.uuid && (
+													<span 
+														className="w-full px-1 py-0.5 text-center truncate rounded bg-purple-50 text-purple-700 border border-purple-200"
+														style={{ fontSize: "9px", letterSpacing: "-0.02em" }}
+														title={e.uuid}
 													>
-														<i className="mr-1 fa fa-hashtag"></i>
-														{e.id}
-													</button>
-													<span className={`w-full px-1 py-0.5 text-xs font-medium rounded text-center ${
-														e.estado === 1 ? "bg-green-100 text-green-800" : 
-														e.estado === 2 ? "bg-red-100 text-red-800" : 
-														"bg-yellow-100 text-yellow-800"
-													}`}>
-														{e.estado === 1 ? "Proc" : e.estado === 2 ? "Anul" : "Pend"}
+														<i className="mr-0.5 fa fa-fingerprint"></i>
+														{e.uuid.length > 12 ? e.uuid.slice(-12) : e.uuid}
 													</span>
-												</div>
-											</td>
+												)}
+											</div>
+										</td>
 
 											{/* Información del Vendedor y Fecha */}
 											<td className="w-40 p-2">

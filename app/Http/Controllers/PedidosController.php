@@ -628,7 +628,7 @@ class PedidosController extends Controller
                     ->get();
                 return $q;
             });
-        } else if ($tipobusquedapedido == "fact" || $tipobusquedapedido == "cliente") {
+        } else if ($tipobusquedapedido == "fact" || $tipobusquedapedido == "cliente" || $tipobusquedapedido == "uuid") {
             // Optimización para búsqueda de facturas y clientes - Sin cache
             $fact = pedidos::with([
                 "pagos:id,id_pedido,tipo,monto,monto_original,moneda,referencia",
@@ -645,6 +645,9 @@ class PedidosController extends Controller
             })
             ->when($tipobusquedapedido == "fact" && $busquedaPedido, function($q) use ($busquedaPedido) {
                 $q->where("id", "LIKE", "$busquedaPedido%");
+            })
+            ->when($tipobusquedapedido == "uuid" && $busquedaPedido, function($q) use ($busquedaPedido) {
+                $q->where("uuid", "LIKE", "%$busquedaPedido%");
             })
             ->when($tipobusquedapedido == "cliente", function($q) use ($busquedaPedido) {
                 $q->whereIn("id_cliente", function ($q) use ($busquedaPedido) {
