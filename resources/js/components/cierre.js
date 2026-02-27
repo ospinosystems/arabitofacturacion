@@ -478,9 +478,9 @@ function Cierre({
 										{/* Solo mostrar botón Guardar/Editar si NO está bloqueado */}
 										{!bloqueado && (
 											tipo_accionCierre=="guardar"?
-											<button className="btn-sm btn btn-outline-success" onClick={guardar_cierre} type="button">Guardar</button>
+											<button className="btn-sm btn btn-outline-success" onClick={() => { if (window.confirm('¿Realmente desea Guardar?')) guardar_cierre(); }} type="button">Guardar</button>
 											:
-											<button className="btn-sm btn btn-sinapsis" onClick={guardar_cierre} type="button">Editar</button>
+											<button className="btn-sm btn btn-sinapsis" onClick={() => { if (window.confirm('¿Realmente desea Editar?')) guardar_cierre(); }} type="button">Editar</button>
 										)}
 										
 										<button className="btn-sm btn btn-sinapsis" onClick={veryenviarcierrefun} type="button" data-type="ver">Ver</button>

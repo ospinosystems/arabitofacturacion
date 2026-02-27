@@ -6134,18 +6134,17 @@ export default function Facturar({
         }
 
         
-        if (window.confirm("¿Realmente desea Guardar/Editar?")) {
-            setLoading(true);
-            
-            // Preparar dataPuntosAdicionales incluyendo lotesPinpad
-            const dataPuntosAdicionalesConLotes = {
-                puntos: dataPuntosAdicionales,
-                lotes_pinpad: lotesPinpad
-            };
-            
-            // SOLO enviar valores ORIGINALES ingresados por el usuario
-            // El backend recalculará TODO internamente en guardarCierre
-            db.guardarCierre({
+        setLoading(true);
+        
+        // Preparar dataPuntosAdicionales incluyendo lotesPinpad
+        const dataPuntosAdicionalesConLotes = {
+            puntos: dataPuntosAdicionales,
+            lotes_pinpad: lotesPinpad
+        };
+        
+        // SOLO enviar valores ORIGINALES ingresados por el usuario
+        // El backend recalculará TODO internamente en guardarCierre
+        db.guardarCierre({
                 fechaCierre,
                 
                 // Valores originales de efectivo contado
@@ -6192,30 +6191,29 @@ export default function Facturar({
                 CajaChicaEntradaCierreDolar,
                 CajaChicaEntradaCierreCop,
                 CajaChicaEntradaCierreBs,
-                
-            }).then((res) => {
-                setLoading(false);
-                
-                // Si hay un error de faltante, mostrar mensaje detallado
-                // El backend retorna total_diferencia cuando hay un faltante
-                if (!res.data.estado && res.data.msj && (res.data.total_diferencia !== undefined || res.data.descuadre_general !== undefined)) {
-                    // Mostrar mensaje detallado del faltante
-                    mostrarMensajeFaltante(res.data);
-                } else {
-                    notificar(res, false);
-                }
-                
-                if (res.data.estado) {
-                    db.getStatusCierre({ fechaCierre }).then((res) => {
-                        settipo_accionCierre(res.data.tipo_accionCierre);
-                    });
-                }
-            }).catch((err) => {
-                setLoading(false);
-                const msj = err.response?.data?.msj || err.message || 'Error al guardar el cierre';
-                notificar({ data: { msj, estado: false } }, false);
-            });
-        }
+            
+        }).then((res) => {
+            setLoading(false);
+            
+            // Si hay un error de faltante, mostrar mensaje detallado
+            // El backend retorna total_diferencia cuando hay un faltante
+            if (!res.data.estado && res.data.msj && (res.data.total_diferencia !== undefined || res.data.descuadre_general !== undefined)) {
+                // Mostrar mensaje detallado del faltante
+                mostrarMensajeFaltante(res.data);
+            } else {
+                notificar(res, false);
+            }
+            
+            if (res.data.estado) {
+                db.getStatusCierre({ fechaCierre }).then((res) => {
+                    settipo_accionCierre(res.data.tipo_accionCierre);
+                });
+            }
+        }).catch((err) => {
+            setLoading(false);
+            const msj = err.response?.data?.msj || err.message || 'Error al guardar el cierre';
+            notificar({ data: { msj, estado: false } }, false);
+        });
     };
 
     const [puedeSendCierre, setpuedeSendCierre] = useState(true);
