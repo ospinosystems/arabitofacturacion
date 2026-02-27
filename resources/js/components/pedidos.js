@@ -11,7 +11,7 @@ function Pedidos({
 	togleeReferenciasElec,
 	settogleeReferenciasElec,
 
-	addNewPedido,
+	addNewPedidoFront,
 	auth,
 	pedidoData,
 	getPedidoFast,
@@ -330,7 +330,7 @@ function Pedidos({
 								)}
 								<button 
 									className="px-2 py-1 text-xs text-white transition-colors bg-green-500 rounded-r hover:bg-green-600" 
-									onClick={addNewPedido}
+									onClick={addNewPedidoFront}
 								>
 									<i className="fa fa-plus"></i>
 								</button>

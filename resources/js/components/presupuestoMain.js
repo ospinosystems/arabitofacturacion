@@ -30,6 +30,7 @@ export default function PresupuestoMain({
     focusCtMain,
     selectProductoFast,
     setpresupuestocarritotopedido,
+    setpresupuestoAPedidoFront,
     openBarcodeScan,
     number,
     dolar
@@ -431,9 +432,9 @@ export default function PresupuestoMain({
 
                             {/* Botones de acción */}
                             <div className="sticky bottom-0 p-3 bg-white border border-gray-200 rounded">
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap gap-2">
                                     <button
-                                        className="flex-1 px-4 py-2 text-sm font-medium text-white transition-colors bg-orange-500 rounded hover:bg-orange-600"
+                                        className="flex-1 px-4 py-2 text-sm font-medium text-white transition-colors bg-orange-500 rounded hover:bg-orange-600 min-w-[140px]"
                                         onClick={() =>
                                             toggleImprimirTicket("presupuesto")
                                         }
@@ -442,12 +443,22 @@ export default function PresupuestoMain({
                                         Imprimir Presupuesto
                                     </button>
                                     <button
-                                        className="flex-1 px-4 py-2 text-sm font-medium text-white transition-colors bg-green-500 rounded hover:bg-green-600"
+                                        className="flex-1 px-4 py-2 text-sm font-medium text-white transition-colors bg-green-500 rounded hover:bg-green-600 min-w-[140px]"
                                         onClick={setpresupuestocarritotopedido}
                                     >
                                         <i className="mr-2 fa fa-save"></i>
                                         Convertir a Pedido
                                     </button>
+                                    {setpresupuestoAPedidoFront && (
+                                        <button
+                                            className="flex-1 px-4 py-2 text-sm font-medium text-white transition-colors bg-blue-500 rounded hover:bg-blue-600 min-w-[140px]"
+                                            onClick={setpresupuestoAPedidoFront}
+                                            title="Crea un pedido solo en pantalla (tipo front) sin guardar en backend hasta el pago"
+                                        >
+                                            <i className="mr-2 fa fa-file-text-o"></i>
+                                            Convertir a Pedido (Front)
+                                        </button>
+                                    )}
                                 </div>
                                 <button
                                     className="w-full px-4 py-2 mt-2 text-sm font-medium text-gray-700 transition-colors bg-gray-200 rounded hover:bg-gray-300"
@@ -489,6 +500,15 @@ export default function PresupuestoMain({
                                             >
                                                 <i className="text-xs fa fa-save"></i>
                                             </button>
+                                            {setpresupuestoAPedidoFront && (
+                                                <button
+                                                    className="flex items-center justify-center w-8 h-8 text-white transition-colors bg-blue-500 rounded-full hover:bg-blue-600"
+                                                    onClick={setpresupuestoAPedidoFront}
+                                                    title="Convertir a Pedido (Front)"
+                                                >
+                                                    <i className="text-xs fa fa-file-text-o"></i>
+                                                </button>
+                                            )}
                                             <button
                                                 className="flex items-center justify-center w-8 h-8 text-white transition-colors bg-gray-500 rounded-full hover:bg-gray-600"
                                                 onClick={() =>

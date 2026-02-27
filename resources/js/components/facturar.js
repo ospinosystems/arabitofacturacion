@@ -526,6 +526,7 @@ export default function Facturar({
     const [pendienteDescuentoMetodoPago, setPendienteDescuentoMetodoPago] = useState({});
     const [descuentoMetodoPagoVerificando, setDescuentoMetodoPagoVerificando] = useState(false);
     const [cancelandoDescuentoMetodoPago, setCancelandoDescuentoMetodoPago] = useState(false);
+    const [eliminandoValidacionDescuentoMetodoPago, setEliminandoValidacionDescuentoMetodoPago] = useState(false);
     const [descuentoMetodoPagoAprobadoPorUuid, setDescuentoMetodoPagoAprobadoPorUuid] = useState({});
     /** Métodos y montos aprobados por central para descuento por método de pago (por uuid). setPagoPedido solo se acepta con estos exactos. */
     const [metodosPagoAprobadosPorUuid, setMetodosPagoAprobadosPorUuid] = useState({});
@@ -4578,6 +4579,38 @@ export default function Facturar({
             });
     };
 
+    /** Elimina la validación de descuento por método de pago ya aprobada (por error de ambas partes). Limpia estado local y opcionalmente intenta anular en central. */
+    const eliminarValidacionDescuentoMetodoPagoFront = () => {
+        if (!pedidoData._frontOnly || !pedidoData.id) return;
+        setEliminandoValidacionDescuentoMetodoPago(true);
+        const uuid = pedidoData.id;
+        const limpiarLocal = () => {
+            setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
+                const next = { ...prev };
+                delete next[uuid];
+                return next;
+            });
+            setMetodosPagoAprobadosPorUuid((prev) => {
+                const next = { ...prev };
+                delete next[uuid];
+                setMetodosPagoAprobadosPorUuidStorage(next);
+                return next;
+            });
+        };
+        db.solicitudDescuentoFrontCancelar({ uuid_pedido_front: uuid, tipo_descuento: "metodo_pago" })
+            .then((res) => {
+                setEliminandoValidacionDescuentoMetodoPago(false);
+                limpiarLocal();
+                const data = res?.data ?? res;
+                notificar({ data: { msj: data?.estado === true ? "Validación eliminada. Puede volver a solicitar el descuento si lo necesita." : "Validación eliminada en este equipo. Puede volver a solicitar el descuento.", estado: true } });
+            })
+            .catch(() => {
+                setEliminandoValidacionDescuentoMetodoPago(false);
+                limpiarLocal();
+                notificar({ data: { msj: "Validación eliminada localmente. Puede volver a solicitar el descuento.", estado: true } });
+            });
+    };
+
     const setCantidadCarrito = (e) => {
         const cantidad = window.prompt("Cantidad");
         if (cantidad) {
@@ -7221,6 +7254,67 @@ export default function Facturar({
             });
         }
     };
+
+    /** Convierte el presupuesto actual en un pedido tipo front (solo en front, sin setCarrito). */
+    const setpresupuestoAPedidoFront = () => {
+        if (!presupuestocarrito || presupuestocarrito.length === 0) {
+            notificar({ data: { msj: "El presupuesto está vacío. Agregue productos para convertir a pedido.", estado: false } });
+            return;
+        }
+        const uuid = uuidv4();
+        const created_at = new Date().toISOString().slice(0, 19).replace("T", " ");
+        const tasaDolar = parseFloat(dolar) || 0;
+        const tasaPeso = parseFloat(peso) || 0;
+        const items = presupuestocarrito.map((p) => {
+            const cantidad = parseFloat(p.cantidad) || 1;
+            const precio = parseFloat(p.precio) || 0;
+            const subtotal = parseFloat(p.subtotal) || cantidad * precio;
+            const itemId = "item-front-" + Date.now() + "-" + Math.random().toString(36).slice(2, 9);
+            return {
+                id: itemId,
+                producto: {
+                    id: p.id,
+                    codigo_barras: p.codigo_barras ?? "",
+                    codigo_proveedor: p.codigo_proveedor ?? "",
+                    descripcion: p.descripcion || "",
+                    precio: precio,
+                    precio1: p.precio1 ?? precio,
+                },
+                codigo_barras: p.codigo_barras ?? "",
+                cantidad,
+                precio,
+                tasa: tasaDolar,
+                tasa_cop: tasaPeso,
+                descuento: 0,
+                total: subtotal,
+                total_des: subtotal,
+                cantidad_disponible_al_agregar: 0,
+            };
+        });
+        const clean_subtotal = items.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
+        const clean_total = clean_subtotal;
+        const bs = clean_total * tasaDolar;
+        const pedidoFront = {
+            id: uuid,
+            items,
+            created_at,
+            clean_total,
+            clean_subtotal,
+            bs,
+            estado: 0,
+            cliente: null,
+            referencias: [],
+            pagos: [],
+            _frontOnly: true,
+        };
+        setPedidosFrontPendientes((prev) => ({ ...prev, [uuid]: pedidoFront }));
+        setPedidoData(pedidoFront);
+        setPedidoSelect(uuid);
+        setrefPago(refPagoPorPedidoFront[uuid] || []);
+        setpresupuestocarrito([]);
+        setView("pagar");
+        notificar({ data: { msj: "Presupuesto convertido a pedido (tipo front). Puede proceder al pago.", estado: true } });
+    };
     const setPresupuesto = (e) => {
         let id_producto = e.currentTarget.attributes["data-id"].value;
         let findpr = productos.filter((e) => e.id == id_producto);
@@ -9037,7 +9131,7 @@ export default function Facturar({
                             refrenciasElecData={refrenciasElecData}
                             togleeReferenciasElec={togleeReferenciasElec}
                             settogleeReferenciasElec={settogleeReferenciasElec}
-                            addNewPedido={addNewPedido}
+                            addNewPedidoFront={addNewPedidoFront}
                             setmodalchangepedido={setmodalchangepedido}
                             setseletIdChangePedidoUserHandle={
                                 setseletIdChangePedidoUserHandle
@@ -9864,8 +9958,10 @@ export default function Facturar({
                                     solicitarDescuentoMetodoPagoFront={solicitarDescuentoMetodoPagoFront}
                                     verificarDescuentoMetodoPagoFront={verificarDescuentoMetodoPagoFront}
                                     cancelarSolicitudDescuentoMetodoPagoFront={cancelarSolicitudDescuentoMetodoPagoFront}
+                                    eliminarValidacionDescuentoMetodoPagoFront={eliminarValidacionDescuentoMetodoPagoFront}
                                     descuentoMetodoPagoVerificando={descuentoMetodoPagoVerificando}
                                     cancelandoDescuentoMetodoPago={cancelandoDescuentoMetodoPago}
+                                    eliminandoValidacionDescuentoMetodoPago={eliminandoValidacionDescuentoMetodoPago}
                                     actualizarCampoPedidoFront={actualizarCampoPedidoFront}
                                     actualizarEstatusRefFront={actualizarEstatusRefFront}
                                     itemsDisponiblesDevolucion={itemsDisponiblesDevolucion}
@@ -10235,6 +10331,9 @@ export default function Facturar({
                             selectProductoFast={selectProductoFast}
                             setpresupuestocarritotopedido={
                                 setpresupuestocarritotopedido
+                            }
+                            setpresupuestoAPedidoFront={
+                                setpresupuestoAPedidoFront
                             }
                             openBarcodeScan={openBarcodeScan}
                             number={number}

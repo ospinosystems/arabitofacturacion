@@ -124,8 +124,10 @@ export default function PagarMain({
     solicitarDescuentoMetodoPagoFront,
     verificarDescuentoMetodoPagoFront,
     cancelarSolicitudDescuentoMetodoPagoFront,
+    eliminarValidacionDescuentoMetodoPagoFront,
     descuentoMetodoPagoVerificando = false,
     cancelandoDescuentoMetodoPago = false,
+    eliminandoValidacionDescuentoMetodoPago = false,
     descuentoMetodoPagoAprobadoPorUuid = {},
     metodosPagoAprobadosPorUuid = {},
     setDescuentoTotal,
@@ -2832,6 +2834,31 @@ export default function PagarMain({
                                         </div>
                                     )}
 
+                                    {/* Descuento por método de pago ya aprobado: opción para eliminar validación si fue error */}
+                                    {pedidoData._frontOnly && pedidoData.id && !pendienteDescuentoMetodoPago[pedidoData.id] && (pedidoData.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0) && descuentoMetodoPagoAprobadoPorUuid[pedidoData.id] && (
+                                        <div className="mt-2 pt-2 border-t border-gray-200 flex flex-col gap-1.5">
+                                            <div className="flex items-center justify-between gap-2 text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1.5">
+                                                <span className="text-xs font-medium">Descuento por método de pago aprobado</span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                disabled={eliminandoValidacionDescuentoMetodoPago}
+                                                onClick={() => eliminarValidacionDescuentoMetodoPagoFront && eliminarValidacionDescuentoMetodoPagoFront()}
+                                                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-amber-800 bg-amber-100 border border-amber-300 rounded-lg hover:bg-amber-200 disabled:opacity-60"
+                                                title="Si fue un error, eliminar esta validación para volver a solicitar"
+                                            >
+                                                {eliminandoValidacionDescuentoMetodoPago ? (
+                                                    <>
+                                                        <span className="inline-block w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                                                        Eliminando…
+                                                    </>
+                                                ) : (
+                                                    <>Eliminar validación</>
+                                                )}
+                                            </button>
+                                        </div>
+                                    )}
+
                                     {/* Descuento total pendiente: solo para pedidos front con solicitud global en espera */}
                                     {pedidoData._frontOnly && pedidoData.id && pendientesDescuentoTotal[pedidoData.id] && (
                                         <div className="mt-2 pt-2 border-t border-gray-200 flex flex-col gap-1.5">
@@ -3474,24 +3501,42 @@ export default function PagarMain({
                                     {pedidoData._frontOnly && pedidoData.id && (pedidoData.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0) && pendienteDescuentoMetodoPago[pedidoData.id] && (
                                         <div className="absolute inset-0 bg-white/70 rounded-lg z-[5]" aria-hidden="true" />
                                     )}
-                                    {/* Banner: Descuento por método de pago aprobado — use exactamente estos métodos y montos */}
+                                    {/* Banner: Descuento por método de pago aprobado — use exactamente estos métodos y montos; botón para eliminar validación si fue error */}
                                     {pedidoData._frontOnly && pedidoData.id && (pedidoData.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0) && descuentoMetodoPagoAprobadoPorUuid[pedidoData.id] && (() => {
                                         const metodos = metodosPagoAprobadosPorUuid[pedidoData.id] || [];
                                         const labels = { efectivo: "Efectivo", transferencia: "Transferencia", debito: "Débito", biopago: "Biopago", credito: "Crédito", adicional: "Bs/Pesos" };
                                         const monedaF = (n) => (n == null ? "" : typeof n === "number" ? (n % 1 === 0 ? n : n.toFixed(2)) : String(n));
                                         const list = metodos.map((m) => `${labels[m.tipo] || m.tipo} Bs ${monedaF(m.monto)}`).filter(Boolean);
-                                        return list.length > 0 ? (
-                                            <div className="mb-2 flex items-center gap-2 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-green-800">
-                                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-200">
-                                                    <i className="fa fa-check text-xs text-green-700" />
-                                                </span>
-                                                <div className="min-w-0 flex-1">
-                                                    <span className="text-xs font-semibold">Descuento aprobado para: </span>
-                                                    <span className="text-xs">{list.join(", ")}</span>
-                                                    <p className="mt-0.5 text-[10px] text-green-700">Use exactamente estos métodos y montos para facturar.</p>
+                                        return (
+                                            <div className="mb-2 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-green-800">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-200">
+                                                        <i className="fa fa-check text-xs text-green-700" />
+                                                    </span>
+                                                    <div className="min-w-0 flex-1">
+                                                        <span className="text-xs font-semibold">Descuento aprobado para: </span>
+                                                        <span className="text-xs">{list.length > 0 ? list.join(", ") : "—"}</span>
+                                                        <p className="mt-0.5 text-[10px] text-green-700">Use exactamente estos métodos y montos para facturar.</p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        disabled={eliminandoValidacionDescuentoMetodoPago}
+                                                        onClick={() => eliminarValidacionDescuentoMetodoPagoFront && eliminarValidacionDescuentoMetodoPagoFront()}
+                                                        className="shrink-0 px-3 py-1.5 text-xs font-medium text-amber-800 bg-amber-100 border border-amber-300 rounded-lg hover:bg-amber-200 disabled:opacity-60"
+                                                        title="Si fue un error (central y pedido), eliminar esta validación para poder volver a solicitar el descuento"
+                                                    >
+                                                        {eliminandoValidacionDescuentoMetodoPago ? (
+                                                            <>
+                                                                <span className="inline-block w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin align-middle mr-1" />
+                                                                Eliminando…
+                                                            </>
+                                                        ) : (
+                                                            <>Eliminar validación</>
+                                                        )}
+                                                    </button>
                                                 </div>
                                             </div>
-                                        ) : null;
+                                        );
                                     })()}
                                     {pedidoData._frontOnly && pedidoData.id && (pedidoData.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0) && pendienteDescuentoMetodoPago[pedidoData.id] && (
                                         <div className="absolute inset-0 z-[20] flex flex-col items-center justify-start pt-4 gap-2 bg-amber-50 border-2 border-amber-300 rounded-lg pointer-events-none">
