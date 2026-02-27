@@ -442,13 +442,6 @@ export default function PresupuestoMain({
                                         <i className="mr-2 fa fa-print"></i>
                                         Imprimir Presupuesto
                                     </button>
-                                    <button
-                                        className="flex-1 px-4 py-2 text-sm font-medium text-white transition-colors bg-green-500 rounded hover:bg-green-600 min-w-[140px]"
-                                        onClick={setpresupuestocarritotopedido}
-                                    >
-                                        <i className="mr-2 fa fa-save"></i>
-                                        Convertir a Pedido
-                                    </button>
                                     {setpresupuestoAPedidoFront && (
                                         <button
                                             className="flex-1 px-4 py-2 text-sm font-medium text-white transition-colors bg-blue-500 rounded hover:bg-blue-600 min-w-[140px]"
@@ -490,15 +483,6 @@ export default function PresupuestoMain({
                                                 title="Imprimir Presupuesto"
                                             >
                                                 <i className="text-xs fa fa-print"></i>
-                                            </button>
-                                            <button
-                                                className="flex items-center justify-center w-8 h-8 text-white transition-colors bg-green-500 rounded-full hover:bg-green-600"
-                                                onClick={
-                                                    setpresupuestocarritotopedido
-                                                }
-                                                title="Convertir a Pedido"
-                                            >
-                                                <i className="text-xs fa fa-save"></i>
                                             </button>
                                             {setpresupuestoAPedidoFront && (
                                                 <button
