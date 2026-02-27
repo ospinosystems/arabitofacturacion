@@ -643,11 +643,15 @@ class PagosReferenciasController extends Controller
 
                     if (!is_array($resultCentral) || !isset($resultCentral['estado']) || $resultCentral['estado'] !== true) {
                         $errorMsg = is_array($resultCentral) ? ($resultCentral['msj'] ?? 'Central no confirmó la eliminación') : 'Respuesta inválida de central';
-                        return Response::json(["msj" => "No se pudo eliminar en central: " . $errorMsg, "estado" => false]);
+                        // Si en central ya no existe, considerar éxito (el front puede quitarla de la UI)
+                        $noEncontradaEnCentral = is_array($resultCentral) && stripos($resultCentral['msj'] ?? '', 'Referencia no encontrada') !== false;
+                        if (!$noEncontradaEnCentral) {
+                            return Response::json(["msj" => "No se pudo eliminar en central: " . $errorMsg, "estado" => false]);
+                        }
                     }
                 }
 
-                // Central confirmó (o no es modo central): confirmar al front que puede eliminar localmente
+                // Central confirmó (o no es modo central, o ya no existía en central): confirmar al front
                 return Response::json(["msj" => "Referencia eliminada exitosamente", "estado" => true]);
             }
 
@@ -686,17 +690,22 @@ class PagosReferenciasController extends Controller
                     'valor_estado' => $resultCentral['estado'] ?? 'null'
                 ]);
                 
-                // OBLIGATORIO: Solo eliminar localmente si central confirmó la eliminación con estado === true
+                // Si central no confirmó, solo bloquear si NO es "referencia no encontrada" (en ese caso eliminamos igual localmente)
                 if (!is_array($resultCentral) || !isset($resultCentral['estado']) || $resultCentral['estado'] !== true) {
                     $errorMsg = is_array($resultCentral) ? ($resultCentral['msj'] ?? 'Central no confirmó la eliminación') : 'Respuesta inválida de central';
-                    \Log::warning("NO se eliminará localmente - Central no confirmó", ['resultCentral' => $resultCentral]);
-                    return Response::json([
-                        "msj" => "No se pudo eliminar: " . $errorMsg,
-                        "estado" => false
-                    ]);
+                    $noEncontradaEnCentral = is_array($resultCentral) && stripos($resultCentral['msj'] ?? '', 'Referencia no encontrada') !== false;
+                    if ($noEncontradaEnCentral) {
+                        \Log::info("Referencia no encontrada en central, eliminando solo localmente");
+                    } else {
+                        \Log::warning("NO se eliminará localmente - Central no confirmó", ['resultCentral' => $resultCentral]);
+                        return Response::json([
+                            "msj" => "No se pudo eliminar: " . $errorMsg,
+                            "estado" => false
+                        ]);
+                    }
+                } else {
+                    \Log::info("Central confirmó eliminación, procediendo a eliminar localmente");
                 }
-                
-                \Log::info("Central confirmó eliminación, procediendo a eliminar localmente");
             }
 
             $pagos_referencias->delete();

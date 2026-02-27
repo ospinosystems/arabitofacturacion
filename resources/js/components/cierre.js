@@ -1443,7 +1443,9 @@ function ModalDetallesPagos({ cierre, tipo, moneda, onRefrescarCierre }) {
 		setPedidoData(null);
 	};
 
-	const verificarInstapago = async (pago) => {
+	const verificarInstapago = async (e, pago) => {
+		if (e && e.preventDefault) e.preventDefault();
+		if (e && e.stopPropagation) e.stopPropagation();
 		if (!pago?.id) return;
 		setVerificandoId(pago.id);
 		try {
@@ -1726,6 +1728,7 @@ function ModalDetallesPagos({ cierre, tipo, moneda, onRefrescarCierre }) {
 									<div className="d-flex flex-wrap gap-1 justify-content-center align-items-center">
 										{pago.id_pedido ? (
 											<button 
+												type="button"
 												className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-150"
 												onClick={() => verPedido(pago.id_pedido)}
 											>
@@ -1734,8 +1737,9 @@ function ModalDetallesPagos({ cierre, tipo, moneda, onRefrescarCierre }) {
 										) : null}
 										{moneda === 'OTROS' && (
 											<button 
+												type="button"
 												className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-amber-600 hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-colors duration-150"
-												onClick={() => verificarInstapago(pagosActualizados[pago.id] || pago)}
+												onClick={(ev) => verificarInstapago(ev, pagosActualizados[pago.id] || pago)}
 												disabled={verificandoId === pago.id}
 												title="Verificar con Instapago si la transacción está aprobada y actualizar el pago"
 											>
