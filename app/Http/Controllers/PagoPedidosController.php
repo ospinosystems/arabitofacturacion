@@ -1917,8 +1917,9 @@ class PagoPedidosController extends Controller
     }
 
     /**
-     * Endpoint temporal: pedidos de una fecha donde la suma de items_pedidos.monto es negativa
+     * Endpoint temporal: pedidos de una fecha donde la suma (monto - descuento) de items_pedidos es negativa
      * y el pago en pago_pedidos es el mismo monto pero positivo; se pone ese monto de pago en negativo.
+     * Por ítem: total = monto - (descuento/100)*monto. Esa suma debe ser igual al pago.
      * GET ?fecha=Y-m-d
      */
     public function fixPagosNegativosPorFecha(Request $req)
@@ -1934,7 +1935,13 @@ class PagoPedidosController extends Controller
         $actualizados = [];
 
         foreach ($pedidos as $pedido) {
-            $sumaItems = (float) items_pedidos::where('id_pedido', $pedido->id)->sum('monto');
+            $items = items_pedidos::where('id_pedido', $pedido->id)->get();
+            $sumaItems = $items->sum(function ($it) {
+                $m = (float) $it->monto;
+                $d = (float) $it->descuento;
+                $descuentoMonto = ($d > 0) ? ($d / 100) * $m : 0;
+                return $m - $descuentoMonto;
+            });
             if ($sumaItems >= 0) {
                 continue;
             }
