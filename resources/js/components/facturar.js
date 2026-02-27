@@ -4656,6 +4656,7 @@ export default function Facturar({
                 const qty = parseFloat(qtyRaw) ?? 0;
                 const esDevolucion = qty < 0;
                 let precio = parseFloat(productoSelectinternouno.precio) || 0;
+                let descuentoOriginal = 0;
                 const productInList = productos.find((p) => p.id == productoSelectinternouno.id);
                 const disponible = productInList != null ? parseFloat(productInList.cantidad) || 0 : 0;
                 const items = pedidoData.items || [];
@@ -4682,8 +4683,9 @@ export default function Facturar({
                         notificar({ data: { msj: "Este producto no fue facturado en la factura original #" + idOriginal + ". Solo puede devolver ítems de esa factura.", estado: false } });
                         return;
                     }
-                    // Usar el precio original de la factura validada, no el precio actual del producto
+                    // Usar el precio y descuento originales de la factura validada, no los valores actuales del producto
                     precio = parseFloat(itemDisponible.precio_unitario) || precio;
+                    descuentoOriginal = parseFloat(itemDisponible.descuento) || 0;
                     const cantidadDisponibleDevolucion = parseFloat(itemDisponible.cantidad_disponible) || 0;
                     // Ya devuelto en este pedido (otras líneas del mismo producto con cantidad negativa), sin contar la línea que estamos editando
                     const yaDevueltoOtrasLineas = items.reduce((sum, it, idx) => {
@@ -4711,7 +4713,7 @@ export default function Facturar({
                 let newItems;
                 if (existingIndex >= 0) {
                     const existing = items[existingIndex];
-                    if (existing.descuento != null && parseFloat(existing.descuento) > 0) {
+                    if (!esDevolucion && existing.descuento != null && parseFloat(existing.descuento) > 0) {
                         notificar({ msj: "No se puede agregar más: el ítem tiene descuento aprobado. Para cambiar cantidad, pida al aprobador que revierta y vuelva a solicitar.", estado: false });
                         return;
                     }
@@ -4729,11 +4731,14 @@ export default function Facturar({
                             notificar({ msj: "Solo hay " + disponible + " disponible(s). Se actualizó al máximo.", estado: true });
                         }
                     }
-                    const newTotal = newCantidad * (parseFloat(existing.precio) || precio);
+                    const precioBaseExistente = parseFloat(existing.precio) || precio;
+                    const descuentoExistente = esDevolucion ? descuentoOriginal : (parseFloat(existing.descuento) || 0);
+                    const newTotal = newCantidad * precioBaseExistente * (1 - descuentoExistente / 100);
                     newItems = items.slice();
                     newItems[existingIndex] = {
                         ...existing,
                         cantidad: newCantidad,
+                        descuento: descuentoExistente,
                         total: newTotal,
                         total_des: newTotal,
                         cantidad_disponible_al_agregar: disponible,
@@ -4769,9 +4774,9 @@ export default function Facturar({
                         precio,
                         tasa: parseFloat(dolar) || 0,
                         tasa_cop: parseFloat(peso) || 0,
-                        descuento: 0,
-                        total: qtyToAdd * precio,
-                        total_des: qtyToAdd * precio,
+                        descuento: descuentoOriginal,
+                        total: qtyToAdd * precio * (1 - descuentoOriginal / 100),
+                        total_des: qtyToAdd * precio * (1 - descuentoOriginal / 100),
                         cantidad_disponible_al_agregar: disponible,
                     };
                     newItems = [...items, newItem];
