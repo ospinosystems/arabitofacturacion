@@ -773,9 +773,14 @@ class PagoPedidosController extends Controller
 
                     if($req->efectivo) {
                         // Efectivo en dólares: monto ya está en USD, moneda = dolar
+                        // Devoluciones: guardar monto negativo en pago_pedidos (si el front envía positivo, convertirlo a negativo cuando el total del pedido es negativo)
+                        $montoEfectivo = floatval($req->efectivo);
+                        if ($total_real < 0 && $montoEfectivo > 0) {
+                            $montoEfectivo = -$montoEfectivo;
+                        }
                         pago_pedidos::updateOrCreate(
                             ["id_pedido"=>$req->id, "tipo"=>3, "moneda"=>"dolar"],
-                            ["cuenta"=>$cuenta, "monto"=>floatval($req->efectivo), "moneda"=>"dolar"]
+                            ["cuenta"=>$cuenta, "monto"=>$montoEfectivo, "moneda"=>"dolar"]
                         );
                     }
                     
@@ -793,6 +798,11 @@ class PagoPedidosController extends Controller
                                     $montoUSD = $montoOriginal / $tasaDolar;
                                 } elseif ($moneda === 'peso') {
                                     $montoUSD = $montoOriginal / $tasaPeso;
+                                }
+                                // Devoluciones: guardar montos negativos en pago_pedidos
+                                if ($total_real < 0 && $montoUSD > 0) {
+                                    $montoUSD = -$montoUSD;
+                                    $montoOriginal = -abs($montoOriginal);
                                 }
                                 
                                 pago_pedidos::create([
