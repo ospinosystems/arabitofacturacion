@@ -165,6 +165,9 @@ function Cierre({
 
 	// Estado para modal de totalizar cierre (solo admin)
 	const [mostrarTotalizar, setMostrarTotalizar] = useState(false);
+
+	// Estado para confirmación inline del botón Guardar
+	const [confirmandoGuardar, setConfirmandoGuardar] = useState(false);
 	
 	// Estados para controlar bloqueo de cálculo
 	const [hayCierreGuardado, setHayCierreGuardado] = useState(false);
@@ -475,13 +478,32 @@ function Cierre({
 
 									<div className='btn-group mt-2 mb-2 w-30'>
 		
-										{/* Solo mostrar botón Guardar/Editar si NO está bloqueado */}
-										{!bloqueado && (
+									{/* Solo mostrar botón Guardar/Editar si NO está bloqueado */}
+									{!bloqueado && (
+										confirmandoGuardar ? (
+											<>
+												<button
+													className="btn-sm btn btn-success"
+													type="button"
+													onClick={() => { setConfirmandoGuardar(false); guardar_cierre(); }}
+												>
+													<i className="fa fa-check"></i> Sí, guardar
+												</button>
+												<button
+													className="btn-sm btn btn-outline-secondary"
+													type="button"
+													onClick={() => setConfirmandoGuardar(false)}
+												>
+													<i className="fa fa-times"></i> Cancelar
+												</button>
+											</>
+										) : (
 											tipo_accionCierre=="guardar"?
-											<button className="btn-sm btn btn-outline-success" onClick={() => { if (window.confirm('¿Realmente desea Guardar?')) guardar_cierre(); }} type="button">Guardar</button>
+											<button className="btn-sm btn btn-outline-success" onClick={() => setConfirmandoGuardar(true)} type="button">Guardar</button>
 											:
-											<button className="btn-sm btn btn-sinapsis" onClick={() => { if (window.confirm('¿Realmente desea Editar?')) guardar_cierre(); }} type="button">Editar</button>
-										)}
+											<button className="btn-sm btn btn-sinapsis" onClick={() => setConfirmandoGuardar(true)} type="button">Editar</button>
+										)
+									)}
 										
 										<button className="btn-sm btn btn-sinapsis" onClick={veryenviarcierrefun} type="button" data-type="ver">Ver</button>
 
