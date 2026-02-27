@@ -4406,11 +4406,12 @@ export default function Facturar({
         notificar({ msj: "Cantidad actualizada", estado: true });
     };
 
-    /** True si los métodos de pago son solo efectivo USD (libera sin solicitud de aprobación). */
+    /** True si los métodos de pago son solo efectivo USD (libera sin solicitud de aprobación). Efectivo USD negativo o positivo no activa el filtro de descuento en espera. */
     const isSoloEfectivoUsd = (metodos) => {
         if (!Array.isArray(metodos) || metodos.length === 0) return false;
         if (metodos.length > 1) return false;
-        return metodos[0].tipo === "efectivo" && parseFloat(metodos[0].monto) > 0;
+        const monto = parseFloat(metodos[0].monto);
+        return metodos[0].tipo === "efectivo" && !Number.isNaN(monto) && monto !== 0;
     };
 
     /** Compara si los métodos actuales coinciden con los aprobados (mismo tipo y monto con tolerancia 0.02). */
