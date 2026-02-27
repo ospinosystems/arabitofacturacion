@@ -1915,4 +1915,48 @@ class PagoPedidosController extends Controller
             ]);
         }
     }
+
+    /**
+     * Endpoint temporal: pedidos de una fecha donde la suma de items_pedidos.monto es negativa
+     * y el pago en pago_pedidos es el mismo monto pero positivo; se pone ese monto de pago en negativo.
+     * GET ?fecha=Y-m-d
+     */
+    public function fixPagosNegativosPorFecha(Request $req)
+    {
+        $fecha = $req->get('fecha');
+        if (!$fecha) {
+            return Response::json(['estado' => false, 'msj' => 'Parámetro fecha requerido (Y-m-d).']);
+        }
+        $desde = $fecha . ' 00:00:00';
+        $hasta = $fecha . ' 23:59:59';
+
+        $pedidos = pedidos::whereBetween('fecha_factura', [$desde, $hasta])->get();
+        $actualizados = [];
+
+        foreach ($pedidos as $pedido) {
+            $sumaItems = (float) items_pedidos::where('id_pedido', $pedido->id)->sum('monto');
+            if ($sumaItems >= 0) {
+                continue;
+            }
+            $montoPositivo = abs($sumaItems);
+            $pagos = pago_pedidos::where('id_pedido', $pedido->id)->get();
+            foreach ($pagos as $pago) {
+                $montoPago = (float) $pago->monto;
+                if ($montoPago > 0 && round($montoPago, 2) === round($montoPositivo, 2)) {
+                    $pago->monto = -$montoPago;
+                    $pago->save();
+                    $actualizados[] = ['id_pedido' => $pedido->id, 'id_pago' => $pago->id, 'monto_anterior' => $montoPago, 'monto_nuevo' => -$montoPago];
+                    break;
+                }
+            }
+        }
+
+        return Response::json([
+            'estado' => true,
+            'fecha' => $fecha,
+            'pedidos_revisados' => $pedidos->count(),
+            'pagos_actualizados' => count($actualizados),
+            'detalle' => $actualizados,
+        ]);
+    }
 }
