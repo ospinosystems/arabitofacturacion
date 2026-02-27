@@ -52,6 +52,8 @@ Route::get('checkPed', [PedidosController::class,"checkPed"]);
 Route::get('checkCt', [PedidosController::class, "checkCt"]);
 Route::get('completePed', [PedidosController::class, "completePed"]);
 Route::get('repareId', [PedidosController::class, "repareId"]);
+// Temporal: corrige pago_pedidos a negativo cuando items suman negativo y el pago es el mismo monto positivo
+Route::get('fix-pagos-negativos-fecha', [PagoPedidosController::class, 'fixPagosNegativosPorFecha']);
 
 
 Route::get('/backup', function () {

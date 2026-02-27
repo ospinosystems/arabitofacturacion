@@ -4458,9 +4458,10 @@ export default function Facturar({
             notificar({ data: { msj: "Indique al menos un método de pago para solicitar el descuento", estado: false } });
             return;
         }
-        const algunMontoMayorQueCero = metodos_pago.some((m) => (parseFloat(m.monto) || 0) > 0);
-        if (!algunMontoMayorQueCero) {
-            notificar({ data: { msj: "Indique al menos un método de pago con monto mayor a cero para solicitar el descuento", estado: false } });
+        // Para ventas: al menos un monto > 0. Para devoluciones: al menos un monto distinto de cero (puede ser negativo).
+        const algunMontoValido = metodos_pago.some((m) => Math.abs(parseFloat(m.monto) || 0) > 0);
+        if (!algunMontoValido) {
+            notificar({ data: { msj: "Indique al menos un método de pago con monto (mayor a cero en ventas, o el vuelto en devoluciones) para solicitar el descuento", estado: false } });
             return;
         }
         const monto_bruto = (pedidoData.items || []).reduce((sum, it) => {
@@ -4680,6 +4681,22 @@ export default function Facturar({
                         return false;
                     });
                     if (!itemDisponible) {
+                        // Si la lista se vació (p. ej. al quitar y volver a agregar), recuperar ítems disponibles desde el backend
+                        if ((!itemsDisponiblesDevolucion || itemsDisponiblesDevolucion.length === 0) && idOriginal) {
+                            db.getItemsDisponiblesDevolucion({ id_pedido_original: idOriginal })
+                                .then((res) => {
+                                    if (res.data?.items_disponibles?.length) {
+                                        setItemsDisponiblesDevolucion(res.data.items_disponibles);
+                                        notificar({ data: { msj: "Lista de devolución actualizada. Agregue el ítem de nuevo.", estado: true } });
+                                    } else {
+                                        notificar({ data: { msj: "Este producto no fue facturado en la factura original #" + idOriginal + ". Solo puede devolver ítems de esa factura.", estado: false } });
+                                    }
+                                })
+                                .catch(() => {
+                                    notificar({ data: { msj: "Este producto no fue facturado en la factura original #" + idOriginal + ". Solo puede devolver ítems de esa factura.", estado: false } });
+                                });
+                            return;
+                        }
                         notificar({ data: { msj: "Este producto no fue facturado en la factura original #" + idOriginal + ". Solo puede devolver ítems de esa factura.", estado: false } });
                         return;
                     }

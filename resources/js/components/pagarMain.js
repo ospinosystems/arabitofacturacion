@@ -256,6 +256,7 @@ export default function PagarMain({
     const debitosRefInputRefs = useRef([]);
     // Evitar ciclo infinito: solo auto-disparar facturar una vez por (pedidoId, totalAprobado)
     const lastAutoSubmitPosRef = useRef({ pedidoId: null, totalAprobado: null });
+    const prevPedidoIdRef = useRef(undefined);
     
     // Exponer al padre la función para enfocar el campo Ref. del primer débito (solo cuando hay un solo débito)
     useEffect(() => {
@@ -2152,30 +2153,34 @@ export default function PagarMain({
 
     // No llamar getPedidosFast al montar; se invoca tras getPedido, facturar, delpedido, etc.
 
-    // Limpiar estados de factura original cuando cambie el pedido
+    // Limpiar estados de factura original solo cuando se cambie a otro pedido (no al re-seleccionar el mismo ni al cargar por primera vez)
     useEffect(() => {
-        // Permitir nuevo auto-disparo POS al cambiar de pedido (evita ciclo infinito al seleccionar otro y volver)
-        lastAutoSubmitPosRef.current = { pedidoId: null, totalAprobado: null };
-        // Limpiar estados relacionados con devoluciones al cambiar de pedido
-        setPedidoOriginalAsignado(null);
-        setItemsFacturaOriginal([]);
-        setItemsDisponiblesDevolucion([]);
-        setShowModalInfoFacturaOriginal(false);
-        setShowModalPedidoOriginal(false);
-        setPedidoOriginalInput("");
-        // Limpiar calculadora/vueltos
-        setShowCalculadora(false);
-        setShowMiniCalc(false);
-        setCalcInput("");
-        setCalcCampoActivo(null);
-        setCalcPagoEfectivoUsd("");
-        setCalcPagoEfectivoBs("");
-        setCalcPagoEfectivoCop("");
-        setCalcPagoDebito("");
-        setCalcPagoTransferencia("");
-        setCalcVueltoUsd("");
-        setCalcVueltoBs("");
-        setCalcVueltoCop("");
+        const currentId = pedidoData?.id;
+        const prevId = prevPedidoIdRef.current;
+        const switchedToDifferentPedido = prevId !== undefined && currentId !== undefined && String(prevId) !== String(currentId);
+        const clearedSelection = prevId !== undefined && currentId === undefined;
+        if (switchedToDifferentPedido || clearedSelection) {
+            lastAutoSubmitPosRef.current = { pedidoId: null, totalAprobado: null };
+            setPedidoOriginalAsignado(null);
+            setItemsFacturaOriginal([]);
+            setItemsDisponiblesDevolucion([]);
+            setShowModalInfoFacturaOriginal(false);
+            setShowModalPedidoOriginal(false);
+            setPedidoOriginalInput("");
+            setShowCalculadora(false);
+            setShowMiniCalc(false);
+            setCalcInput("");
+            setCalcCampoActivo(null);
+            setCalcPagoEfectivoUsd("");
+            setCalcPagoEfectivoBs("");
+            setCalcPagoEfectivoCop("");
+            setCalcPagoDebito("");
+            setCalcPagoTransferencia("");
+            setCalcVueltoUsd("");
+            setCalcVueltoBs("");
+            setCalcVueltoCop("");
+        }
+        prevPedidoIdRef.current = currentId;
     }, [pedidoData?.id]);
 
     // useEffect para detectar scroll y mostrar/ocultar menú
