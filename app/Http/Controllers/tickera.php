@@ -1812,6 +1812,8 @@ class tickera extends Controller
                         array_push($factura, number_format($val->descuento, 2, '', '')."\n");
                     } */
                 }
+                // Código de barras del id del pedido al final del recibo fiscal (Factura)
+                array_push($factura, "iB*" . $id . "\n");
                 array_push($factura,"101");
     
                 $file = "C:/IntTFHKA/Factura.txt";	

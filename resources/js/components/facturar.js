@@ -5221,9 +5221,16 @@ export default function Facturar({
                 // Pedido front con ítems con descuento aprobado: regla 1) Solo efectivo USD → libera. 2) Cualquier otro método → protocolo solicitud aprobación.
                 const isFrontConDescuento = pedidoActual?._frontOnly && pedidoActual?.id && (pedidoActual?.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0);
                 const uuid = pedidoActual?.id;
+                const totalPedidoCero = pedidoActual?.clean_total != null && Math.abs(parseFloat(pedidoActual.clean_total)) < 0.01;
                 if (isFrontConDescuento && uuid) {
                     const metodos = buildMetodosPagoFront();
                     if (metodos.length === 0) {
+                        if (totalPedidoCero) {
+                            // Devolución con balance cero: lo que entra = lo que sale, no se exige método de pago
+                            console.log("[setPagoPedido] Pedido en cero (devolución balance cero) → avanza sin método de pago", { uuid, pedidoActual });
+                            procesarPagoInterno(callback, null, options || null);
+                            return;
+                        }
                         console.log("[setPagoPedido] BLOQUEADO: pedido front con descuento pero sin métodos de pago", { uuid, pedidoActual });
                         notificar({ data: { msj: "Indique al menos un método de pago antes de guardar.", estado: false } });
                         return;
