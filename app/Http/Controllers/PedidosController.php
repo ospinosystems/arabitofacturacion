@@ -5113,6 +5113,59 @@ class PedidosController extends Controller
     }
 
     /**
+     * Validar devolución usando directamente el id del pedido original.
+     * Usado cuando el pedido de devolución aún no existe (nuevo) o no tiene isdevolucionOriginalid en BD.
+     * Considera todas las devoluciones previas de esa factura.
+     */
+    public function validarProductoDevolucionPorOriginal($id_pedido_original, $id_producto, $cantidad)
+    {
+        if (!$id_pedido_original || !is_numeric($id_pedido_original)) {
+            return ['valido' => true];
+        }
+
+        $itemsDisponibles = $this->getItemsDisponiblesDevolucion((int) $id_pedido_original);
+
+        $itemEncontrado = null;
+        foreach ($itemsDisponibles as $item) {
+            if ($item['id_producto'] == $id_producto) {
+                $itemEncontrado = $item;
+                break;
+            }
+        }
+
+        if (!$itemEncontrado) {
+            $itemOriginal = items_pedidos::where('id_pedido', $id_pedido_original)
+                ->where('id_producto', $id_producto)
+                ->where('cantidad', '>', 0)
+                ->first();
+
+            if ($itemOriginal) {
+                return [
+                    'valido' => false,
+                    'mensaje' => "Este producto ya fue devuelto completamente de la factura original #{$id_pedido_original}"
+                ];
+            }
+            return [
+                'valido' => false,
+                'mensaje' => 'Este producto no existe en la factura original #' . $id_pedido_original
+            ];
+        }
+
+        $cantidadSolicitada = abs($cantidad);
+        if ($cantidadSolicitada > $itemEncontrado['cantidad_disponible']) {
+            return [
+                'valido' => false,
+                'mensaje' => "Cantidad máxima disponible para devolución: {$itemEncontrado['cantidad_disponible']} (Original: {$itemEncontrado['cantidad_original']}, Ya devuelto: {$itemEncontrado['cantidad_devuelta']})"
+            ];
+        }
+
+        return [
+            'valido' => true,
+            'item_original' => $itemEncontrado
+        ];
+    }
+
+    /**
      * Eliminar la asignación de pedido original de una devolución
      */
     public function eliminarPedidoOriginalDevolucion(Request $req)

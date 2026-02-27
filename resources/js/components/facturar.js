@@ -4897,6 +4897,9 @@ export default function Facturar({
                 devolucion_motivonotrajofact,
                 devolucion_numfactoriginal,
             };
+            if (parseFloat(cantidad) < 0 && pedidoData?.isdevolucionOriginalid) {
+                params.id_pedido_original = pedidoData.isdevolucionOriginalid;
+            }
             db.setCarrito(params).then((res) => {
                 if (res.data.msj) {
                     notificar(res.data.msj);
@@ -5363,6 +5366,7 @@ export default function Facturar({
             fecha_inicio: (isFrontOnly && pedidoActual && pedidoActual.fecha_inicio) ? pedidoActual.fecha_inicio : undefined,
             fecha_vence: (isFrontOnly && pedidoActual && pedidoActual.fecha_vence) ? pedidoActual.fecha_vence : undefined,
             formato_pago: (isFrontOnly && pedidoActual && pedidoActual.formato_pago != null) ? pedidoActual.formato_pago : undefined,
+            isdevolucionOriginalid: (pedidoActual && pedidoActual.isdevolucionOriginalid) ? pedidoActual.isdevolucionOriginalid : undefined,
             items: frontItems || undefined,
             debito: debitoParam,
             debitoRef: debitoRefParam,

@@ -68,3 +68,21 @@ export async function searchProducts(query, limit = 20) {
   }
   return [];
 }
+
+/**
+ * Busca productos por código de barras o código proveedor para consulta de precio.
+ * Incluye items con stock cero (itemCero: true). Retorna items crudos del inventario.
+ * @param {string} query - Código de barras, código proveedor o parte del mismo
+ * @param {number} limit - Máximo de resultados
+ * @returns {Promise<Object[]>} Lista de items de inventario con bs, precio, descripcion, codigo_barras, codigo_proveedor
+ */
+export async function searchForConsultaPrecio(query, limit = 25) {
+  if (!query || !String(query).trim()) return [];
+  const q = String(query).trim();
+  const { data } = await api.getInventario({
+    qProductosMain: q,
+    num: limit,
+    itemCero: true,
+  });
+  return Array.isArray(data) ? data : [];
+}

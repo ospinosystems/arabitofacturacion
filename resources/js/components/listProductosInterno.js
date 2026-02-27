@@ -583,6 +583,9 @@ export default function ListProductosInterno({
           devolucion_numfactoriginal,
           valinputsetclaveadmin: carnetCode // Agregar el código del carnet
         };
+        if (qtyNum < 0 && pedidoData?.isdevolucionOriginalid) {
+          params.id_pedido_original = pedidoData.isdevolucionOriginalid;
+        }
 
 
         // Llamar directamente a db.setCarrito (solo para pedidos de backend)

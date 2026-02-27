@@ -1,5 +1,6 @@
-import React from 'react';
-import { ShoppingCart, Fingerprint, CreditCard } from 'lucide-react';
+import React, { useState } from 'react';
+import { ShoppingCart, Fingerprint, CreditCard, DollarSign } from 'lucide-react';
+import ModalConsultaPrecio from '../components/ModalConsultaPrecio';
 
 const STEPS = [
   { icon: Fingerprint, label: 'Identificarse' },
@@ -8,8 +9,10 @@ const STEPS = [
 ];
 
 export default function WelcomeView({ onStart }) {
+  const [showConsultaPrecio, setShowConsultaPrecio] = useState(false);
+
   return (
-    <div className="h-full flex flex-col items-center justify-center px-12 animate-fade-in bg-gray-50">
+    <div className="h-full flex flex-col items-center justify-center px-12 animate-fade-in bg-gray-50 relative">
       <img
         src="/images/logo.png"
         alt="Logo"
@@ -58,6 +61,17 @@ export default function WelcomeView({ onStart }) {
       >
         Toca para empezar
       </button>
+      <div className="absolute bottom-6 left-0 right-0 flex justify-center px-12">
+        <button
+          type="button"
+          onClick={() => setShowConsultaPrecio(true)}
+          className="flex items-center gap-2 px-5 py-3 rounded-xl text-base font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 hover:text-gray-800 transition-colors"
+        >
+          <DollarSign size={20} strokeWidth={2} />
+          Consultar precio
+        </button>
+      </div>
+      <ModalConsultaPrecio open={showConsultaPrecio} onClose={() => setShowConsultaPrecio(false)} />
     </div>
   );
 }

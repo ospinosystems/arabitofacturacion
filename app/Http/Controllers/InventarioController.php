@@ -301,11 +301,11 @@ class InventarioController extends Controller
             ->get();
     }
 
-    public function hacer_pedido($id, $id_pedido, $cantidad, $type, $typeafter = null, $usuario = null, $devolucionTipo = 0, $arrgarantia = null, $valinputsetclaveadmin = null, $frontOnlyBypass = false)
+    public function hacer_pedido($id, $id_pedido, $cantidad, $type, $typeafter = null, $usuario = null, $devolucionTipo = 0, $arrgarantia = null, $valinputsetclaveadmin = null, $frontOnlyBypass = false, $id_pedido_original_req = null)
     {
         // Ejecutar sendComovamos solo cada 30 minutos
         try {
-            return DB::transaction(function () use ($id, $id_pedido, $cantidad, $type, $typeafter, $usuario, $devolucionTipo, $arrgarantia, $valinputsetclaveadmin, $frontOnlyBypass) {
+            return DB::transaction(function () use ($id, $id_pedido, $cantidad, $type, $typeafter, $usuario, $devolucionTipo, $arrgarantia, $valinputsetclaveadmin, $frontOnlyBypass, $id_pedido_original_req) {
             $cantidad = !$cantidad ? 1 : $cantidad;
             // Validar que la cantidad sea un número positivo o negativo, pero no cero, y que su valor absoluto sea al menos 0.1
             if (!is_numeric($cantidad) || abs($cantidad) < 0.1) {
@@ -353,13 +353,22 @@ class InventarioController extends Controller
                     }
                 }
                 
-                // Validar devolución contra factura original y obtener datos del item original
+                // Validar devolución contra factura original (considera devoluciones previas de la misma factura)
                 if ($id_pedido != 'nuevo' && $id_pedido != 'ultimo') {
                     $validacionDevolucion = (new PedidosController)->validarProductoDevolucion($id_pedido, $id, $cantidad);
                     if (!$validacionDevolucion['valido']) {
                         throw new \Exception($validacionDevolucion['mensaje'], 1);
                     }
                     // Guardar datos del item original para usar su precio y tasa
+                    if (isset($validacionDevolucion['item_original'])) {
+                        $itemOriginalDevolucion = $validacionDevolucion['item_original'];
+                    }
+                } elseif (($id_pedido == 'nuevo' || $id_pedido == 'ultimo') && $id_pedido_original_req) {
+                    // Pedido nuevo o "ultimo": validar por id factura original enviado en la petición
+                    $validacionDevolucion = (new PedidosController)->validarProductoDevolucionPorOriginal($id_pedido_original_req, $id, $cantidad);
+                    if (!$validacionDevolucion['valido']) {
+                        throw new \Exception($validacionDevolucion['mensaje'], 1);
+                    }
                     if (isset($validacionDevolucion['item_original'])) {
                         $itemOriginalDevolucion = $validacionDevolucion['item_original'];
                     }
@@ -385,6 +394,15 @@ class InventarioController extends Controller
                     }
 
                     $id_pedido = (new PedidosController)->addNewPedido();
+
+                    // Si es devolución, asignar factura original al nuevo pedido
+                    if ($id_pedido_original_req && $id_pedido_original_req > 0) {
+                        $pedidoNuevo = pedidos::find($id_pedido);
+                        if ($pedidoNuevo && pedidos::where('id', $id_pedido_original_req)->exists()) {
+                            $pedidoNuevo->isdevolucionOriginalid = $id_pedido_original_req;
+                            $pedidoNuevo->save();
+                        }
+                    }
                 }
 
                 if ($id_pedido == 'ultimo') {
@@ -1233,7 +1251,14 @@ class InventarioController extends Controller
 
             $id_return = $id == 'nuevo' ? 'nuevo' : $id;
 
-            return $this->hacer_pedido($id_producto, $id_return, $cantidad, 'ins', $type, $usuario, $devolucionTipo, $arrgarantia, $valinputsetclaveadmin, $frontOnlyBypass);
+            $id_pedido_original = $req->id_pedido_original ?? $req->isdevolucionOriginalid ?? null;
+            if ($id_pedido_original !== null && $id_pedido_original !== '') {
+                $id_pedido_original = is_numeric($id_pedido_original) ? (int) $id_pedido_original : null;
+            } else {
+                $id_pedido_original = null;
+            }
+
+            return $this->hacer_pedido($id_producto, $id_return, $cantidad, 'ins', $type, $usuario, $devolucionTipo, $arrgarantia, $valinputsetclaveadmin, $frontOnlyBypass, $id_pedido_original);
         }
     }
 
