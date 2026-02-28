@@ -249,17 +249,19 @@ class PagoPedidosController extends Controller
             if ($req->efectivo && floatval($req->efectivo)) {
                 $metodos_pago[] = ['tipo' => 'efectivo', 'monto' => floatval($req->efectivo)];
             }
-            if ($req->debito && floatval($req->debito)) {
-                $metodos_pago[] = ['tipo' => 'debito', 'monto' => floatval($req->debito)];
-            }
-            // Verificar múltiples débitos (incluye montos negativos)
-            if ($req->debitos && is_array($req->debitos)) {
+            // Débitos: si viene el array debitos con datos, usar solo ese (evita mezclar campo único + array y disparar "positivos y negativos")
+            $debitosArrayConMonto = $req->debitos && is_array($req->debitos)
+                ? array_filter($req->debitos, function ($d) { return floatval($d['monto'] ?? 0) != 0; })
+                : [];
+            if (count($debitosArrayConMonto) > 0) {
                 foreach ($req->debitos as $debitoItem) {
                     $montoDeb = floatval($debitoItem['monto'] ?? 0);
                     if ($montoDeb != 0) {
                         $metodos_pago[] = ['tipo' => 'debito', 'monto' => $montoDeb];
                     }
                 }
+            } elseif ($req->debito && floatval($req->debito)) {
+                $metodos_pago[] = ['tipo' => 'debito', 'monto' => floatval($req->debito)];
             }
             if ($req->transferencia && floatval($req->transferencia)) {
                 $metodos_pago[] = ['tipo' => 'transferencia', 'monto' => floatval($req->transferencia)];

@@ -4736,7 +4736,8 @@ export default function Facturar({
 
                 // Validar devolución: solo productos facturados en la factura original y máximo la cantidad disponible a devolver
                 if (esDevolucion) {
-                    const idOriginal = (options && options.id_pedido_original) ?? pedidoData.isdevolucionOriginalid ?? null;
+                    const pedidoEnLista = pedidosFrontPendientes[pedidoData.id];
+                    const idOriginal = (options && options.id_pedido_original) ?? pedidoData.isdevolucionOriginalid ?? (pedidoEnLista && pedidoEnLista.isdevolucionOriginalid) ?? null;
                     if (!idOriginal) {
                         notificar({ data: { msj: "Asigne primero la factura original para realizar la devolución.", estado: false } });
                         return;
@@ -4873,8 +4874,10 @@ export default function Facturar({
                 const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
                 const clean_total = clean_subtotal;
                 const bs = clean_total * (parseFloat(dolar) || 0);
+                const idOriginalParaGuardar = (options && options.id_pedido_original != null) ? options.id_pedido_original : (pedidoData.isdevolucionOriginalid ?? (pedidosFrontPendientes[pedidoData.id] && pedidosFrontPendientes[pedidoData.id].isdevolucionOriginalid));
                 const updated = {
                     ...pedidoData,
+                    ...(idOriginalParaGuardar != null ? { isdevolucionOriginalid: idOriginalParaGuardar } : {}),
                     items: newItems,
                     clean_subtotal,
                     clean_total,
@@ -5479,8 +5482,9 @@ export default function Facturar({
             formato_pago: (isFrontOnly && pedidoActual && pedidoActual.formato_pago != null) ? pedidoActual.formato_pago : undefined,
             isdevolucionOriginalid: (pedidoActual && pedidoActual.isdevolucionOriginalid) ? pedidoActual.isdevolucionOriginalid : undefined,
             items: frontItems || undefined,
-            debito: debitoParam,
-            debitoRef: debitoRefParam,
+            // Si hay array de débitos, no enviar campo único para no mezclar positivos/negativos en backend
+            debito: (debitosParam && debitosParam.length > 0) ? null : debitoParam,
+            debitoRef: (debitosParam && debitosParam.length > 0) ? null : debitoRefParam,
             debitos: debitosParam,
             posData: posDataParam, // Este ya no se usa para múltiples débitos
             efectivo: efectivoDolarVal != 0 ? efectivoDolarVal : null,
