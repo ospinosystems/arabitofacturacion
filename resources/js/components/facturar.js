@@ -5247,6 +5247,20 @@ export default function Facturar({
             }
 
             const transferenciaActualCheck = transferenciaRef.current;
+            const tieneRefTransferencia = refPago.some((e) => e.tipo == 1 || e.tipo == 2);
+            const usaMetodoTransferencia = parseFloat(transferenciaActualCheck || 0) > 0;
+
+            // Referencia de transferencia cargada pero método de pago no es transferencia → no permitir ejecutar
+            if (tieneRefTransferencia && !usaMetodoTransferencia) {
+                console.log("[setPagoPedido] BLOQUEADO: referencia de transferencia cargada pero método de pago no es transferencia", { refPago, transferencia: transferenciaActualCheck });
+                notificar({
+                    data: {
+                        msj: "Tiene una referencia de transferencia cargada pero no está usando el método de pago Transferencia. Indique el monto en Transferencia o elimine la referencia para continuar.",
+                        estado: false,
+                    },
+                });
+                return;
+            }
             if (transferenciaActualCheck && !refPago.filter((e) => e.tipo == 1 || e.tipo == 2).length) {
                 console.log("[setPagoPedido] BLOQUEADO: transferencia indicada pero sin referencia cargada", { transferencia: transferenciaActualCheck, refPago });
                 alert(
