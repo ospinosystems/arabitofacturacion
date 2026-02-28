@@ -110,11 +110,11 @@ class ItemsPedidosController extends Controller
             $item = items_pedidos::find($req->index);
 
             $descuento = floatval($req->descuento);
-            if ($descuento>15) {
-                // Verificar si existe cliente en el pedido
+            if ($descuento > 0) {
+                // Verificar si existe cliente en el pedido (siempre que haya descuento)
                 $pedido = pedidos::with('cliente')->find($item->id_pedido);
                 if (!$pedido || $pedido->id_cliente == 1) {
-                    return Response::json(["msj"=>"Error: Debe registrar un cliente para solicitar descuentos superiores al 15%","estado"=>false]);
+                    return Response::json(["msj"=>"Error: Debe registrar un cliente para solicitar descuentos","estado"=>false]);
                 }
 
                 // Verificar si ya existe una solicitud para este pedido
@@ -285,11 +285,11 @@ class ItemsPedidosController extends Controller
             }
 
             $descuento = floatval($req->descuento);
-            if ($descuento>15) {
-                // Verificar si existe cliente en el pedido
+            if ($descuento > 0) {
+                // Verificar si existe cliente en el pedido (siempre que haya descuento)
                 $pedido = pedidos::with('cliente')->find($req->index);
                 if (!$pedido || $pedido->id_cliente == 1) {
-                    return Response::json(["msj"=>"Error: Debe registrar un cliente para solicitar descuentos superiores al 15%","estado"=>false]);
+                    return Response::json(["msj"=>"Error: Debe registrar un cliente para solicitar descuentos","estado"=>false]);
                 }
 
                 // Verificar si ya existe una solicitud para este pedido

@@ -4308,14 +4308,6 @@ export default function Facturar({
         notificar({ msj: "Cantidad actualizada", estado: true });
     };
 
-    /** True si los métodos de pago son solo efectivo USD (libera sin solicitud de aprobación). Efectivo USD negativo o positivo no activa el filtro de descuento en espera. */
-    const isSoloEfectivoUsd = (metodos) => {
-        if (!Array.isArray(metodos) || metodos.length === 0) return false;
-        if (metodos.length > 1) return false;
-        const monto = parseFloat(metodos[0].monto);
-        return metodos[0].tipo === "efectivo" && !Number.isNaN(monto) && monto !== 0;
-    };
-
     /** Compara si los métodos actuales coinciden con los aprobados (mismo tipo y monto con tolerancia 0.02). */
     const metodosPagoCoincidenConAprobados = (actuales, aprobados) => {
         if (!Array.isArray(aprobados) || aprobados.length === 0) return false;
@@ -5244,13 +5236,7 @@ export default function Facturar({
                         notificar({ data: { msj: "Indique al menos un método de pago antes de guardar.", estado: false } });
                         return;
                     }
-                    // Solo efectivo USD: no requiere aprobación, avanza directo
-                    if (isSoloEfectivoUsd(metodos)) {
-                        console.log("[setPagoPedido] Pedido front con descuento → solo efectivo USD → avanza directo", { uuid, metodos });
-                        procesarPagoInterno(callback, null, options || null);
-                        return;
-                    }
-                    // Hay método distinto a efectivo USD: activar protocolo
+                    // Siempre enviar solicitud de descuento (efectivo, débito, etc.) y esperar aprobación
                     if (pendienteDescuentoMetodoPago[uuid]) {
                         console.log("[setPagoPedido] BLOQUEADO: descuento por método de pago pendiente de aprobación", { uuid, pendienteDescuentoMetodoPago });
                         notificar({ data: { msj: "Descuento por método de pago en espera. Use 'Verificar si ya está aprobado' y luego vuelva a guardar.", estado: false } });
@@ -9771,7 +9757,8 @@ export default function Facturar({
                                         setclienteInpdireccion
                                     }
                                 />
-                            ) : viewconfigcredito ? (
+                            ) : null}
+                            {viewconfigcredito ? (
                                 <Modalconfigcredito
                                     pedidoData={pedidoData}
                                     lastAddedFrontItemId={lastAddedFrontItemId}
