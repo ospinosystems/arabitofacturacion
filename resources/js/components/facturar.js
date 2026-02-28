@@ -530,6 +530,8 @@ export default function Facturar({
     const [descuentoMetodoPagoAprobadoPorUuid, setDescuentoMetodoPagoAprobadoPorUuid] = useState({});
     /** Métodos y montos aprobados por central para descuento por método de pago (por uuid). setPagoPedido solo se acepta con estos exactos. */
     const [metodosPagoAprobadosPorUuid, setMetodosPagoAprobadosPorUuid] = useState({});
+    /** Uuids de pedidos cuya solicitud de descuento fue cancelada por el usuario: no reutilizar esa aprobación al guardar. */
+    const refSolicitudDescuentoCanceladaPorUsuario = useRef({});
 
     const [sucursaldata, setSucursaldata] = useState("");
 
@@ -4308,18 +4310,52 @@ export default function Facturar({
         notificar({ msj: "Cantidad actualizada", estado: true });
     };
 
-    /** Compara si los métodos actuales coinciden con los aprobados (mismo tipo y monto con tolerancia 0.02). */
+    /** Compara si los métodos actuales coinciden con los aprobados (tipo, moneda y monto con tolerancia 0.02). */
     const metodosPagoCoincidenConAprobados = (actuales, aprobados) => {
         if (!Array.isArray(aprobados) || aprobados.length === 0) return false;
         if (!Array.isArray(actuales) || actuales.length !== aprobados.length) return false;
-        const sort = (arr) => [...arr].sort((a, b) => (String(a.tipo)).localeCompare(String(b.tipo)) || (parseFloat(a.monto) || 0) - (parseFloat(b.monto) || 0));
+        const moneda = (m) => (m && (m.moneda || m.moneda_original)) ? String(m.moneda || m.moneda_original) : "";
+        const sort = (arr) => [...arr].sort((a, b) =>
+            (String(a.tipo)).localeCompare(String(b.tipo)) ||
+            moneda(a).localeCompare(moneda(b)) ||
+            (parseFloat(a.monto) || 0) - (parseFloat(b.monto) || 0)
+        );
         const sa = sort(actuales);
         const sb = sort(aprobados);
         for (let i = 0; i < sa.length; i++) {
             if (sa[i].tipo !== sb[i].tipo) return false;
+            if (moneda(sa[i]) !== moneda(sb[i])) return false;
             if (Math.abs((parseFloat(sa[i].monto) || 0) - (parseFloat(sb[i].monto) || 0)) > 0.02) return false;
         }
         return true;
+    };
+
+    /** Construye metodos_pago desde refs (para validar en callbacks sin estado obsoleto). */
+    const buildMetodosPagoFromRefs = () => {
+        const metodos = [];
+        const ed = parseFloat(efectivo_dolarRef.current);
+        if (!Number.isNaN(ed) && ed !== 0) metodos.push({ tipo: "efectivo", monto: ed, moneda: "USD" });
+        const deb = debitosRef.current || [];
+        if (Array.isArray(deb) && deb.length > 0) {
+            deb.forEach((d) => {
+                const m = parseFloat(d.monto);
+                if (!Number.isNaN(m) && m !== 0) metodos.push({ tipo: "debito", monto: m, moneda: d.moneda || "Bs" });
+            });
+        } else {
+            const dm = parseFloat(debitoMontoRef.current);
+            if (!Number.isNaN(dm) && dm !== 0) metodos.push({ tipo: "debito", monto: dm, moneda: "Bs" });
+        }
+        const tr = parseFloat(transferenciaRef.current);
+        if (!Number.isNaN(tr) && tr !== 0) metodos.push({ tipo: "transferencia", monto: tr, moneda: "USD" });
+        const bi = parseFloat(biopagoRef.current);
+        if (!Number.isNaN(bi) && bi !== 0) metodos.push({ tipo: "biopago", monto: 0, moneda: "USD" });
+        const cr = parseFloat(creditoRef.current);
+        if (!Number.isNaN(cr) && cr !== 0) metodos.push({ tipo: "credito", monto: cr, moneda: "USD" });
+        const eb = parseFloat(efectivo_bsRef.current);
+        if (!Number.isNaN(eb) && eb !== 0) metodos.push({ tipo: "adicional", monto: eb, moneda: "Bs" });
+        const ep = parseFloat(efectivo_pesoRef.current);
+        if (!Number.isNaN(ep) && ep !== 0) metodos.push({ tipo: "adicional", monto: ep, moneda: "COP" });
+        return metodos;
     };
 
     // Construir metodos_pago como el backend (para solicitud descuento por método de pago), con moneda original de cada uno
@@ -4418,7 +4454,16 @@ export default function Facturar({
                 if (data.estado === true && data.existe) {
                     const estadoSolicitud = data.data?.estado;
                     if (estadoSolicitud === "aprobado") {
+                        // Si el usuario canceló esta solicitud, no reutilizar la aprobación: debe enviar otra solicitud
+                        if (refSolicitudDescuentoCanceladaPorUsuario.current && refSolicitudDescuentoCanceladaPorUsuario.current[pedidoData.id]) {
+                            notificar({ data: { msj: "La solicitud fue cancelada por usted. Debe enviar una nueva solicitud de descuento (guardar de nuevo); cancele la solicitud en central si es necesario para poder crear una nueva.", estado: false } });
+                            return;
+                        }
                         const metodosAprobados = data.data?.metodos_pago || [];
+                        if (!metodosPagoCoincidenConAprobados(metodos_pago, metodosAprobados)) {
+                            notificar({ data: { msj: "Los métodos de pago no coinciden con los aprobados. Cancele la solicitud en central y envíe una nueva con los métodos que desea usar.", estado: false } });
+                            return;
+                        }
                         setPendienteDescuentoMetodoPago((prev) => {
                             const next = { ...prev };
                             delete next[pedidoData.id];
@@ -4434,6 +4479,10 @@ export default function Facturar({
                     return;
                 }
                 if (data.estado === true) {
+                    // Nueva solicitud creada: quitar marca de "cancelada por usuario" para este pedido
+                    if (refSolicitudDescuentoCanceladaPorUsuario.current && refSolicitudDescuentoCanceladaPorUsuario.current[pedidoData.id]) {
+                        delete refSolicitudDescuentoCanceladaPorUsuario.current[pedidoData.id];
+                    }
                     setPendienteDescuentoMetodoPago((prev) => ({ ...prev, [pedidoData.id]: { submittedAt: Date.now(), metodos_pago, numItemsConDescuento } }));
                     notificar({ data: { msj: `Se envió la solicitud de descuento de ${numItemsConDescuento} ítem(s) con sus descuentos y el método de pago elegido. Use Verificar aprobación cuando central apruebe.`, estado: true } });
                     return;
@@ -4455,6 +4504,11 @@ export default function Facturar({
                 const data = res?.data;
                 if (data?.existe && data?.data?.estado === "aprobado") {
                     const metodosAprobados = data?.data?.metodos_pago || [];
+                    const actualesRefs = buildMetodosPagoFromRefs();
+                    if (!metodosPagoCoincidenConAprobados(actualesRefs, metodosAprobados)) {
+                        notificar({ data: { msj: "Los métodos de pago no coinciden con los aprobados. Use los métodos aprobados o cancele la solicitud y envíe una nueva.", estado: false } });
+                        return;
+                    }
                     setPendienteDescuentoMetodoPago((prev) => {
                         const next = { ...prev };
                         delete next[pedidoData.id];
@@ -4536,6 +4590,10 @@ export default function Facturar({
                         if (typeof setMetodosPagoAprobadosPorUuidStorage === "function") setMetodosPagoAprobadosPorUuidStorage(next);
                         return next;
                     });
+                    // Marcar que el usuario canceló: no reutilizar esta aprobación al guardar; deberá enviar otra solicitud
+                    if (refSolicitudDescuentoCanceladaPorUsuario.current) {
+                        refSolicitudDescuentoCanceladaPorUsuario.current[uuid] = true;
+                    }
                     notificar({ data: { msj: data.msj || "Solicitud cancelada. Debe enviar de nuevo la solicitud con los métodos de pago que vaya a usar.", estado: true } });
                 } else {
                     notificar({ data: { msj: data?.msj || "No se pudo cancelar la solicitud", estado: false } });
@@ -5243,12 +5301,36 @@ export default function Facturar({
                         return;
                     }
                     if (descuentoMetodoPagoAprobadoPorUuid[uuid]) {
+                        const aprobados = metodosPagoAprobadosPorUuid[uuid];
+                        if (!metodosPagoCoincidenConAprobados(metodos, aprobados)) {
+                            setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
+                                const next = { ...prev };
+                                delete next[uuid];
+                                return next;
+                            });
+                            setMetodosPagoAprobadosPorUuid((prev) => {
+                                const next = { ...prev };
+                                delete next[uuid];
+                                if (typeof setMetodosPagoAprobadosPorUuidStorage === "function") setMetodosPagoAprobadosPorUuidStorage(next);
+                                return next;
+                            });
+                            notificar({ data: { msj: "Los métodos de pago no coinciden con los aprobados. Use los métodos aprobados o cancele la solicitud y envíe una nueva.", estado: false } });
+                            return;
+                        }
                         // Verificar en central que la solicitud sigue existiendo y aprobada (p. ej. si la eliminaron en central)
                         console.log("[setPagoPedido] Verificando en central que la solicitud siga aprobada antes de facturar", { uuid });
                         db.solicitudDescuentoFrontVerificar({ uuid_pedido_front: uuid, tipo_descuento: "metodo_pago" })
                             .then((res) => {
                                 const data = res?.data;
                                 if (data?.existe && data?.data?.estado === "aprobado") {
+                                    const actualesRefs = buildMetodosPagoFromRefs();
+                                    const aprobadosRes = data?.data?.metodos_pago || [];
+                                    if (!metodosPagoCoincidenConAprobados(actualesRefs, aprobadosRes)) {
+                                        setDescuentoMetodoPagoAprobadoPorUuid((prev) => { const n = { ...prev }; delete n[uuid]; return n; });
+                                        setMetodosPagoAprobadosPorUuid((prev) => { const n = { ...prev }; delete n[uuid]; if (typeof setMetodosPagoAprobadosPorUuidStorage === "function") setMetodosPagoAprobadosPorUuidStorage(n); return n; });
+                                        notificar({ data: { msj: "Los métodos de pago no coinciden con los aprobados. Use los métodos aprobados o cancele la solicitud y envíe una nueva.", estado: false } });
+                                        return;
+                                    }
                                     procesarPagoInterno(callback, null, options || null);
                                 } else {
                                     setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
@@ -5286,10 +5368,23 @@ export default function Facturar({
     const procesarPagoInterno = (callback = null, refOverride = null, posOverrides = null) => {
         console.log("[procesarPagoInterno] Iniciando construcción de params...");
         setLoading(true);
+        const pedidoActual = pedidoDataRef.current;
+        const isFrontOnly = !!(pedidoActual && pedidoActual._frontOnly);
+        const frontUuid = isFrontOnly ? pedidoActual.id : null;
+        if (frontUuid && descuentoMetodoPagoAprobadoPorUuid[frontUuid]) {
+            const actualesRefs = buildMetodosPagoFromRefs();
+            const aprobados = metodosPagoAprobadosPorUuid[frontUuid];
+            if (!metodosPagoCoincidenConAprobados(actualesRefs, aprobados)) {
+                setLoading(false);
+                setDescuentoMetodoPagoAprobadoPorUuid((prev) => { const n = { ...prev }; delete n[frontUuid]; return n; });
+                setMetodosPagoAprobadosPorUuid((prev) => { const n = { ...prev }; delete n[frontUuid]; if (typeof setMetodosPagoAprobadosPorUuidStorage === "function") setMetodosPagoAprobadosPorUuidStorage(n); return n; });
+                notificar({ data: { msj: "Los métodos de pago no coinciden con los aprobados. Use los métodos aprobados o cancele la solicitud y envíe una nueva.", estado: false } });
+                return;
+            }
+        }
         // Leer siempre de refs los montos actuales (evita closure obsoleta por setTimeout 300ms y re-renders)
         const efectivoBsActual = efectivo_bsRef.current;
         const efectivoPesoActual = efectivo_pesoRef.current;
-        const pedidoActual = pedidoDataRef.current;
         // Construir pagos adicionales de efectivo (Bs y COP)
         let pagosAdicionales = [];
         if (efectivoBsActual && parseFloat(efectivoBsActual) != 0) {
@@ -5338,9 +5433,7 @@ export default function Facturar({
                 posData: d.posData || null // Incluir posData individual de cada débito
             }));
         }
-        
-        const isFrontOnly = !!(pedidoActual && pedidoActual._frontOnly);
-        const frontUuid = isFrontOnly ? pedidoActual.id : null;
+
         const frontItems = isFrontOnly && Array.isArray(pedidoActual.items) && pedidoActual.items.length > 0
             ? pedidoActual.items.map((it) => ({
                 id: it.producto?.id ?? it.id_producto,
