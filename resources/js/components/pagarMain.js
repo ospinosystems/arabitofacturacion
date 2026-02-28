@@ -139,6 +139,8 @@ export default function PagarMain({
     onDescuentoTotalCancel,
     descuentoTotalVerificando = false,
     verificarDescuentoTotalFront,
+    cancelarSolicitudDescuentoTotalFront,
+    cancelandoDescuentoTotal = false,
     setCantidadCarrito,
     setCantidadCarritoFront,
     toggleAddPersona,
@@ -2877,21 +2879,36 @@ export default function PagarMain({
                                             <div className="text-[10px] text-amber-700 bg-amber-50/80 rounded px-2 py-1">
                                                 <span className="font-medium">Monto final enviado:</span> {pendientesDescuentoTotal[pedidoData.id]?.montoFinal}
                                             </div>
-                                            <button
-                                                type="button"
-                                                disabled={descuentoTotalVerificando}
-                                                onClick={() => verificarDescuentoTotalFront && verificarDescuentoTotalFront()}
-                                                className="w-full flex items-center justify-center gap-2 px-4 py-3 font-semibold text-orange-800 bg-orange-200 border-2 border-orange-400 rounded-lg hover:bg-orange-300 hover:border-orange-500 disabled:opacity-60 shadow-md"
-                                            >
-                                                {descuentoTotalVerificando ? (
-                                                    <>
-                                                        <span className="inline-block w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin shrink-0" />
-                                                        Verificando…
-                                                    </>
-                                                ) : (
-                                                    <>Verificar si ya está aprobado</>
-                                                )}
-                                            </button>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    disabled={descuentoTotalVerificando || cancelandoDescuentoTotal}
+                                                    onClick={() => verificarDescuentoTotalFront && verificarDescuentoTotalFront()}
+                                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 font-semibold text-orange-800 bg-orange-200 border-2 border-orange-400 rounded-lg hover:bg-orange-300 hover:border-orange-500 disabled:opacity-60 shadow-md"
+                                                >
+                                                    {descuentoTotalVerificando ? (
+                                                        <>
+                                                            <span className="inline-block w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                                                            Verificando…
+                                                        </>
+                                                    ) : (
+                                                        <>Verificar si ya está aprobado</>
+                                                    )}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={descuentoTotalVerificando || cancelandoDescuentoTotal}
+                                                    onClick={() => cancelarSolicitudDescuentoTotalFront && cancelarSolicitudDescuentoTotalFront()}
+                                                    className="flex items-center justify-center gap-2 px-3 py-3 font-semibold text-gray-700 bg-gray-100 border-2 border-gray-300 rounded-lg hover:bg-gray-200 hover:border-gray-400 disabled:opacity-60"
+                                                    title="Cancelar esta solicitud para poder enviar de nuevo"
+                                                >
+                                                    {cancelandoDescuentoTotal ? (
+                                                        <span className="inline-block w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                                                    ) : (
+                                                        <i className="fa fa-times" />
+                                                    )}
+                                                </button>
+                                            </div>
                                         </div>
                                     )}
 
@@ -3276,31 +3293,36 @@ export default function PagarMain({
                                                                 </td>
                                                             )}
                                                             <td
-                                                                className={`relative px-2 py-1 text-xs text-right ${
-                                                                    descuentoUnitarioVerificandoId != null && String(e.id) === String(descuentoUnitarioVerificandoId)
-                                                                        ? "align-middle bg-gray-50"
-                                                                        : descuentoUnitarioEditingId != null && String(e.id) === String(descuentoUnitarioEditingId)
-                                                                        ? "align-middle"
-                                                                        : `cursor-pointer hover:bg-orange-50 ${
-                                                                            e.descuento && parseFloat(e.descuento) > 0
-                                                                                ? "bg-orange-100 text-orange-700 font-semibold"
-                                                                                : "text-gray-400"
-                                                                          }`
-                                                                }`}
-                                                                title={
-                                                                    (descuentoUnitarioVerificandoId != null && String(e.id) === String(descuentoUnitarioVerificandoId)) ||
-                                                                    (descuentoUnitarioEditingId != null && String(e.id) === String(descuentoUnitarioEditingId)) ||
-                                                                    (descuentoUnitarioTooltipAprobadoId != null && String(e.id) === String(descuentoUnitarioTooltipAprobadoId))
-                                                                        ? undefined
-                                                                        : "Click para aplicar descuento"
-                                                                }
-                                                                onClick={
-                                                                    descuentoUnitarioVerificandoId != null || (descuentoUnitarioEditingId != null && String(e.id) === String(descuentoUnitarioEditingId))
-                                                                        ? undefined
-                                                                        : setDescuentoUnitario
-                                                                }
+                                                                className={`relative px-2 py-1 text-xs text-right ${(() => {
+                                                                    const esNegativoConDescuento = parseFloat(e.cantidad) < 0 && e.descuento && parseFloat(e.descuento) > 0;
+                                                                    if (esNegativoConDescuento) return "text-gray-400 select-none";
+                                                                    if (descuentoUnitarioVerificandoId != null && String(e.id) === String(descuentoUnitarioVerificandoId)) return "align-middle bg-gray-50";
+                                                                    if (descuentoUnitarioEditingId != null && String(e.id) === String(descuentoUnitarioEditingId)) return "align-middle";
+                                                                    return `cursor-pointer hover:bg-orange-50 ${e.descuento && parseFloat(e.descuento) > 0 ? "bg-orange-100 text-orange-700 font-semibold" : "text-gray-400"}`;
+                                                                })()}`}
+                                                                title={(() => {
+                                                                    const esNegativoConDescuento = parseFloat(e.cantidad) < 0 && e.descuento && parseFloat(e.descuento) > 0;
+                                                                    if (esNegativoConDescuento) return "Descuento heredado del ítem original, no modificable";
+                                                                    if ((descuentoUnitarioVerificandoId != null && String(e.id) === String(descuentoUnitarioVerificandoId)) ||
+                                                                        (descuentoUnitarioEditingId != null && String(e.id) === String(descuentoUnitarioEditingId)) ||
+                                                                        (descuentoUnitarioTooltipAprobadoId != null && String(e.id) === String(descuentoUnitarioTooltipAprobadoId))) return undefined;
+                                                                    return "Click para aplicar descuento";
+                                                                })()}
+                                                                onClick={(() => {
+                                                                    const esNegativoConDescuento = parseFloat(e.cantidad) < 0 && e.descuento && parseFloat(e.descuento) > 0;
+                                                                    if (esNegativoConDescuento) return undefined;
+                                                                    if (descuentoUnitarioVerificandoId != null || (descuentoUnitarioEditingId != null && String(e.id) === String(descuentoUnitarioEditingId))) return undefined;
+                                                                    return setDescuentoUnitario;
+                                                                })()}
                                                                 data-index={e.id}
                                                             >
+                                                                {parseFloat(e.cantidad) < 0 && e.descuento && parseFloat(e.descuento) > 0 ? (
+                                                                    <span className="flex items-center justify-end gap-1 text-gray-400">
+                                                                        <i className="fa fa-lock text-[9px]"></i>
+                                                                        {e.descuento}%
+                                                                    </span>
+                                                                ) : (
+                                                                <>
                                                                 {((descuentoUnitarioVerificandoId != null && String(e.id) === String(descuentoUnitarioVerificandoId)) ||
                                                                   (descuentoUnitarioEditingId != null && String(e.id) === String(descuentoUnitarioEditingId)) ||
                                                                   (descuentoUnitarioTooltipAprobadoId != null && String(e.id) === String(descuentoUnitarioTooltipAprobadoId))) ? (
@@ -3381,6 +3403,8 @@ export default function PagarMain({
                                                                         <span className="text-gray-300">-</span>
                                                                     );
                                                                 })()}
+                                                                </>
+                                                                )}
                                                             </td>
                                                             <td className="px-2 py-1 text-xs font-bold text-right">
                                                                 {moneda(e.total)}

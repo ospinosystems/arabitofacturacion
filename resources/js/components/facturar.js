@@ -523,6 +523,7 @@ export default function Facturar({
     const [descuentoTotalEditingId, setDescuentoTotalEditingId] = useState(null);
     const [descuentoTotalInputValue, setDescuentoTotalInputValue] = useState("");
     const [descuentoTotalVerificando, setDescuentoTotalVerificando] = useState(false);
+    const [cancelandoDescuentoTotal, setCancelandoDescuentoTotal] = useState(false);
     const [pendienteDescuentoMetodoPago, setPendienteDescuentoMetodoPago] = useState({});
     const [descuentoMetodoPagoVerificando, setDescuentoMetodoPagoVerificando] = useState(false);
     const [cancelandoDescuentoMetodoPago, setCancelandoDescuentoMetodoPago] = useState(false);
@@ -3994,6 +3995,12 @@ export default function Facturar({
 
         if (!pedidoData._frontOnly || !pedidoData.id) return;
 
+        const itemsConCantidadNegativa = (pedidoData.items || []).filter((it) => parseFloat(it.cantidad) < 0);
+        if (itemsConCantidadNegativa.length > 0) {
+            notificar({ data: { msj: "No se puede aplicar descuento totalizado: hay ítems con cantidad negativa", estado: false } });
+            return;
+        }
+
         setLoading(true);
 
         if (montoFinal === "0" || montoFinal === 0) {
@@ -4139,11 +4146,39 @@ export default function Facturar({
             });
     };
 
+    const cancelarSolicitudDescuentoTotalFront = () => {
+        if (!pedidoData._frontOnly || !pedidoData.id) return;
+        setCancelandoDescuentoTotal(true);
+        db.solicitudDescuentoFrontCancelar({ uuid_pedido_front: pedidoData.id, tipo_descuento: "monto_porcentaje" })
+            .then((res) => {
+                setCancelandoDescuentoTotal(false);
+                const data = res?.data ?? res;
+                if (data?.estado === true) {
+                    setPendientesDescuentoTotal((prev) => {
+                        const next = { ...prev };
+                        delete next[pedidoData.id];
+                        return next;
+                    });
+                    notificar({ data: { msj: data.msj || "Solicitud de descuento cancelada. Puede enviar de nuevo.", estado: true } });
+                } else {
+                    notificar({ data: { msj: data?.msj || "No se pudo cancelar la solicitud", estado: false } });
+                }
+            })
+            .catch(() => {
+                setCancelandoDescuentoTotal(false);
+                notificar({ data: { msj: "Error de conexión al cancelar", estado: false } });
+            });
+    };
+
     const setDescuentoUnitario = (e) => {
         const index = e.currentTarget.attributes["data-index"].value;
         const item = pedidoData.items?.find((i) => i.id == index);
         if (!item) {
             notificar({ data: { msj: "Item no encontrado", estado: false } });
+            return;
+        }
+        if (parseFloat(item.cantidad) < 0 && item.descuento && parseFloat(item.descuento) > 0) {
+            notificar({ data: { msj: "Este ítem tiene un descuento heredado del ítem original y no puede ser modificado", estado: false } });
             return;
         }
         const subtotalItem = parseFloat(item.producto?.precio || 0) * Math.abs(parseFloat(item.cantidad || 0));
@@ -9991,6 +10026,8 @@ export default function Facturar({
                                     }}
                                     descuentoTotalVerificando={descuentoTotalVerificando}
                                     verificarDescuentoTotalFront={verificarDescuentoTotalFront}
+                                    cancelarSolicitudDescuentoTotalFront={cancelarSolicitudDescuentoTotalFront}
+                                    cancelandoDescuentoTotal={cancelandoDescuentoTotal}
                                     setCantidadCarrito={setCantidadCarrito}
                                     setCantidadCarritoFront={setCantidadCarritoFront}
                                     toggleAddPersona={toggleAddPersona}
