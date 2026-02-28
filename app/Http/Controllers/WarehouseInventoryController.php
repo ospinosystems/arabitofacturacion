@@ -19,7 +19,7 @@ class WarehouseInventoryController extends Controller
     public function index(Request $request)
     {
         // Consulta unificada de productos
-        $query = inventario::with(['proveedor', 'categoria', 'marca', 'warehouseInventory.warehouse']);
+        $query = inventario::with(['warehouseInventory.warehouse']);
         
         // Filtro de búsqueda
         if ($request->has('buscar') && $request->buscar) {
@@ -109,11 +109,11 @@ class WarehouseInventoryController extends Controller
             return $producto;
         });
         
-        // Obtener datos para filtros
+        // Obtener datos para filtros (categorías, proveedores y marcas ya no existen como tablas)
         $warehouses = Warehouse::activas()->orderBy('codigo')->get();
-        $categorias = \App\Models\categorias::orderBy('descripcion')->get();
-        $proveedores = \App\Models\proveedores::orderBy('descripcion')->get();
-        $marcas = \App\Models\marcas::orderBy('descripcion')->get();
+        $categorias = collect();
+        $proveedores = collect();
+        $marcas = collect();
         
         // Si es AJAX, devolver JSON
         if ($request->ajax() || $request->wantsJson()) {
@@ -131,7 +131,7 @@ class WarehouseInventoryController extends Controller
      */
     private function buscarProductosGenerales(Request $request)
     {
-        $query = inventario::with(['proveedor', 'categoria', 'marca', 'warehouseInventory.warehouse']);
+        $query = inventario::with(['warehouseInventory.warehouse']);
         
         // Filtro por campo de búsqueda
         if ($request->has('buscar') && $request->buscar) {
@@ -197,15 +197,16 @@ class WarehouseInventoryController extends Controller
         });
         
         $warehouses = Warehouse::activas()->orderBy('codigo')->get();
-        $categorias = \App\Models\categoria::orderBy('nombre')->get();
-        $proveedores = \App\Models\proveedores::orderBy('razonsocial')->get();
+        $categorias = collect();
+        $proveedores = collect();
+        $marcas = collect();
         
         // Si es AJAX, devolver JSON
         if ($request->ajax() || $request->wantsJson()) {
             return Response::json($productos);
         }
         
-        return view('warehouse-inventory.index', compact('productos', 'warehouses', 'categorias', 'proveedores'));
+        return view('warehouse-inventory.index', compact('productos', 'warehouses', 'categorias', 'proveedores', 'marcas'));
     }
 
     /**
@@ -219,10 +220,10 @@ class WarehouseInventoryController extends Controller
         $warehouse = null;
         
         if ($request->has('warehouse_id') && $request->warehouse_id) {
-            $warehouse = Warehouse::with(['inventarios.inventario.proveedor', 'inventarios.inventario.categoria'])
+            $warehouse = Warehouse::with(['inventarios.inventario'])
                 ->findOrFail($request->warehouse_id);
             
-            $query = WarehouseInventory::with(['inventario.proveedor', 'inventario.categoria'])
+            $query = WarehouseInventory::with(['inventario'])
                 ->where('warehouse_id', $request->warehouse_id)
                 ->conStock();
             
@@ -310,7 +311,7 @@ class WarehouseInventoryController extends Controller
             ]);
         }
         
-        $inventario = WarehouseInventory::with(['warehouse', 'inventario.proveedor', 'inventario.categoria'])
+        $inventario = WarehouseInventory::with(['warehouse', 'inventario'])
             ->find($id);
         
         if (!$inventario) {
@@ -590,7 +591,7 @@ class WarehouseInventoryController extends Controller
      */
     public function consultarUbicaciones($inventarioId)
     {
-        $producto = inventario::with(['proveedor', 'categoria', 'marca'])->findOrFail($inventarioId);
+        $producto = inventario::findOrFail($inventarioId);
         
         $ubicaciones = WarehouseInventory::with(['warehouse'])
             ->where('inventario_id', $inventarioId)
@@ -657,7 +658,7 @@ class WarehouseInventoryController extends Controller
     {
         $warehouse = Warehouse::findOrFail($warehouseId);
         
-        $productos = WarehouseInventory::with(['inventario.proveedor', 'inventario.categoria'])
+        $productos = WarehouseInventory::with(['inventario'])
             ->where('warehouse_id', $warehouseId)
             ->conStock()
             ->orderBy('fecha_entrada', 'asc')
@@ -760,8 +761,7 @@ class WarehouseInventoryController extends Controller
             ]);
         }
         
-        $productos = inventario::with(['proveedor', 'categoria', 'marca'])
-            ->where(function($query) use ($buscar) {
+        $productos = inventario::where(function($query) use ($buscar) {
                 $query->where('codigo_barras', 'like', "%{$buscar}%")
                       ->orWhere('codigo_proveedor', 'like', "%{$buscar}%")
                       ->orWhere('descripcion', 'like', "%{$buscar}%");
@@ -774,9 +774,9 @@ class WarehouseInventoryController extends Controller
                     'codigo_barras' => $producto->codigo_barras,
                     'codigo_proveedor' => $producto->codigo_proveedor,
                     'descripcion' => $producto->descripcion,
-                    'proveedor' => $producto->proveedor->razonsocial ?? 'N/A',
-                    'categoria' => $producto->categoria->nombre ?? 'N/A',
-                    'precio' => $producto->precio_venta,
+                    'proveedor' => 'N/A',
+                    'categoria' => 'N/A',
+                    'precio' => $producto->precio ?? 0,
                 ];
             });
         

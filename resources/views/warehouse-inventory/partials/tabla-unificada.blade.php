@@ -205,15 +205,9 @@
                         </td>
                         <td class="px-2 md:px-4 py-3">
                             <div class="text-sm font-medium text-gray-900 break-words">{{ $producto->descripcion }}</div>
-                            <div class="text-xs text-gray-500 break-words">
-                                @if($producto->proveedor)
-                                    {{ $producto->proveedor->razonsocial }}
-                                @endif
-                                @if($producto->categoria)
-                                    <span class="mx-1">•</span>
-                                    {{ $producto->categoria->nombre }}
-                                @endif
-                            </div>
+                            @if($producto->codigo_proveedor)
+                            <div class="text-xs text-gray-500 break-words">Cód. proveedor: {{ $producto->codigo_proveedor }}</div>
+                            @endif
                             {{-- Mostrar estado en móvil/tablet --}}
                             <div class="md:hidden mt-2">
                                 @if($producto->tiene_warehouse ?? false)
