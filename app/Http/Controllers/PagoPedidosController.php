@@ -1642,15 +1642,7 @@ class PagoPedidosController extends Controller
                     return Response::json(["msj"=>"La solicitud de descuento por método de pago fue rechazada","estado"=>false]);
                 }
                 if ($solicitudExistente['data']['estado'] === 'aprobado') {
-                    $porcentaje_aprobado = isset($solicitudExistente['data']['porcentaje_descuento'])
-                        ? floatval($solicitudExistente['data']['porcentaje_descuento'])
-                        : $porcentaje_descuento;
-                    if (abs($porcentaje_descuento - $porcentaje_aprobado) > 0.01) {
-                        return Response::json([
-                            "msj"=>"Error: El porcentaje de descuento debe coincidir con el aprobado ({$porcentaje_aprobado}%)",
-                            "estado"=>false
-                        ]);
-                    }
+                    // Descuento ya aprobado previamente; no se valida coincidencia de porcentaje (cada ítem puede tener su descuento)
                     $metodos_aprobados = $solicitudExistente['data']['metodos_pago'] ?? [];
                     if (!is_array($metodos_aprobados)) {
                         $metodos_aprobados = [];
@@ -1678,17 +1670,7 @@ class PagoPedidosController extends Controller
                 if ($solicitudExistente['data']['estado'] === 'enviado') {
                     return Response::json(["msj"=>"Ya existe una solicitud de descuento por método de pago en espera de aprobación","estado"=>false]);
                 } elseif ($solicitudExistente['data']['estado'] === 'aprobado') {
-                    // Validar que el porcentaje de descuento sea exactamente igual al aprobado
-                    $porcentaje_aprobado = isset($solicitudExistente['data']['porcentaje_descuento'])
-                        ? floatval($solicitudExistente['data']['porcentaje_descuento'])
-                        : $porcentaje_descuento;
-                    if (abs($porcentaje_descuento - $porcentaje_aprobado) > 0.01) {
-                        return Response::json([
-                            "msj"=>"Error: El porcentaje de descuento calculado ({$porcentaje_descuento}%) debe ser exactamente igual al aprobado ({$porcentaje_aprobado}%)",
-                            "estado"=>false
-                        ]);
-                    }
-                    // Validar que los métodos de pago sean exactos a los aprobados
+                    // Descuento ya aprobado previamente; no se valida coincidencia de porcentaje (cada ítem puede tener su descuento)
                     $metodos_aprobados = $solicitudExistente['data']['metodos_pago'] ?? [];
                     if (!is_array($metodos_aprobados)) {
                         $metodos_aprobados = [];
