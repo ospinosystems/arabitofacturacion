@@ -5248,7 +5248,7 @@ export default function Facturar({
 
             const transferenciaActualCheck = transferenciaRef.current;
             const tieneRefTransferencia = refPago.some((e) => e.tipo == 1 || e.tipo == 2);
-            const usaMetodoTransferencia = parseFloat(transferenciaActualCheck || 0) > 0;
+            const usaMetodoTransferencia = parseFloat(transferenciaActualCheck || 0) !== 0;
 
             // Referencia de transferencia cargada pero método de pago no es transferencia → no permitir ejecutar
             if (tieneRefTransferencia && !usaMetodoTransferencia) {
