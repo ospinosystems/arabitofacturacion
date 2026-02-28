@@ -972,9 +972,12 @@ class sendCentral extends Controller
         }
 
         $request = Http::timeout($timeout)->withHeaders($headers);
+        $methodUpper = strtoupper($method);
 
-        if (strtoupper($method) === 'GET') {
+        if ($methodUpper === 'GET') {
             $response = $request->get($url, $params);
+        } elseif ($methodUpper === 'PUT') {
+            $response = $request->put($url, $params);
         } else {
             if (!empty($options['asForm'])) {
                 $response = $request->asForm()->post($url, $params);

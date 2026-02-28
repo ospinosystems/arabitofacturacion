@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 use Illuminate\Support\Facades\Cache;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 
 class InventarioCiclicoReporteController extends Controller
 {
@@ -16,7 +15,7 @@ class InventarioCiclicoReporteController extends Controller
     {
         $sendCentral = new \App\Http\Controllers\sendCentral();
         try {
-            $response = Http::timeout(30)->get($sendCentral->path() . "/api/inventario-ciclico/planillas/{$id}");
+            $response = $sendCentral->requestToCentral('GET', "/api/inventario-ciclico/planillas/{$id}", [], ['timeout' => 30]);
             if (!$response->successful()) {
                 abort(500, 'No se pudo cargar la planilla: ' . $response->body());
             }
@@ -57,7 +56,7 @@ class InventarioCiclicoReporteController extends Controller
     {
         $sendCentral = new \App\Http\Controllers\sendCentral();
         try {
-            $response = Http::timeout(30)->get($sendCentral->path() . "/api/inventario-ciclico/planillas/{$id}");
+            $response = $sendCentral->requestToCentral('GET', "/api/inventario-ciclico/planillas/{$id}", [], ['timeout' => 30]);
             if (!$response->successful()) {
                 return response()->json(['success' => false, 'message' => 'No se pudo cargar la planilla'], 500);
             }

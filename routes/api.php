@@ -369,25 +369,20 @@ Route::prefix('garantias')->middleware(['auth.user:api'])->group(function () {
 // ================ RUTAS DE INVENTARIO CÍCLICO ================
 Route::prefix('inventario-ciclico')->middleware(['auth.user:api'])->group(function () {
     
-    // Listar planillas
+    // Listar planillas (requestToCentral envía codigo_origen y API key a central)
     Route::get('planillas', function (Request $request) {
         $sendCentral = new App\Http\Controllers\sendCentral();
-        $codigoOrigen = $sendCentral->getOrigen();
-        
-        $params = array_merge($request->all(), ['sucursal_codigo' => $codigoOrigen]);
-        
+        $params = array_merge($request->all(), ['sucursal_codigo' => $sendCentral->getOrigen()]);
         try {
-            $response = Http::timeout(30)->get($sendCentral->path() . "/api/inventario-ciclico/planillas", $params);
-            return $response->body();
+            $response = $sendCentral->requestToCentral('GET', '/api/inventario-ciclico/planillas', $params, ['timeout' => 30]);
             if ($response->successful()) {
                 return response()->json($response->json());
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error al obtener planillas: ' . $response->body(),
-                    'data' => []
-                ], 500);
             }
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener planillas: ' . $response->body(),
+                'data' => []
+            ], 500);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -400,21 +395,16 @@ Route::prefix('inventario-ciclico')->middleware(['auth.user:api'])->group(functi
     // Crear nueva planilla
     Route::post('planillas', function (Request $request) {
         $sendCentral = new App\Http\Controllers\sendCentral();
-        $codigoOrigen = $sendCentral->getOrigen();
-        
-        $data = array_merge($request->all(), ['sucursal_codigo' => $codigoOrigen]);
-        
+        $data = array_merge($request->all(), ['sucursal_codigo' => $sendCentral->getOrigen()]);
         try {
-            $response = Http::timeout(30)->post($sendCentral->path() . "/api/inventario-ciclico/planillas", $data);
-            
+            $response = $sendCentral->requestToCentral('POST', '/api/inventario-ciclico/planillas', $data, ['timeout' => 30]);
             if ($response->successful()) {
                 return response()->json($response->json());
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error al crear planilla: ' . $response->body()
-                ], 500);
             }
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al crear planilla: ' . $response->body()
+            ], 500);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -426,18 +416,15 @@ Route::prefix('inventario-ciclico')->middleware(['auth.user:api'])->group(functi
     // Mostrar planilla específica
     Route::get('planillas/{id}', function (Request $request, $id) {
         $sendCentral = new App\Http\Controllers\sendCentral();
-        
         try {
-            $response = Http::timeout(30)->get($sendCentral->path() . "/api/inventario-ciclico/planillas/{$id}");
-            
+            $response = $sendCentral->requestToCentral('GET', "/api/inventario-ciclico/planillas/{$id}", [], ['timeout' => 30]);
             if ($response->successful()) {
                 return response()->json($response->json());
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error al obtener planilla: ' . $response->body()
-                ], 500);
             }
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener planilla: ' . $response->body()
+            ], 500);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -567,18 +554,15 @@ Route::prefix('inventario-ciclico')->middleware(['auth.user:api'])->group(functi
     // Actualizar cantidad de producto
     Route::put('planillas/{planillaId}/productos/{detalleId}', function (Request $request, $planillaId, $detalleId) {
         $sendCentral = new App\Http\Controllers\sendCentral();
-        
         try {
-            $response = Http::timeout(30)->put($sendCentral->path() . "/api/inventario-ciclico/planillas/{$planillaId}/productos/{$detalleId}", $request->all());
-            
+            $response = $sendCentral->requestToCentral('PUT', "/api/inventario-ciclico/planillas/{$planillaId}/productos/{$detalleId}", $request->all(), ['timeout' => 30]);
             if ($response->successful()) {
                 return response()->json($response->json());
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error al actualizar cantidad: ' . $response->body()
-                ], 500);
             }
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al actualizar cantidad: ' . $response->body()
+            ], 500);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -590,18 +574,15 @@ Route::prefix('inventario-ciclico')->middleware(['auth.user:api'])->group(functi
     // Cerrar planilla
     Route::post('planillas/{id}/cerrar', function (Request $request, $id) {
         $sendCentral = new App\Http\Controllers\sendCentral();
-        
         try {
-            $response = Http::timeout(30)->post($sendCentral->path() . "/api/inventario-ciclico/planillas/{$id}/cerrar", $request->all());
-            
+            $response = $sendCentral->requestToCentral('POST', "/api/inventario-ciclico/planillas/{$id}/cerrar", $request->all(), ['timeout' => 30]);
             if ($response->successful()) {
                 return response()->json($response->json());
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error al cerrar planilla: ' . $response->body()
-                ], 500);
             }
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al cerrar planilla: ' . $response->body()
+            ], 500);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -682,18 +663,15 @@ Route::prefix('inventario-ciclico')->middleware(['auth.user:api'])->group(functi
     // Refrescar estado de tareas
     Route::post('planillas/{id}/refrescar-tareas', function (Request $request, $id) {
         $sendCentral = new App\Http\Controllers\sendCentral();
-        
         try {
-            $response = Http::timeout(30)->post($sendCentral->path() . "/api/inventario-ciclico/planillas/{$id}/refrescar-tareas");
-            
+            $response = $sendCentral->requestToCentral('POST', "/api/inventario-ciclico/planillas/{$id}/refrescar-tareas", [], ['timeout' => 30]);
             if ($response->successful()) {
                 return response()->json($response->json());
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error al refrescar tareas: ' . $response->body()
-                ], 500);
             }
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al refrescar tareas: ' . $response->body()
+            ], 500);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -710,20 +688,17 @@ Route::prefix('inventario-ciclico')->middleware(['auth.user:api'])->group(functi
     // Generar reporte Excel
     Route::get('planillas/{id}/reporte-excel', function (Request $request, $id) {
         $sendCentral = new App\Http\Controllers\sendCentral();
-        
         try {
-            $response = Http::timeout(60)->get($sendCentral->path() . "/api/inventario-ciclico/planillas/{$id}/reporte-excel");
-            
+            $response = $sendCentral->requestToCentral('GET', "/api/inventario-ciclico/planillas/{$id}/reporte-excel", [], ['timeout' => 60]);
             if ($response->successful()) {
                 return response($response->body())
                     ->header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
                     ->header('Content-Disposition', 'attachment; filename="Planilla_Inventario_' . $id . '_' . date('Y-m-d') . '.xlsx"');
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error al generar reporte Excel: ' . $response->body()
-                ], 500);
             }
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al generar reporte Excel: ' . $response->body()
+            ], 500);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
