@@ -74,6 +74,7 @@ export default function ListProductosInterno({
   // Props para modal de pedido original en devoluciones
   setShowModalPedidoOriginal,
   pedidoOriginalAsignado,
+  refEjecutarTrasFacturaOriginal,
 }) {
 
 
@@ -490,22 +491,26 @@ export default function ListProductosInterno({
     
     // Verificar si la cantidad actual que se está ingresando es negativa
     const currentQuantityIsNegative = parseFloat(cantidad) < 0;
-    console.log(hasNegativeItems, currentQuantityIsNegative);
-    console.log(pedidoData.items);
-    console.log(cantidad);
-    
     return !hasNegativeItems && currentQuantityIsNegative;
   };
 
   // Función para manejar el éxito del escaneo del carnet
   const handleCarnetScanSuccess = (carnetCode) => {
     setvalinputsetclaveadmin(carnetCode);
-    // Proceder con la adición al carrito
+    // Si falta asignar factura original: cerrar modal carnet, registrar callback y abrir modal factura; al confirmar factura se ejecutará proceedWithAddToCart con el id asignado.
+    if (refEjecutarTrasFacturaOriginal && necesitaPedidoOriginal()) {
+      setShowModalCarnet(false);
+      const qty = cantidad;
+      refEjecutarTrasFacturaOriginal.current = (idPedidoOriginal, itemsDisponibles) => proceedWithAddToCart(carnetCode, qty, idPedidoOriginal, itemsDisponibles);
+      if (setShowModalPedidoOriginal) setShowModalPedidoOriginal(true);
+      return;
+    }
+    // Ya tiene factura o no aplica: agregar al carrito de una vez
     proceedWithAddToCart(carnetCode);
   };
 
-  // Función para proceder con la adición al carrito (con o sin carnet). cantidadOverride = valor actual del input (p. ej. al pulsar Enter).
-  const proceedWithAddToCart = (carnetCode = null, cantidadOverride = null) => {
+  // Función para proceder con la adición al carrito (con o sin carnet). cantidadOverride = valor actual del input. idPedidoOriginalOverride = id de factura recién asignada. itemsDisponiblesOverride = ítems de la factura recién asignada (para no depender del estado).
+  const proceedWithAddToCart = (carnetCode = null, cantidadOverride = null, idPedidoOriginalOverride = null, itemsDisponiblesOverride = null) => {
     if (selectedProduct) {
       const cantidadToUse = cantidadOverride !== undefined && cantidadOverride !== null && String(cantidadOverride).trim() !== "" ? cantidadOverride : cantidad;
       const qtyNum = parseFloat(cantidadToUse) || 0;
@@ -530,7 +535,10 @@ export default function ListProductosInterno({
       
       // Pedido solo en front: no llamar setCarrito; agregar directamente al pedido en state (vía addCarritoRequestInterno). No llamar setNum(10) para no disparar getProductos (inventario) innecesariamente.
       if (pedidoData?._frontOnly) {
-        addCarritoRequestInterno(null, true, cantidadToUse);
+        const opts = (idPedidoOriginalOverride != null || (itemsDisponiblesOverride && itemsDisponiblesOverride.length))
+          ? { id_pedido_original: idPedidoOriginalOverride ?? undefined, items_disponibles: itemsDisponiblesOverride || undefined }
+          : undefined;
+        addCarritoRequestInterno(null, true, cantidadToUse, opts);
         setproductoSelectinternouno(null);
         closeQuantityInput();
         if (refaddfast?.current) {
@@ -649,16 +657,8 @@ export default function ListProductosInterno({
   // Función para agregar al carrito
   const handleAddToCart = (event = null) => {
     if (selectedProduct) {
-      // Verificar si hay cantidades negativas en el pedido
+      // Cantidad negativa: una sola aprobación, luego factura original si falta, y finalmente agregar al carrito
       if (hasNegativeQuantities()) {
-        // PRIMERO: Verificar si necesita asignar el pedido original
-        if (necesitaPedidoOriginal() && setShowModalPedidoOriginal) {
-          // Mostrar modal de pedido original ANTES del modal de carnet
-          setShowModalPedidoOriginal(true);
-          return;
-        }
-        
-        // SEGUNDO: Si ya tiene pedido original, mostrar modal de carnet
         setShowModalCarnet(true);
         return;
       }

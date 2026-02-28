@@ -260,6 +260,8 @@ export default function PagarMain({
     const debitosRefInputRefs = useRef([]);
     // Evitar ciclo infinito: solo auto-disparar facturar una vez por (pedidoId, totalAprobado)
     const lastAutoSubmitPosRef = useRef({ pedidoId: null, totalAprobado: null });
+    // Callback que listProductosInterno registra para ejecutar tras asignar factura original (flujo: aprobación → factura → agregar)
+    const refEjecutarTrasFacturaOriginal = useRef(null);
     const prevPedidoIdRef = useRef(undefined);
     
     // Exponer al padre la función para enfocar el campo Ref. del primer débito (solo cuando hay un solo débito)
@@ -2025,6 +2027,14 @@ export default function PagarMain({
                         // Pedido real en BD: refrescar desde servidor
                         getPedido(null, null, false);
                     }
+                    // Si listProductosInterno dejó un callback (flujo ítem negativo: aprobación → factura → agregar), ejecutarlo con id e ítems de la factura recién asignada
+                    if (typeof refEjecutarTrasFacturaOriginal.current === "function") {
+                        const fn = refEjecutarTrasFacturaOriginal.current;
+                        const idAsignado = pedidoOriginalInput;
+                        const itemsAsignados = res.data.items_disponibles || [];
+                        refEjecutarTrasFacturaOriginal.current = null;
+                        setTimeout(() => fn(idAsignado, itemsAsignados), 0);
+                    }
                 } else {
                     notificar(res.data);
                 }
@@ -2041,6 +2051,7 @@ export default function PagarMain({
     const cerrarModalPedidoOriginal = () => {
         setShowModalPedidoOriginal(false);
         setPedidoOriginalInput("");
+        refEjecutarTrasFacturaOriginal.current = null;
     };
 
     // Verificar si se necesita mostrar modal de pedido original
@@ -2666,6 +2677,7 @@ export default function PagarMain({
                         devolucionTipo={devolucionTipo}
                         setShowModalPedidoOriginal={setShowModalPedidoOriginal}
                         pedidoOriginalAsignado={pedidoOriginalAsignado}
+                        refEjecutarTrasFacturaOriginal={refEjecutarTrasFacturaOriginal}
                     />
                 </div>
 
@@ -2759,8 +2771,10 @@ export default function PagarMain({
                                         ) : (
                                             <button
                                                 data-index={id}
-                                                onClick={setDescuentoTotal}
-                                                className="px-2 py-1 text-xs font-semibold text-gray-700 border !border-gray-300 transition-colors bg-gray-100 rounded-lg hover:bg-gray-200"
+                                                onClick={pendienteDescuentoMetodoPago[pedidoData.id] ? undefined : setDescuentoTotal}
+                                                disabled={!!pendienteDescuentoMetodoPago[pedidoData.id]}
+                                                className={`px-2 py-1 text-xs font-semibold border !border-gray-300 rounded-lg ${pendienteDescuentoMetodoPago[pedidoData.id] ? "text-gray-400 bg-gray-50 cursor-not-allowed" : "text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"}`}
+                                                title={pendienteDescuentoMetodoPago[pedidoData.id] ? "Solicitud en espera. Verifique aprobación o cancele para editar descuentos." : undefined}
                                             >
                                                 <i className="mr-1.5 fa fa-percentage text-xs"></i>
                                                 {total_porciento}%
@@ -2768,44 +2782,39 @@ export default function PagarMain({
                                         )}
                                     </div>
 
-                                    {/* Descuento por método de pago: solo se muestra cuando hay solicitud en espera (la solicitud se envía al guardar) */}
-                                    {pedidoData._frontOnly && pedidoData.id && (pedidoData.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0) && pendienteDescuentoMetodoPago[pedidoData.id] && (
-                                        <div className="mt-2 pt-2 border-t border-gray-200 flex flex-col gap-1.5">
-                                            <div className="flex items-center justify-between gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                                                <span className="text-xs font-medium">Descuento por método de pago en espera</span>
-                                                <span className="text-[10px] tabular-nums text-amber-600">
-                                                    {(() => {
-                                                        const submittedAt = pendienteDescuentoMetodoPago[pedidoData.id]?.submittedAt || 0;
-                                                        const elapsed = Math.floor((Date.now() - submittedAt) / 1000);
-                                                        const m = Math.floor(elapsed / 60);
-                                                        const s = elapsed % 60;
-                                                        return `${m}:${String(s).padStart(2, "0")}`;
-                                                    })()}
-                                                </span>
-                                            </div>
-                                            {(() => {
-                                                const metodos = pendienteDescuentoMetodoPago[pedidoData.id]?.metodos_pago || [];
-                                                const labels = { efectivo: "Efectivo", transferencia: "Transferencia", debito: "Débito", biopago: "Biopago", credito: "Crédito", adicional: "Bs/Pesos" };
-                                                const monedaF = (n) => (n == null || n === 0 ? "" : typeof n === "number" ? (n % 1 === 0 ? n : n.toFixed(2)) : String(n));
-                                                const list = metodos.map((m) => {
-                                                    const label = labels[m.tipo] || m.tipo;
-                                                    return m.monto != null && m.monto !== 0 ? `${label} Bs ${monedaF(m.monto)}` : label;
-                                                }).filter(Boolean);
-                                                return list.length > 0 ? (
-                                                    <div className="text-[10px] text-amber-700 bg-amber-50/80 rounded px-2 py-1">
-                                                        <span className="font-medium">Métodos enviados a validar:</span> {list.join(", ")}
-                                                    </div>
-                                                ) : null;
-                                            })()}
-                                            <p className="text-[10px] text-amber-600">
-                                                ¿Envió por el método equivocado? Cancele y vuelva a guardar con los datos correctos.
+                                    {/* Descuento en proceso: una sola solicitud (ítems + descuentos + método de pago) enviada al guardar */}
+                                    {pedidoData._frontOnly && pedidoData.id && (pedidoData.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0) && pendienteDescuentoMetodoPago[pedidoData.id] && (() => {
+                                        const pend = pendienteDescuentoMetodoPago[pedidoData.id];
+                                        const metodos = pend?.metodos_pago || [];
+                                        const labelMetodo = (m) => {
+                                            const nom = { efectivo: "Efectivo", debito: "Débito", transferencia: "Transferencia", biopago: "Biopago", credito: "Crédito" }[m.tipo] || m.tipo;
+                                            if (m.tipo === "adicional") return m.moneda === "Bs" ? "Efectivo (Bs)" : m.moneda === "COP" ? "Efectivo (COP)" : "Efectivo (otra)";
+                                            return nom;
+                                        };
+                                        const fmt = (m) => {
+                                            const mon = m.tipo === "debito" ? "Bs" : (m.moneda === "Bs" ? "Bs" : m.moneda === "COP" ? "COP" : "USD");
+                                            const n = parseFloat(m.monto);
+                                            return `${labelMetodo(m)} ${Number.isNaN(n) ? "—" : n % 1 === 0 ? n : n.toFixed(2)} ${mon}`;
+                                        };
+                                        return (
+                                        <div className="mt-2 pt-2 border-t border-gray-200 flex flex-col gap-2">
+                                            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                                                Se envió la solicitud de descuento de {pend?.numItemsConDescuento ?? (pedidoData.items || []).filter((it) => it.descuento != null && parseFloat(it.descuento) > 0).length} ítem(s) con sus descuentos y el método de pago elegido.
                                             </p>
+                                            {metodos.length > 0 && (
+                                                <p className="text-xs text-amber-900 bg-amber-100/80 border border-amber-300 rounded px-2 py-1">
+                                                    <span className="font-semibold">Métodos enviados: </span>
+                                                    {metodos.map((m, i) => (
+                                                        <span key={i}>{i > 0 ? ", " : ""}{fmt(m)}</span>
+                                                    ))}
+                                                </p>
+                                            )}
                                             <div className="flex gap-2">
                                                 <button
                                                     type="button"
                                                     disabled={descuentoMetodoPagoVerificando || cancelandoDescuentoMetodoPago}
                                                     onClick={() => verificarDescuentoMetodoPagoFront && verificarDescuentoMetodoPagoFront()}
-                                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 font-semibold text-orange-800 bg-orange-200 border-2 border-orange-400 rounded-lg hover:bg-orange-300 hover:border-orange-500 disabled:opacity-60 shadow-md"
+                                                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-orange-800 bg-orange-200 border border-orange-400 rounded-lg hover:bg-orange-300 disabled:opacity-60"
                                                 >
                                                     {descuentoMetodoPagoVerificando ? (
                                                         <>
@@ -2813,28 +2822,26 @@ export default function PagarMain({
                                                             Verificando…
                                                         </>
                                                     ) : (
-                                                        <>Verificar si ya está aprobado</>
+                                                        <>Verificar aprobación</>
                                                     )}
                                                 </button>
                                                 <button
                                                     type="button"
                                                     disabled={descuentoMetodoPagoVerificando || cancelandoDescuentoMetodoPago}
                                                     onClick={() => cancelarSolicitudDescuentoMetodoPagoFront && cancelarSolicitudDescuentoMetodoPagoFront()}
-                                                    className="flex items-center justify-center gap-2 px-4 py-3 font-semibold text-gray-700 bg-gray-100 border-2 border-gray-300 rounded-lg hover:bg-gray-200 hover:border-gray-400 disabled:opacity-60"
-                                                    title="Cancelar esta solicitud para poder enviar de nuevo con transferencia, débito, etc. correctos"
+                                                    className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 disabled:opacity-60"
+                                                    title="Cancelar solicitud para poder enviar de nuevo"
                                                 >
                                                     {cancelandoDescuentoMetodoPago ? (
-                                                        <>
-                                                            <span className="inline-block w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin shrink-0" />
-                                                            Cancelando…
-                                                        </>
+                                                        <span className="inline-block w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin shrink-0" />
                                                     ) : (
                                                         <>Cancelar solicitud</>
                                                     )}
                                                 </button>
                                             </div>
                                         </div>
-                                    )}
+                                        );
+                                    })()}
 
                                     {/* Descuento por método de pago ya aprobado: opción para eliminar validación si fue error */}
                                     {pedidoData._frontOnly && pedidoData.id && !pendienteDescuentoMetodoPago[pedidoData.id] && (pedidoData.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0) && descuentoMetodoPagoAprobadoPorUuid[pedidoData.id] && (
@@ -2861,91 +2868,36 @@ export default function PagarMain({
                                         </div>
                                     )}
 
-                                    {/* Descuento total pendiente: solo para pedidos front con solicitud global en espera */}
-                                    {pedidoData._frontOnly && pedidoData.id && pendientesDescuentoTotal[pedidoData.id] && (
-                                        <div className="mt-2 pt-2 border-t border-gray-200 flex flex-col gap-1.5">
-                                            <div className="flex items-center justify-between gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                                                <span className="text-xs font-medium">Descuento total en espera de aprobación</span>
-                                                <span className="text-[10px] tabular-nums text-amber-600">
-                                                    {(() => {
-                                                        const submittedAt = pendientesDescuentoTotal[pedidoData.id]?.submittedAt || 0;
-                                                        const elapsed = Math.floor((Date.now() - submittedAt) / 1000);
-                                                        const m = Math.floor(elapsed / 60);
-                                                        const s = elapsed % 60;
-                                                        return `${m}:${String(s).padStart(2, "0")}`;
-                                                    })()}
-                                                </span>
+                                    {/* Info del pedido abajo: línea 1 = UUID + fecha; línea 2 = cliente + cédula */}
+                                    <div className="flex items-center justify-between mt-2 gap-2">
+                                        <div className="min-w-0 flex flex-col gap-0.5">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="text-xs font-semibold text-gray-700 truncate" title={id}>#{id}</span>
+                                                <span className="text-xs text-gray-400 shrink-0">·</span>
+                                                <span className="text-xs text-gray-500 shrink-0">{created_at}</span>
+                                                {(pedidoData?.isdevolucionOriginalid || pedidoOriginalAsignado) && (
+                                                    <>
+                                                        <span className="text-xs text-gray-400">·</span>
+                                                        <button
+                                                            onClick={verFacturaOriginal}
+                                                            className="px-1.5 py-0.5 text-[10px] font-medium text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200 transition-colors shrink-0"
+                                                            title="Ver factura original"
+                                                        >
+                                                            <i className="mr-0.5 fa fa-file-invoice"></i>
+                                                            #{pedidoData?.isdevolucionOriginalid || pedidoOriginalAsignado}
+                                                        </button>
+                                                    </>
+                                                )}
                                             </div>
-                                            <div className="text-[10px] text-amber-700 bg-amber-50/80 rounded px-2 py-1">
-                                                <span className="font-medium">Monto final enviado:</span> {pendientesDescuentoTotal[pedidoData.id]?.montoFinal}
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    type="button"
-                                                    disabled={descuentoTotalVerificando || cancelandoDescuentoTotal}
-                                                    onClick={() => verificarDescuentoTotalFront && verificarDescuentoTotalFront()}
-                                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 font-semibold text-orange-800 bg-orange-200 border-2 border-orange-400 rounded-lg hover:bg-orange-300 hover:border-orange-500 disabled:opacity-60 shadow-md"
-                                                >
-                                                    {descuentoTotalVerificando ? (
-                                                        <>
-                                                            <span className="inline-block w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin shrink-0" />
-                                                            Verificando…
-                                                        </>
-                                                    ) : (
-                                                        <>Verificar si ya está aprobado</>
-                                                    )}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    disabled={descuentoTotalVerificando || cancelandoDescuentoTotal}
-                                                    onClick={() => cancelarSolicitudDescuentoTotalFront && cancelarSolicitudDescuentoTotalFront()}
-                                                    className="flex items-center justify-center gap-2 px-3 py-3 font-semibold text-gray-700 bg-gray-100 border-2 border-gray-300 rounded-lg hover:bg-gray-200 hover:border-gray-400 disabled:opacity-60"
-                                                    title="Cancelar esta solicitud para poder enviar de nuevo"
-                                                >
-                                                    {cancelandoDescuentoTotal ? (
-                                                        <span className="inline-block w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin shrink-0" />
-                                                    ) : (
-                                                        <i className="fa fa-times" />
-                                                    )}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Info del pedido abajo */}
-                                    <div className="flex items-center justify-between mt-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-semibold text-gray-700 min-w-0 max-w-[140px] truncate" title={id}>#{id}</span>
-                                            <span className="text-xs text-gray-400">•</span>
-                                            <span className="text-xs text-gray-500">{created_at}</span>
-                                            
-                                            {/* Botón para ver factura original */}
-                                            {(pedidoData?.isdevolucionOriginalid || pedidoOriginalAsignado) && (
-                                                <>
-                                                    <span className="text-xs text-gray-400">•</span>
-                                                    <button
-                                                        onClick={verFacturaOriginal}
-                                                        className="px-2 py-0.5 text-xs font-medium text-orange-700 bg-orange-100 border border-orange-300 rounded hover:bg-orange-200 transition-colors"
-                                                        title="Ver factura original"
-                                                    >
-                                                        <i className="mr-1 fa fa-file-invoice"></i>
-                                                        #{pedidoData?.isdevolucionOriginalid || pedidoOriginalAsignado}
-                                                    </button>
-                                                </>
-                                            )}
-                                            
                                             {cliente && (
-                                                <>
-                                                    <span className="text-xs text-gray-400">•</span>
-                                                    <span className="text-xs font-medium text-gray-700 truncate max-w-[150px]" title={cliente.nombre === "CF" ? "Sin cliente" : cliente.nombre}>
+                                                <div className="text-[11px] text-gray-600 truncate">
+                                                    <span className="font-medium text-gray-700" title={cliente.nombre === "CF" ? "Sin cliente" : cliente.nombre}>
                                                         {cliente.nombre === "CF" ? "Sin cliente" : cliente.nombre}
                                                     </span>
-                                                    {cliente.identificacion !== "CF" && (
-                                                        <span className="text-xs text-gray-500">
-                                                            ({cliente.identificacion})
-                                                        </span>
+                                                    {cliente.identificacion && cliente.identificacion !== "CF" && (
+                                                        <span className="text-gray-500"> · {cliente.identificacion}</span>
                                                     )}
-                                                </>
+                                                </div>
                                             )}
                                         </div>
 
@@ -3153,17 +3105,17 @@ export default function PagarMain({
                                                             <td
                                                                 className={`px-2 py-1 text-center ${e.descuento != null && parseFloat(e.descuento) > 0 ? "text-gray-500" : ""}`}
                                                                 onClick={
-                                                                    (e.descuento != null && parseFloat(e.descuento) > 0)
+                                                                    (pendienteDescuentoMetodoPago[pedidoData.id] || (e.descuento != null && parseFloat(e.descuento) > 0 && descuentoMetodoPagoAprobadoPorUuid[pedidoData.id]))
                                                                         ? undefined
                                                                         : !pedidoData._frontOnly && e.condicion != 1
                                                                         ? setCantidadCarrito
                                                                         : undefined
                                                                 }
                                                                 data-index={pedidoData._frontOnly ? undefined : e.id}
-                                                                title={e.descuento != null && parseFloat(e.descuento) > 0 ? "No se puede editar cantidad: el ítem tiene descuento aprobado" : undefined}
+                                                                title={pendienteDescuentoMetodoPago[pedidoData.id] ? "Solicitud de descuento en espera. Verifique aprobación o cancele para editar." : (e.descuento != null && parseFloat(e.descuento) > 0 && descuentoMetodoPagoAprobadoPorUuid[pedidoData.id] ? "No se puede editar cantidad: el ítem tiene descuento aprobado por central" : undefined)}
                                                             >
                                                                 {pedidoData._frontOnly ? (
-                                                                    (e.descuento != null && parseFloat(e.descuento) > 0) ? (
+                                                                    (pendienteDescuentoMetodoPago[pedidoData.id] || (e.descuento != null && parseFloat(e.descuento) > 0 && descuentoMetodoPagoAprobadoPorUuid[pedidoData.id])) ? (
                                                                         <span className="text-xs">
                                                                             {Number(e.cantidad) % 1 === 0
                                                                                 ? Number(e.cantidad)
@@ -3294,6 +3246,7 @@ export default function PagarMain({
                                                             )}
                                                             <td
                                                                 className={`relative px-2 py-1 text-xs text-right ${(() => {
+                                                                    if (pedidoData._frontOnly && pendienteDescuentoMetodoPago[pedidoData.id]) return "cursor-not-allowed opacity-60";
                                                                     const esNegativoConDescuento = parseFloat(e.cantidad) < 0 && e.descuento && parseFloat(e.descuento) > 0;
                                                                     if (esNegativoConDescuento) return "text-gray-400 select-none";
                                                                     if (descuentoUnitarioVerificandoId != null && String(e.id) === String(descuentoUnitarioVerificandoId)) return "align-middle bg-gray-50";
@@ -3301,6 +3254,7 @@ export default function PagarMain({
                                                                     return `cursor-pointer hover:bg-orange-50 ${e.descuento && parseFloat(e.descuento) > 0 ? "bg-orange-100 text-orange-700 font-semibold" : "text-gray-400"}`;
                                                                 })()}`}
                                                                 title={(() => {
+                                                                    if (pedidoData._frontOnly && pendienteDescuentoMetodoPago[pedidoData.id]) return "Solicitud en espera. Verifique aprobación o cancele para editar descuentos.";
                                                                     const esNegativoConDescuento = parseFloat(e.cantidad) < 0 && e.descuento && parseFloat(e.descuento) > 0;
                                                                     if (esNegativoConDescuento) return "Descuento heredado del ítem original, no modificable";
                                                                     if ((descuentoUnitarioVerificandoId != null && String(e.id) === String(descuentoUnitarioVerificandoId)) ||
@@ -3309,6 +3263,7 @@ export default function PagarMain({
                                                                     return "Click para aplicar descuento";
                                                                 })()}
                                                                 onClick={(() => {
+                                                                    if (pedidoData._frontOnly && pendienteDescuentoMetodoPago[pedidoData.id]) return undefined;
                                                                     const esNegativoConDescuento = parseFloat(e.cantidad) < 0 && e.descuento && parseFloat(e.descuento) > 0;
                                                                     if (esNegativoConDescuento) return undefined;
                                                                     if (descuentoUnitarioVerificandoId != null || (descuentoUnitarioEditingId != null && String(e.id) === String(descuentoUnitarioEditingId))) return undefined;
@@ -3414,6 +3369,7 @@ export default function PagarMain({
                                                                     <i
                                                                         onClick={(ev) => {
                                                                             ev.stopPropagation();
+                                                                            if (pedidoData._frontOnly && pendienteDescuentoMetodoPago[pedidoData.id]) return;
                                                                             if (pedidoData._frontOnly) {
                                                                                 delItemPedido({ currentTarget: { attributes: { "data-index": { value: e.id } } } });
                                                                             } else {
@@ -3421,8 +3377,8 @@ export default function PagarMain({
                                                                             }
                                                                         }}
                                                                         data-index={e.id}
-                                                                        className={`cursor-pointer hover:opacity-80 ${pedidoData._frontOnly ? "text-red-500 fa fa-trash hover:text-red-700" : "text-red-500 fa fa-times hover:text-red-700"}`}
-                                                                        title={pedidoData._frontOnly ? "Eliminar del pedido" : "Quitar ítem"}
+                                                                        className={`${pedidoData._frontOnly && pendienteDescuentoMetodoPago[pedidoData.id] ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:opacity-80"} ${pedidoData._frontOnly ? "text-red-500 fa fa-trash hover:text-red-700" : "text-red-500 fa fa-times hover:text-red-700"}`}
+                                                                        title={pedidoData._frontOnly && pendienteDescuentoMetodoPago[pedidoData.id] ? "Solicitud en espera. Verifique aprobación o cancele para eliminar ítems." : (pedidoData._frontOnly ? "Eliminar del pedido" : "Quitar ítem")}
                                                                     ></i>
                                                                 </td>
                                                             ) : null}
@@ -3562,13 +3518,31 @@ export default function PagarMain({
                                             </div>
                                         );
                                     })()}
-                                    {pedidoData._frontOnly && pedidoData.id && (pedidoData.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0) && pendienteDescuentoMetodoPago[pedidoData.id] && (
+                                    {pedidoData._frontOnly && pedidoData.id && (pedidoData.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0) && pendienteDescuentoMetodoPago[pedidoData.id] && (() => {
+                                        const pend = pendienteDescuentoMetodoPago[pedidoData.id];
+                                        const metodos = pend?.metodos_pago || [];
+                                        const labelMetodo = (m) => {
+                                            if (m.tipo === "adicional") return m.moneda === "Bs" ? "Efectivo (Bs)" : m.moneda === "COP" ? "Efectivo (COP)" : "Efectivo (otra)";
+                                            return { efectivo: "Efectivo", debito: "Débito", transferencia: "Transferencia", biopago: "Biopago", credito: "Crédito" }[m.tipo] || m.tipo;
+                                        };
+                                        const fmt = (m) => {
+                                            const mon = m.tipo === "debito" ? "Bs" : (m.moneda === "Bs" ? "Bs" : m.moneda === "COP" ? "COP" : "USD");
+                                            const n = parseFloat(m.monto);
+                                            return `${labelMetodo(m)} ${Number.isNaN(n) ? "—" : n % 1 === 0 ? n : n.toFixed(2)} ${mon}`;
+                                        };
+                                        return (
                                         <div className="absolute inset-0 z-[20] flex flex-col items-center justify-start pt-4 gap-2 bg-amber-50 border-2 border-amber-300 rounded-lg pointer-events-none">
                                             <span className="text-sm font-semibold text-amber-900 bg-amber-100 border border-amber-400 rounded-lg px-4 py-3 shadow-md text-center max-w-md">
                                                 Pago bloqueado hasta que la solicitud de descuento por método de pago esté aprobada. Use el botón <strong>&quot;Verificar si ya está aprobado&quot;</strong> en la tarjeta del pedido (lista izquierda).
                                             </span>
+                                            {metodos.length > 0 && (
+                                                <span className="text-xs font-medium text-amber-800 bg-amber-100 border border-amber-300 rounded-lg px-3 py-2 text-center max-w-md">
+                                                    Métodos enviados: {metodos.map((m, i) => fmt(m)).join(", ")}
+                                                </span>
+                                            )}
                                         </div>
-                                    )}
+                                        );
+                                    })()}
                                     {/* ══════════ GRUPO DÉBITO ══════════ */}
                                     <div className="flex flex-col gap-1">
                                         <div className="flex items-center gap-2">

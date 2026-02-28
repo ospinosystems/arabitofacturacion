@@ -180,7 +180,6 @@ export default function Facturar({
     // modalesPosAbiertos[pedidoId] = { pedidoId, debitoIndex, montoTotalOriginal, transaccionesAprobadas, cedulaTitular, tipoCuenta, montoDebito, loading, respuesta }
     const [modalesPosAbiertos, setModalesPosAbiertos] = useState({});
     const [forzarReferenciaManual, setForzarReferenciaManual] = useState(false); // Para bypassear PINPAD
-    const [montosNoCoincidenDetalle, setMontosNoCoincidenDetalle] = useState(null); // { total_pedido_usd, total_pagos_usd, diferencia_usd, ... } para modal especial
     // Mapa global de transacciones POS por pedido: { pedidoId: [{monto, cedula, referencia, ...}] }
     const [posTransaccionesPorPedido, setPosTransaccionesPorPedido] = useState(() => {
         try {
@@ -1693,39 +1692,64 @@ export default function Facturar({
     };
 
     const onAutovalidarReferenciaSuccess = (dataFromAutovalidar, formData = {}) => {
-        if (!pedidoData?._frontOnly || !pedidoData?.id) return;
-        const uuid = pedidoData.id;
+        if (!pedidoData?.id) return;
         const descripcion = (dataFromAutovalidar?.referencia_completa || formData?.descripcion || "").toString().trim();
         if (!descripcion) return;
-        setRefPagoPorPedidoFront((prev) => {
-            const list = prev[uuid] || [];
-            const yaExiste = list.some((r) => (r.descripcion || "").toString().trim() === descripcion);
-            if (yaExiste) {
-                notificar({ data: { msj: "Esta referencia ya está cargada en el pedido.", estado: true } });
-                return prev;
-            }
-            const monto = formData.monto ?? dataFromAutovalidar?.monto ?? monto_referenciapago;
-            const nuevaRef = {
-                _localId: `autovalidar_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-                tipo: 1,
-                descripcion,
-                monto: monto != null ? String(monto) : "",
-                banco: dataFromAutovalidar?.banco ?? formData.banco ?? "0134",
-                cedula: formData.cedula ?? dataFromAutovalidar?.cedula ?? "",
-                telefono: formData.telefono ?? dataFromAutovalidar?.telefono ?? "",
-                categoria: "autovalidar",
-                estatus: "aprobada",
-                fecha_pago: formData.fecha_pago ?? dataFromAutovalidar?.fecha_pago ?? null,
-                banco_origen: formData.banco_origen ?? dataFromAutovalidar?.banco_origen ?? null,
-                response: dataFromAutovalidar?.response_central ? JSON.stringify(dataFromAutovalidar.response_central) : null,
-            };
-            notificar({ data: { msj: "Referencia de transferencia guardada en el pedido. Se registrará al procesar el pago.", estado: true } });
-            // Actualizar refPago inmediatamente para que la UI lo muestre sin esperar al useEffect
-            setrefPago((p) => {
-                const ya = p.some((r) => (r.descripcion || "").toString().trim() === descripcion);
-                return ya ? p : [...p, nuevaRef];
+
+        // Pedido solo front: guardar referencia en estado/IndexedDB (se enviará al procesar pago)
+        if (pedidoData._frontOnly) {
+            const uuid = pedidoData.id;
+            setRefPagoPorPedidoFront((prev) => {
+                const list = prev[uuid] || [];
+                const yaExiste = list.some((r) => (r.descripcion || "").toString().trim() === descripcion);
+                if (yaExiste) {
+                    notificar({ data: { msj: "Esta referencia ya está cargada en el pedido.", estado: true } });
+                    return prev;
+                }
+                const monto = formData.monto ?? dataFromAutovalidar?.monto ?? monto_referenciapago;
+                const nuevaRef = {
+                    _localId: `autovalidar_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                    tipo: 1,
+                    descripcion,
+                    monto: monto != null ? String(monto) : "",
+                    banco: dataFromAutovalidar?.banco ?? formData.banco ?? "0134",
+                    cedula: formData.cedula ?? dataFromAutovalidar?.cedula ?? "",
+                    telefono: formData.telefono ?? dataFromAutovalidar?.telefono ?? "",
+                    categoria: "autovalidar",
+                    estatus: "aprobada",
+                    fecha_pago: formData.fecha_pago ?? dataFromAutovalidar?.fecha_pago ?? null,
+                    banco_origen: formData.banco_origen ?? dataFromAutovalidar?.banco_origen ?? null,
+                    response: dataFromAutovalidar?.response_central ? JSON.stringify(dataFromAutovalidar.response_central) : null,
+                };
+                notificar({ data: { msj: "Referencia de transferencia guardada en el pedido. Se registrará al procesar el pago.", estado: true } });
+                setrefPago((p) => {
+                    const ya = p.some((r) => (r.descripcion || "").toString().trim() === descripcion);
+                    return ya ? p : [...p, nuevaRef];
+                });
+                return { ...prev, [uuid]: [...list, nuevaRef] };
             });
-            return { ...prev, [uuid]: [...list, nuevaRef] };
+            return;
+        }
+
+        // Pedido con id en backend (no front): agregar referencia en BD para que quede guardada
+        const monto = formData.monto ?? dataFromAutovalidar?.monto ?? monto_referenciapago;
+        db.addRefPago({
+            id_pedido: pedidoData.id,
+            tipo: tipo_referenciapago ?? 1,
+            monto: monto != null ? String(monto) : monto_referenciapago,
+            descripcion,
+            banco: dataFromAutovalidar?.banco ?? formData.banco ?? "0134",
+            cedula: formData.cedula ?? cedula_referenciapago ?? "",
+            telefono: formData.telefono ?? telefono_referenciapago ?? "",
+            categoria: "autovalidar",
+            fecha_pago: formData.fecha_pago ?? null,
+            codigo_banco_origen: formData.banco_origen ?? null,
+            response_central: dataFromAutovalidar?.response_central ?? dataFromAutovalidar,
+        }).then((res) => {
+            getPedido(null, null, false);
+            notificar(res?.data ?? res);
+        }).catch((err) => {
+            notificar({ data: { msj: err.response?.data?.msj || "Error al guardar la referencia en el pedido.", estado: false } });
         });
     };
 
@@ -3855,6 +3879,10 @@ export default function Facturar({
     const delItemPedido = (e) => {
         const index = e.currentTarget.attributes["data-index"].value;
         if (pedidoData._frontOnly && pedidoData.id) {
+            if (pendienteDescuentoMetodoPago[pedidoData.id]) {
+                notificar({ data: { msj: "Solicitud de descuento en espera. Verifique aprobación o cancele la solicitud para editar el pedido.", estado: false } });
+                return;
+            }
             const newItems = (pedidoData.items || []).filter((it) => String(it.id) !== String(index));
             const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
             const clean_total = clean_subtotal;
@@ -3937,6 +3965,10 @@ export default function Facturar({
 
     const setDescuentoTotal = (e) => {
         if (pedidoData._frontOnly && pedidoData.id) {
+            if (pendienteDescuentoMetodoPago[pedidoData.id]) {
+                notificar({ data: { msj: "Solicitud de descuento en espera. Verifique aprobación o cancele la solicitud para editar descuentos.", estado: false } });
+                return;
+            }
             setDescuentoTotalEditingId(String(pedidoData.id));
             setDescuentoTotalInputValue("");
             return;
@@ -3994,6 +4026,10 @@ export default function Facturar({
         setDescuentoTotalInputValue("");
 
         if (!pedidoData._frontOnly || !pedidoData.id) return;
+        if (pendienteDescuentoMetodoPago[pedidoData.id]) {
+            notificar({ data: { msj: "Solicitud de descuento en espera. Verifique aprobación o cancele la solicitud para editar descuentos.", estado: false } });
+            return;
+        }
 
         const itemsConCantidadNegativa = (pedidoData.items || []).filter((it) => parseFloat(it.cantidad) < 0);
         if (itemsConCantidadNegativa.length > 0) {
@@ -4037,78 +4073,18 @@ export default function Facturar({
             return;
         }
 
-        const descuento = (100 - (montoFinalNum * 100) / cleanSubtotal).toFixed(4);
-        const items = pedidoData.items || [];
-        let monto_bruto = 0;
-        let monto_descuento = 0;
-        const ids_productos = items.map((it) => {
+        const descuentoNum = parseFloat((100 - (montoFinalNum * 100) / cleanSubtotal).toFixed(4));
+        const newItems = (pedidoData.items || []).map((it) => {
             const subtotal_it = parseFloat(it.producto?.precio || 0) * Math.abs(parseFloat(it.cantidad || 0));
-            const pct = parseFloat(descuento);
-            const subtotal_con_descuento = subtotal_it * (1 - pct / 100);
-            monto_bruto += subtotal_it;
-            monto_descuento += subtotal_it - subtotal_con_descuento;
-            return {
-                id_producto: it.producto?.id ?? it.id,
-                cantidad: it.cantidad,
-                precio: it.producto?.precio ?? it.precio ?? 0,
-                precio_base: it.producto?.precio_base ?? 0,
-                subtotal: subtotal_it,
-                subtotal_con_descuento,
-                porcentaje_descuento: pct,
-            };
+            const totalConDescuento = subtotal_it * (1 - descuentoNum / 100);
+            return { ...it, descuento: descuentoNum, total: totalConDescuento, total_des: totalConDescuento };
         });
-        const monto_con_descuento = monto_bruto - monto_descuento;
-
-        db.solicitudDescuentoFrontCrear({
-            uuid_pedido_front: pedidoData.id,
-            ids_productos,
-            monto_bruto,
-            monto_con_descuento,
-            monto_descuento,
-            porcentaje_descuento: parseFloat(descuento),
-            tipo_descuento: "monto_porcentaje",
-        })
-            .then((res) => {
-                setLoading(false);
-                const data = res.data || res;
-                if (data.estado === true && data.data?.estado === "aprobado") {
-                    const byProduct = {};
-                    (data.data.ids_productos || []).forEach((p) => {
-                        byProduct[p.id_producto] = parseFloat(p.porcentaje_descuento) || 0;
-                    });
-                    const newItems = (pedidoData.items || []).map((it) => {
-                        const idProd = it.producto?.id ?? it.id;
-                        const pct = byProduct[idProd] ?? parseFloat(descuento);
-                        const subtotal_it = parseFloat(it.producto?.precio || 0) * Math.abs(parseFloat(it.cantidad || 0));
-                        const totalConDescuento = subtotal_it * (1 - pct / 100);
-                        return { ...it, descuento: pct, total: totalConDescuento, total_des: totalConDescuento };
-                    });
-                    const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
-                    const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
-                    setPedidoData(updated);
-                    setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
-                    setPendientesDescuentoTotal((prev) => { const next = { ...prev }; delete next[pedidoData.id]; return next; });
-                    notificar({ data: { msj: "Descuento total aprobado y aplicado", estado: true } });
-                    return;
-                }
-                if (data.estado === true && data.existe) {
-                    notificar({ data: { msj: data.msj || "Ya existe una solicitud en espera de aprobación", estado: true } });
-                    return;
-                }
-                if (data.estado === true) {
-                    setPendientesDescuentoTotal((prev) => ({
-                        ...prev,
-                        [pedidoData.id]: { montoFinal: String(montoFinal), submittedAt: Date.now() },
-                    }));
-                    notificar({ data: { msj: "Solicitud de descuento total enviada a central para aprobación", estado: true } });
-                    return;
-                }
-                notificar({ data: { msj: data.msj || "Error al enviar solicitud", estado: false } });
-            })
-            .catch(() => {
-                setLoading(false);
-                notificar({ data: { msj: "Error de conexión con el servidor", estado: false } });
-            });
+        const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
+        const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
+        setPedidoData(updated);
+        setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
+        setLoading(false);
+        notificar({ data: { msj: "Descuento total aplicado. Al guardar el pedido se enviará la solicitud a central.", estado: true } });
     };
 
     const verificarDescuentoTotalFront = () => {
@@ -4188,66 +4164,20 @@ export default function Facturar({
         }
 
         if (pedidoData._frontOnly && pedidoData.id) {
+            if (pendienteDescuentoMetodoPago[pedidoData.id]) {
+                notificar({ data: { msj: "Solicitud de descuento en espera. Verifique aprobación o cancele la solicitud para editar descuentos.", estado: false } });
+                return;
+            }
             const tieneDescuentoAplicado = item.descuento != null && parseFloat(item.descuento) > 0;
-            if (tieneDescuentoAplicado) {
+            const descuentoYaAprobadoPorCentral = descuentoMetodoPagoAprobadoPorUuid[pedidoData.id];
+            if (tieneDescuentoAplicado && descuentoYaAprobadoPorCentral) {
                 setDescuentoUnitarioTooltipAprobadoId((prev) => (prev === String(index) ? null : String(index)));
                 return;
             }
             setDescuentoUnitarioTooltipAprobadoId(null);
-            const openInlineDescuento = () => {
-                setDescuentoUnitarioVerificandoId(null);
-                setDescuentoUnitarioContext({ index, item, subtotalItem });
-                setDescuentoUnitarioInputValue("");
-                setDescuentoUnitarioEditingId(String(index));
-            };
-            setDescuentoUnitarioVerificandoId(String(index));
-            setLoading(true);
-            db.solicitudDescuentoFrontVerificar({ uuid_pedido_front: pedidoData.id, tipo_descuento: "monto_porcentaje" })
-                .then((res) => {
-                    setLoading(false);
-                    setDescuentoUnitarioVerificandoId(null);
-                    const data = res?.data;
-                    const existe = data?.existe === true;
-                    const aprobado = data?.data?.estado === "aprobado";
-                    const idsProductos = Array.isArray(data?.data?.ids_productos) ? data.data.ids_productos : [];
-                    if (existe && aprobado && idsProductos.length > 0) {
-                        const byProduct = {};
-                        idsProductos.forEach((p) => {
-                            const idProd = p.id_producto;
-                            if (idProd != null) byProduct[idProd] = parseFloat(p.porcentaje_descuento) || 0;
-                        });
-                        const idProductoItem = item.producto?.id ?? item.id;
-                        const pctAprobado = byProduct[idProductoItem] ?? byProduct[String(idProductoItem)];
-                        if (pctAprobado != null && Number(pctAprobado) > 0) {
-                            const totalConDescuento = subtotalItem * (1 - pctAprobado / 100);
-                            const newItems = (pedidoData.items || []).map((it) => {
-                                if (String(it.id) !== String(index)) return it;
-                                return { ...it, descuento: pctAprobado, total: totalConDescuento, total_des: totalConDescuento };
-                            });
-                            const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
-                            const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
-                            setPedidoData(updated);
-                            setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
-                            setPendientesDescuentoUnitario((prev) => {
-                                const next = { ...prev };
-                                if (next[pedidoData.id]) {
-                                    const sub = { ...next[pedidoData.id] };
-                                    delete sub[String(index)];
-                                    next[pedidoData.id] = Object.keys(sub).length ? sub : undefined;
-                                }
-                                return next;
-                            });
-                            notificar({ data: { msj: "Descuento aprobado aplicado al ítem", estado: true } });
-                            return;
-                        }
-                    }
-                    openInlineDescuento();
-                })
-                .catch(() => {
-                    setLoading(false);
-                    setDescuentoUnitarioVerificandoId(null);
-                    openInlineDescuento();
-                });
+            setDescuentoUnitarioContext({ index, item, subtotalItem });
+            setDescuentoUnitarioInputValue("");
+            setDescuentoUnitarioEditingId(String(index));
             return;
         }
 
@@ -4265,7 +4195,10 @@ export default function Facturar({
         setDescuentoUnitarioInputValue("");
 
         if (pedidoData._frontOnly && pedidoData.id) {
-            setLoading(true);
+            if (pendienteDescuentoMetodoPago[pedidoData.id]) {
+                notificar({ data: { msj: "Solicitud de descuento en espera. Verifique aprobación o cancele la solicitud para editar descuentos.", estado: false } });
+                return;
+            }
             if (montoFinal === "0" || montoFinal === 0) {
                 const newItems = (pedidoData.items || []).map((it) =>
                     String(it.id) === String(index) ? { ...it, descuento: 0, total: parseFloat(it.precio || 0) * Math.abs(parseFloat(it.cantidad || 0)), total_des: parseFloat(it.precio || 0) * Math.abs(parseFloat(it.cantidad || 0)) } : it
@@ -4274,103 +4207,29 @@ export default function Facturar({
                 const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
                 setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
                 setPedidoData(updated);
-                setLoading(false);
                 notificar({ data: { msj: "Descuento eliminado", estado: true } });
                 return;
             }
             const montoFinalNum = parseFloat(montoFinal);
             if (isNaN(montoFinalNum) || montoFinalNum < 0) {
                 notificar({ data: { msj: "Monto inválido", estado: false } });
-                setLoading(false);
                 return;
             }
             if (montoFinalNum >= subtotalItem) {
                 notificar({ data: { msj: "El monto final debe ser menor al subtotal", estado: false } });
-                setLoading(false);
                 return;
             }
-            const descuento = (100 - (montoFinalNum * 100) / subtotalItem).toFixed(4);
-            const items = pedidoData.items || [];
-            let monto_bruto = 0;
-            let monto_descuento = 0;
-            const ids_productos = items.map((it) => {
-                const subtotal_it = parseFloat(it.producto?.precio || 0) * Math.abs(parseFloat(it.cantidad || 0));
-                const pct = String(it.id) === String(index) ? parseFloat(descuento) : parseFloat(it.descuento) || 0;
-                const subtotal_con_descuento = subtotal_it * (1 - pct / 100);
-                monto_bruto += subtotal_it;
-                monto_descuento += subtotal_it - subtotal_con_descuento;
-                return {
-                    id_producto: it.producto?.id ?? it.id,
-                    cantidad: it.cantidad,
-                    precio: it.producto?.precio ?? it.precio ?? 0,
-                    precio_base: it.producto?.precio_base ?? 0,
-                    subtotal: subtotal_it,
-                    subtotal_con_descuento,
-                    porcentaje_descuento: pct,
-                };
+            const descuentoNum = parseFloat((100 - (montoFinalNum * 100) / subtotalItem).toFixed(4));
+            const totalConDescuento = subtotalItem * (1 - descuentoNum / 100);
+            const newItems = (pedidoData.items || []).map((it) => {
+                if (String(it.id) !== String(index)) return it;
+                return { ...it, descuento: descuentoNum, total: totalConDescuento, total_des: totalConDescuento };
             });
-            const monto_con_descuento = monto_bruto - monto_descuento;
-            db.solicitudDescuentoFrontCrear({
-                uuid_pedido_front: pedidoData.id,
-                ids_productos,
-                monto_bruto,
-                monto_con_descuento,
-                monto_descuento,
-                porcentaje_descuento: parseFloat(descuento),
-                tipo_descuento: "monto_porcentaje",
-            })
-                .then((res) => {
-                    setLoading(false);
-                    const data = res.data || res;
-                    if (data.estado === true && data.data?.estado === "aprobado") {
-                        setPendientesDescuentoUnitario((prev) => {
-                            const next = { ...prev };
-                            if (next[pedidoData.id]) {
-                                const sub = { ...next[pedidoData.id] };
-                                delete sub[String(index)];
-                                next[pedidoData.id] = Object.keys(sub).length ? sub : undefined;
-                            }
-                            return next;
-                        });
-                        const byProduct = {};
-                        (data.data.ids_productos || []).forEach((p) => {
-                            byProduct[p.id_producto] = parseFloat(p.porcentaje_descuento) || 0;
-                        });
-                        const idProductoItem = item.producto?.id ?? item.id;
-                        const pctAprobado = byProduct[idProductoItem] ?? parseFloat(descuento);
-                        const totalConDescuento = subtotalItem * (1 - pctAprobado / 100);
-                        const newItems = (pedidoData.items || []).map((it) => {
-                            if (String(it.id) !== String(index)) return it;
-                            return { ...it, descuento: pctAprobado, total: totalConDescuento, total_des: totalConDescuento };
-                        });
-                        const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
-                        const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
-                        setPedidoData(updated);
-                        setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
-                        notificar({ data: { msj: "Descuento aprobado y aplicado al ítem", estado: true } });
-                        return;
-                    }
-                    if (data.estado === true && data.existe) {
-                        notificar({ data: { msj: data.msj || "Ya existe una solicitud en espera de aprobación", estado: true } });
-                        return;
-                    }
-                    if (data.estado === true) {
-                        setPendientesDescuentoUnitario((prev) => ({
-                            ...prev,
-                            [pedidoData.id]: {
-                                ...(prev[pedidoData.id] || {}),
-                                [String(index)]: { montoFinal: String(montoFinal), submittedAt: Date.now() },
-                            },
-                        }));
-                        notificar({ data: { msj: "Solicitud de descuento enviada a central para aprobación", estado: true } });
-                        return;
-                    }
-                    notificar({ data: { msj: data.msj || "Error al enviar solicitud", estado: false } });
-                })
-                .catch(() => {
-                    setLoading(false);
-                    notificar({ data: { msj: "Error de conexión con el servidor", estado: false } });
-                });
+            const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
+            const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
+            setPedidoData(updated);
+            setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
+            notificar({ data: { msj: "Descuento aplicado al ítem. Al guardar el pedido se enviará la solicitud a central.", estado: true } });
             return;
         }
 
@@ -4413,10 +4272,14 @@ export default function Facturar({
     };
     const setCantidadCarritoFront = (itemId, newCantidad) => {
         if (!pedidoData._frontOnly || !pedidoData.id) return;
+        if (pendienteDescuentoMetodoPago[pedidoData.id]) {
+            notificar({ data: { msj: "Solicitud de descuento en espera. Verifique aprobación o cancele la solicitud para editar cantidades.", estado: false } });
+            return;
+        }
         const item = (pedidoData.items || []).find((it) => String(it.id) === String(itemId));
         if (!item || !item.producto) return;
-        if (item.descuento != null && parseFloat(item.descuento) > 0) {
-            notificar({ msj: "No se puede editar la cantidad: el ítem tiene descuento aprobado", estado: false });
+        if (descuentoMetodoPagoAprobadoPorUuid[pedidoData.id] && item.descuento != null && parseFloat(item.descuento) > 0) {
+            notificar({ msj: "No se puede editar la cantidad: el ítem tiene descuento aprobado por central", estado: false });
             return;
         }
         const qty = parseFloat(newCantidad);
@@ -4432,8 +4295,11 @@ export default function Facturar({
         if (qtyCapped < qty && disponible >= 0) {
             notificar({ msj: "Solo hay " + disponible + " disponible(s). Se actualizó al máximo.", estado: true });
         }
+        const precioUnit = parseFloat(item.precio) || parseFloat(item.producto?.precio) || 0;
+        const pctDescuento = (item.descuento != null && parseFloat(item.descuento) > 0) ? parseFloat(item.descuento) : 0;
+        const totalItem = pctDescuento > 0 ? qtyCapped * precioUnit * (1 - pctDescuento / 100) : qtyCapped * precioUnit;
         const newItems = (pedidoData.items || []).map((it) =>
-            String(it.id) === String(itemId) ? { ...it, cantidad: qtyCapped, total: qtyCapped * (parseFloat(it.precio) || 0), total_des: qtyCapped * (parseFloat(it.precio) || 0) } : it
+            String(it.id) === String(itemId) ? { ...it, cantidad: qtyCapped, total: totalItem, total_des: totalItem } : it
         );
         const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
         const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
@@ -4464,22 +4330,24 @@ export default function Facturar({
         return true;
     };
 
-    // Construir metodos_pago como el backend (para solicitud descuento por método de pago)
+    // Construir metodos_pago como el backend (para solicitud descuento por método de pago), con moneda original de cada uno
     const buildMetodosPagoFront = () => {
         const metodos_pago = [];
-        if (efectivo_dolar && parseFloat(efectivo_dolar)) metodos_pago.push({ tipo: "efectivo", monto: parseFloat(efectivo_dolar) });
-        if (debito && parseFloat(debito)) metodos_pago.push({ tipo: "debito", monto: parseFloat(debito) });
-        if (debitos && Array.isArray(debitos)) {
+        if (efectivo_dolar && parseFloat(efectivo_dolar)) metodos_pago.push({ tipo: "efectivo", monto: parseFloat(efectivo_dolar), moneda: "USD" });
+        // Un solo bloque débito: si hay array debitos con montos, usar solo ese; si no, usar el campo único debito. Débito siempre en Bs.
+        if (debitos && Array.isArray(debitos) && debitos.length > 0) {
             debitos.forEach((d) => {
                 const m = parseFloat(d.monto);
-                if (!Number.isNaN(m) && m !== 0) metodos_pago.push({ tipo: "debito", monto: m });
+                if (!Number.isNaN(m) && m !== 0) metodos_pago.push({ tipo: "debito", monto: m, moneda: d.moneda || "Bs" });
             });
+        } else if (debito && parseFloat(debito)) {
+            metodos_pago.push({ tipo: "debito", monto: parseFloat(debito), moneda: "Bs" });
         }
-        if (transferencia && parseFloat(transferencia)) metodos_pago.push({ tipo: "transferencia", monto: parseFloat(transferencia) });
-        if (biopago && parseFloat(biopago)) metodos_pago.push({ tipo: "biopago", monto: 0 });
-        if (credito && parseFloat(credito)) metodos_pago.push({ tipo: "credito", monto: parseFloat(credito) });
-        if (efectivo_bs && parseFloat(efectivo_bs)) metodos_pago.push({ tipo: "adicional", monto: parseFloat(efectivo_bs) });
-        if (efectivo_peso && parseFloat(efectivo_peso)) metodos_pago.push({ tipo: "adicional", monto: parseFloat(efectivo_peso) });
+        if (transferencia && parseFloat(transferencia)) metodos_pago.push({ tipo: "transferencia", monto: parseFloat(transferencia), moneda: "USD" });
+        if (biopago && parseFloat(biopago)) metodos_pago.push({ tipo: "biopago", monto: 0, moneda: "USD" });
+        if (credito && parseFloat(credito)) metodos_pago.push({ tipo: "credito", monto: parseFloat(credito), moneda: "USD" });
+        if (efectivo_bs && parseFloat(efectivo_bs)) metodos_pago.push({ tipo: "adicional", monto: parseFloat(efectivo_bs), moneda: "Bs" });
+        if (efectivo_peso && parseFloat(efectivo_peso)) metodos_pago.push({ tipo: "adicional", monto: parseFloat(efectivo_peso), moneda: "COP" });
         return metodos_pago;
     };
 
@@ -4488,6 +4356,10 @@ export default function Facturar({
         const tieneDescuento = pedidoData.items.some((it) => it.descuento != null && parseFloat(it.descuento) > 0);
         if (!tieneDescuento) {
             notificar({ data: { msj: "El pedido no tiene ítems con descuento", estado: false } });
+            return;
+        }
+        if (!pedidoData.id_cliente || pedidoData.id_cliente == 1) {
+            notificar({ data: { msj: "Debe seleccionar un cliente antes de enviar la solicitud de descuento.", estado: false } });
             return;
         }
         const metodos_pago = buildMetodosPagoFront();
@@ -4501,20 +4373,26 @@ export default function Facturar({
             notificar({ data: { msj: "Indique al menos un método de pago con monto (mayor a cero en ventas, o el vuelto en devoluciones) para solicitar el descuento", estado: false } });
             return;
         }
+        // Respetar signo de cantidad (devoluciones = negativos)
         const monto_bruto = (pedidoData.items || []).reduce((sum, it) => {
-            const subtotal = (parseFloat(it.producto?.precio ?? it.precio) || 0) * Math.abs(parseFloat(it.cantidad) || 0);
-            return sum + subtotal;
+            const precio = parseFloat(it.producto?.precio ?? it.precio) || 0;
+            const cantidad = parseFloat(it.cantidad) || 0;
+            return sum + precio * cantidad;
         }, 0);
         let monto_descuento = 0;
         (pedidoData.items || []).forEach((it) => {
-            const subtotal = (parseFloat(it.producto?.precio ?? it.precio) || 0) * Math.abs(parseFloat(it.cantidad) || 0);
+            const precio = parseFloat(it.producto?.precio ?? it.precio) || 0;
+            const cantidad = parseFloat(it.cantidad) || 0;
+            const subtotal = precio * cantidad;
             const pct = parseFloat(it.descuento) || 0;
             if (pct > 0) monto_descuento += subtotal * (pct / 100);
         });
         const monto_con_descuento = monto_bruto - monto_descuento;
-        const porcentaje_descuento = monto_bruto > 0 ? (monto_descuento / monto_bruto) * 100 : 0;
+        const porcentaje_descuento = monto_bruto !== 0 ? (monto_descuento / monto_bruto) * 100 : 0;
         const ids_productos = (pedidoData.items || []).map((it) => {
-            const subtotal_it = (parseFloat(it.producto?.precio ?? it.precio) || 0) * Math.abs(parseFloat(it.cantidad) || 0);
+            const precio = parseFloat(it.producto?.precio ?? it.precio) || 0;
+            const cantidad = parseFloat(it.cantidad) || 0;
+            const subtotal_it = precio * cantidad;
             const pct = parseFloat(it.descuento) || 0;
             const subtotal_con_descuento = subtotal_it * (1 - pct / 100);
             return {
@@ -4527,6 +4405,7 @@ export default function Facturar({
                 porcentaje_descuento: pct,
             };
         });
+        const numItemsConDescuento = (pedidoData.items || []).filter((it) => it.descuento != null && parseFloat(it.descuento) > 0).length;
         setLoading(true);
         db.solicitudDescuentoFrontCrear({
             uuid_pedido_front: pedidoData.id,
@@ -4538,17 +4417,33 @@ export default function Facturar({
             tipo_descuento: "metodo_pago",
             metodos_pago,
             observaciones: "Solicitud de descuento por método de pago: " + porcentaje_descuento.toFixed(2) + "%",
+            id_cliente: pedidoData.id_cliente || undefined,
+            data_cliente: (pedidoData.cliente && typeof pedidoData.cliente === "object") ? pedidoData.cliente : undefined,
         })
             .then((res) => {
                 setLoading(false);
                 const data = res.data || res;
                 if (data.estado === true && data.existe) {
+                    const estadoSolicitud = data.data?.estado;
+                    if (estadoSolicitud === "aprobado") {
+                        const metodosAprobados = data.data?.metodos_pago || [];
+                        setPendienteDescuentoMetodoPago((prev) => {
+                            const next = { ...prev };
+                            delete next[pedidoData.id];
+                            return next;
+                        });
+                        setDescuentoMetodoPagoAprobadoPorUuid((prev) => ({ ...prev, [pedidoData.id]: true }));
+                        setMetodosPagoAprobadosPorUuid((prev) => ({ ...prev, [pedidoData.id]: metodosAprobados }));
+                        notificar({ data: { msj: "Solicitud ya aprobada en central. Guardando pedido…", estado: true } });
+                        if (procesarPagoInternoRef.current) procesarPagoInternoRef.current(null, null, null);
+                        return;
+                    }
                     notificar({ data: { msj: data.msj || "Ya existe una solicitud en espera de aprobación", estado: true } });
                     return;
                 }
                 if (data.estado === true) {
-                    setPendienteDescuentoMetodoPago((prev) => ({ ...prev, [pedidoData.id]: { submittedAt: Date.now(), metodos_pago } }));
-                    notificar({ data: { msj: "Solicitud de descuento por método de pago enviada a central", estado: true } });
+                    setPendienteDescuentoMetodoPago((prev) => ({ ...prev, [pedidoData.id]: { submittedAt: Date.now(), metodos_pago, numItemsConDescuento } }));
+                    notificar({ data: { msj: `Se envió la solicitud de descuento de ${numItemsConDescuento} ítem(s) con sus descuentos y el método de pago elegido. Use Verificar aprobación cuando central apruebe.`, estado: true } });
                     return;
                 }
                 notificar({ data: { msj: data.msj || "Error al enviar solicitud", estado: false } });
@@ -4575,13 +4470,46 @@ export default function Facturar({
                     });
                     setDescuentoMetodoPagoAprobadoPorUuid((prev) => ({ ...prev, [pedidoData.id]: true }));
                     setMetodosPagoAprobadosPorUuid((prev) => ({ ...prev, [pedidoData.id]: metodosAprobados }));
-                    const labels = { efectivo: "Efectivo", transferencia: "Transferencia", debito: "Débito", biopago: "Biopago", credito: "Crédito", adicional: "Bs/Pesos" };
-                    const list = metodosAprobados.map((m) => `${labels[m.tipo] || m.tipo} $${m.monto != null ? m.monto : ""}`).filter(Boolean).join(", ");
-                    notificar({ data: { msj: list ? `Descuento aprobado para: ${list}. Use exactamente estos métodos y montos para facturar.` : "Descuento por método de pago aprobado. Ya puede procesar el pago.", estado: true } });
+                    notificar({ data: { msj: "Descuento aprobado. Guardando pedido…", estado: true } });
+                    if (procesarPagoInternoRef.current) procesarPagoInternoRef.current(null, null, null);
                 } else if (data?.existe && data?.data?.estado === "enviado") {
                     notificar({ data: { msj: "La solicitud sigue en espera de aprobación", estado: true } });
+                } else if (data?.existe === false || data?.data?.estado === "rechazado") {
+                    setPendienteDescuentoMetodoPago((prev) => {
+                        const next = { ...prev };
+                        delete next[pedidoData.id];
+                        return next;
+                    });
+                    setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
+                        const next = { ...prev };
+                        delete next[pedidoData.id];
+                        return next;
+                    });
+                    setMetodosPagoAprobadosPorUuid((prev) => {
+                        const next = { ...prev };
+                        delete next[pedidoData.id];
+                        if (typeof setMetodosPagoAprobadosPorUuidStorage === "function") setMetodosPagoAprobadosPorUuidStorage(next);
+                        return next;
+                    });
+                    notificar({ data: { msj: "La solicitud ya no existe o fue rechazada. Puede volver a guardar el pedido para enviar una nueva solicitud.", estado: true } });
                 } else {
-                    notificar({ data: { msj: data?.msj || "No hay solicitud aprobada aún", estado: true } });
+                    setPendienteDescuentoMetodoPago((prev) => {
+                        const next = { ...prev };
+                        delete next[pedidoData.id];
+                        return next;
+                    });
+                    setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
+                        const next = { ...prev };
+                        delete next[pedidoData.id];
+                        return next;
+                    });
+                    setMetodosPagoAprobadosPorUuid((prev) => {
+                        const next = { ...prev };
+                        delete next[pedidoData.id];
+                        if (typeof setMetodosPagoAprobadosPorUuidStorage === "function") setMetodosPagoAprobadosPorUuidStorage(next);
+                        return next;
+                    });
+                    notificar({ data: { msj: data?.msj || "La solicitud ya no está disponible. Puede volver a guardar el pedido para enviar una nueva solicitud.", estado: true } });
                 }
             })
             .catch(() => {
@@ -4593,17 +4521,30 @@ export default function Facturar({
     const cancelarSolicitudDescuentoMetodoPagoFront = () => {
         if (!pedidoData._frontOnly || !pedidoData.id) return;
         setCancelandoDescuentoMetodoPago(true);
-        db.solicitudDescuentoFrontCancelar({ uuid_pedido_front: pedidoData.id, tipo_descuento: "metodo_pago" })
+        const uuid = pedidoData.id;
+        db.solicitudDescuentoFrontCancelar({ uuid_pedido_front: uuid, tipo_descuento: "metodo_pago" })
             .then((res) => {
                 setCancelandoDescuentoMetodoPago(false);
                 const data = res?.data ?? res;
                 if (data?.estado === true) {
                     setPendienteDescuentoMetodoPago((prev) => {
                         const next = { ...prev };
-                        delete next[pedidoData.id];
+                        delete next[uuid];
                         return next;
                     });
-                    notificar({ data: { msj: data.msj || "Solicitud cancelada. Puede enviar de nuevo con los métodos de pago correctos.", estado: true } });
+                    // Si la solicitud ya estaba aprobada y se cancela, limpiar también el estado "aprobado" para que deba enviar otra
+                    setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
+                        const next = { ...prev };
+                        delete next[uuid];
+                        return next;
+                    });
+                    setMetodosPagoAprobadosPorUuid((prev) => {
+                        const next = { ...prev };
+                        delete next[uuid];
+                        if (typeof setMetodosPagoAprobadosPorUuidStorage === "function") setMetodosPagoAprobadosPorUuidStorage(next);
+                        return next;
+                    });
+                    notificar({ data: { msj: data.msj || "Solicitud cancelada. Debe enviar de nuevo la solicitud con los métodos de pago que vaya a usar.", estado: true } });
                 } else {
                     notificar({ data: { msj: data?.msj || "No se pudo cancelar la solicitud", estado: false } });
                 }
@@ -4656,10 +4597,14 @@ export default function Facturar({
                 return;
             }
             if (pedidoData._frontOnly && pedidoData.id) {
+                if (pendienteDescuentoMetodoPago[pedidoData.id]) {
+                    notificar({ data: { msj: "Solicitud de descuento en espera. Verifique aprobación o cancele la solicitud para editar cantidades.", estado: false } });
+                    return;
+                }
                 const item = (pedidoData.items || []).find((it) => String(it.id) === String(index));
                 if (!item || !item.producto) return;
-                if (item.descuento != null && parseFloat(item.descuento) > 0) {
-                    notificar({ msj: "No se puede editar la cantidad: el ítem tiene descuento aprobado", estado: false });
+                if (descuentoMetodoPagoAprobadoPorUuid[pedidoData.id] && item.descuento != null && parseFloat(item.descuento) > 0) {
+                    notificar({ msj: "No se puede editar la cantidad: el ítem tiene descuento aprobado por central", estado: false });
                     return;
                 }
                 const productInList = productos.find((p) => p.id == item.producto.id);
@@ -4668,8 +4613,11 @@ export default function Facturar({
                 if (qtyCapped < qty && disponible >= 0) {
                     notificar({ msj: "Solo hay " + disponible + " disponible(s). Se actualizó al máximo.", estado: true });
                 }
+                const precioUnit = parseFloat(item.precio) || parseFloat(item.producto?.precio) || 0;
+                const pctDescuento = (item.descuento != null && parseFloat(item.descuento) > 0) ? parseFloat(item.descuento) : 0;
+                const totalItem = pctDescuento > 0 ? qtyCapped * precioUnit * (1 - pctDescuento / 100) : qtyCapped * precioUnit;
                 const newItems = (pedidoData.items || []).map((it) =>
-                    String(it.id) === String(index) ? { ...it, cantidad: qtyCapped, total: qtyCapped * (parseFloat(it.precio) || 0), total_des: qtyCapped * (parseFloat(it.precio) || 0) } : it
+                    String(it.id) === String(index) ? { ...it, cantidad: qtyCapped, total: totalItem, total_des: totalItem } : it
                 );
                 const clean_subtotal = newItems.reduce((sum, it) => sum + (parseFloat(it.total) || 0), 0);
                 const updated = { ...pedidoData, items: newItems, clean_subtotal, clean_total: clean_subtotal, bs: clean_subtotal * (parseFloat(pedidoData.items?.[0]?.tasa) || parseFloat(dolar) || 0) };
@@ -4712,7 +4660,7 @@ export default function Facturar({
         setdevolucionTipo(null);
         setModaladdproductocarritoToggle(true);
     };
-    const addCarritoRequestInterno = (e = null, isnotformatogan = true, cantidadOverride = null) => {
+    const addCarritoRequestInterno = (e = null, isnotformatogan = true, cantidadOverride = null, options = {}) => {
         if (e && e.preventDefault) {
             e.preventDefault();
         }
@@ -4722,6 +4670,10 @@ export default function Facturar({
         } else {
             // Pedido solo en front: agregar ítem localmente sin llamar API (si ya existe por id producto, editar cantidad). Permitir cantidades negativas para devoluciones.
             if (pedidoData._frontOnly && pedidoData.id) {
+                if (pendienteDescuentoMetodoPago[pedidoData.id]) {
+                    notificar({ data: { msj: "Solicitud de descuento en espera. Verifique aprobación o cancele la solicitud para agregar ítems al pedido.", estado: false } });
+                    return;
+                }
                 const qtyRaw = cantidadOverride ?? cantidad;
                 const qty = parseFloat(qtyRaw) ?? 0;
                 const esDevolucion = qty < 0;
@@ -4734,7 +4686,7 @@ export default function Facturar({
 
                 // Validar devolución: solo productos facturados en la factura original y máximo la cantidad disponible a devolver
                 if (esDevolucion) {
-                    const idOriginal = pedidoData.isdevolucionOriginalid || null;
+                    const idOriginal = (options && options.id_pedido_original) ?? pedidoData.isdevolucionOriginalid ?? null;
                     if (!idOriginal) {
                         notificar({ data: { msj: "Asigne primero la factura original para realizar la devolución.", estado: false } });
                         return;
@@ -4742,7 +4694,8 @@ export default function Facturar({
                     const idProductoBuscar = productoSelectinternouno.id ?? productoSelectinternouno.id_producto;
                     const idProductoNum = Number(idProductoBuscar);
                     const codigoBarrasBuscar = (productoSelectinternouno.codigo_barras ?? productoSelectinternouno.codigo_proveedor ?? "").toString().trim();
-                    const itemDisponible = (itemsDisponiblesDevolucion || []).find((d) => {
+                    const listaParaBuscar = (options && Array.isArray(options.items_disponibles)) ? options.items_disponibles : (itemsDisponiblesDevolucion || []);
+                    const itemDisponible = listaParaBuscar.find((d) => {
                         const idD = Number(d.id_producto);
                         if (!Number.isNaN(idProductoNum) && !Number.isNaN(idD) && idD === idProductoNum) return true;
                         if (String(d.id_producto) === String(idProductoBuscar)) return true;
@@ -4751,7 +4704,7 @@ export default function Facturar({
                     });
                     if (!itemDisponible) {
                         // Si la lista se vació (p. ej. al quitar y volver a agregar), recuperar ítems disponibles desde el backend
-                        if ((!itemsDisponiblesDevolucion || itemsDisponiblesDevolucion.length === 0) && idOriginal) {
+                        if ((!listaParaBuscar || listaParaBuscar.length === 0) && idOriginal) {
                             db.getItemsDisponiblesDevolucion({ id_pedido_original: idOriginal })
                                 .then((res) => {
                                     if (res.data?.items_disponibles?.length) {
@@ -4799,8 +4752,8 @@ export default function Facturar({
                 let newItems;
                 if (existingIndex >= 0) {
                     const existing = items[existingIndex];
-                    if (!esDevolucion && existing.descuento != null && parseFloat(existing.descuento) > 0) {
-                        notificar({ msj: "No se puede agregar más: el ítem tiene descuento aprobado. Para cambiar cantidad, pida al aprobador que revierta y vuelva a solicitar.", estado: false });
+                    if (!esDevolucion && descuentoMetodoPagoAprobadoPorUuid[pedidoData.id] && existing.descuento != null && parseFloat(existing.descuento) > 0) {
+                        notificar({ msj: "No se puede agregar más: el ítem tiene descuento aprobado por central. Para cambiar cantidad, use Eliminar validación y vuelva a solicitar.", estado: false });
                         return;
                     }
                     let newCantidad;
@@ -5142,6 +5095,7 @@ export default function Facturar({
     const debitoRefRef = useRef("");
     const debitoMontoRef = useRef("");
     const vueltoRef = useRef("");
+    const procesarPagoInternoRef = useRef(null);
     useEffect(() => { debitosPorPedidoRef.current = debitosPorPedido; }, [debitosPorPedido]);
     useEffect(() => { debitosRef.current = debitos; }, [debitos]);
     useEffect(() => { pedidoDataRef.current = pedidoData; }, [pedidoData]);
@@ -5180,7 +5134,13 @@ export default function Facturar({
             
             if (tieneDescuentos && clientePorDefecto) {
                 console.log("[setPagoPedido] BLOQUEADO: descuentos en ítems pero sin cliente registrado", { pedidoActual });
-                alert("Error: El pedido tiene descuentos aplicados. Debe registrar un cliente antes de procesar el pago.");
+                setToggleAddPersonaFun(true, () => {
+                    setclienteInpnombre("");
+                    setclienteInptelefono("");
+                    setclienteInpdireccion("");
+                    setTimeout(() => inputmodaladdpersonacarritoref?.current?.focus(), 100);
+                });
+                notificar({ data: { msj: "Debe registrar un cliente para aplicar el descuento.", estado: false } });
                 return;
             }
             
@@ -5297,15 +5257,31 @@ export default function Facturar({
                         return;
                     }
                     if (descuentoMetodoPagoAprobadoPorUuid[uuid]) {
-                        const aprobados = metodosPagoAprobadosPorUuid[uuid];
-                        console.log("[setPagoPedido] Pedido front con descuento → aprobado por central → avanza", { uuid, aprobados, metodos });
-                       /*  if (!metodosPagoCoincidenConAprobados(metodos, aprobados)) {
-                            const labels = { efectivo: "Efectivo", transferencia: "Transferencia", debito: "Débito", biopago: "Biopago", credito: "Crédito", adicional: "Bs/Pesos" };
-                            const list = (aprobados || []).map((m) => `${labels[m.tipo] || m.tipo} $${m.monto}`).join(", ");
-                            notificar({ data: { msj: `Debe usar exactamente los métodos y montos aprobados: ${list || "—"}.`, estado: false } });
-                            return;
-                        } */
-                        procesarPagoInterno(callback, null, options || null);
+                        // Verificar en central que la solicitud sigue existiendo y aprobada (p. ej. si la eliminaron en central)
+                        console.log("[setPagoPedido] Verificando en central que la solicitud siga aprobada antes de facturar", { uuid });
+                        db.solicitudDescuentoFrontVerificar({ uuid_pedido_front: uuid, tipo_descuento: "metodo_pago" })
+                            .then((res) => {
+                                const data = res?.data;
+                                if (data?.existe && data?.data?.estado === "aprobado") {
+                                    procesarPagoInterno(callback, null, options || null);
+                                } else {
+                                    setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
+                                        const next = { ...prev };
+                                        delete next[uuid];
+                                        return next;
+                                    });
+                                    setMetodosPagoAprobadosPorUuid((prev) => {
+                                        const next = { ...prev };
+                                        delete next[uuid];
+                                        if (typeof setMetodosPagoAprobadosPorUuidStorage === "function") setMetodosPagoAprobadosPorUuidStorage(next);
+                                        return next;
+                                    });
+                                    notificar({ data: { msj: "La solicitud ya no existe o fue eliminada. Debe enviar una nueva solicitud de descuento (guardar de nuevo el pedido) antes de facturar.", estado: false } });
+                                }
+                            })
+                            .catch(() => {
+                                notificar({ data: { msj: "No se pudo verificar la solicitud. Intente de nuevo o envíe una nueva solicitud guardando de nuevo.", estado: false } });
+                            });
                         return;
                     }
                     console.log("[setPagoPedido] BLOQUEADO: pedido front con descuento → solicitando aprobación de descuento por método de pago", { uuid, metodos });
@@ -5450,11 +5426,7 @@ export default function Facturar({
         db.setPagoPedido(params).then((res) => {
             console.log("[setPagoPedido] Respuesta del backend →", res.data);
             setLoading(false);
-            if (res.data.montos_no_coinciden && res.data.montos_detalle) {
-                setMontosNoCoincidenDetalle(res.data.montos_detalle);
-            } else {
-                notificar(res);
-            }
+            notificar(res);
 
             if (res.data.estado) {
                 // Limpiar datos de localStorage para este pedido procesado
@@ -5587,6 +5559,7 @@ export default function Facturar({
             setLoading(false);
         });
     };
+    procesarPagoInternoRef.current = procesarPagoInterno;
     
     // Actualizar una instancia del modal POS (por pedidoId)
     const actualizarInstanciaPos = (instanceId, updates) => {
@@ -10437,72 +10410,6 @@ export default function Facturar({
                         />
                     )}
                     
-                    {/* Modal especial: montos no coinciden (setPagoPedido) */}
-                    {montosNoCoincidenDetalle && (
-                        <div
-                            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]"
-                            onClick={() => setMontosNoCoincidenDetalle(null)}
-                            role="dialog"
-                            aria-labelledby="montos-no-coinciden-title"
-                        >
-                            <div
-                                className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <div className="bg-amber-500 text-white px-5 py-4">
-                                    <h2 id="montos-no-coinciden-title" className="text-lg font-bold flex items-center gap-2">
-                                        <span className="text-2xl" aria-hidden>⚠️</span>
-                                        Los montos no coinciden
-                                    </h2>
-                                    <p className="text-sm text-amber-100 mt-1">
-                                        El total del pedido y la suma de lo que ingresaste en métodos de pago no son iguales.
-                                    </p>
-                                </div>
-                                <div className="p-5 space-y-4">
-                                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                                        <span className="text-gray-600">Total del pedido:</span>
-                                        <span className="font-semibold text-right">{Number(montosNoCoincidenDetalle.total_pedido_usd).toFixed(2)} $</span>
-                                        <span className="text-gray-600">Total que ingresaste:</span>
-                                        <span className="font-semibold text-right">{Number(montosNoCoincidenDetalle.total_pagos_usd).toFixed(2)} $</span>
-                                        <span className="text-gray-700 font-medium">Diferencia:</span>
-                                        <span className={`font-bold text-right ${montosNoCoincidenDetalle.diferencia_usd > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                            {Number(montosNoCoincidenDetalle.diferencia_usd).toFixed(2)} $
-                                        </span>
-                                    </div>
-                                    <p className="text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
-                                        {montosNoCoincidenDetalle.diferencia_usd > 0
-                                            ? `Falta ingresar ${Number(montosNoCoincidenDetalle.diferencia_usd).toFixed(2)} $ en métodos de pago.`
-                                            : `Ingresaste ${Math.abs(Number(montosNoCoincidenDetalle.diferencia_usd)).toFixed(2)} $ de más. Ajusta los montos.`}
-                                    </p>
-                                    {montosNoCoincidenDetalle.total_pedido_bs != null && (
-                                        <div className="border-t pt-3 mt-3">
-                                            <p className="text-xs font-medium text-gray-500 mb-2">En bolívares (validación débito):</p>
-                                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-700">
-                                                <span>Pedido:</span>
-                                                <span className="text-right">{Number(montosNoCoincidenDetalle.total_pedido_bs).toFixed(2)} Bs</span>
-                                                <span>Pagos:</span>
-                                                <span className="text-right">{Number(montosNoCoincidenDetalle.total_pagos_bs).toFixed(2)} Bs</span>
-                                                <span>Diferencia:</span>
-                                                <span className={`text-right font-semibold ${(montosNoCoincidenDetalle.diferencia_bs || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                                    {Number(montosNoCoincidenDetalle.diferencia_bs || 0).toFixed(2)} Bs
-                                                </span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="px-5 py-4 bg-gray-50 border-t flex justify-end">
-                                    <button
-                                        type="button"
-                                        onClick={() => setMontosNoCoincidenDetalle(null)}
-                                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors"
-                                    >
-                                        Entendido
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
                     {/* Modales POS Débito - una instancia por pedido (independientes) */}
                     {Object.entries(modalesPosAbiertos).map(([instanceId, inst]) => (
                         <div

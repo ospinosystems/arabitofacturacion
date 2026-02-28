@@ -539,7 +539,8 @@ class PagosReferenciasController extends Controller
             $item->monto = $req->monto;
             $item->id_pedido = $req->id_pedido;
             $item->cedula = $req->cedula;
-            $item->estatus = "pendiente"; // No aprobada por defecto
+            // Autovalidar: ya fue aprobada en Central, guardar como aprobada
+            $item->estatus = ($categoria === 'autovalidar') ? 'aprobada' : 'pendiente';
             $item->categoria = $categoria;
             
             // Campos según categoría
@@ -569,6 +570,18 @@ class PagosReferenciasController extends Controller
                     $item->descripcion = $req->descripcion ?? null;
                     $item->fecha_pago = $req->fecha_pago ?? null;
                     $item->banco_origen = $req->codigo_banco_origen ?? null;
+                    break;
+
+                case 'autovalidar':
+                    // Autovalidar: ya validada en Central; mismos campos que pagomovil + banco
+                    $item->descripcion = $req->descripcion ?? null;
+                    $item->banco = $req->banco ?? null;
+                    $item->fecha_pago = $req->fecha_pago ?? null;
+                    $item->telefono = $req->telefono ?? $req->telefono_pago ?? null;
+                    $item->banco_origen = $req->codigo_banco_origen ?? $req->banco_origen ?? null;
+                    if (!empty($req->response_central)) {
+                        $item->response = is_string($req->response_central) ? $req->response_central : json_encode($req->response_central);
+                    }
                     break;
             }
             

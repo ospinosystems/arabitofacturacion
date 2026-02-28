@@ -265,8 +265,8 @@ export default function ModalRefPago({
                     message: response.data.msj || '¡Transferencia validada y aprobada exitosamente!',
                     data: response.data.data
                 });
-                // Pedido front: guardar referencia en estado (IndexedDB) sin recargar desde servidor
-                if (pedidoData?._frontOnly && pedidoData?.id && typeof onAutovalidarReferenciaSuccess === 'function') {
+                // Siempre notificar al padre: front → guarda en estado; no front → guarda en backend vía addRefPago
+                if (pedidoData?.id && typeof onAutovalidarReferenciaSuccess === 'function') {
                     onAutovalidarReferenciaSuccess(response.data.data || {}, {
                         monto: monto_referenciapago,
                         descripcion: response.data.data?.referencia_completa || referenciaFormateada,
@@ -276,16 +276,11 @@ export default function ModalRefPago({
                         banco_origen: codigoBancoOrigen,
                         banco: response.data.data?.banco || '0134',
                     });
-                    // Solo cerrar el modal; NO llamar "recargar" para evitar que el stale closure de getPedido sobreescriba las refs recién añadidas
-                    setTimeout(() => {
-                        addRefPago("cerrar");
-                    }, 1500);
-                } else {
-                    // Pedido normal (backend): recargar pedido para mostrar la referencia guardada en BD
-                    setTimeout(() => {
-                        addRefPago("recargar");
-                    }, 1500);
                 }
+                // Cerrar modal tras breve delay (pedido front: solo cerrar; pedido backend: el callback ya recargó)
+                setTimeout(() => {
+                    addRefPago("cerrar");
+                }, 1500);
             } else if (response.data.monto_diferente) {
                 // Caso especial: referencia encontrada pero monto diferente
                 setResultadoValidacion({
