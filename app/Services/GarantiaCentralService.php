@@ -102,8 +102,13 @@ class GarantiaCentralService
                 }
             }
 
-            // Enviar usando HTTP multipart al endpoint unificado
-            $response = \Http::timeout(60)->asMultipart()->post(
+            // Enviar usando HTTP multipart al endpoint unificado (con API key de sucursal para central)
+            $headers = [];
+            $apiKey = $this->sendCentral->getCentralApiKey();
+            if ($apiKey !== null && $apiKey !== '') {
+                $headers['X-Sucursal-Api-Key'] = $apiKey;
+            }
+            $response = \Http::timeout(60)->withHeaders($headers)->asMultipart()->post(
                 $this->sendCentral->path() . "/api/garantias/registrar",
                 $multipartData
             );
@@ -259,8 +264,13 @@ class GarantiaCentralService
                 }
             }
 
-            // Enviar usando HTTP multipart al endpoint unificado
-            $response = \Http::timeout(60)->asMultipart()->post(
+            // Enviar usando HTTP multipart al endpoint unificado (con API key de sucursal para central)
+            $headers = [];
+            $apiKey = $this->sendCentral->getCentralApiKey();
+            if ($apiKey !== null && $apiKey !== '') {
+                $headers['X-Sucursal-Api-Key'] = $apiKey;
+            }
+            $response = \Http::timeout(60)->withHeaders($headers)->asMultipart()->post(
                 $this->sendCentral->path() . "/api/garantias/registrar",
                 $multipartData
             );
