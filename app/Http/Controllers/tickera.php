@@ -1815,7 +1815,12 @@ class tickera extends Controller
                 array_push($factura,"101");
     
                 $file = "C:/IntTFHKA/Factura.txt";	
-                
+    
+                // Marcar recibo fiscal como impreso/enviado ANTES de enviar al terminal, para que quede
+                // registrado en DB aunque sendFiscalTerminal falle (p. ej. desde setPagoPedido).
+                $updateprint = pedidos::find($id);
+                $updateprint->fiscal = 1;
+                $updateprint->save();
     
                 $this->sendFiscalTerminal(json_encode($factura),"factura",$file);
     
@@ -1825,10 +1830,6 @@ class tickera extends Controller
                 for($i=0; $i < $lineas; $i++){
                     $rep = $repuesta[$i];
                 }  */
-                
-                $updateprint = pedidos::find($id);
-                $updateprint->fiscal = 1;
-                $updateprint->save();
                 
                 return Response::json([
                     "msj"=>"Imprimiendo Factura Fiscal...".$rep,
