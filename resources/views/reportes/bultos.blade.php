@@ -15,10 +15,6 @@
                <b> {{$num_bulto}} / {{$total}}</b>
             </label>
             <br>
-            <label class="numped">
-                <b class="fs-4">#{{$id}}</b>
-            </label>
-            <br>
             <br>
             {{-- <label class="numped">
                 <b class="fs-6">ITEMS {{count($e)}}</b>
