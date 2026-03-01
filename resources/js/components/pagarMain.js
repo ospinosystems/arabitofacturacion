@@ -254,6 +254,12 @@ export default function PagarMain({
     const [showModalExportarLista, setShowModalExportarLista] = useState(false);
     const refContenidoImpresionExportar = useRef(null);
 
+    // Modal pantalla completa: imprimir bultos
+    const [showModalBultos, setShowModalBultos] = useState(false);
+    const [numBultosInput, setNumBultosInput] = useState("");
+    const [bultosIframeUrl, setBultosIframeUrl] = useState(null);
+    const refIframeBultos = useRef(null);
+
     // Estados para mostrar/ocultar efectivo dividido por moneda
     const [showEfectivoDetalle, setShowEfectivoDetalle] = useState(false);
     const [showEfectivoPeso, setShowEfectivoPeso] = useState(false);
@@ -4606,7 +4612,11 @@ export default function PagarMain({
                                           
                                         <button
                                             className="flex items-center gap-1 px-2 py-1 text-xs text-amber-700 transition-colors border !border-amber-300 rounded bg-amber-100 hover:bg-amber-200"
-                                            onClick={() => printBultos()}
+                                            onClick={() => {
+                                                setNumBultosInput("");
+                                                setBultosIframeUrl(null);
+                                                setShowModalBultos(true);
+                                            }}
                                             title="Imprimir Bultos"
                                         >
                                             <i className="fa fa-box"></i>
@@ -5203,6 +5213,94 @@ export default function PagarMain({
                         >
                             Cerrar
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal pantalla completa: Imprimir Bultos */}
+            {showModalBultos && pedidoData?.id && (
+                <div className="fixed inset-0 z-[100] flex flex-col bg-white">
+                    <div className="flex-shrink-0 flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-amber-50 border-b border-amber-200">
+                        <h2 className="text-lg font-bold text-amber-900">
+                            <i className="fa fa-box mr-2"></i>
+                            Imprimir Bultos — Pedido #{pedidoData.id}
+                        </h2>
+                        <div className="flex items-center gap-3 flex-wrap">
+                            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                                Número de bultos:
+                                <input
+                                    type="number"
+                                    min="1"
+                                    className="w-20 px-2 py-1.5 border border-gray-300 rounded-md text-center font-mono"
+                                    value={numBultosInput}
+                                    onChange={(e) => setNumBultosInput(e.target.value)}
+                                    placeholder="Ej: 5"
+                                />
+                            </label>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const n = parseInt(numBultosInput, 10);
+                                    if (n >= 1) {
+                                        const base = typeof window !== "undefined" ? window.location.origin : "";
+                                        setBultosIframeUrl(`${base}/printBultos?id=${pedidoData.id}&bultos=${n}`);
+                                    } else {
+                                        notificar?.("Indique un número de bultos válido (≥ 1)") || alert("Indique un número de bultos válido (≥ 1).");
+                                    }
+                                }}
+                                className="px-4 py-2 text-white bg-amber-600 border border-amber-700 rounded-lg hover:bg-amber-700"
+                            >
+                                <i className="fa fa-refresh mr-2"></i>
+                                Generar vista
+                            </button>
+                            {bultosIframeUrl && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        try {
+                                            if (refIframeBultos.current?.contentWindow) {
+                                                refIframeBultos.current.contentWindow.print();
+                                            }
+                                        } catch (err) {
+                                            notificar?.("Error al imprimir: " + err.message) || alert("Error al imprimir: " + err.message);
+                                        }
+                                    }}
+                                    className="px-4 py-2 text-white bg-indigo-600 border border-indigo-700 rounded-lg hover:bg-indigo-700"
+                                >
+                                    <i className="fa fa-print mr-2"></i>
+                                    Imprimir
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowModalBultos(false);
+                                    setBultosIframeUrl(null);
+                                    setNumBultosInput("");
+                                }}
+                                className="px-4 py-2 text-gray-700 bg-gray-200 border border-gray-400 rounded-lg hover:bg-gray-300"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
+                    </div>
+                    <div className="flex-1 min-h-0 flex flex-col bg-gray-100 p-4">
+                        {bultosIframeUrl ? (
+                            <iframe
+                                ref={refIframeBultos}
+                                src={bultosIframeUrl}
+                                title="Vista de bultos para imprimir"
+                                className="w-full flex-1 min-h-0 border border-gray-300 rounded-lg bg-white"
+                            />
+                        ) : (
+                            <div className="flex-1 flex items-center justify-center text-gray-500">
+                                <div className="text-center">
+                                    <i className="fa fa-box text-4xl mb-3 opacity-50"></i>
+                                    <p className="font-medium">Indique el número de bultos y pulse «Generar vista»</p>
+                                    <p className="text-sm mt-1">Luego use «Imprimir» para imprimir como antes.</p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

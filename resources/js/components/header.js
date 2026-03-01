@@ -396,7 +396,7 @@ function Header({
                                     Cierre
                                 </button>
 
-                                {auth("super") && (
+                                {(auth("super") || user.tipo_usuario == 1) && (
                                     <button
                                         className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
                                             view === "historialVentasCierre"
