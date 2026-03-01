@@ -250,6 +250,10 @@ export default function PagarMain({
     const [itemsFacturaOriginal, setItemsFacturaOriginal] = useState([]);
     const [loadingFacturaOriginal, setLoadingFacturaOriginal] = useState(false);
 
+    // Modal pantalla completa: exportar lista de productos (F4)
+    const [showModalExportarLista, setShowModalExportarLista] = useState(false);
+    const refContenidoImpresionExportar = useRef(null);
+
     // Estados para mostrar/ocultar efectivo dividido por moneda
     const [showEfectivoDetalle, setShowEfectivoDetalle] = useState(false);
     const [showEfectivoPeso, setShowEfectivoPeso] = useState(false);
@@ -762,6 +766,19 @@ export default function PagarMain({
         document.addEventListener('keydown', handleKeyDown, true);
         return () => document.removeEventListener('keydown', handleKeyDown, true);
     }, [showCalculadora, showMiniCalc, calcInput, calcCampoActivo]);
+
+    // Escape cierra el modal de exportar lista (F4)
+    useEffect(() => {
+        if (!showModalExportarLista) return;
+        const handleEscape = (e) => {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                setShowModalExportarLista(false);
+            }
+        };
+        document.addEventListener("keydown", handleEscape, true);
+        return () => document.removeEventListener("keydown", handleEscape, true);
+    }, [showModalExportarLista]);
 
     // Funciones para formato de moneda en inputs de pago (tiempo real)
     const formatMonedaLive = (value) => {
@@ -2438,17 +2455,21 @@ export default function PagarMain({
         },
         [showModalPosDebito, togglereferenciapago, debitos, del_pedido, notificar]
     );
-    //f4
+    // F4: modal pantalla completa para exportar lista de productos (código, descripción, cantidad, precio)
     useHotkeys(
         "f4",
         () => {
-            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
-            viewReportPedido();
+            if (showModalPosDebito || togglereferenciapago) return;
+            if (pedidoData?.id && (pedidoData?.items?.length ?? 0) > 0) {
+                setShowModalExportarLista(true);
+            } else {
+                if (typeof viewReportPedido === "function") viewReportPedido();
+            }
         },
         {
             enableOnTags: ["INPUT", "SELECT"],
         },
-        [showModalPosDebito, togglereferenciapago]
+        [showModalPosDebito, togglereferenciapago, pedidoData?.id, pedidoData?.items]
     );
     //f3
     useHotkeys(
@@ -4561,8 +4582,11 @@ export default function PagarMain({
 
                                         <button
                                             className="flex items-center gap-1 px-2 py-1 text-xs text-indigo-700 transition-colors border !border-indigo-300 rounded bg-indigo-100 hover:bg-indigo-200"
-                                            onClick={() => viewReportPedido()}
-                                            title="Ver Pedido (F4)"
+                                            onClick={() => {
+                                                if (pedidoData?.items?.length) setShowModalExportarLista(true);
+                                                else if (typeof viewReportPedido === "function") viewReportPedido();
+                                            }}
+                                            title="Exportar lista / Ver pedido (F4)"
                                         >
                                             <i className="fa fa-eye"></i>
                                             <span>Ver</span>
@@ -5070,6 +5094,115 @@ export default function PagarMain({
                                 Cerrar
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal pantalla completa: exportar lista de productos (F4) */}
+            {showModalExportarLista && pedidoData && (
+                <div className="fixed inset-0 z-[100] flex flex-col bg-white">
+                    {/* Cliente anclado arriba — fuera del scroll, siempre visible */}
+                    <div ref={refContenidoImpresionExportar} className="flex-shrink-0 px-4 py-3 bg-gray-100 border-b border-gray-300 shadow-sm print:bg-transparent print:border-b print:shadow-none">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <span className="text-xs font-semibold text-gray-500 uppercase">Cliente</span>
+                                <div className="mt-0.5 text-base font-medium text-gray-900">
+                                    {cliente && (cliente.nombre || cliente.identificacion) ? (
+                                        <>
+                                            {cliente.nombre !== "CF" ? cliente.nombre : "Sin cliente"}
+                                            {cliente.identificacion && cliente.identificacion !== "CF" && (
+                                                <span className="ml-2 text-sm text-gray-600">· {cliente.identificacion}</span>
+                                            )}
+                                        </>
+                                    ) : (
+                                        "—"
+                                    )}
+                                </div>
+                            </div>
+                            <div className="text-sm text-gray-500">
+                                Pedido #{id} {created_at ? ` · ${created_at}` : ""}
+                            </div>
+                        </div>
+                    </div>
+                    {/* Solo esta zona hace scroll; cabecera de tabla fija debajo del cliente */}
+                    <div className="flex-1 min-h-0 overflow-auto">
+                        <div className="p-4">
+                            <table className="w-full text-sm border-collapse border border-gray-300">
+                                <thead className="bg-gray-100 sticky top-0 z-10 print:static">
+                                    <tr>
+                                        <th className="px-3 py-2 text-left font-semibold text-gray-700 border border-gray-300 w-14">#</th>
+                                        <th className="px-3 py-2 text-left font-semibold text-gray-700 border border-gray-300">Código</th>
+                                        <th className="px-3 py-2 text-left font-semibold text-gray-700 border border-gray-300">Cód. proveedor</th>
+                                        <th className="px-3 py-2 text-left font-semibold text-gray-700 border border-gray-300">Descripción</th>
+                                        <th className="px-3 py-2 text-right font-semibold text-gray-700 border border-gray-300 w-24">Cantidad</th>
+                                        <th className="px-3 py-2 text-right font-semibold text-gray-700 border border-gray-300 w-28">Precio</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(items || []).map((e, index) => {
+                                        const codigo = e.producto?.codigo_barras ?? e.codigo_barras ?? "—";
+                                        const codigoProveedor = e.producto?.codigo_proveedor ?? e.codigo_proveedor ?? "—";
+                                        const descripcion = e.producto?.descripcion ?? e.descripcion ?? "—";
+                                        const cantidad = Number(e.cantidad);
+                                        const precio = e.producto?.precio ?? e.precio_unitario ?? e.precio ?? 0;
+                                        return (
+                                            <tr key={e.id ?? index} className="border-b border-gray-200 hover:bg-gray-50">
+                                                <td className="px-3 py-2 border border-gray-200 font-mono text-gray-600">{index + 1}</td>
+                                                <td className="px-3 py-2 border border-gray-200 font-mono text-gray-800">{String(codigo).trim() || "—"}</td>
+                                                <td className="px-3 py-2 border border-gray-200 font-mono text-gray-700">{String(codigoProveedor).trim() || "—"}</td>
+                                                <td className="px-3 py-2 border border-gray-200 text-gray-900">{descripcion}</td>
+                                                <td className="px-3 py-2 border border-gray-200 text-right font-medium">{cantidad % 1 === 0 ? cantidad : cantidad.toFixed(2)}</td>
+                                                <td className="px-3 py-2 border border-gray-200 text-right">{moneda(precio, 4)}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {/* Botones: Imprimir y Cerrar — anclados abajo */}
+                    <div className="flex-shrink-0 flex items-center justify-end gap-3 px-4 py-3 bg-gray-100 border-t border-gray-300 print:hidden">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (refContenidoImpresionExportar.current) {
+                                    const ventana = window.open("", "_blank");
+                                    if (ventana) {
+                                        ventana.document.write(`
+                                            <!DOCTYPE html><html><head><title>Lista de productos - Pedido ${id}</title>
+                                            <style>body{font-family:sans-serif;padding:1rem;} table{width:100%;border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .cliente{margin-bottom:1rem;font-weight:600;}</style>
+                                            </head><body>
+                                            <div class="cliente">Cliente: ${cliente && (cliente.nombre !== "CF" ? cliente.nombre : "Sin cliente")}${cliente?.identificacion && cliente.identificacion !== "CF" ? " · " + cliente.identificacion : ""}</div>
+                                            <div style="margin-bottom:0.5rem;font-size:12px;color:#666;">Pedido #${id} ${created_at ? " · " + created_at : ""}</div>
+                                            <table><thead><tr><th>#</th><th>Código</th><th>Cód. proveedor</th><th>Descripción</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Precio</th></tr></thead><tbody>
+                                            ${(items || []).map((e, i) => {
+                                                const cod = (e.producto?.codigo_barras ?? e.codigo_barras ?? "—").toString().trim() || "—";
+                                                const codProv = (e.producto?.codigo_proveedor ?? e.codigo_proveedor ?? "—").toString().trim() || "—";
+                                                const desc = (e.producto?.descripcion ?? e.descripcion ?? "—").toString();
+                                                const cant = Number(e.cantidad);
+                                                const prec = e.producto?.precio ?? e.precio_unitario ?? e.precio ?? 0;
+                                                const precStr = Number(prec).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+                                                return `<tr><td>${i + 1}</td><td>${cod}</td><td>${codProv}</td><td>${desc}</td><td style="text-align:right">${cant % 1 === 0 ? cant : cant.toFixed(2)}</td><td style="text-align:right">${precStr}</td></tr>`;
+                                            }).join("")}
+                                            </tbody></table></body></html>`);
+                                        ventana.document.close();
+                                        ventana.focus();
+                                        setTimeout(() => { ventana.print(); ventana.close(); }, 300);
+                                    }
+                                }
+                            }}
+                            className="px-4 py-2 text-white bg-indigo-600 border border-indigo-700 rounded-lg hover:bg-indigo-700"
+                        >
+                            <i className="mr-2 fa fa-print"></i>
+                            Imprimir
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setShowModalExportarLista(false)}
+                            className="px-4 py-2 text-gray-700 bg-gray-200 border border-gray-400 rounded-lg hover:bg-gray-300"
+                        >
+                            Cerrar
+                        </button>
                     </div>
                 </div>
             )}
