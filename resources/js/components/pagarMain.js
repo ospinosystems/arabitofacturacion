@@ -5240,6 +5240,11 @@ export default function PagarMain({
                             <button
                                 type="button"
                                 onClick={() => {
+                                    const nom = (pedidoData?.cliente?.nombre || "").trim();
+                                    if (!pedidoData?.cliente || !nom.includes("SUC ")) {
+                                        notificar?.("El pedido debe tener un cliente destino asignado (ej: SUC CALABOZO) para imprimir bultos.") || alert("El pedido debe tener un cliente destino asignado (ej: SUC CALABOZO) para imprimir bultos.");
+                                        return;
+                                    }
                                     const n = parseInt(numBultosInput, 10);
                                     if (n >= 1) {
                                         const base = typeof window !== "undefined" ? window.location.origin : "";
@@ -5294,10 +5299,15 @@ export default function PagarMain({
                             />
                         ) : (
                             <div className="flex-1 flex items-center justify-center text-gray-500">
-                                <div className="text-center">
+                                <div className="text-center max-w-md px-4">
                                     <i className="fa fa-box text-4xl mb-3 opacity-50"></i>
                                     <p className="font-medium">Indique el número de bultos y pulse «Generar vista»</p>
                                     <p className="text-sm mt-1">Luego use «Imprimir» para imprimir como antes.</p>
+                                    {(!pedidoData?.cliente || !(pedidoData?.cliente?.nombre || "").includes("SUC ")) && (
+                                        <p className="text-amber-700 bg-amber-50 mt-4 p-3 rounded-lg text-sm font-medium">
+                                            El pedido debe tener un cliente destino (ej: SUC CALABOZO) asignado para poder imprimir bultos. La sucursal que aparece en el ticket es la del cliente del pedido.
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         )}

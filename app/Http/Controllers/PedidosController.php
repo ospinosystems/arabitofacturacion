@@ -278,38 +278,44 @@ class PedidosController extends Controller
 
     function printBultos(Request $req) {
         $id = $req->id;
-        $bultos = $req->bultos;
+        $bultos = (int) $req->bultos;
         $ped = pedidos::with("cliente","items")->find($id);
-        $origen = sucursal::all()->first()->codigo;
-        $fecha = $ped->created_at;
 
-        $count_ped = $ped->items->count();
-        $cliente = $ped->cliente->nombre;
+        if (!$ped) {
+            return response()->json(['estado' => false, 'msj' => 'Pedido no encontrado.'], 404);
+        }
+
+        if (!$ped->cliente) {
+            return response()->json(['estado' => false, 'msj' => 'El pedido debe tener un cliente (destino) asignado para imprimir bultos.'], 422);
+        }
+
+        $clienteNombre = $ped->cliente->nombre ?? '';
+        $suc = explode("SUC ", $clienteNombre, 2);
+        $destino = isset($suc[1]) ? trim($suc[1]) : '';
+
+        if ($destino === '') {
+            return response()->json(['estado' => false, 'msj' => 'El cliente del pedido debe ser una sucursal destino (ej: SUC CALABOZO).'], 422);
+        }
+
+        if ($bultos < 1) {
+            return response()->json(['estado' => false, 'msj' => 'Indique un número de bultos válido.'], 422);
+        }
+
+        $origen = sucursal::all()->first()->codigo ?? 'ORIGEN';
+        $fecha = $ped->created_at;
         $porbulto = [];
-        
-        for ($i=1; $i <= $bultos ; $i++) { 
+        for ($i = 1; $i <= $bultos; $i++) {
             $porbulto[$i] = $i;
         }
 
-        $suc = explode("SUC ",$cliente);
-        if (isset($suc[1])) {
-
-            $total_bultos = count($porbulto);
-
-            return view("reportes.bultos",[
-                "bultos"=>$porbulto,
-                "id"=>$id,
-                "total" => count($porbulto),
-                "fecha" => $fecha,
-                "origen" => $origen,
-                "sucursal" => strtoupper($suc[1])
-            ]);
-        }
-        
-
-
-
-        
+        return view("reportes.bultos", [
+            "bultos" => $porbulto,
+            "id" => $id,
+            "total" => count($porbulto),
+            "fecha" => $fecha,
+            "origen" => $origen,
+            "sucursal" => strtoupper($destino)
+        ]);
     }
     public function sumpedidos(Request $req)
     {
