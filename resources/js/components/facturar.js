@@ -4454,10 +4454,9 @@ export default function Facturar({
                 if (data.estado === true && data.existe) {
                     const estadoSolicitud = data.data?.estado;
                     if (estadoSolicitud === "aprobado") {
-                        // Si el usuario canceló esta solicitud, no reutilizar la aprobación: debe enviar otra solicitud
+                        // Si el usuario había cancelado localmente, al reenviar se reutiliza la aprobación existente en central
                         if (refSolicitudDescuentoCanceladaPorUsuario.current && refSolicitudDescuentoCanceladaPorUsuario.current[pedidoData.id]) {
-                            notificar({ data: { msj: "La solicitud fue cancelada por usted. Debe enviar una nueva solicitud de descuento (guardar de nuevo); cancele la solicitud en central si es necesario para poder crear una nueva.", estado: false } });
-                            return;
+                            delete refSolicitudDescuentoCanceladaPorUsuario.current[pedidoData.id];
                         }
                         const metodosAprobados = data.data?.metodos_pago || [];
                         if (!metodosPagoCoincidenConAprobados(metodos_pago, metodosAprobados)) {

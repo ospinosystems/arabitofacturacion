@@ -2250,7 +2250,7 @@ export default function PagarMain({
     useHotkeys(
         "t",
         (event) => {
-            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
+            if (showModalPosDebito || togglereferenciapago || toggleAddPersona) return; // Bloquear si modal POS, referencia o modal cliente está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -2281,14 +2281,14 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast, showModalPosDebito, togglereferenciapago]
+        [refaddfast, showModalPosDebito, togglereferenciapago, toggleAddPersona]
     );
     //p - Biopago (Pago móvil)
     useHotkeys(
         "p",
         (event) => {
             return;
-            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
+            if (showModalPosDebito || togglereferenciapago || toggleAddPersona) return; // Bloquear si modal POS, referencia o modal cliente está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -2314,13 +2314,13 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast, showModalPosDebito, togglereferenciapago]
+        [refaddfast, showModalPosDebito, togglereferenciapago, toggleAddPersona]
     );
     //b - Efectivo Bolívares
     useHotkeys(
         "b",
         (event) => {
-            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
+            if (showModalPosDebito || togglereferenciapago || toggleAddPersona) return; // Bloquear si modal POS, referencia o modal cliente está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -2352,13 +2352,13 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast, showModalPosDebito, togglereferenciapago]
+        [refaddfast, showModalPosDebito, togglereferenciapago, toggleAddPersona]
     );
     //e - Efectivo USD
     useHotkeys(
         "e",
         (event) => {
-            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
+            if (showModalPosDebito || togglereferenciapago || toggleAddPersona) return; // Bloquear si modal POS, referencia o modal cliente está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -2390,13 +2390,13 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast, showModalPosDebito, togglereferenciapago]
+        [refaddfast, showModalPosDebito, togglereferenciapago, toggleAddPersona]
     );
     //d
     useHotkeys(
         "d",
         (event) => {
-            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
+            if (showModalPosDebito || togglereferenciapago || toggleAddPersona) return; // Bloquear si modal POS, referencia o modal cliente está abierto
             // No ejecutar si estamos en el input de búsqueda de productos
             if (event.target === refaddfast?.current) {
                 return;
@@ -2437,7 +2437,7 @@ export default function PagarMain({
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
         },
-        [refaddfast, debitoInputRef, showModalPosDebito, togglereferenciapago]
+        [refaddfast, debitoInputRef, showModalPosDebito, togglereferenciapago, toggleAddPersona]
     );
     //f5 - ejecutar acción sin recargar la página (eliminar pedido). No permitir si hay débito aprobado o refs cargadas.
     useHotkeys(
@@ -2579,7 +2579,7 @@ export default function PagarMain({
     useHotkeys(
         "r",
         (event) => {
-            if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
+            if (showModalPosDebito || togglereferenciapago || toggleAddPersona) return; // Bloquear si modal POS, referencia o modal cliente está abierto
             // Solo ejecutar si NO estamos en ningún input o select
             const isInputOrSelect =
                 event.target.tagName === "INPUT" ||
@@ -2615,7 +2615,7 @@ export default function PagarMain({
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
             filter: false,
         },
-        [transferencia, debito, efectivo, credito, biopago, showModalPosDebito]
+        [transferencia, debito, efectivo, credito, biopago, showModalPosDebito, toggleAddPersona]
     );
 
     const {
