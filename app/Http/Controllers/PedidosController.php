@@ -280,36 +280,37 @@ class PedidosController extends Controller
         $id = $req->id;
         $bultos = $req->bultos;
         $ped = pedidos::with("cliente","items")->find($id);
-        $origen = sucursal::all()->first()->codigo;
-        $fecha = $ped->created_at;
 
-        $count_ped = $ped->items->count();
-        $cliente = $ped->cliente->nombre;
+        if (!$ped) {
+            abort(404, 'Pedido no encontrado.');
+        }
+
+        $origenSucursal = sucursal::all()->first();
+        $origen = $origenSucursal ? $origenSucursal->codigo : 'N/A';
+        $fecha = $ped->created_at ?? now();
+
+        $cliente = $ped->cliente;
+        $clienteNombre = $cliente ? ($cliente->nombre ?? '') : '';
+        if ($clienteNombre === '') {
+            abort(400, 'El pedido no tiene cliente asignado. Asigne un cliente para imprimir bultos.');
+        }
+
         $porbulto = [];
-        
-        for ($i=1; $i <= $bultos ; $i++) { 
+        for ($i = 1; $i <= $bultos; $i++) {
             $porbulto[$i] = $i;
         }
 
-        $suc = explode("SUC ",$cliente);
-        if (isset($suc[1])) {
+        $suc = explode("SUC ", $clienteNombre);
+        $sucursal = isset($suc[1]) ? strtoupper(trim($suc[1])) : strtoupper($clienteNombre);
 
-            $total_bultos = count($porbulto);
-
-            return view("reportes.bultos",[
-                "bultos"=>$porbulto,
-                "id"=>$id,
-                "total" => count($porbulto),
-                "fecha" => $fecha,
-                "origen" => $origen,
-                "sucursal" => strtoupper($suc[1])
-            ]);
-        }
-        
-
-
-
-        
+        return view("reportes.bultos", [
+            "bultos" => $porbulto,
+            "id" => $id,
+            "total" => count($porbulto),
+            "fecha" => $fecha,
+            "origen" => $origen,
+            "sucursal" => $sucursal
+        ]);
     }
     public function sumpedidos(Request $req)
     {
