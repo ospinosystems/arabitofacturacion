@@ -2363,11 +2363,10 @@ class InventarioController extends Controller
 
             // Buscar por ID si se proporciona
             if ($request->id) {
-                $producto = inventario::with(['proveedor', 'categoria', 'marca'])->find($codigo);
+                $producto = inventario::find($codigo);
             } else {
                 // Buscar por código de barras o código proveedor
-                $producto = inventario::with(['proveedor', 'categoria', 'marca'])
-                    ->where('codigo_barras', $codigo)
+                $producto = inventario::where('codigo_barras', $codigo)
                     ->orWhere('codigo_proveedor', $codigo)
                     ->first();
             }
@@ -2389,9 +2388,9 @@ class InventarioController extends Controller
                     'precio' => $producto->precio,
                     'cantidad' => $producto->cantidad,
                     'stock' => $producto->cantidad,
-                    'categoria' => $producto->categoria ? $producto->categoria->descripcion : '',
-                    'proveedor' => $producto->proveedor ? $producto->proveedor->descripcion : '',
-                    'marca' => $producto->marca ? $producto->marca->descripcion : ''
+                    'categoria' => '',
+                    'proveedor' => '',
+                    'marca' => ''
                 ]
             ]);
         } catch (\Exception $e) {
