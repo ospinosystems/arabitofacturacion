@@ -4613,6 +4613,11 @@ export default function PagarMain({
                                         <button
                                             className="flex items-center gap-1 px-2 py-1 text-xs text-amber-700 transition-colors border !border-amber-300 rounded bg-amber-100 hover:bg-amber-200"
                                             onClick={() => {
+                                                const cli = pedidoData?.cliente;
+                                                if (!cli || !cli.nombre || cli.nombre === "CF") {
+                                                    notificar?.("Debe asignar un cliente al pedido para imprimir bultos.") || alert("Debe asignar un cliente al pedido para imprimir bultos.");
+                                                    return;
+                                                }
                                                 setNumBultosInput("");
                                                 setBultosIframeUrl(null);
                                                 setShowModalBultos(true);
@@ -5240,11 +5245,6 @@ export default function PagarMain({
                             <button
                                 type="button"
                                 onClick={() => {
-                                    const nom = (pedidoData?.cliente?.nombre || "").trim();
-                                    if (!pedidoData?.cliente || !nom.includes("SUC ")) {
-                                        notificar?.("El pedido debe tener un cliente destino asignado (ej: SUC CALABOZO) para imprimir bultos.") || alert("El pedido debe tener un cliente destino asignado (ej: SUC CALABOZO) para imprimir bultos.");
-                                        return;
-                                    }
                                     const n = parseInt(numBultosInput, 10);
                                     if (n >= 1) {
                                         const base = typeof window !== "undefined" ? window.location.origin : "";
@@ -5296,18 +5296,31 @@ export default function PagarMain({
                                 src={bultosIframeUrl}
                                 title="Vista de bultos para imprimir"
                                 className="w-full flex-1 min-h-0 border border-gray-300 rounded-lg bg-white"
+                                onLoad={() => {
+                                    const doc = refIframeBultos.current?.contentDocument;
+                                    const cli = pedidoData?.cliente?.nombre;
+                                    if (!doc || !cli || cli === "CF") return;
+                                    const sucursalLabel = String(cli).includes("SUC ")
+                                        ? (String(cli).split("SUC ")[1]?.trim() || cli)
+                                        : cli;
+                                    const label = sucursalLabel.toUpperCase();
+                                    try {
+                                        doc.querySelectorAll(".sucursal").forEach((el) => {
+                                            const b = el.querySelector("b");
+                                            if (b) b.textContent = label;
+                                            else el.textContent = label;
+                                        });
+                                    } catch (e) {
+                                        console.warn("Bulto iframe: no se pudo actualizar sucursal", e);
+                                    }
+                                }}
                             />
                         ) : (
                             <div className="flex-1 flex items-center justify-center text-gray-500">
-                                <div className="text-center max-w-md px-4">
+                                <div className="text-center">
                                     <i className="fa fa-box text-4xl mb-3 opacity-50"></i>
                                     <p className="font-medium">Indique el número de bultos y pulse «Generar vista»</p>
                                     <p className="text-sm mt-1">Luego use «Imprimir» para imprimir como antes.</p>
-                                    {(!pedidoData?.cliente || !(pedidoData?.cliente?.nombre || "").includes("SUC ")) && (
-                                        <p className="text-amber-700 bg-amber-50 mt-4 p-3 rounded-lg text-sm font-medium">
-                                            El pedido debe tener un cliente destino (ej: SUC CALABOZO) asignado para poder imprimir bultos. La sucursal que aparece en el ticket es la del cliente del pedido.
-                                        </p>
-                                    )}
                                 </div>
                             </div>
                         )}
