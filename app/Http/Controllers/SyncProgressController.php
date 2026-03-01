@@ -58,6 +58,17 @@ class SyncProgressController extends Controller
         }
         return $this->codigoOrigen;
     }
+
+    /** Cabeceras para peticiones a central (API key de sucursal). */
+    private function centralRequestHeaders(): array
+    {
+        $headers = [];
+        $apiKey = (new sendCentral())->getCentralApiKey();
+        if ($apiKey !== null && $apiKey !== '') {
+            $headers['X-Sucursal-Api-Key'] = $apiKey;
+        }
+        return $headers;
+    }
     
     /**
      * Vista principal de sincronización
@@ -1123,6 +1134,7 @@ class SyncProgressController extends Controller
                     ], 3600); // 1 hora
                     
                     $response = Http::timeout(120)
+                        ->withHeaders($this->centralRequestHeaders())
                         ->retry(2, 1000) // 2 reintentos internos con 1 segundo entre cada uno
                         ->post($this->getCentralUrl() . "/api/sync/batch", [
                             'codigo_origen' => $this->getCodigoOrigen(),
@@ -1276,6 +1288,7 @@ class SyncProgressController extends Controller
                         ], 3600);
                         
                         $response = Http::timeout(120)
+                            ->withHeaders($this->centralRequestHeaders())
                             ->retry(2, 1000)
                             ->post($this->getCentralUrl() . "/api/sync/batch", [
                                 'codigo_origen' => $this->getCodigoOrigen(),
@@ -1356,11 +1369,13 @@ class SyncProgressController extends Controller
             Log::info("    [{$nombreTabla}] Enviando lista de " . count($idsExistentes) . " IDs para limpiar obsoletos");
             
             // Enviar a Central para que elimine los que no estén en esta lista
-            $response = Http::timeout(120)->post($this->getCentralUrl() . "/api/sync/limpiar-obsoletos", [
-                'codigo_origen' => $this->getCodigoOrigen(),
-                'tabla_destino' => $config['tabla_destino'],
-                'ids_existentes' => base64_encode(gzcompress(json_encode($idsExistentes))),
-            ]);
+            $response = Http::timeout(120)
+                ->withHeaders($this->centralRequestHeaders())
+                ->post($this->getCentralUrl() . "/api/sync/limpiar-obsoletos", [
+                    'codigo_origen' => $this->getCodigoOrigen(),
+                    'tabla_destino' => $config['tabla_destino'],
+                    'ids_existentes' => base64_encode(gzcompress(json_encode($idsExistentes))),
+                ]);
             
             if ($response->ok()) {
                 $resultado = $response->json();
