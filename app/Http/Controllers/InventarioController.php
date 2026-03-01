@@ -2425,8 +2425,7 @@ class InventarioController extends Controller
                 ]);
             }
 
-            $producto = inventario::with(['proveedor', 'categoria', 'marca'])
-                ->where(function($query) use ($codigo) {
+            $producto = inventario::where(function($query) use ($codigo) {
                     $query->where('codigo_barras', $codigo)
                           ->orWhere('codigo_proveedor', $codigo);
                 })
@@ -2487,9 +2486,9 @@ class InventarioController extends Controller
                     'descripcion' => $producto->descripcion,
                     'cantidad_actual' => $producto->cantidad ?? 0,
                     'cantidad_anterior' => $producto->cantidad ?? 0, // Se guardará antes de actualizar
-                    'proveedor' => $producto->proveedor->razonsocial ?? 'N/A',
-                    'categoria' => $producto->categoria->nombre ?? 'N/A',
-                    'marca' => $producto->marca->descripcion ?? null,
+                    'proveedor' => 'N/A',
+                    'categoria' => 'N/A',
+                    'marca' => null,
                     'unidad' => $producto->unidad ?? 'N/A',
                     'precio' => $producto->precio ?? 0,
                     'precio_base' => $producto->precio_base ?? 0,
