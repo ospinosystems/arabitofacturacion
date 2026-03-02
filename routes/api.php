@@ -71,7 +71,12 @@ Route::prefix('garantias')->middleware(['auth.user:api'])->group(function () {
         $path = ltrim(preg_replace('#^storage/#', '', $path), '/');
         $sendCentral = new App\Http\Controllers\sendCentral();
         $url = rtrim($sendCentral->path(), '/') . '/storage/' . $path;
-        $response = Http::timeout(15)->get($url);
+        $headers = [];
+        $apiKey = $sendCentral->getCentralApiKey();
+        if ($apiKey !== null) {
+            $headers['X-Sucursal-Api-Key'] = $apiKey;
+        }
+        $response = Http::timeout(15)->withHeaders($headers)->get($url);
         if (!$response->successful()) {
             return response()->json(['error' => 'Not found'], 404);
         }
@@ -87,13 +92,12 @@ Route::prefix('garantias')->middleware(['auth.user:api'])->group(function () {
         return response()->json($stats);
     });
 
-    // Sincronizar solicitudes desde central
+    // Sincronizar solicitudes desde central (usa requestToCentral para enviar X-Sucursal-Api-Key)
     Route::get('sync', function (Request $request) {
         try {
             $sendCentral = new App\Http\Controllers\sendCentral();
             
             $params = [
-                'codigo_origen' => $sendCentral->getOrigen(),
                 'fecha_inicio' => $request->input('fecha_inicio'),
                 'fecha_fin' => $request->input('fecha_fin'),
                 'estatus' => $request->input('estatus'),
@@ -102,7 +106,7 @@ Route::prefix('garantias')->middleware(['auth.user:api'])->group(function () {
                 'per_page' => $request->input('per_page', 50)
             ];
             
-            $response = Http::timeout(30)->get($sendCentral->path() . "/api/garantias/solicitudes", $params);
+            $response = $sendCentral->requestToCentral('get', '/api/garantias/solicitudes', $params, ['timeout' => 30]);
             
             if ($response->successful()) {
                 $data = $response->json();
@@ -252,7 +256,7 @@ Route::prefix('garantias')->middleware(['auth.user:api'])->group(function () {
         ];
         
         try {
-            $response = Http::timeout(30)->get($sendCentral->path() . "/api/dashboard/garantias/inventarios", $params);
+            $response = $sendCentral->requestToCentral('get', '/api/dashboard/garantias/inventarios', $params, ['timeout' => 30]);
             
             if ($response->successful()) {
                 return response()->json($response->json());
@@ -281,7 +285,7 @@ Route::prefix('garantias')->middleware(['auth.user:api'])->group(function () {
         $sendCentral = new App\Http\Controllers\sendCentral();
         
         try {
-            $response = Http::timeout(30)->get($sendCentral->path() . "/api/dashboard/garantias/sucursales");
+            $response = $sendCentral->requestToCentral('get', '/api/dashboard/garantias/sucursales', [], ['timeout' => 30]);
             
             if ($response->successful()) {
                 return response()->json($response->json());
@@ -306,7 +310,7 @@ Route::prefix('garantias')->middleware(['auth.user:api'])->group(function () {
         $sendCentral = new App\Http\Controllers\sendCentral();
         
         try {
-            $response = Http::timeout(30)->get($sendCentral->path() . "/api/dashboard/garantias/proveedores");
+            $response = $sendCentral->requestToCentral('get', '/api/dashboard/garantias/proveedores', [], ['timeout' => 30]);
             
             if ($response->successful()) {
                 return response()->json($response->json());
@@ -344,7 +348,7 @@ Route::prefix('garantias')->middleware(['auth.user:api'])->group(function () {
         ];
         
         try {
-            $response = Http::timeout(30)->get($sendCentral->path() . "/api/dashboard/garantias/movimientos", $params);
+            $response = $sendCentral->requestToCentral('get', '/api/dashboard/garantias/movimientos', $params, ['timeout' => 30]);
             
             if ($response->successful()) {
                 return response()->json($response->json());

@@ -5273,7 +5273,7 @@ export default function Facturar({
                 });
                 return;
             }
-            if (transferenciaActualCheck && !refPago.filter((e) => e.tipo == 1 || e.tipo == 2).length) {
+            if (parseFloat(transferenciaActualCheck || 0) !== 0 && !refPago.filter((e) => e.tipo == 1 || e.tipo == 2).length) {
                 console.log("[setPagoPedido] BLOQUEADO: transferencia indicada pero sin referencia cargada", { transferencia: transferenciaActualCheck, refPago });
                 alert(
                     "Error: Debe cargar referencia de transferencia electrónica."
@@ -5748,7 +5748,7 @@ export default function Facturar({
                     }, 500);
                     if (debeFacturarImprimir) {
                         const cbImprimir = () => toggleImprimirTicket();
-                        if (transferencia && !refPago.filter((e) => e.tipo == 1).length) {
+                        if (parseFloat(transferencia || 0) !== 0 && !refPago.filter((e) => e.tipo == 1).length) {
                             alert("Error: Debe cargar referencia de transferencia electrónica.");
                         } else {
                             procesarPagoInterno(cbImprimir, refUltimos4, { debitoOverride: totalAprobadoDebitos, debitosOverride: nuevosDebitos, imprimirDespues: true });

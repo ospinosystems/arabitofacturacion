@@ -20,9 +20,8 @@ class GarantiaController extends Controller
         try {
             $sendCentral = new \App\Http\Controllers\sendCentral();
             
-            // Crear parámetros para la consulta
+            // Crear parámetros para la consulta (requestToCentral añade codigo_origen y X-Sucursal-Api-Key)
             $params = [
-                'codigo_origen' => $sendCentral->getOrigen(),
                 'busqueda' => $req->qgarantia,
                 'campo_orden' => $req->garantiaorderCampo ?? 'fecha_solicitud',
                 'orden' => $req->garantiaorder ?? 'desc',
@@ -31,7 +30,7 @@ class GarantiaController extends Controller
             ];
             
             // Hacer petición a central para obtener solicitudes de garantía
-            $response = \Http::timeout(30)->get($sendCentral->path() . "/api/garantias/solicitudes", $params);
+            $response = $sendCentral->requestToCentral('get', '/api/garantias/solicitudes', $params, ['timeout' => 30]);
             
             if ($response->successful()) {
                 $data = $response->json();
@@ -1202,9 +1201,8 @@ class GarantiaController extends Controller
             // Consultar solicitudes desde central usando el servicio sendCentral
             $sendCentral = new \App\Http\Controllers\sendCentral();
             
-            // Crear parámetros para la consulta usando codigo_origen
+            // Crear parámetros para la consulta (requestToCentral añade codigo_origen y X-Sucursal-Api-Key)
             $params = [
-                'codigo_origen' => $sendCentral->getOrigen(),
                 'fecha_inicio' => $request->fecha_inicio,
                 'fecha_fin' => $request->fecha_fin,
                 'estatus' => $request->estatus,
@@ -1214,7 +1212,7 @@ class GarantiaController extends Controller
             ];
             
             // Hacer petición a central para obtener solicitudes de garantía
-            $response = \Http::timeout(30)->get($sendCentral->path() . "/api/garantias/solicitudes", $params);
+            $response = $sendCentral->requestToCentral('get', '/api/garantias/solicitudes', $params, ['timeout' => 30]);
             
             if ($response->successful()) {
                 $data = $response->json();
@@ -1393,14 +1391,12 @@ class GarantiaController extends Controller
         try {
             $sendCentral = new \App\Http\Controllers\sendCentral();
             
-            $response = \Http::timeout(30)->put(
-                $sendCentral->path() . "/api/garantias/solicitudes/{$solicitudId}/estatus",
-                [
-                    'codigo_origen' => $codigoOrigen,
-                    'nuevo_estatus' => $nuevoEstatus,
-                    'timestamp' => now()->toDateTimeString()
-                ]
-            );
+            $body = [
+                'codigo_origen' => $codigoOrigen,
+                'nuevo_estatus' => $nuevoEstatus,
+                'timestamp' => now()->toDateTimeString()
+            ];
+            $response = $sendCentral->requestToCentral('put', "/api/garantias/solicitudes/{$solicitudId}/estatus", $body, ['timeout' => 30]);
 
             if ($response->successful()) {
                 $data = $response->json();
@@ -1478,14 +1474,12 @@ class GarantiaController extends Controller
                 'salidas' => $this->extraerSalidas($resultadoLocal)
             ];
             
-            $response = \Http::timeout(30)->post(
-                $sendCentral->path() . "/api/garantias/solicitudes/{$solicitudId}/ejecutar",
-                [
-                    'codigo_origen' => $codigoOrigen,
-                    'detalles_ejecucion' => $detallesEjecucion,
-                    'timestamp' => now()->toDateTimeString()
-                ]
-            );
+            $body = [
+                'codigo_origen' => $codigoOrigen,
+                'detalles_ejecucion' => $detallesEjecucion,
+                'timestamp' => now()->toDateTimeString()
+            ];
+            $response = $sendCentral->requestToCentral('post', "/api/garantias/solicitudes/{$solicitudId}/ejecutar", $body, ['timeout' => 30]);
 
             if ($response->successful()) {
                 $data = $response->json();
@@ -1605,15 +1599,13 @@ class GarantiaController extends Controller
             
             $sendCentral = new \App\Http\Controllers\sendCentral();
             
-            $response = \Http::timeout(30)->put(
-                $sendCentral->path() . "/api/garantias/solicitudes/{$solicitudId}/estatus",
-                [
-                    'codigo_origen' => $codigoOrigen,
-                    'nuevo_estatus' => $estatusAnterior,
-                    'timestamp' => now()->toDateTimeString(),
-                    'motivo' => 'Revertir por error en ejecución local'
-                ]
-            );
+            $body = [
+                'codigo_origen' => $codigoOrigen,
+                'nuevo_estatus' => $estatusAnterior,
+                'timestamp' => now()->toDateTimeString(),
+                'motivo' => 'Revertir por error en ejecución local'
+            ];
+            $response = $sendCentral->requestToCentral('put', "/api/garantias/solicitudes/{$solicitudId}/estatus", $body, ['timeout' => 30]);
 
             if ($response->successful()) {
                 $data = $response->json();
@@ -1665,13 +1657,11 @@ class GarantiaController extends Controller
         try {
             $sendCentral = new \App\Http\Controllers\sendCentral();
             
-            $response = \Http::timeout(30)->post(
-                $sendCentral->path() . "/api/garantias/solicitudes/{$solicitudId}/ejecutar",
-                [
-                    'codigo_origen' => $codigoOrigen,
-                    'detalles_ejecucion' => $resultadoLocal
-                ]
-            );
+            $body = [
+                'codigo_origen' => $codigoOrigen,
+                'detalles_ejecucion' => $resultadoLocal
+            ];
+            $response = $sendCentral->requestToCentral('post', "/api/garantias/solicitudes/{$solicitudId}/ejecutar", $body, ['timeout' => 30]);
 
             if ($response->successful()) {
                 return $response->json();
