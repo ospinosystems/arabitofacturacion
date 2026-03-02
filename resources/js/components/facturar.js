@@ -208,10 +208,10 @@ export default function Facturar({
 
         if (pedidoData?.id) {
             // Guardar débitos del pedido anterior si había uno
-            const pedidoAnteriorId = Object.keys(debitosPorPedido).find(id => 
+            const pedidoAnteriorId = Object.keys(debitosPorPedido).find(id =>
                 debitosPorPedido[id] && id !== String(pedidoData.id)
             );
-            
+
             // Restaurar débitos del pedido actual o inicializar vacío
             if (debitosPorPedido[pedidoData.id]) {
                 setDebitos(debitosPorPedido[pedidoData.id]);
@@ -4310,24 +4310,122 @@ export default function Facturar({
         notificar({ msj: "Cantidad actualizada", estado: true });
     };
 
-    /** Compara si los métodos actuales coinciden con los aprobados (tipo, moneda y monto con tolerancia 0.02). */
+    /** Compara si los métodos actuales coinciden con los aprobados (tipo, moneda y monto con tolerancia 0.02).
+     * Normaliza tipo y moneda (trim + minúsculas) y redondea montos a 2 decimales para evitar falsos negativos
+     * por diferencias de mayúsculas (BS vs Bs) o por flotantes (10.1 vs 10.10000001). */
     const metodosPagoCoincidenConAprobados = (actuales, aprobados) => {
-        if (!Array.isArray(aprobados) || aprobados.length === 0) return false;
-        if (!Array.isArray(actuales) || actuales.length !== aprobados.length) return false;
-        const moneda = (m) => (m && (m.moneda || m.moneda_original)) ? String(m.moneda || m.moneda_original) : "";
+        if (!Array.isArray(aprobados) || aprobados.length === 0) {
+            console.log("[metodosPagoCoincidenConAprobados] false: aprobados vacío o no array", { aprobados });
+            return false;
+        }
+        if (!Array.isArray(actuales) || actuales.length !== aprobados.length) {
+            console.log("[metodosPagoCoincidenConAprobados] false: longitud distinta", { actualesLen: actuales?.length, aprobadosLen: aprobados?.length, actuales, aprobados });
+            return false;
+        }
+        const monedaNorm = (m) => (m && (m.moneda || m.moneda_original)) ? String(m.moneda || m.moneda_original).trim().toLowerCase() : "";
+        const tipoNorm = (m) => (m && m.tipo != null) ? String(m.tipo).trim().toLowerCase() : "";
+        const montoNorm = (m) => Math.round((parseFloat(m.monto ?? m.monto_original) || 0) * 100) / 100;
         const sort = (arr) => [...arr].sort((a, b) =>
-            (String(a.tipo)).localeCompare(String(b.tipo)) ||
-            moneda(a).localeCompare(moneda(b)) ||
-            (parseFloat(a.monto) || 0) - (parseFloat(b.monto) || 0)
+            tipoNorm(a).localeCompare(tipoNorm(b)) ||
+            monedaNorm(a).localeCompare(monedaNorm(b)) ||
+            montoNorm(a) - montoNorm(b)
         );
         const sa = sort(actuales);
         const sb = sort(aprobados);
         for (let i = 0; i < sa.length; i++) {
-            if (sa[i].tipo !== sb[i].tipo) return false;
-            if (moneda(sa[i]) !== moneda(sb[i])) return false;
-            if (Math.abs((parseFloat(sa[i].monto) || 0) - (parseFloat(sb[i].monto) || 0)) > 0.02) return false;
+            if (tipoNorm(sa[i]) !== tipoNorm(sb[i])) {
+                console.log("[metodosPagoCoincidenConAprobados] false: tipo distinto en i=" + i, { actual: sa[i], aprobado: sb[i], tipoActual: tipoNorm(sa[i]), tipoAprobado: tipoNorm(sb[i]) });
+                return false;
+            }
+            if (monedaNorm(sa[i]) !== monedaNorm(sb[i])) {
+                console.log("[metodosPagoCoincidenConAprobados] false: moneda distinta en i=" + i, { actual: sa[i], aprobado: sb[i], monedaActual: monedaNorm(sa[i]), monedaAprobado: monedaNorm(sb[i]) });
+                return false;
+            }
+            if (Math.abs(montoNorm(sa[i]) - montoNorm(sb[i])) > 0.02) {
+                console.log("[metodosPagoCoincidenConAprobados] false: monto distinto en i=" + i, { actual: sa[i], aprobado: sb[i], montoActual: montoNorm(sa[i]), montoAprobado: montoNorm(sb[i]) });
+                return false;
+            }
         }
         return true;
+    };
+
+    /** Construye efectivo USD, débitos, pagos adicionales, transferencia, crédito, biopago desde array metodos_pago (para usar en setPagoPedido). */
+    const buildParamsPagoDesdeMetodos = (metodos) => {
+        let efectivoDolarVal = 0;
+        const pagosAdicionales = [];
+        let debitoParam = null;
+        let debitoRefParam = null;
+        const debitosParam = [];
+        let transferenciaActual = "";
+        let creditoActual = "";
+        let biopagoActual = "";
+        if (!Array.isArray(metodos)) return { efectivoDolarVal, pagosAdicionales, debitoParam, debitoRefParam, debitosParam, transferenciaActual, creditoActual, biopagoActual };
+        for (const m of metodos) {
+            const tipo = (m.tipo || "").toLowerCase();
+            const moneda = String(m.moneda || m.moneda_original || "").toLowerCase();
+            const monto = parseFloat(m.monto ?? m.monto_original) || 0;
+            if (tipo === "efectivo" && (moneda === "usd" || moneda === "")) {
+                efectivoDolarVal = monto;
+            } else if (tipo === "debito") {
+                debitosParam.push({ monto, referencia: m.referencia || "", posData: m.posData || null });
+            } else if (tipo === "adicional" && moneda === "bs") {
+                pagosAdicionales.push({ moneda: "bs", monto_original: monto });
+            } else if (tipo === "adicional" && (moneda === "cop" || moneda === "peso")) {
+                pagosAdicionales.push({ moneda: "peso", monto_original: monto });
+            } else if (tipo === "transferencia") {
+                transferenciaActual = String(monto);
+            } else if (tipo === "credito") {
+                creditoActual = String(monto);
+            } else if (tipo === "biopago") {
+                biopagoActual = "1";
+            }
+        }
+        if (debitosParam.length > 0 && debitosParam.length === 1) {
+            debitoParam = debitosParam[0].monto;
+            debitoRefParam = debitosParam[0].referencia || null;
+        }
+        return { efectivoDolarVal, pagosAdicionales, debitoParam, debitoRefParam, debitosParam: debitosParam.length > 0 ? debitosParam : null, transferenciaActual, creditoActual, biopagoActual };
+    };
+
+    /** Aplica al formulario los métodos de pago aprobados para que el usuario los vea y el flujo de pago use los correctos. */
+    const aplicarMetodosPagoAprobadosAlFormulario = (metodos, pedidoId) => {
+        if (!Array.isArray(metodos) || metodos.length === 0) return;
+        setEfectivo_dolar("");
+        setEfectivo_bs("");
+        setEfectivo_peso("");
+        setTransferencia("");
+        setCredito("");
+        setBiopago("");
+        setDebito("");
+        const debitosFromMetodos = [];
+        for (const m of metodos) {
+            const tipo = (m.tipo || "").toLowerCase();
+            const moneda = String(m.moneda || m.moneda_original || "").toLowerCase();
+            const monto = parseFloat(m.monto ?? m.monto_original) || 0;
+            if (tipo === "efectivo" && (moneda === "usd" || moneda === "")) {
+                setEfectivo_dolar(String(monto));
+            } else if (tipo === "debito") {
+                debitosFromMetodos.push({ monto: monto, referencia: "", moneda: moneda === "bs" ? "Bs" : (moneda || "Bs") });
+            } else if (tipo === "adicional" && moneda === "bs") {
+                setEfectivo_bs(String(monto));
+            } else if (tipo === "adicional" && (moneda === "cop" || moneda === "peso")) {
+                setEfectivo_peso(String(monto));
+            } else if (tipo === "transferencia") {
+                setTransferencia(String(monto));
+            } else if (tipo === "credito") {
+                setCredito(String(monto));
+            } else if (tipo === "biopago") {
+                setBiopago("1");
+            }
+        }
+        if (debitosFromMetodos.length > 0) {
+            setDebitos(debitosFromMetodos);
+            if (pedidoId && typeof guardarDebitosPorPedido === "function") {
+                guardarDebitosPorPedido(pedidoId, debitosFromMetodos);
+            }
+        } else {
+            setDebitos([{ monto: "", referencia: "", bloqueado: false, posData: null }]);
+        }
     };
 
     /** Construye metodos_pago desde refs (para validar en callbacks sin estado obsoleto). */
@@ -4501,10 +4599,15 @@ export default function Facturar({
             .then((res) => {
                 setDescuentoMetodoPagoVerificando(false);
                 const data = res?.data;
+
                 if (data?.existe && data?.data?.estado === "aprobado") {
                     const metodosAprobados = data?.data?.metodos_pago || [];
+                    const metodosEnviados = pendienteDescuentoMetodoPago[pedidoData.id]?.metodos_pago;
+                    const coincideConEnviados = Array.isArray(metodosEnviados) && metodosEnviados.length > 0 && metodosPagoCoincidenConAprobados(metodosEnviados, metodosAprobados);
                     const actualesRefs = buildMetodosPagoFromRefs();
-                    if (!metodosPagoCoincidenConAprobados(actualesRefs, metodosAprobados)) {
+                    const actualesEstado = buildMetodosPagoFront();
+                    const coincideConForm = metodosPagoCoincidenConAprobados(actualesRefs, metodosAprobados) || metodosPagoCoincidenConAprobados(actualesEstado, metodosAprobados);
+                    if (!coincideConEnviados && !coincideConForm) {
                         notificar({ data: { msj: "Los métodos de pago no coinciden con los aprobados. Use los métodos aprobados o cancele la solicitud y envíe una nueva.", estado: false } });
                         return;
                     }
@@ -4515,7 +4618,7 @@ export default function Facturar({
                     });
                     setDescuentoMetodoPagoAprobadoPorUuid((prev) => ({ ...prev, [pedidoData.id]: true }));
                     setMetodosPagoAprobadosPorUuid((prev) => ({ ...prev, [pedidoData.id]: metodosAprobados }));
-                    notificar({ data: { msj: "Descuento aprobado. Guardando pedido…", estado: true } });
+                    notificar({ data: { msj: "Descuento aprobado. Complete los métodos de pago (referencias, etc.) y guarde el pedido para facturar.", estado: true } });
                     if (procesarPagoInternoRef.current) procesarPagoInternoRef.current(null, null, null);
                 } else if (data?.existe && data?.data?.estado === "enviado") {
                     notificar({ data: { msj: "La solicitud sigue en espera de aprobación", estado: true } });
@@ -5325,12 +5428,14 @@ export default function Facturar({
                             .then((res) => {
                                 const data = res?.data;
                                 if (data?.existe && data?.data?.estado === "aprobado") {
-                                    const actualesRefs = buildMetodosPagoFromRefs();
                                     const aprobadosRes = data?.data?.metodos_pago || [];
-                                    if (!metodosPagoCoincidenConAprobados(actualesRefs, aprobadosRes)) {
-                                        setDescuentoMetodoPagoAprobadoPorUuid((prev) => { const n = { ...prev }; delete n[uuid]; return n; });
-                                        setMetodosPagoAprobadosPorUuid((prev) => { const n = { ...prev }; delete n[uuid]; if (typeof setMetodosPagoAprobadosPorUuidStorage === "function") setMetodosPagoAprobadosPorUuidStorage(n); return n; });
-                                        notificar({ data: { msj: "Los métodos de pago no coinciden con los aprobados. Use los métodos aprobados o cancele la solicitud y envíe una nueva.", estado: false } });
+                                    const aprobadosGuardados = metodosPagoAprobadosPorUuid[uuid];
+                                    const coincideConGuardado = Array.isArray(aprobadosGuardados) && metodosPagoCoincidenConAprobados(aprobadosGuardados, aprobadosRes);
+                                    const actualesRefs = buildMetodosPagoFromRefs();
+                                    const actualesEstado = buildMetodosPagoFront();
+                                    const coincideConForm = metodosPagoCoincidenConAprobados(actualesRefs, aprobadosRes) || metodosPagoCoincidenConAprobados(actualesEstado, aprobadosRes);
+                                    if (!coincideConGuardado && !coincideConForm) {
+                                        notificar({ data: { msj: "Complete los métodos de pago con los montos aprobados (y referencias si aplica) y vuelva a guardar. La aprobación se mantiene.", estado: false } });
                                         return;
                                     }
                                     procesarPagoInterno(callback, null, options || null);
@@ -5375,66 +5480,51 @@ export default function Facturar({
         const frontUuid = isFrontOnly ? pedidoActual.id : null;
         if (frontUuid && descuentoMetodoPagoAprobadoPorUuid[frontUuid]) {
             const actualesRefs = buildMetodosPagoFromRefs();
+            const actualesEstado = buildMetodosPagoFront();
             const aprobados = metodosPagoAprobadosPorUuid[frontUuid];
-            if (!metodosPagoCoincidenConAprobados(actualesRefs, aprobados)) {
+            const coincideRefs = metodosPagoCoincidenConAprobados(actualesRefs, aprobados);
+            const coincideEstado = metodosPagoCoincidenConAprobados(actualesEstado, aprobados);
+            if (!coincideRefs && !coincideEstado) {
                 setLoading(false);
-                setDescuentoMetodoPagoAprobadoPorUuid((prev) => { const n = { ...prev }; delete n[frontUuid]; return n; });
-                setMetodosPagoAprobadosPorUuid((prev) => { const n = { ...prev }; delete n[frontUuid]; if (typeof setMetodosPagoAprobadosPorUuidStorage === "function") setMetodosPagoAprobadosPorUuidStorage(n); return n; });
-                notificar({ data: { msj: "Los métodos de pago no coinciden con los aprobados. Use los métodos aprobados o cancele la solicitud y envíe una nueva.", estado: false } });
+                notificar({ data: { msj: "Complete los métodos de pago con los montos aprobados (y referencias si aplica) en el formulario y vuelva a guardar. La aprobación se mantiene.", estado: false } });
                 return;
             }
         }
-        // Leer siempre de refs los montos actuales (evita closure obsoleta por setTimeout 300ms y re-renders)
         const efectivoBsActual = efectivo_bsRef.current;
         const efectivoPesoActual = efectivo_pesoRef.current;
-        // Construir pagos adicionales de efectivo (Bs y COP)
         let pagosAdicionales = [];
         if (efectivoBsActual && parseFloat(efectivoBsActual) != 0) {
-            pagosAdicionales.push({ 
-                moneda: 'bs', 
-                monto_original: parseFloat(efectivoBsActual)
-            });
+            pagosAdicionales.push({ moneda: 'bs', monto_original: parseFloat(efectivoBsActual) });
         }
         if (efectivoPesoActual && parseFloat(efectivoPesoActual) != 0) {
-            pagosAdicionales.push({ 
-                moneda: 'peso', 
-                monto_original: parseFloat(efectivoPesoActual)
-            });
+            pagosAdicionales.push({ moneda: 'peso', monto_original: parseFloat(efectivoPesoActual) });
         }
-        
-        // Usar overrides del POS cuando existen; si no, leer montos actuales de refs
         const debitoVal = posOverrides?.debitoOverride != null ? parseFloat(posOverrides.debitoOverride) : parseFloat(debitoMontoRef.current) || 0;
         const debitoBs = !Number.isNaN(debitoVal) ? debitoVal : 0;
         const efectivoDolarVal = parseFloat(efectivo_dolarRef.current) || 0;
-        
-        // Usar refOverride si viene del POS, sino el valor actual de la ref
         const refFinal = refOverride !== null ? refOverride : debitoRefRef.current;
-        
-        // Preparar débitos: posOverrides o ref actual
         let debitoParam = null;
         let debitoRefParam = null;
         let debitosParam = null;
         let posDataParam = null;
-        
-        const debitosParaUsar = (posOverrides?.debitosOverride && Array.isArray(posOverrides.debitosOverride))
-            ? posOverrides.debitosOverride
-            : (debitosRef.current || []);
-        
-        // Débito simple: enviar siempre que sea distinto de 0 (incluye negativos)
         if (debitoBs !== 0) {
             debitoParam = debitoBs;
             debitoRefParam = refFinal || null;
         }
-        
-        // Filtrar débitos válidos (con monto distinto de 0, incluye negativos)
+        const debitosParaUsar = (posOverrides?.debitosOverride && Array.isArray(posOverrides.debitosOverride))
+            ? posOverrides.debitosOverride
+            : (debitosRef.current || []);
         const debitosValidos = debitosParaUsar.filter(d => parseFloat(d.monto) !== 0 && !Number.isNaN(parseFloat(d.monto)));
         if (debitosValidos.length > 0) {
             debitosParam = debitosValidos.map(d => ({
                 monto: parseFloat(d.monto),
                 referencia: d.referencia,
-                posData: d.posData || null // Incluir posData individual de cada débito
+                posData: d.posData || null
             }));
         }
+        const transferenciaActual = transferenciaRef.current;
+        const creditoActual = creditoRef.current;
+        const biopagoActual = biopagoRef.current;
 
         const frontItems = isFrontOnly && Array.isArray(pedidoActual.items) && pedidoActual.items.length > 0
             ? pedidoActual.items.map((it) => ({
@@ -5463,10 +5553,7 @@ export default function Facturar({
               }))
             : undefined;
 
-        // Montos actuales desde refs (transferencia, credito, biopago, vuelto)
-        const transferenciaActual = transferenciaRef.current;
-        const creditoActual = creditoRef.current;
-        const biopagoActual = biopagoRef.current;
+        // vuelto siempre desde ref (no forma parte de metodos_pago aprobados)
         const vueltoActual = vueltoRef.current;
 
         let params = {

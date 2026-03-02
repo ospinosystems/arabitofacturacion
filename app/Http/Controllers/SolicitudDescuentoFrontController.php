@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\sendCentral;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
 
 /**
@@ -62,10 +63,19 @@ class SolicitudDescuentoFrontController extends Controller
         ]);
 
         $sendCentral = new sendCentral();
-        $resultado = $sendCentral->verificarSolicitudDescuentoFront([
+        $payload = [
             'id_sucursal' => $sendCentral->getOrigen(),
             'uuid_pedido_front' => $request->uuid_pedido_front,
             'tipo_descuento' => $request->tipo_descuento,
+        ];
+        Log::channel('single')->info('[solicitudDescuentoFrontVerificar] Request', $payload);
+
+        $resultado = $sendCentral->verificarSolicitudDescuentoFront($payload);
+
+        Log::channel('single')->info('[solicitudDescuentoFrontVerificar] Response from central', [
+            'is_array' => is_array($resultado),
+            'resultado' => is_array($resultado) ? $resultado : (method_exists($resultado, 'getData') ? $resultado->getData(true) : 'not-array'),
+            'data_metodos_pago' => is_array($resultado) && isset($resultado['data']['metodos_pago']) ? $resultado['data']['metodos_pago'] : null,
         ]);
 
         if (is_array($resultado)) {
