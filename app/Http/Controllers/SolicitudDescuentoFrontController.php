@@ -21,7 +21,7 @@ class SolicitudDescuentoFrontController extends Controller
             'monto_bruto' => 'required|numeric',
             'monto_con_descuento' => 'required|numeric',
             'monto_descuento' => 'required|numeric',
-            'porcentaje_descuento' => 'required|numeric|max:100',
+            'porcentaje_descuento' => 'required|numeric',
             'tipo_descuento' => 'required|in:monto_porcentaje,metodo_pago',
         ]);
 
