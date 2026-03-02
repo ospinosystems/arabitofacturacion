@@ -110,6 +110,7 @@ export default function ListProductosInterno({
   // Estados para el modal de carnet de aprobación
   const [showModalCarnet, setShowModalCarnet] = useState(false);
   const [valinputsetclaveadmin, setvalinputsetclaveadmin] = useState("");
+  const [idTareaCarnet, setIdTareaCarnet] = useState(null);
   const inputCarnetRef = useRef(null);
   
   // Función para verificar si un producto está en el carrito
@@ -657,9 +658,20 @@ export default function ListProductosInterno({
   // Función para agregar al carrito
   const handleAddToCart = (event = null) => {
     if (selectedProduct) {
-      // Cantidad negativa: una sola aprobación, luego factura original si falta, y finalmente agregar al carrito
+      // Cantidad negativa: crear tarea de validación, abrir modal de carnet y solo continuar si la clave es válida
       if (hasNegativeQuantities()) {
-        setShowModalCarnet(true);
+        db.crearTareaAgregarProducto()
+          .then((res) => {
+            if (res.data?.estado && res.data?.id) {
+              setIdTareaCarnet(res.data.id);
+              setShowModalCarnet(true);
+            } else {
+              notificar("No se pudo abrir la aprobación", "error");
+            }
+          })
+          .catch(() => {
+            notificar("Error al solicitar aprobación", "error");
+          });
         return;
       }
       
@@ -1160,11 +1172,13 @@ export default function ListProductosInterno({
             onClose={() => {
               setShowModalCarnet(false);
               setvalinputsetclaveadmin("");
+              setIdTareaCarnet(null);
             }}
             onScanSuccess={handleCarnetScanSuccess}
             inputCarnetRef={inputCarnetRef}
             valinputsetclaveadmin={valinputsetclaveadmin}
             setvalinputsetclaveadmin={setvalinputsetclaveadmin}
+            idTareaValidacion={idTareaCarnet}
           />
       </div>
   );

@@ -883,20 +883,16 @@ class PagoPedidosController extends Controller
                         // Usar siempre el id del pedido persistido (importante para pedidos front_only recién creados)
                         $idPedidoProcesado = (int) $pedido->id;
                         $isFullFiscal = (new SucursalController)->isFullFiscal();
+                        // "Solo débito": sin efectivo ni transferencia y con débito (campo único o array debitos)
+                        $tieneDebito = (floatval($req->debito ?? 0) != 0)
+                            || ($req->debitos && is_array($req->debitos) && count(array_filter($req->debitos, function ($d) { return floatval($d['monto'] ?? 0) != 0; })) > 0);
+                        $soloDebito = $tieneDebito && !floatval($req->efectivo ?? 0) && !floatval($req->transferencia ?? 0);
 
-                        if ($isFullFiscal) {
+                        if ($isFullFiscal || $soloDebito) {
                             try {
                                 (new tickera)->sendReciboFiscalFun($idPedidoProcesado);
                             } catch (\Exception $e) {
                                 \Log::error('Error al enviar recibo fiscal: ' . $e->getMessage());
-                            }
-                        } else {
-                            if ($req->debito && !$req->efectivo && !$req->transferencia) {
-                                try {
-                                    (new tickera)->sendReciboFiscalFun($idPedidoProcesado);
-                                } catch (\Exception $e) {
-                                    \Log::error('Error al enviar recibo fiscal: ' . $e->getMessage());
-                                }
                             }
                         }
                     }

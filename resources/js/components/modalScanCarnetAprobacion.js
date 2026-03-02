@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
+import db from "../database/database";
 
 export default function ModalScanCarnetAprobacion({
     isOpen,
@@ -8,10 +9,13 @@ export default function ModalScanCarnetAprobacion({
     inputCarnetRef,
     valinputsetclaveadmin,
     setvalinputsetclaveadmin,
+    /** Si se pasa, el modal valida la clave con sendClavemodal antes de llamar onScanSuccess. Si la clave es incorrecta no se cierra ni se continúa el flujo. */
+    idTareaValidacion = null,
 }) {
     const [error, setError] = useState("");
     const [isScanning, setIsScanning] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [validating, setValidating] = useState(false);
     const scannerRef = useRef(null);
     const typingTimeoutRef = useRef(null);
 
@@ -21,10 +25,32 @@ export default function ModalScanCarnetAprobacion({
         }
     }, [isOpen]);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         if (!valinputsetclaveadmin) {
             setError("Por favor escanee o ingrese el código del carnet");
+            return;
+        }
+        if (idTareaValidacion != null) {
+            setValidating(true);
+            setError("");
+            try {
+                const res = await db.sendClavemodal({
+                    valinputsetclaveadmin,
+                    idtareatemp: idTareaValidacion,
+                });
+                const data = res?.data ?? res;
+                if (data?.estado === true) {
+                    onScanSuccess(valinputsetclaveadmin);
+                    onClose();
+                } else {
+                    setError(data?.msj || "Clave incorrecta. No se puede aprobar.");
+                }
+            } catch (err) {
+                setError(err?.response?.data?.msj || "Error al validar. Intente de nuevo.");
+            } finally {
+                setValidating(false);
+            }
             return;
         }
         onScanSuccess(valinputsetclaveadmin);
@@ -254,10 +280,19 @@ export default function ModalScanCarnetAprobacion({
                                 <button
                                     type="submit"
                                     className="btn btn-warning"
-                                    disabled={!valinputsetclaveadmin}
+                                    disabled={!valinputsetclaveadmin || validating}
                                 >
-                                    <i className="fa fa-check me-1"></i>
-                                    Aprobar
+                                    {validating ? (
+                                        <>
+                                            <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                            Validando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="fa fa-check me-1"></i>
+                                            Aprobar
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         </form>

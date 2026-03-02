@@ -27,6 +27,7 @@ const db = {
   validarCodigoAprobacion: data=>axios.post(host+"validarCodigoAprobacion",data),
   
   sendClavemodal: data=>axios.post(host+"sendClavemodal",data),
+  crearTareaAgregarProducto: ()=>axios.post(host+"autopago-crear-tarea-agregar-producto"),
   saveReplaceProducto: data=>axios.post(host+"saveReplaceProducto",data),
   
   guardarCierre: data=>axios.post(host+"guardarCierre",data),
