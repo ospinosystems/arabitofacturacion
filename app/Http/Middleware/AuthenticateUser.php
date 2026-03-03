@@ -264,8 +264,22 @@ class AuthenticateUser
             $routeUri = $request->route() ? $request->route()->uri : $request->path();
             $path = $request->path();
             
+            // Log para diagnóstico: warehouses/buscar y usuario DICI
+            if (str_contains($path, 'warehouse') || str_contains($path, 'warehouses')) {
+                \Log::channel('single')->info('AuthenticateUser DICI (tipo 7)', [
+                    'path' => $path,
+                    'routeUri' => $routeUri,
+                    'routeName' => $request->route() ? $request->route()->getName() : null,
+                    'in_array_uri' => in_array($routeUri, self::DICI_ALLOWED_ROUTES),
+                    'in_array_path' => in_array($path, self::DICI_ALLOWED_ROUTES),
+                ]);
+            }
+            
             // Verificar coincidencia exacta
             if (in_array($routeUri, self::DICI_ALLOWED_ROUTES)) {
+                return true;
+            }
+            if (in_array($path, self::DICI_ALLOWED_ROUTES)) {
                 return true;
             }
             
@@ -280,6 +294,11 @@ class AuthenticateUser
                 }
             }
             
+            \Log::channel('single')->warning('AuthenticateUser DICI acceso denegado', [
+                'path' => $path,
+                'routeUri' => $routeUri,
+                'tipo_usuario' => 7,
+            ]);
             return false;
         }
         

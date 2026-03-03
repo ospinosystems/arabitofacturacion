@@ -130,10 +130,16 @@ class WarehouseController extends Controller
      */
     public function buscarUbicaciones(Request $request)
     {
+        \Log::channel('single')->info('WarehouseController::buscarUbicaciones entrada', [
+            'buscar' => $request->buscar,
+            'all' => $request->only(['buscar']),
+        ]);
+
         try {
             $buscar = $request->buscar;
 
             if (!$buscar || strlen($buscar) < 1) {
+                \Log::channel('single')->info('WarehouseController::buscarUbicaciones salida vacía (sin buscar)');
                 return Response::json([
                     'ubicaciones' => []
                 ]);
@@ -142,36 +148,42 @@ class WarehouseController extends Controller
             // Normalizar código de búsqueda
             $buscar = $this->normalizarCodigoUbicacion($buscar);
 
-            $ubicaciones = Warehouse::where(function ($query) use ($buscar) {
-                $query->where('codigo', 'like', "%{$buscar}%")
-                    ->orWhere('nombre', 'like', "%{$buscar}%");
-            })
+            $ubicaciones = Warehouse::where(function($query) use ($buscar) {
+                    $query->where('codigo', 'like', "%{$buscar}%")
+                          ->orWhere('nombre', 'like', "%{$buscar}%");
+                })
                 ->where('estado', 'activa')
                 ->limit(15)
                 ->get()
-                ->map(function ($warehouse) {
+                ->map(function($warehouse) {
                     return [
                         'id' => $warehouse->id,
                         'codigo' => $warehouse->codigo,
                         'nombre' => $warehouse->nombre,
                         'tipo' => $warehouse->tipo,
-                        'ubicacion' => $warehouse->codigo ?? null,
+                        'ubicacion' => $warehouse->ubicacion ?? null,
                         'capacidad_maxima' => $warehouse->capacidad_maxima,
                     ];
                 });
+
+            \Log::channel('single')->info('WarehouseController::buscarUbicaciones salida', [
+                'buscar_normalizado' => $buscar,
+                'count' => $ubicaciones->count(),
+            ]);
 
             return Response::json([
                 'ubicaciones' => $ubicaciones
             ]);
         } catch (\Throwable $e) {
-            \Log::error('WarehouseController::buscarUbicaciones', [
+            \Log::channel('single')->error('WarehouseController::buscarUbicaciones excepción', [
                 'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
             ]);
             return Response::json([
                 'ubicaciones' => [],
-                'estado' => false,
                 'msj' => 'Error al buscar ubicación: ' . $e->getMessage(),
+                'estado' => false,
             ], 500);
         }
     }

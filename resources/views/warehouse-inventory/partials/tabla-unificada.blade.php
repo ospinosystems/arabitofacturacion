@@ -381,9 +381,7 @@ document.getElementById('buscar_ubicacion_input')?.addEventListener('change', fu
     const codigo = this.value.trim();
     if (!codigo) return;
     
-    fetch(`/warehouses/buscar?buscar=${encodeURIComponent(codigo)}`, {
-            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
-        })
+    fetch(`/warehouses/buscar?buscar=${encodeURIComponent(codigo)}`)
         .then(response => {
             return response.json().then(data => ({ ok: response.ok, data }));
         })
