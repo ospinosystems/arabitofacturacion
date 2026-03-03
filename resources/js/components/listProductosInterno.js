@@ -58,6 +58,7 @@ export default function ListProductosInterno({
   pedidosFrontPendientesList = [],
   onClickEditPedido,
   togglereferenciapago,
+  toggleAddPersona,
 
   cedula_referenciapago,
   setcedula_referenciapago,
@@ -185,8 +186,8 @@ export default function ListProductosInterno({
   useHotkeys(
     "tab",
     (event) => {
-      // No ejecutar si el modal de referencia está abierto
-      if (togglereferenciapago) {
+      // No interceptar si el modal de referencia o el modal de cliente está abierto (dejar que TAB navegue entre inputs)
+      if (togglereferenciapago || toggleAddPersona) {
         return; // Permitir comportamiento por defecto del TAB
       }
       
@@ -229,14 +230,14 @@ export default function ListProductosInterno({
         return event.target !== inputCantidadCarritoref?.current;
       },
     },
-    [pedidosFast, pedidosFrontPendientesList, pedidoData, onClickEditPedido, inputCantidadCarritoref, togglereferenciapago]
+    [pedidosFast, pedidosFrontPendientesList, pedidoData, onClickEditPedido, inputCantidadCarritoref, togglereferenciapago, toggleAddPersona]
   );
 
   // SHIFT+TAB: Seleccionar pedido anterior (incluye pedidos front y backend)
   useHotkeys(
     "shift+tab",
     (event) => {
-      if (togglereferenciapago) {
+      if (togglereferenciapago || toggleAddPersona) {
         return;
       }
       
@@ -278,7 +279,7 @@ export default function ListProductosInterno({
         return event.target !== inputCantidadCarritoref?.current;
       },
     },
-    [pedidosFast, pedidosFrontPendientesList, pedidoData, onClickEditPedido, inputCantidadCarritoref, togglereferenciapago]
+    [pedidosFast, pedidosFrontPendientesList, pedidoData, onClickEditPedido, inputCantidadCarritoref, togglereferenciapago, toggleAddPersona]
   );
 
 

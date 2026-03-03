@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\sendCentral;
+use App\Models\clientes;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
@@ -26,6 +27,30 @@ class SolicitudDescuentoFrontController extends Controller
         ]);
 
         $sendCentral = new sendCentral();
+        $dataCliente = $request->input('data_cliente');
+        // Si no vienen datos del cliente pero sí id_cliente, cargar desde BD de facturación para enviar a Central (identificación, nombre, etc.)
+        if ((empty($dataCliente) || empty($dataCliente['identificacion'] ?? null)) && $request->filled('id_cliente')) {
+            $cliente = clientes::find($request->input('id_cliente'));
+            if ($cliente) {
+                $dataCliente = [
+                    'identificacion' => $cliente->identificacion ?? '',
+                    'nombre' => $cliente->nombre ?? '',
+                    'correo' => $cliente->correo ?? '',
+                    'direccion' => $cliente->direccion ?? '',
+                    'telefono' => $cliente->telefono ?? '',
+                ];
+            }
+        }
+        // Normalizar data_cliente si viene del front: solo campos que Central usa
+        if (is_array($dataCliente) && !empty($dataCliente['identificacion'] ?? null)) {
+            $dataCliente = [
+                'identificacion' => $dataCliente['identificacion'] ?? '',
+                'nombre' => $dataCliente['nombre'] ?? '',
+                'correo' => $dataCliente['correo'] ?? '',
+                'direccion' => $dataCliente['direccion'] ?? '',
+                'telefono' => $dataCliente['telefono'] ?? '',
+            ];
+        }
         $resultado = $sendCentral->crearSolicitudDescuentoFront([
             'id_sucursal' => $sendCentral->getOrigen(),
             'uuid_pedido_front' => $request->uuid_pedido_front,
@@ -40,7 +65,7 @@ class SolicitudDescuentoFrontController extends Controller
             'tipo_descuento' => $request->tipo_descuento,
             'observaciones' => $request->input('observaciones', ''),
             'id_cliente' => $request->input('id_cliente'),
-            'data_cliente' => $request->input('data_cliente'),
+            'data_cliente' => $dataCliente,
         ]);
 
         if (is_array($resultado) && isset($resultado['estado'])) {

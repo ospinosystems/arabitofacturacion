@@ -3459,12 +3459,15 @@ export default function Facturar({
             clienteInptelefono,
         }).then((res) => {
             notificar(res);
-            if (res.data) {
-                if (res.data.estado) {
-                    if (res.data.id) {
-                        setPersonas(res.data.id);
-                    }
-                }
+            if (res.data && res.data.estado && res.data.id) {
+                // Pasar objeto completo para que setPersonas ancle el cliente a la orden igual que al seleccionar
+                setPersonas({
+                    id: res.data.id,
+                    nombre: clienteInpnombre,
+                    identificacion: clienteInpidentificacion,
+                    direccion: clienteInpdireccion,
+                    telefono: clienteInptelefono,
+                });
             }
             setLoading(false);
         });

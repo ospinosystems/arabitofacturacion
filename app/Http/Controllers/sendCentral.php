@@ -57,8 +57,8 @@ class sendCentral extends Controller
 
     public function path()
     {
-       //return "http://127.0.0.1:8001";
-       return "https://phplaravel-1009655-3565285.cloudwaysapps.com";
+        //return "http://127.0.0.1:8001";
+        return "https://phplaravel-1009655-3565285.cloudwaysapps.com";
     }
 
     public function sends()
@@ -967,10 +967,12 @@ class sendCentral extends Controller
         $timeout = $options['timeout'] ?? 30;
         $headers = $options['headers'] ?? [];
         $apiKey = $this->getCentralApiKey();
-        if ($apiKey !== null && $apiKey !== '') {
+        if ($apiKey !== null) {
             $headers['X-Sucursal-Api-Key'] = $apiKey;
-            // Central también acepta la key por query/body (central_api_key); refuerzo para GET y POST
-            $params['central_api_key'] = $apiKey;
+            // GET: enviar también en query para que central reciba la key aunque algún proxy quite headers
+            if (strtoupper($method) === 'GET') {
+                $params['central_api_key'] = $apiKey;
+            }
         }
 
         $request = Http::timeout($timeout)->withHeaders($headers);
@@ -4698,6 +4700,17 @@ class sendCentral extends Controller
     public function crearSolicitudDescuento($data) {
         try {
             $codigo_origen = $this->getOrigen();
+            $cliente = isset($data['id_cliente']) ? clientes::find($data['id_cliente']) : null;
+            $dataCliente = null;
+            if ($cliente) {
+                $dataCliente = [
+                    'identificacion' => $cliente->identificacion ?? '',
+                    'nombre' => $cliente->nombre ?? '',
+                    'correo' => $cliente->correo ?? '',
+                    'direccion' => $cliente->direccion ?? '',
+                    'telefono' => $cliente->telefono ?? '',
+                ];
+            }
             $response = $this->requestToCentral('post', "/api/solicitudes-descuentos", [
                 "codigo_origen" => $codigo_origen,
                 "id_sucursal" => $data['id_sucursal'],
@@ -4708,7 +4721,7 @@ class sendCentral extends Controller
                 "monto_descuento" => $data['monto_descuento'],
                 "porcentaje_descuento" => $data['porcentaje_descuento'],
                 "id_cliente" => $data['id_cliente'],
-                "data_cliente" => clientes::where("id",$data['id_cliente'])->first(),
+                "data_cliente" => $dataCliente,
                 "usuario_ensucursal" => $data['usuario_ensucursal'],
                 "metodos_pago" => $data['metodos_pago'],
                 "ids_productos" => $data['ids_productos'],

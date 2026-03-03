@@ -2558,21 +2558,19 @@ export default function PagarMain({
         [showHeaderAndMenu, showModalPosDebito, togglereferenciapago]
     );
 
-    //tab - Comportamiento por defecto cuando el modal de referencia está abierto
+    //tab - Dejar que TAB funcione normalmente (navegación entre inputs) cuando modal de referencia o modal cliente está abierto
     useHotkeys(
         "tab",
         (event) => {
-            // Solo aplicar comportamiento por defecto si el modal de referencia está abierto
-            if (togglereferenciapago) {
-                // Permitir el comportamiento por defecto del TAB (navegación entre elementos)
-                return; // No hacer preventDefault, dejar que el TAB funcione normalmente
+            if (togglereferenciapago || toggleAddPersona) {
+                return; // No interceptar: permitir comportamiento por defecto del TAB
             }
         },
         {
-            enableOnTags: ["INPUT", "SELECT"],
+            enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
             filter: false,
         },
-        [togglereferenciapago]
+        [togglereferenciapago, toggleAddPersona]
     );
 
     //r - Abrir modal de referencia de pago
@@ -2696,6 +2694,7 @@ export default function PagarMain({
                         onClickEditPedido={onClickEditPedido}
                         addNewPedidoFront={addNewPedidoFront}
                         togglereferenciapago={togglereferenciapago}
+                        toggleAddPersona={toggleAddPersona}
                         orderColumn={orderColumn}
                         setOrderColumn={setOrderColumn}
                         orderBy={orderBy}
