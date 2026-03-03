@@ -376,49 +376,75 @@
 </div>
 
 <script>
-// Buscar ubicación por código escaneado
-document.getElementById('buscar_ubicacion_input')?.addEventListener('change', function() {
-    const codigo = this.value.trim();
+// Buscar ubicación por código escaneado y redirigir (evita que Enter en este campo envíe el form)
+function buscarUbicacionYRedirigir(inputEl) {
+    const codigo = (inputEl && inputEl.value ? inputEl.value : '').trim();
     if (!codigo) return;
-    
+    var input = inputEl || document.getElementById('buscar_ubicacion_input');
+    if (!input) return;
+
     fetch(`/warehouses/buscar?buscar=${encodeURIComponent(codigo)}`)
-        .then(response => {
-            return response.json().then(data => ({ ok: response.ok, data }));
+        .then(function(response) {
+            return response.json().then(function(data) { return { ok: response.ok, data: data }; });
         })
-        .then(({ ok, data }) => {
+        .then(function(result) {
+            var ok = result.ok, data = result.data;
             if (!ok && data && data.msj) {
                 mostrarNotificacion(data.msj, 'error');
-                this.value = '';
-                this.focus();
+                input.value = '';
+                input.focus();
                 return;
             }
             if (data.ubicaciones && data.ubicaciones.length > 0) {
-                const warehouse = data.ubicaciones[0];
-                // Actualizar campos ocultos y vista
+                var warehouse = data.ubicaciones[0];
                 document.getElementById('ubicacion_id_hidden').value = warehouse.id;
                 document.getElementById('ubicacion_codigo_hidden').value = warehouse.codigo;
-                this.value = warehouse.codigo;
-                this.classList.add('border-green-500', 'bg-green-50');
-                mostrarNotificacion(`Ubicación encontrada: ${warehouse.codigo}`, 'success');
-                
-                // Redirigir con URL explícita para asegurar que ubicacion_id y ubicacion_codigo se envíen
-                const form = document.getElementById('formBusqueda');
-                const params = new URLSearchParams(new FormData(form));
+                input.value = warehouse.codigo;
+                input.classList.add('border-green-500', 'bg-green-50');
+                mostrarNotificacion('Ubicación encontrada: ' + warehouse.codigo, 'success');
+                var form = document.getElementById('formBusqueda');
+                var params = new URLSearchParams(new FormData(form));
                 params.set('ubicacion_id', String(warehouse.id));
                 params.set('ubicacion_codigo', warehouse.codigo || '');
-                const url = form.action + (params.toString() ? '?' + params.toString() : '');
+                var url = form.action + (params.toString() ? '?' + params.toString() : '');
                 window.location.href = url;
             } else {
                 mostrarNotificacion('Ubicación no encontrada', 'warning');
-                this.value = '';
-                this.focus();
+                input.value = '';
+                input.focus();
             }
         })
-        .catch(error => {
+        .catch(function(error) {
+            if (error && error.name === 'AbortError') return;
             console.error('Error:', error);
             mostrarNotificacion('Error al buscar ubicación', 'error');
         });
-});
+}
+
+(function() {
+    var inputUbicacion = document.getElementById('buscar_ubicacion_input');
+    if (!inputUbicacion) return;
+    // Change: al salir del campo o cuando cambia el valor
+    inputUbicacion.addEventListener('change', function() {
+        buscarUbicacionYRedirigir(this);
+    });
+    // Enter: evitar submit del form y lanzar búsqueda (típico del escáner)
+    inputUbicacion.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            buscarUbicacionYRedirigir(this);
+        }
+    });
+    // Al enviar el form (Enter o clic en Buscar): si hay código en "Escanear Ubicación", resolver primero y redirigir
+    document.getElementById('formBusqueda')?.addEventListener('submit', function(e) {
+        var input = document.getElementById('buscar_ubicacion_input');
+        if (input && input.value.trim()) {
+            e.preventDefault();
+            buscarUbicacionYRedirigir(input);
+        }
+    });
+})();
 
 // Limpiar filtro de ubicación
 function limpiarFiltroUbicacion() {
