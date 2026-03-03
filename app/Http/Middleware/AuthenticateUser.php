@@ -264,9 +264,9 @@ class AuthenticateUser
             $routeUri = $request->route() ? $request->route()->uri : $request->path();
             $path = $request->path();
             
-            // Log para diagnóstico: warehouses/buscar y usuario DICI
+            // Log dedicado warehouse_ubicacion: Escanear Ubicación (DICI / warehouses/buscar)
             if (str_contains($path, 'warehouse') || str_contains($path, 'warehouses')) {
-                \Log::channel('single')->info('AuthenticateUser DICI (tipo 7)', [
+                \Log::channel('warehouse_ubicacion')->info('AuthenticateUser DICI (tipo 7)', [
                     'path' => $path,
                     'routeUri' => $routeUri,
                     'routeName' => $request->route() ? $request->route()->getName() : null,
@@ -294,7 +294,7 @@ class AuthenticateUser
                 }
             }
             
-            \Log::channel('single')->warning('AuthenticateUser DICI acceso denegado', [
+            \Log::channel('warehouse_ubicacion')->warning('AuthenticateUser DICI acceso denegado', [
                 'path' => $path,
                 'routeUri' => $routeUri,
                 'tipo_usuario' => 7,

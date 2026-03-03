@@ -107,6 +107,14 @@ return [
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => 30,
         ],
+
+        // Log dedicado: Escanear Ubicación en warehouse-inventory (middleware + WarehouseController::buscarUbicaciones)
+        'warehouse_ubicacion' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/warehouse_ubicacion.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 14,
+        ],
     ],
 
 ];

@@ -130,7 +130,7 @@ class WarehouseController extends Controller
      */
     public function buscarUbicaciones(Request $request)
     {
-        \Log::channel('single')->info('WarehouseController::buscarUbicaciones entrada', [
+        \Log::channel('warehouse_ubicacion')->info('WarehouseController::buscarUbicaciones entrada', [
             'buscar' => $request->buscar,
             'all' => $request->only(['buscar']),
         ]);
@@ -139,7 +139,7 @@ class WarehouseController extends Controller
             $buscar = $request->buscar;
 
             if (!$buscar || strlen($buscar) < 1) {
-                \Log::channel('single')->info('WarehouseController::buscarUbicaciones salida vacía (sin buscar)');
+                \Log::channel('warehouse_ubicacion')->info('WarehouseController::buscarUbicaciones salida vacía (sin buscar)');
                 return Response::json([
                     'ubicaciones' => []
                 ]);
@@ -166,7 +166,7 @@ class WarehouseController extends Controller
                     ];
                 });
 
-            \Log::channel('single')->info('WarehouseController::buscarUbicaciones salida', [
+            \Log::channel('warehouse_ubicacion')->info('WarehouseController::buscarUbicaciones salida', [
                 'buscar_normalizado' => $buscar,
                 'count' => $ubicaciones->count(),
             ]);
@@ -175,7 +175,7 @@ class WarehouseController extends Controller
                 'ubicaciones' => $ubicaciones
             ]);
         } catch (\Throwable $e) {
-            \Log::channel('single')->error('WarehouseController::buscarUbicaciones excepción', [
+            \Log::channel('warehouse_ubicacion')->error('WarehouseController::buscarUbicaciones excepción', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
