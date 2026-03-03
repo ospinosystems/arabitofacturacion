@@ -2261,7 +2261,7 @@ class InventarioController extends Controller
                 ]);
             }
 
-            $producto = inventario::with(['proveedor', 'categoria', 'marca'])
+            $producto = inventario::with([])
                 ->find($id);
 
             if (!$producto) {

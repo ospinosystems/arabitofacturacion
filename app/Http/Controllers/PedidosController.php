@@ -577,10 +577,6 @@ class PedidosController extends Controller
         if ($tipobusquedapedido == "prod") {
             // Optimización para búsqueda de productos - Sin cache
             $prod = inventario::with([
-                "proveedor:id,descripcion",
-                "categoria:id,descripcion",
-                "marca:id,descripcion",
-                "deposito:id,descripcion",
             ])
             ->where(function ($q) use ($busquedaPedido) {
                 $q->where("descripcion", "LIKE", "%$busquedaPedido%")
