@@ -967,8 +967,10 @@ class sendCentral extends Controller
         $timeout = $options['timeout'] ?? 30;
         $headers = $options['headers'] ?? [];
         $apiKey = $this->getCentralApiKey();
-        if ($apiKey !== null) {
+        if ($apiKey !== null && $apiKey !== '') {
             $headers['X-Sucursal-Api-Key'] = $apiKey;
+            // Central también acepta la key por query/body (central_api_key); refuerzo para GET y POST
+            $params['central_api_key'] = $apiKey;
         }
 
         $request = Http::timeout($timeout)->withHeaders($headers);
