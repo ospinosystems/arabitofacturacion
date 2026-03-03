@@ -78,6 +78,7 @@ class sendCentral extends Controller
      */
     public function buscarSolicitudGarantiaCentral($id)
     {
+        $url = $this->path() . "/api/garantias/solicitudes/{$id}";
         try {
             $codigoOrigen = $this->getOrigen();
             $response = $this->requestToCentral('get', "/api/garantias/solicitudes/{$id}", [
@@ -98,19 +99,24 @@ class sendCentral extends Controller
                     ];
                 }
             } else {
-                \Log::error('Error al buscar solicitud de garantía en central', [
-                    'id' => $id,
+                $body = $response->body();
+                \Log::channel('single')->error('garantia-reverso/buscar-solicitud: Error de central al buscar solicitud de garantía', [
+                    'solicitud_id' => $id,
+                    'url' => $url,
                     'status' => $response->status(),
-                    'body' => $response->body()
+                    'body' => strlen($body) > 500 ? substr($body, 0, 500) . '...' : $body,
                 ]);
-                
                 return [
                     'success' => false,
                     'message' => 'Error de comunicación con arabitocentral: ' . $response->status()
                 ];
             }
         } catch (\Exception $e) {
-            
+            \Log::channel('single')->error('garantia-reverso/buscar-solicitud: Excepción al llamar a central', [
+                'solicitud_id' => $id,
+                'url' => $url,
+                'exception' => $e->getMessage(),
+            ]);
             return [
                 'success' => false,
                 'message' => 'Error de conexión: ' . $e->getMessage()
@@ -125,38 +131,38 @@ class sendCentral extends Controller
     {
         try {
             $response = $this->requestToCentral('post', "/api/solicitudes-reverso", $data);
-            
+            $result = $response->json();
+
             if ($response->ok()) {
-                $result = $response->json();
-                if ($result['success']) {
+                if ($result && ($result['success'] ?? false)) {
                     return [
                         'estado' => true,
                         'id' => $result['solicitud_id'] ?? null,
                         'msj' => $result['message'] ?? 'Solicitud enviada exitosamente'
                     ];
-                } else {
-                    return [
-                        'estado' => false,
-                        'msj' => $result['message'] ?? 'Error al enviar solicitud'
-                    ];
                 }
-            } else {
                 return [
                     'estado' => false,
-                    'msj' => 'Error de conexión con central: ' . $response->status()
+                    'msj' => ($result['message'] ?? null) ?: 'Error al enviar solicitud'
                 ];
             }
+
+            // Central devolvió 4xx/5xx: usar mensaje del body si viene en JSON
+            $msj = ($result['message'] ?? null) ?: ('Error de comunicación con central: ' . $response->status());
+            return [
+                'estado' => false,
+                'msj' => $msj
+            ];
         } catch (\Exception $e) {
             \Log::error('Error enviando solicitud de reverso a central', [
                 'data' => $data,
                 'error' => $e->getMessage()
             ]);
-            
             return [
                 'estado' => false,
                 'msj' => 'Error de conexión: ' . $e->getMessage()
             ];
-                }
+        }
     }
 
   
