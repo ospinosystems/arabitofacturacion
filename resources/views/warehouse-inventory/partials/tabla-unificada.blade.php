@@ -381,9 +381,19 @@ document.getElementById('buscar_ubicacion_input')?.addEventListener('change', fu
     const codigo = this.value.trim();
     if (!codigo) return;
     
-    fetch(`/warehouses/buscar?buscar=${encodeURIComponent(codigo)}`)
-        .then(response => response.json())
-        .then(data => {
+    fetch(`/warehouses/buscar?buscar=${encodeURIComponent(codigo)}`, {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(response => {
+            return response.json().then(data => ({ ok: response.ok, data }));
+        })
+        .then(({ ok, data }) => {
+            if (!ok && data && data.msj) {
+                mostrarNotificacion(data.msj, 'error');
+                this.value = '';
+                this.focus();
+                return;
+            }
             if (data.ubicaciones && data.ubicaciones.length > 0) {
                 const warehouse = data.ubicaciones[0];
                 // Guardar valores en campos ocultos

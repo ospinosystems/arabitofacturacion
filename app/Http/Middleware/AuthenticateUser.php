@@ -292,6 +292,8 @@ class AuthenticateUser
             $pasilleroRoutes = [
                 // Ruta principal de warehouse-inventory
                 'warehouse-inventory',
+                // Buscar ubicación por código (Escanear Ubicación en índice)
+                'warehouses/buscar',
                 // Rutas TCR Pasillero
                 'warehouse-inventory/tcr/pasillero',
                 'warehouse-inventory/tcr/mis-asignaciones',
