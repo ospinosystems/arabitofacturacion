@@ -394,27 +394,20 @@ document.getElementById('buscar_ubicacion_input')?.addEventListener('change', fu
             }
             if (data.ubicaciones && data.ubicaciones.length > 0) {
                 const warehouse = data.ubicaciones[0];
-                // Guardar valores en campos ocultos
+                // Actualizar campos ocultos y vista
                 document.getElementById('ubicacion_id_hidden').value = warehouse.id;
                 document.getElementById('ubicacion_codigo_hidden').value = warehouse.codigo;
-                // Mostrar confirmación visual
                 this.value = warehouse.codigo;
                 this.classList.add('border-green-500', 'bg-green-50');
                 mostrarNotificacion(`Ubicación encontrada: ${warehouse.codigo}`, 'success');
                 
-                // Esperar a que los valores estén asignados antes de hacer submit
-                setTimeout(() => {
-                    // Verificar que los valores estén asignados
-                    const idAsignado = document.getElementById('ubicacion_id_hidden').value;
-                    const codigoAsignado = document.getElementById('ubicacion_codigo_hidden').value;
-                    
-                    if (idAsignado && codigoAsignado) {
-                        document.getElementById('formBusqueda').submit();
-                    } else {
-                        console.error('Error: valores no asignados correctamente');
-                        mostrarNotificacion('Error al procesar la búsqueda', 'error');
-                    }
-                }, 100);
+                // Redirigir con URL explícita para asegurar que ubicacion_id y ubicacion_codigo se envíen
+                const form = document.getElementById('formBusqueda');
+                const params = new URLSearchParams(new FormData(form));
+                params.set('ubicacion_id', String(warehouse.id));
+                params.set('ubicacion_codigo', warehouse.codigo || '');
+                const url = form.action + (params.toString() ? '?' + params.toString() : '');
+                window.location.href = url;
             } else {
                 mostrarNotificacion('Ubicación no encontrada', 'warning');
                 this.value = '';
