@@ -1147,7 +1147,7 @@ class SyncProgressController extends Controller
                     if ($response->ok()) {
                         $resultado = $response->json();
                         
-                        if ($resultado['estado'] ?? false) {
+                        if ($resultado && ($resultado['estado'] ?? false)) {
                             // Marcar como sincronizados usando el campo correcto
                             // EXCEPTO para inventarios - no actualizar el campo push
                             if ($nombreTabla !== 'inventarios') {
@@ -1165,10 +1165,23 @@ class SyncProgressController extends Controller
                             $procesados += count($data);
                             $exito = true;
                         } else {
-                            $ultimoError = $resultado['mensaje'] ?? 'Error desconocido';
+                            $ultimoError = (is_array($resultado) ? ($resultado['mensaje'] ?? $resultado['message'] ?? null) : null);
+                            if (empty($ultimoError)) {
+                                $body = $response->body();
+                                Log::error("    [{$nombreTabla}] Central respondió 200 pero estado no OK. Respuesta completa: " . (strlen($body) > 500 ? substr($body, 0, 500) . '...' : $body));
+                                $ultimoError = 'Central devolvió estado=false sin mensaje. Revisar logs para respuesta completa.';
+                            }
                         }
                     } else {
+                        $body = $response->body();
                         $ultimoError = 'HTTP ' . $response->status();
+                        if (!empty($body)) {
+                            Log::error("    [{$nombreTabla}] Respuesta HTTP {$response->status()}: " . (strlen($body) > 500 ? substr($body, 0, 500) . '...' : $body));
+                            $decoded = is_string($body) ? json_decode($body, true) : null;
+                            if (is_array($decoded)) {
+                                $ultimoError .= ' - ' . ($decoded['mensaje'] ?? $decoded['message'] ?? $decoded['error'] ?? '');
+                            }
+                        }
                     }
                 } catch (\Exception $e) {
                     $ultimoError = $e->getMessage();
@@ -1301,15 +1314,28 @@ class SyncProgressController extends Controller
                         if ($response->ok()) {
                             $resultado = $response->json();
                             
-                            if ($resultado['estado'] ?? false) {
+                            if ($resultado && ($resultado['estado'] ?? false)) {
                                 $procesados += count($chunk);
                                 $exito = true;
                                 Log::info("    [{$nombreTabla}] Lote enviado: " . count($chunk) . " registros");
                             } else {
-                                $ultimoError = $resultado['mensaje'] ?? 'Error desconocido';
+                                $ultimoError = (is_array($resultado) ? ($resultado['mensaje'] ?? $resultado['message'] ?? null) : null);
+                                if (empty($ultimoError)) {
+                                    $body = $response->body();
+                                    Log::error("    [{$nombreTabla}] Central respondió 200 pero estado no OK. Respuesta: " . (strlen($body) > 500 ? substr($body, 0, 500) . '...' : $body));
+                                    $ultimoError = 'Central devolvió estado=false sin mensaje. Revisar logs.';
+                                }
                             }
                         } else {
+                            $body = $response->body();
                             $ultimoError = 'HTTP ' . $response->status();
+                            if (!empty($body)) {
+                                Log::error("    [{$nombreTabla}] Respuesta HTTP {$response->status()}: " . (strlen($body) > 500 ? substr($body, 0, 500) . '...' : $body));
+                                $decoded = is_string($body) ? json_decode($body, true) : null;
+                                if (is_array($decoded)) {
+                                    $ultimoError .= ' - ' . ($decoded['mensaje'] ?? $decoded['message'] ?? $decoded['error'] ?? '');
+                                }
+                            }
                         }
                     } catch (\Exception $e) {
                         $ultimoError = $e->getMessage();
