@@ -99,6 +99,7 @@ function Cierre({
 	tipo_accionCierre,
 	settipo_accionCierre,
 	getTotalizarCierre,
+	notificar,
 
 	cierrenumreportez,
 	setcierrenumreportez,
@@ -417,6 +418,7 @@ function Cierre({
 					dolar={moneda?.bs || 0}
 					peso={moneda?.cop || 0}
 					esModal={false} // Renderizar como componente normal, no como modal
+					notificar={notificar}
 				/>
 			</div>
 		);
@@ -1271,6 +1273,7 @@ function Cierre({
 					onClose={() => setMostrarTotalizar(false)}
 					dolar={dolar}
 					peso={peso}
+					notificar={notificar}
 				/>
 			)}
 		</div>

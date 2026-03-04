@@ -12,7 +12,8 @@ function TotalizarCierre({
 	onClose,
 	dolar, // tasa BS
 	peso,  // tasa COP
-	esModal = true // Por defecto es modal
+	esModal = true, // Por defecto es modal
+	notificar
 }) {
 	const [loading, setLoading] = useState(false);
 	const [cierreConsolidado, setCierreConsolidado] = useState(null);
@@ -142,7 +143,7 @@ function TotalizarCierre({
 
 	const guardarCierreAdmin = async () => {
 		if (!cierreConsolidado || !datosConsolidados) {
-			alert('No hay datos de cierre para guardar');
+			notificar?.('No hay datos de cierre para guardar', true);
 			return;
 		}
 
@@ -177,10 +178,7 @@ function TotalizarCierre({
 			const response = await db.guardarCierre(datosGuardar);
 			
 			if (response.data && response.data.estado) {
-				// Mostrar notificación en lugar de alert
-				if (window.notificar) {
-					window.notificar('✓ Cierre de administrador guardado exitosamente', false);
-				}
+				notificar?.('✓ Cierre de administrador guardado exitosamente', false);
 				setCierreAdminGuardado(true);
 				
 				// Abrir modal de envío de cierre inmediatamente
@@ -188,9 +186,7 @@ function TotalizarCierre({
 					enviarCierreConModal();
 				} catch (syncError) {
 					console.error('Error al abrir modal de envío:', syncError);
-					if (window.notificar) {
-						window.notificar('Error al abrir modal de envío', false);
-					}
+					notificar?.('Error al abrir modal de envío', true);
 				}
 			} else {
 				// Si hay un faltante, mostrar mensaje detallado
@@ -198,11 +194,11 @@ function TotalizarCierre({
 				if (response.data?.total_diferencia !== undefined || response.data?.descuadre_general !== undefined) {
 					mostrarMensajeFaltante(response.data);
 				} else {
-					alert(response.data?.msj || 'Error al guardar el cierre');
+					notificar?.(response.data?.msj || 'Error al guardar el cierre', true);
 				}
 			}
 			} catch (error) {
-				alert('Error al guardar el cierre: ' + (error.message || error));
+				notificar?.('Error al guardar el cierre: ' + (error.message || error), true);
 			} finally {
 				setGuardandoCierre(false);
 			}
@@ -233,9 +229,7 @@ function TotalizarCierre({
 		const fecha = fechaCierreBackend || "";
 		
 		if (!fecha) {
-			if (window.notificar) {
-				window.notificar('No hay fecha de cierre disponible para enviar', false);
-			}
+			notificar?.('No hay fecha de cierre disponible para enviar', true);
 			return;
 		}
 		
@@ -249,9 +243,7 @@ function TotalizarCierre({
 		const fecha = fechaCierreBackend || fechaCierre || "";
 		
 		if (!fecha) {
-			if (window.notificar) {
-				window.notificar('No hay fecha de cierre disponible para enviar', false);
-			}
+			notificar?.('No hay fecha de cierre disponible para enviar', true);
 			return;
 		}
 
@@ -299,9 +291,7 @@ function TotalizarCierre({
 					window.SyncModal.complete(true, `Sincronización completada: ${registros} registros en ${tiempo}`, res.data);
 				}
 				
-				if (window.notificar) {
-					window.notificar(`✓ Sincronización completada: ${registros} registros`, false);
-				}
+				notificar?.(`✓ Sincronización completada: ${registros} registros`, false);
 				
 				// Ejecutar post-procesamiento (correo, backup) en segundo plano
 				db.ejecutarPostSync({ fecha: fecha }).catch(err => {
@@ -327,9 +317,7 @@ function TotalizarCierre({
 					}
 				}
 				
-				if (window.notificar) {
-					window.notificar(mensaje, false);
-				}
+				notificar?.(mensaje, false);
 			}
 		} catch (error) {
 			const errorMsg = "Error: " + (error.message || "Error desconocido");
@@ -344,9 +332,7 @@ function TotalizarCierre({
 				window.SyncModal.complete(false, errorMsg);
 			}
 			
-			if (window.notificar) {
-				window.notificar(errorMsg, false);
-			}
+			notificar?.(errorMsg, true);
 		}
 	};
 

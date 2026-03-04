@@ -9313,6 +9313,7 @@ export default function Facturar({
                             guardar_cierre={guardar_cierre}
                             veryenviarcierrefun={veryenviarcierrefun}
                             notaCierre={notaCierre}
+                            notificar={notificar}
                             billete1={billete1}
                             setbillete1={setbillete1}
                             billete5={billete5}

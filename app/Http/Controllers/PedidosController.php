@@ -1358,6 +1358,47 @@ class PedidosController extends Controller
         }
     }
 
+    /**
+     * Verifica que todos los usuarios caja (tipo_usuario = 4) que tuvieron pedidos
+     * en la fecha dada hayan guardado su cierre (tipo_cierre = 0).
+     * Reutilizable al totalizar y al guardar cierre de administrador.
+     *
+     * @param string $fecha Fecha en formato Y-m-d
+     * @return array ['valido' => bool, 'msj' => string, 'usuarios_sin_cierre' => array]
+     */
+    public function validarCierresCajerosCompletos($fecha)
+    {
+        $usuarios_con_pedidos = pedidos::whereBetween('fecha_factura', ["$fecha 00:00:00", "$fecha 23:59:59"])
+            ->whereNotNull('id_vendedor')
+            ->join('usuarios', 'pedidos.id_vendedor', '=', 'usuarios.id')
+            ->where('usuarios.tipo_usuario', 4)
+            ->distinct()
+            ->pluck('pedidos.id_vendedor')
+            ->toArray();
+
+        if (empty($usuarios_con_pedidos)) {
+            return ['valido' => true, 'msj' => '', 'usuarios_sin_cierre' => []];
+        }
+
+        $usuarios_con_cierre = cierres::where('fecha', $fecha)
+            ->where('tipo_cierre', 0)
+            ->pluck('id_usuario')
+            ->toArray();
+
+        $usuarios_sin_cierre = array_diff($usuarios_con_pedidos, $usuarios_con_cierre);
+
+        if (!empty($usuarios_sin_cierre)) {
+            $nombres = usuarios::whereIn('id', $usuarios_sin_cierre)->pluck('nombre')->toArray();
+            return [
+                'valido' => false,
+                'msj' => 'Las siguientes cajas tuvieron pedidos hoy pero no realizaron cierre: ' . implode(', ', $nombres),
+                'usuarios_sin_cierre' => array_values($usuarios_sin_cierre),
+            ];
+        }
+
+        return ['valido' => true, 'msj' => '', 'usuarios_sin_cierre' => []];
+    }
+
     // ==================== FUNCIONES AUXILIARES PARA CERRARFUN ====================
     
     /**
@@ -2690,6 +2731,18 @@ class PedidosController extends Controller
                     ]);
                 }
             }
+
+            // ========== VALIDAR QUE TODAS LAS CAJAS CON PEDIDOS HAYAN GUARDADO CIERRE ==========
+            // Al guardar cierre administrador, exigir que todos los usuarios caja con pedidos del día tengan cierre guardado
+            if ($tipo_cierre == 1) {
+                $validacion_cajeros = $this->validarCierresCajerosCompletos($today);
+                if (!$validacion_cajeros['valido']) {
+                    return Response::json([
+                        'msj' => $validacion_cajeros['msj'],
+                        'estado' => false
+                    ], 200);
+                }
+            }
             
             // ========== RECALCULAR TODO INTERNAMENTE DESDE DATOS ORIGINALES ==========
             // Preparar datos originales del usuario
@@ -3690,33 +3743,15 @@ class PedidosController extends Controller
                 ])
                 ->get();
             
-            // Verificar que todas las cajas que tuvieron pedidos hoy hayan hecho cierre
-            // Solo considerar usuarios tipo caja (tipo_usuario = 4)
-            $usuarios_con_pedidos = pedidos::whereBetween('fecha_factura', ["$fecha 00:00:00", "$fecha 23:59:59"])
-                ->whereNotNull('id_vendedor')
-                ->join('usuarios', 'pedidos.id_vendedor', '=', 'usuarios.id')
-                ->where('usuarios.tipo_usuario', 4)
-                ->distinct()
-                ->pluck('pedidos.id_vendedor')
-                ->toArray();
-            
-            if (!empty($usuarios_con_pedidos)) {
-                $usuarios_con_cierre = $cierres_cajeros->pluck('id_usuario')->toArray();
-                $usuarios_sin_cierre = array_diff($usuarios_con_pedidos, $usuarios_con_cierre);
-                
-                if (!empty($usuarios_sin_cierre)) {
-                    // Obtener nombres de los usuarios sin cierre
-                    $nombres_usuarios_sin_cierre = usuarios::whereIn('id', $usuarios_sin_cierre)
-                        ->pluck('nombre')
-                        ->toArray();
-                    
-                    return Response::json([
-                        'estado' => false,
-                        'msj' => 'Las siguientes cajas tuvieron pedidos hoy pero no realizaron cierre: ' . implode(', ', $nombres_usuarios_sin_cierre)
-                    ], 200);
-                }
+            // Verificar que todas las cajas que tuvieron pedidos hoy hayan hecho cierre (misma validación que al guardar cierre admin)
+            $validacion_cajeros = $this->validarCierresCajerosCompletos($fecha);
+            if (!$validacion_cajeros['valido']) {
+                return Response::json([
+                    'estado' => false,
+                    'msj' => $validacion_cajeros['msj']
+                ], 200);
             }
-            
+
             if ($cierres_cajeros->isEmpty()) {
                 return Response::json([
                     'estado' => false,
