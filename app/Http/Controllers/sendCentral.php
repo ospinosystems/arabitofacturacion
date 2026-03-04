@@ -1261,17 +1261,16 @@ class sendCentral extends Controller
         ]);
         $codigoOrigen = $this->getOrigen();
         try {
-            $payload = [
+            $params = [
                 'codigo_sucursal' => $codigoOrigen,
                 'order_number' => $orderNumber,
                 'amount' => $amount,
             ];
             if ($posErrorBody !== null) {
-                $payload['pos_error_body'] = is_array($posErrorBody) ? $posErrorBody : ['raw' => $posErrorBody];
+                $params['pos_error_body'] = is_array($posErrorBody) ? $posErrorBody : ['raw' => $posErrorBody];
             }
-            $url = $this->path() . '/pos/query-transaction';
-            $logPos('queryTransaccionPosCentral REQUEST', ['url' => $url, 'payload' => $payload]);
-            $response = Http::timeout(30)->post($url, $payload);
+            $logPos('queryTransaccionPosCentral REQUEST', ['path' => '/pos/query-transaction', 'params_keys' => array_keys($params)]);
+            $response = $this->requestToCentral('post', '/pos/query-transaction', $params, ['timeout' => 30]);
             $httpStatus = $response->status();
             $body = $response->body();
             $responseJson = $response->json();
