@@ -1247,7 +1247,7 @@ class sendCentral extends Controller
      * @param string $orderNumber numeroOrden enviado al POS
      * @param float|int $amount monto en decimal (ej. 58.77). Si se recibe entero (centavos), dividir por 100.
      * @param array|null $posErrorBody respuesta negativa del POS que generó esta confirmación (para registro en central)
-     * @return array|null ['approved' => bool, 'data' => array|null] o null si falla la llamada
+     * @return array Siempre: ['http_status' => int, 'body' => string, 'json' => array|null, 'approved' => bool, 'data' => array|null]
      */
     public function queryTransaccionPosCentral($orderNumber, $amount, $posErrorBody = null)
     {
@@ -1272,29 +1272,23 @@ class sendCentral extends Controller
             $url = $this->path() . '/pos/query-transaction';
             $logPos('queryTransaccionPosCentral REQUEST', ['url' => $url, 'payload' => $payload]);
             $response = Http::timeout(30)->post($url, $payload);
-            $responseOk = $response->ok();
+            $httpStatus = $response->status();
+            $body = $response->body();
             $responseJson = $response->json();
             $logPos('queryTransaccionPosCentral RESPONSE', [
-                'http_status' => $response->status(),
-                'response_ok' => $responseOk,
-                'has_json' => $responseJson !== null,
-                'body' => $response->body(),
+                'http_status' => $httpStatus,
+                'body' => $body,
                 'json' => $responseJson,
             ]);
-            if ($responseOk && $responseJson) {
-                $result = [
-                    'approved' => (bool) ($responseJson['approved'] ?? false),
-                    'data' => $responseJson['data'] ?? null,
-                ];
-                $logPos('queryTransaccionPosCentral RETORNA aprobado', [
-                    'approved' => $result['approved'],
-                    'has_data' => !empty($result['data']),
-                ]);
-                return $result;
-            }
-            $logPos('queryTransaccionPosCentral RETORNA null (response no ok o sin json)', [
-                'response_ok' => $responseOk,
-            ]);
+            $approved = $response->ok() && $responseJson ? (bool) ($responseJson['approved'] ?? false) : false;
+            $data = $responseJson && isset($responseJson['data']) ? $responseJson['data'] : null;
+            return [
+                'http_status' => $httpStatus,
+                'body' => $body,
+                'json' => $responseJson,
+                'approved' => $approved,
+                'data' => $data,
+            ];
         } catch (\Exception $e) {
             $logPos('queryTransaccionPosCentral EXCEPCIÓN', [
                 'message' => $e->getMessage(),
@@ -1302,8 +1296,14 @@ class sendCentral extends Controller
                 'line' => $e->getLine(),
             ]);
             \Log::warning('queryTransaccionPosCentral exception: ' . $e->getMessage());
+            return [
+                'http_status' => 0,
+                'body' => $e->getMessage(),
+                'json' => null,
+                'approved' => false,
+                'data' => null,
+            ];
         }
-        return null;
     }
 
     /**
@@ -1372,13 +1372,30 @@ class sendCentral extends Controller
 
         $result = $this->queryTransaccionPosCentral($orderNumber, $amount);
 
-        if ($result === null || !($result['approved'] ?? false) || empty($result['data'])) {
+        $httpStatus = $result['http_status'] ?? 0;
+        $serverResponse = [
+            'http_status' => $httpStatus,
+            'body' => $result['body'] ?? null,
+            'json' => $result['json'] ?? null,
+        ];
+
+        if ($httpStatus > 0 && $httpStatus < 200 || $httpStatus >= 300) {
+            return response()->json([
+                'success' => false,
+                'approved' => false,
+                'message' => 'Central respondió con error',
+                'request_sent' => $requestSent,
+                'server_response' => $serverResponse,
+            ], $httpStatus >= 400 && $httpStatus < 600 ? $httpStatus : 502);
+        }
+
+        if (!($result['approved'] ?? false) || empty($result['data'])) {
             return response()->json([
                 'success' => false,
                 'approved' => false,
                 'message' => 'Instapago no reporta transacción aprobada con esa referencia y monto',
                 'request_sent' => $requestSent,
-                'api_response' => $result,
+                'server_response' => $serverResponse,
             ], 200);
         }
 
@@ -1388,7 +1405,7 @@ class sendCentral extends Controller
                 'success' => false,
                 'message' => 'Respuesta de central sin datos',
                 'request_sent' => $requestSent,
-                'api_response' => $result,
+                'server_response' => $serverResponse,
             ], 200);
         }
 
@@ -1412,7 +1429,11 @@ class sendCentral extends Controller
             'approved' => true,
             'message' => 'Transacción aprobada y pago actualizado',
             'request_sent' => $requestSent,
-            'api_response' => $result,
+            'server_response' => [
+                'http_status' => $result['http_status'] ?? 200,
+                'body' => $result['body'] ?? null,
+                'json' => $result['json'] ?? null,
+            ],
             'pago' => $pago->fresh()->toArray(),
         ]);
     }
