@@ -263,6 +263,8 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::get('verCierre', [PedidosController::class,"verCierre"]);
 		Route::post('cerrar', [PedidosController::class,"cerrar"]);
 		Route::post('getTotalizarCierre', [PedidosController::class,"getTotalizarCierre"]);
+		// Endpoint temporal: cierre administrador por fecha + envío/sincronización
+		Route::get('cierre-administrador-por-fecha', [PedidosController::class, 'cierreAdministradorPorFecha']);
 		Route::post('getPermisoCierre', [TareaslocalController::class,"getPermisoCierre"]);
 		Route::get('sendCuentasporCobrar', [PedidosController::class,"sendCuentasporCobrar"]);
 		

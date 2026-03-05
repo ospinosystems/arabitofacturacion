@@ -2705,7 +2705,7 @@ class PedidosController extends Controller
             //return $req->all();
             
             $id_usuario = session("id_usuario");
-            $today = (new PedidosController)->today();
+            $today = $req->get('fecha') ?: (new PedidosController)->today();
 
             $cop = $this->get_moneda()["cop"];
             $bs = $this->get_moneda()["bs"];
@@ -3712,6 +3712,77 @@ class PedidosController extends Controller
             return Response::json(["msj" => "Error: " . $e->getCode() . " " . $e->getMessage()." LINEA ".$e->getLine(), "estado" => false]);
 
         }
+    }
+
+    /**
+     * Endpoint temporal: cierre administrador por fecha + envío/sincronización.
+     * Simula el flujo completo: calcular (getTotalizarCierre), guardar (guardarCierre), enviar (verCierre type=enviar).
+     * Solo reutiliza métodos existentes.
+     */
+    public function cierreAdministradorPorFecha(Request $req)
+    {
+        $fecha = $req->query('fecha') ?: $req->get('fecha');
+        if (!$fecha || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+            return Response::json(['estado' => false, 'msj' => 'Parámetro fecha requerido en formato Y-m-d'], 400);
+        }
+
+        $reqTotalizar = new Request(['fechaCierre' => $fecha]);
+        $resTotalizar = $this->getTotalizarCierre($reqTotalizar);
+        $dataTotalizar = $resTotalizar instanceof \Illuminate\Http\JsonResponse
+            ? $resTotalizar->getData(true)
+            : (is_array($resTotalizar) ? $resTotalizar : json_decode($resTotalizar, true));
+
+        if (empty($dataTotalizar['estado']) || empty($dataTotalizar['cierre_consolidado']) || empty($dataTotalizar['datos_consolidados'])) {
+            return Response::json([
+                'estado' => false,
+                'msj' => $dataTotalizar['msj'] ?? 'No se pudo obtener el totalizado para la fecha indicada'
+            ], 200);
+        }
+
+        $consolidado = $dataTotalizar['datos_consolidados'];
+        $cierreConsolidado = $dataTotalizar['cierre_consolidado'];
+        $cuadreDetallado = $cierreConsolidado['cuadre_detallado'] ?? [];
+
+        $payloadGuardar = [
+            'totalizarcierre' => true,
+            'fecha' => $fecha,
+            'caja_usd' => $consolidado['efectivo_real']['usd'] ?? 0,
+            'caja_cop' => $consolidado['efectivo_real']['cop'] ?? 0,
+            'caja_bs' => $consolidado['efectivo_real']['bs'] ?? 0,
+            'dejar_usd' => $consolidado['dejar_caja']['usd'] ?? 0,
+            'dejar_cop' => $consolidado['dejar_caja']['cop'] ?? 0,
+            'dejar_bs' => $consolidado['dejar_caja']['bs'] ?? 0,
+            'cuadre_detallado' => $cuadreDetallado,
+            'dataPuntosAdicionales' => [],
+            'lotesPinpad' => [],
+        ];
+
+        $reqGuardar = new Request($payloadGuardar);
+        $resGuardar = $this->guardarCierre($reqGuardar);
+        $dataGuardar = $resGuardar instanceof \Illuminate\Http\JsonResponse
+            ? $resGuardar->getData(true)
+            : (is_array($resGuardar) ? $resGuardar : json_decode($resGuardar, true));
+
+        if (empty($dataGuardar['estado'])) {
+            return Response::json([
+                'estado' => false,
+                'msj' => $dataGuardar['msj'] ?? 'Error al guardar el cierre',
+                'guardar' => $dataGuardar
+            ], 200);
+        }
+
+        $reqEnviar = new Request(['fecha' => $fecha, 'type' => 'enviar']);
+        $resEnviar = $this->verCierre($reqEnviar);
+        $dataEnviar = $resEnviar instanceof \Illuminate\Http\JsonResponse
+            ? $resEnviar->getData(true)
+            : (is_array($resEnviar) ? $resEnviar : ['msj' => (string) $resEnviar]);
+
+        return Response::json([
+            'estado' => true,
+            'msj' => 'Cierre administrador calculado, guardado y enviado/sincronizado para la fecha ' . $fecha,
+            'guardar' => $dataGuardar,
+            'enviar' => $dataEnviar,
+        ]);
     }
     
     /**
