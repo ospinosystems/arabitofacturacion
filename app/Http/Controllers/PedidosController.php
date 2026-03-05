@@ -2947,8 +2947,10 @@ class PedidosController extends Controller
                 $fecha_ultimo_cierre = $last_cierre["fecha"];
             }
 
+            // Endpoint temporal cierre-administrador-por-fecha: permitir guardar por fecha aunque exista cierre posterior
+            $permitirPorFecha = $req->get('cierre_por_fecha') === true || $req->get('cierre_por_fecha') === '1';
 
-            if ($check === null || $fecha_ultimo_cierre == $today) {
+            if ($check === null || $fecha_ultimo_cierre == $today || $permitirPorFecha) {
                 Cache::forget('lastcierres');
                 Cache::forget('cierreCount');
                 Cache::forget('today');
@@ -3746,6 +3748,7 @@ class PedidosController extends Controller
         $payloadGuardar = [
             'totalizarcierre' => true,
             'fecha' => $fecha,
+            'cierre_por_fecha' => true,
             'caja_usd' => $consolidado['efectivo_real']['usd'] ?? 0,
             'caja_cop' => $consolidado['efectivo_real']['cop'] ?? 0,
             'caja_bs' => $consolidado['efectivo_real']['bs'] ?? 0,
