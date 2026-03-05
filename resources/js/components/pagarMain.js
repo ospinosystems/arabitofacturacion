@@ -5113,65 +5113,96 @@ export default function PagarMain({
             )}
 
             {/* Modal pantalla completa: exportar lista de productos (F4) */}
-            {showModalExportarLista && pedidoData && (
+            {showModalExportarLista && pedidoData && (() => {
+                const razonSocial = (cliente?.razon_social ?? cliente?.nombre) ? (cliente.nombre === "CF" ? "Sin cliente" : (cliente.razon_social || cliente.nombre)) : "—";
+                const rifCliente = cliente?.identificacion && cliente.identificacion !== "CF" ? cliente.identificacion : "—";
+                const direccionCliente = cliente?.direccion && String(cliente.direccion).trim() ? cliente.direccion : "—";
+                const nombreOrigen = sucursaldata?.sucursal || sucursaldata?.codigo || "—";
+                const subtotalReporte = parseFloat(pedidoData.subtotal ?? pedidoData.clean_total ?? total) || 0;
+                const montoExento = parseFloat(pedidoData.exento) || 0;
+                const montoGravable = parseFloat(pedidoData.gravable) || 0;
+                const montoIva = parseFloat(pedidoData.monto_iva ?? pedidoData.ivas) || 0;
+                const montoTotalReporte = subtotalReporte;
+                const fmt = (n) => Number(n).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                return (
                 <div className="fixed inset-0 z-[100] flex flex-col bg-white">
-                    {/* Cliente anclado arriba — fuera del scroll, siempre visible */}
+                    {/* Header: Cliente (Razón Social, RIF, Dirección) + Origen (sucursal) */}
                     <div ref={refContenidoImpresionExportar} className="flex-shrink-0 px-4 py-3 bg-gray-100 border-b border-gray-300 shadow-sm print:bg-transparent print:border-b print:shadow-none">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
                             <div>
                                 <span className="text-xs font-semibold text-gray-500 uppercase">Cliente</span>
-                                <div className="mt-0.5 text-base font-medium text-gray-900">
-                                    {cliente && (cliente.nombre || cliente.identificacion) ? (
-                                        <>
-                                            {cliente.nombre !== "CF" ? cliente.nombre : "Sin cliente"}
-                                            {cliente.identificacion && cliente.identificacion !== "CF" && (
-                                                <span className="ml-2 text-sm text-gray-600">· {cliente.identificacion}</span>
-                                            )}
-                                        </>
-                                    ) : (
-                                        "—"
-                                    )}
+                                <div className="mt-0.5 text-sm text-gray-900 space-y-0.5">
+                                    <div><strong>Razón Social:</strong> {razonSocial}</div>
+                                    <div><strong>RIF:</strong> {rifCliente}</div>
+                                    <div><strong>Dirección:</strong> {direccionCliente}</div>
                                 </div>
+                            </div>
+                            <div>
+                                <span className="text-xs font-semibold text-gray-500 uppercase">Origen</span>
+                                <div className="mt-0.5 text-base font-medium text-gray-900">{nombreOrigen}</div>
                             </div>
                             <div className="text-sm text-gray-500">
                                 Pedido #{id} {created_at ? ` · ${created_at}` : ""}
                             </div>
                         </div>
                     </div>
-                    {/* Solo esta zona hace scroll; cabecera de tabla fija debajo del cliente */}
+                    {/* Contenido: tabla + columna totales a la derecha */}
                     <div className="flex-1 min-h-0 overflow-auto">
-                        <div className="p-4">
-                            <table className="w-full text-sm border-collapse border border-gray-300">
-                                <thead className="bg-gray-100 sticky top-0 z-10 print:static">
-                                    <tr>
-                                        <th className="px-3 py-2 text-left font-semibold text-gray-700 border border-gray-300 w-14">#</th>
-                                        <th className="px-3 py-2 text-left font-semibold text-gray-700 border border-gray-300">Código</th>
-                                        <th className="px-3 py-2 text-left font-semibold text-gray-700 border border-gray-300">Cód. proveedor</th>
-                                        <th className="px-3 py-2 text-left font-semibold text-gray-700 border border-gray-300">Descripción</th>
-                                        <th className="px-3 py-2 text-right font-semibold text-gray-700 border border-gray-300 w-24">Cantidad</th>
-                                        <th className="px-3 py-2 text-right font-semibold text-gray-700 border border-gray-300 w-28">Precio</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {(items || []).map((e, index) => {
-                                        const codigo = e.producto?.codigo_barras ?? e.codigo_barras ?? "—";
-                                        const codigoProveedor = e.producto?.codigo_proveedor ?? e.codigo_proveedor ?? "—";
-                                        const descripcion = e.producto?.descripcion ?? e.descripcion ?? "—";
-                                        const cantidad = Number(e.cantidad);
-                                        const precio = e.producto?.precio ?? e.precio_unitario ?? e.precio ?? 0;
-                                        return (
-                                            <tr key={e.id ?? index} className="border-b border-gray-200 hover:bg-gray-50">
-                                                <td className="px-3 py-2 border border-gray-200 font-mono text-gray-600">{index + 1}</td>
-                                                <td className="px-3 py-2 border border-gray-200 font-mono text-gray-800">{String(codigo).trim() || "—"}</td>
-                                                <td className="px-3 py-2 border border-gray-200 font-mono text-gray-700">{String(codigoProveedor).trim() || "—"}</td>
-                                                <td className="px-3 py-2 border border-gray-200 text-gray-900">{descripcion}</td>
-                                                <td className="px-3 py-2 border border-gray-200 text-right font-medium">{cantidad % 1 === 0 ? cantidad : cantidad.toFixed(2)}</td>
-                                                <td className="px-3 py-2 border border-gray-200 text-right">{moneda(precio, 4)}</td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                        <div className="p-4 flex flex-wrap gap-4 items-start">
+                            <div className="flex-1 min-w-0">
+                                <table className="w-full text-sm border-collapse border border-gray-300">
+                                    <thead className="bg-gray-100 sticky top-0 z-10 print:static">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left font-semibold text-gray-700 border border-gray-300 w-14">#</th>
+                                            <th className="px-3 py-2 text-left font-semibold text-gray-700 border border-gray-300">Código</th>
+                                            <th className="px-3 py-2 text-left font-semibold text-gray-700 border border-gray-300">Cód. proveedor</th>
+                                            <th className="px-3 py-2 text-left font-semibold text-gray-700 border border-gray-300">Descripción</th>
+                                            <th className="px-3 py-2 text-right font-semibold text-gray-700 border border-gray-300 w-24">Cantidad</th>
+                                            <th className="px-3 py-2 text-right font-semibold text-gray-700 border border-gray-300 w-28">Precio</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(items || []).map((e, index) => {
+                                            const codigo = e.producto?.codigo_barras ?? e.codigo_barras ?? "—";
+                                            const codigoProveedor = e.producto?.codigo_proveedor ?? e.codigo_proveedor ?? "—";
+                                            const descripcion = e.producto?.descripcion ?? e.descripcion ?? "—";
+                                            const cantidad = Number(e.cantidad);
+                                            const precio = e.producto?.precio ?? e.precio_unitario ?? e.precio ?? 0;
+                                            return (
+                                                <tr key={e.id ?? index} className="border-b border-gray-200 hover:bg-gray-50">
+                                                    <td className="px-3 py-2 border border-gray-200 font-mono text-gray-600">{index + 1}</td>
+                                                    <td className="px-3 py-2 border border-gray-200 font-mono text-gray-800">{String(codigo).trim() || "—"}</td>
+                                                    <td className="px-3 py-2 border border-gray-200 font-mono text-gray-700">{String(codigoProveedor).trim() || "—"}</td>
+                                                    <td className="px-3 py-2 border border-gray-200 text-gray-900">{descripcion}</td>
+                                                    <td className="px-3 py-2 border border-gray-200 text-right font-medium">{cantidad % 1 === 0 ? cantidad : cantidad.toFixed(2)}</td>
+                                                    <td className="px-3 py-2 border border-gray-200 text-right">{moneda(precio, 4)}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {/* Columna totales alineada a la derecha */}
+                            <div className="text-right border border-gray-300 rounded-md bg-gray-50 p-3 print:border print:bg-transparent">
+                                <table className="ml-auto text-sm border-collapse">
+                                    <tbody>
+                                        <tr><td className="py-1 pr-4 text-gray-700">Subtotal</td><td className="py-1 font-medium">{fmt(subtotalReporte)}</td></tr>
+                                        <tr><td className="py-1 pr-4 text-gray-700">Monto Exento</td><td className="py-1 font-medium">{fmt(montoExento)}</td></tr>
+                                        <tr><td className="py-1 pr-4 text-gray-700">Monto Gravable</td><td className="py-1 font-medium">{fmt(montoGravable)}</td></tr>
+                                        <tr><td className="py-1 pr-4 text-gray-700">IVA</td><td className="py-1 font-medium">{fmt(montoIva)}</td></tr>
+                                        <tr><td className="py-1 pr-4 text-gray-700 font-semibold">Monto Total</td><td className="py-1 font-semibold">{fmt(montoTotalReporte)}</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        {/* Firmas: al final y centradas en la hoja */}
+                        <div className="px-4 pb-4 flex flex-wrap gap-8 justify-center mt-4 print:mt-6">
+                            <div className="text-center">
+                                <div className="border-t border-gray-400 pt-1 mt-12 w-40 text-sm font-medium text-gray-700">Firma del Despachador</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="border-t border-gray-400 pt-1 mt-12 w-40 text-sm font-medium text-gray-700">Firma del Receptor</div>
+                            </div>
                         </div>
                     </div>
                     {/* Botones: Imprimir y Cerrar — anclados abajo */}
@@ -5182,13 +5213,28 @@ export default function PagarMain({
                                 if (refContenidoImpresionExportar.current) {
                                     const ventana = window.open("", "_blank");
                                     if (ventana) {
+                                        const clienteRazon = (cliente?.razon_social ?? cliente?.nombre) ? (cliente?.nombre === "CF" ? "Sin cliente" : (cliente?.razon_social || cliente?.nombre)) : "—";
+                                        const clienteRif = cliente?.identificacion && cliente.identificacion !== "CF" ? cliente.identificacion : "—";
+                                        const clienteDir = cliente?.direccion && String(cliente.direccion || "").trim() ? cliente.direccion : "—";
+                                        const origenNombre = sucursaldata?.sucursal || sucursaldata?.codigo || "—";
+                                        const sub = parseFloat(pedidoData.subtotal ?? pedidoData.clean_total ?? total) || 0;
+                                        const exento = parseFloat(pedidoData.exento) || 0;
+                                        const gravable = parseFloat(pedidoData.gravable) || 0;
+                                        const iva = parseFloat(pedidoData.monto_iva ?? pedidoData.ivas) || 0;
+                                        const fmtP = (n) => Number(n).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                         ventana.document.write(`
                                             <!DOCTYPE html><html><head><title>Lista de productos - Pedido ${id}</title>
-                                            <style>body{font-family:sans-serif;padding:1rem;} table{width:100%;border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .cliente{margin-bottom:1rem;font-weight:600;}</style>
+                                            <style>body{font-family:sans-serif;padding:1rem;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{text-align:right;margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;}</style>
                                             </head><body>
-                                            <div class="cliente">Cliente: ${cliente && (cliente.nombre !== "CF" ? cliente.nombre : "Sin cliente")}${cliente?.identificacion && cliente.identificacion !== "CF" ? " · " + cliente.identificacion : ""}</div>
-                                            <div style="margin-bottom:0.5rem;font-size:12px;color:#666;">Pedido #${id} ${created_at ? " · " + created_at : ""}</div>
-                                            <table><thead><tr><th>#</th><th>Código</th><th>Cód. proveedor</th><th>Descripción</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Precio</th></tr></thead><tbody>
+                                            <div class="header">
+                                                <div><strong>Cliente</strong></div>
+                                                <div>Razón Social: ${clienteRazon}</div>
+                                                <div>RIF: ${clienteRif}</div>
+                                                <div>Dirección: ${clienteDir}</div>
+                                                <div style="margin-top:0.5rem;"><strong>Origen:</strong> ${origenNombre}</div>
+                                                <div style="margin-top:0.25rem;font-size:12px;color:#666;">Pedido #${id} ${created_at ? " · " + created_at : ""}</div>
+                                            </div>
+                                            <table style="width:100%;"><thead><tr><th>#</th><th>Código</th><th>Cód. proveedor</th><th>Descripción</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Precio</th></tr></thead><tbody>
                                             ${(items || []).map((e, i) => {
                                                 const cod = (e.producto?.codigo_barras ?? e.codigo_barras ?? "—").toString().trim() || "—";
                                                 const codProv = (e.producto?.codigo_proveedor ?? e.codigo_proveedor ?? "—").toString().trim() || "—";
@@ -5198,7 +5244,21 @@ export default function PagarMain({
                                                 const precStr = Number(prec).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
                                                 return `<tr><td>${i + 1}</td><td>${cod}</td><td>${codProv}</td><td>${desc}</td><td style="text-align:right">${cant % 1 === 0 ? cant : cant.toFixed(2)}</td><td style="text-align:right">${precStr}</td></tr>`;
                                             }).join("")}
-                                            </tbody></table></body></html>`);
+                                            </tbody></table>
+                                            <div class="totales">
+                                                <table>
+                                                <tr><td style="text-align:right;padding-right:1rem;">Subtotal</td><td>${fmtP(sub)}</td></tr>
+                                                <tr><td style="text-align:right;padding-right:1rem;">Monto Exento</td><td>${fmtP(exento)}</td></tr>
+                                                <tr><td style="text-align:right;padding-right:1rem;">Monto Gravable</td><td>${fmtP(gravable)}</td></tr>
+                                                <tr><td style="text-align:right;padding-right:1rem;">IVA</td><td>${fmtP(iva)}</td></tr>
+                                                <tr><td style="text-align:right;padding-right:1rem;font-weight:bold;">Monto Total</td><td style="font-weight:bold;">${fmtP(sub)}</td></tr>
+                                                </table>
+                                            </div>
+                                            <div class="firmas">
+                                                <div><div style="border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;">Firma del Despachador</div></div>
+                                                <div><div style="border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;">Firma del Receptor</div></div>
+                                            </div>
+                                            </body></html>`);
                                         ventana.document.close();
                                         ventana.focus();
                                         setTimeout(() => { ventana.print(); ventana.close(); }, 300);
@@ -5219,7 +5279,8 @@ export default function PagarMain({
                         </button>
                     </div>
                 </div>
-            )}
+                );
+            })()}
 
             {/* Modal pantalla completa: Imprimir Bultos */}
             {showModalBultos && pedidoData?.id && (
