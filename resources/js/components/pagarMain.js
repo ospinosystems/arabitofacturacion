@@ -5182,15 +5182,15 @@ export default function PagarMain({
                                     </tbody>
                                 </table>
                             </div>
-                            {/* Columna totales alineada a la derecha */}
-                            <div className="text-right border border-gray-300 rounded-md bg-gray-50 p-3 print:border print:bg-transparent">
+                            {/* Columna totales: etiquetas a la izquierda, números alineados a la derecha */}
+                            <div className="border border-gray-300 rounded-md bg-gray-50 p-3 print:border print:bg-transparent">
                                 <table className="ml-auto text-sm border-collapse">
                                     <tbody>
-                                        <tr><td className="py-1 pr-4 text-gray-700">Subtotal</td><td className="py-1 font-medium">{fmt(subtotalReporte)}</td></tr>
-                                        <tr><td className="py-1 pr-4 text-gray-700">Monto Exento</td><td className="py-1 font-medium">{fmt(montoExento)}</td></tr>
-                                        <tr><td className="py-1 pr-4 text-gray-700">Monto Gravable</td><td className="py-1 font-medium">{fmt(montoGravable)}</td></tr>
-                                        <tr><td className="py-1 pr-4 text-gray-700">IVA</td><td className="py-1 font-medium">{fmt(montoIva)}</td></tr>
-                                        <tr><td className="py-1 pr-4 text-gray-700 font-semibold">Monto Total</td><td className="py-1 font-semibold">{fmt(montoTotalReporte)}</td></tr>
+                                        <tr><td className="py-1 pr-4 text-gray-700">Subtotal</td><td className="py-1 font-medium text-right">{fmt(subtotalReporte)}</td></tr>
+                                        <tr><td className="py-1 pr-4 text-gray-700">Monto Exento</td><td className="py-1 font-medium text-right">{fmt(montoExento)}</td></tr>
+                                        <tr><td className="py-1 pr-4 text-gray-700">Monto Gravable</td><td className="py-1 font-medium text-right">{fmt(montoGravable)}</td></tr>
+                                        <tr><td className="py-1 pr-4 text-gray-700">IVA</td><td className="py-1 font-medium text-right">{fmt(montoIva)}</td></tr>
+                                        <tr><td className="py-1 pr-4 text-gray-700 font-semibold">Monto Total</td><td className="py-1 font-semibold text-right">{fmt(montoTotalReporte)}</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -5224,7 +5224,7 @@ export default function PagarMain({
                                         const fmtP = (n) => Number(n).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                         ventana.document.write(`
                                             <!DOCTYPE html><html><head><title>Lista de productos - Pedido ${id}</title>
-                                            <style>body{font-family:sans-serif;padding:1rem;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{text-align:right;margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;}</style>
+                                            <style>body{font-family:sans-serif;padding:1rem;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;}</style>
                                             </head><body>
                                             <div class="header">
                                                 <div><strong>Cliente</strong></div>
@@ -5247,11 +5247,11 @@ export default function PagarMain({
                                             </tbody></table>
                                             <div class="totales">
                                                 <table>
-                                                <tr><td style="text-align:right;padding-right:1rem;">Subtotal</td><td>${fmtP(sub)}</td></tr>
-                                                <tr><td style="text-align:right;padding-right:1rem;">Monto Exento</td><td>${fmtP(exento)}</td></tr>
-                                                <tr><td style="text-align:right;padding-right:1rem;">Monto Gravable</td><td>${fmtP(gravable)}</td></tr>
-                                                <tr><td style="text-align:right;padding-right:1rem;">IVA</td><td>${fmtP(iva)}</td></tr>
-                                                <tr><td style="text-align:right;padding-right:1rem;font-weight:bold;">Monto Total</td><td style="font-weight:bold;">${fmtP(sub)}</td></tr>
+                                                <tr><td style="padding-right:1rem;">Subtotal</td><td style="text-align:right;">${fmtP(sub)}</td></tr>
+                                                <tr><td style="padding-right:1rem;">Monto Exento</td><td style="text-align:right;">${fmtP(exento)}</td></tr>
+                                                <tr><td style="padding-right:1rem;">Monto Gravable</td><td style="text-align:right;">${fmtP(gravable)}</td></tr>
+                                                <tr><td style="padding-right:1rem;">IVA</td><td style="text-align:right;">${fmtP(iva)}</td></tr>
+                                                <tr><td style="padding-right:1rem;font-weight:bold;">Monto Total</td><td style="text-align:right;font-weight:bold;">${fmtP(sub)}</td></tr>
                                                 </table>
                                             </div>
                                             <div class="firmas">
