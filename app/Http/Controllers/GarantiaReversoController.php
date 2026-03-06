@@ -11,7 +11,6 @@ use App\Models\pago_pedidos;
 use App\Models\inventario;
 use App\Models\movimientosInventariounitario;
 use App\Http\Controllers\sendCentral;
-use Illuminate\Support\Facades\Http;
 
 class GarantiaReversoController extends Controller
 {
@@ -578,14 +577,21 @@ class GarantiaReversoController extends Controller
                 }
                 
 
-                // Notificar a arabitocentral que el reverso se ejecutó exitosamente
-                $notificacion = $this->notificarReversoEjecutado($solicitudReversoId, $codigoOrigen);
-                
+                // Notificar a arabitocentral que el reverso se ejecutó (usa requestToCentral con API key para que central actualice estatus a Ejecutada)
+                $notificacion = $this->sendCentral->notificarReversoEjecutadoCentral($solicitudReversoId, [
+                    'codigo_origen' => $codigoOrigen,
+                ]);
+
                 if (!$notificacion['success']) {
                     Log::warning('No se pudo notificar a central sobre la ejecución del reverso', [
                         'solicitud_reverso_id' => $solicitudReversoId,
                         'error' => $notificacion['message']
                     ]);
+                    DB::rollback();
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Reverso aplicado en sucursal pero no se pudo actualizar central. La solicitud seguirá apareciendo como aprobada hasta que central se actualice. Error: ' . $notificacion['message']
+                    ], 503);
                 }
 
                 DB::commit();
@@ -622,49 +628,4 @@ class GarantiaReversoController extends Controller
         }
     }
 
-    /**
-     * Notificar a arabitocentral que el reverso se ejecutó exitosamente
-     */
-    private function notificarReversoEjecutado($solicitudReversoId, $codigoOrigen)
-    {
-        try {
-            $response = Http::timeout(30)->post($this->sendCentral->path() . "/api/solicitudes-reverso/{$solicitudReversoId}/ejecutar", [
-                "codigo_origen" => $codigoOrigen,
-                "fecha_ejecucion" => now()->toISOString(),
-                "ejecutado_por" => session("id_usuario") ?? 1,
-                "estado" => "Ejecutado"
-            ]);
-
-            if ($response->ok()) {
-                $data = $response->json();
-                if ($data['success']) {
-                    return [
-                        'success' => true,
-                        'message' => 'Notificación enviada exitosamente'
-                    ];
-                } else {
-                    return [
-                        'success' => false,
-                        'message' => $data['message'] ?? 'Error al notificar ejecución'
-                    ];
-                }
-            } else {
-                return [
-                    'success' => false,
-                    'message' => 'Error de comunicación con central: ' . $response->status()." ".$response->body()
-                ];
-            }
-
-        } catch (\Exception $e) {
-            Log::error('Error notificando ejecución de reverso a central', [
-                'solicitud_reverso_id' => $solicitudReversoId,
-                'error' => $e->getMessage()
-            ]);
-
-            return [
-                'success' => false,
-                'message' => 'Error de conexión: ' . $e->getMessage()
-            ];
-        }
-    }
 } 

@@ -4911,6 +4911,48 @@ class sendCentral extends Controller
         }
     }
 
+    /**
+     * Notificar a central que el reverso se ejecutó en sucursal (POST con auth de sucursal).
+     * Central actualiza la solicitud a "Ejecutada" para que no se vuelva a listar como aprobada.
+     */
+    public function notificarReversoEjecutadoCentral($solicitudReversoId, array $params = []) {
+        try {
+            $payload = array_merge([
+                'fecha_ejecucion' => now()->toISOString(),
+                'ejecutado_por' => $params['ejecutado_por'] ?? session('id_usuario') ?? 1,
+                'estado' => 'Ejecutado',
+            ], $params);
+
+            $response = $this->requestToCentral('post', "/api/solicitudes-reverso/{$solicitudReversoId}/ejecutar", $payload, ['timeout' => 30]);
+
+            if ($response->ok()) {
+                $data = $response->json();
+                if ($data['success'] ?? false) {
+                    return ['success' => true, 'message' => $data['message'] ?? 'Notificación enviada'];
+                }
+                return [
+                    'success' => false,
+                    'message' => $data['message'] ?? 'Error al notificar ejecución a central',
+                ];
+            }
+            $body = $response->body();
+            $data = $response->json();
+            return [
+                'success' => false,
+                'message' => $data['message'] ?? ('Central respondió ' . $response->status() . ': ' . (strlen($body) > 200 ? substr($body, 0, 200) . '...' : $body)),
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Error notificando ejecución de reverso a central', [
+                'solicitud_reverso_id' => $solicitudReversoId,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'success' => false,
+                'message' => 'Error de conexión con central: ' . $e->getMessage(),
+            ];
+        }
+    }
+
     // =================== FIN MÉTODOS SOLICITUDES DE REVERSO ===================
 
     // =================== MÉTODOS SINCRONIZACIÓN DIRECTA ===================
