@@ -6242,28 +6242,23 @@ export default function Facturar({
             notificar({ msj: "Pedido eliminado", estado: true });
             return;
         }
-        if (confirm("¿Seguro de eliminar?")) {
-            if (pedidoData.id) {
-                let motivo = window.prompt(
-                    "¿Cuál es el Motivo de eliminación?"
-                );
-                if (motivo) {
-                    let params = { id: pedidoData.id, motivo };
-                    db.delpedido(params).then((res) => {
-                        notificar(res);
-                        getPedidosFast();
-                        if (res.data.estado === false) {
-                            setLastDbRequest({
-                                dbFunction: db.delpedido,
-                                params,
-                            });
-                            openValidationTarea(res.data.id_tarea);
-                        }
+        // Confirmación se hace con modal en front (pagarMain), no con window.confirm
+        if (pedidoData.id) {
+            const motivo = "Eliminado desde caja";
+            const params = { id: pedidoData.id, motivo };
+            db.delpedido(params).then((res) => {
+                notificar(res);
+                getPedidosFast();
+                if (res.data.estado === false) {
+                    setLastDbRequest({
+                        dbFunction: db.delpedido,
+                        params,
                     });
+                    openValidationTarea(res.data.id_tarea);
                 }
-            } else {
-                alert("No hay pedido seleccionado");
-            }
+            });
+        } else {
+            notificar({ msj: "No hay pedido seleccionado", estado: false });
         }
     };
     const [cierrenumreportez, setcierrenumreportez] = useState("");

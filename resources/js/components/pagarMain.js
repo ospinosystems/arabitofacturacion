@@ -254,6 +254,9 @@ export default function PagarMain({
     const [showModalExportarLista, setShowModalExportarLista] = useState(false);
     const refContenidoImpresionExportar = useRef(null);
 
+    // Modal confirmación eliminar pedido (F5 o botón) - sin window.confirm
+    const [showModalConfirmarEliminarPedido, setShowModalConfirmarEliminarPedido] = useState(false);
+
     // Modal pantalla completa: imprimir bultos
     const [showModalBultos, setShowModalBultos] = useState(false);
     const [numBultosInput, setNumBultosInput] = useState("");
@@ -785,6 +788,26 @@ export default function PagarMain({
         document.addEventListener("keydown", handleEscape, true);
         return () => document.removeEventListener("keydown", handleEscape, true);
     }, [showModalExportarLista]);
+
+    // Escape cierra el modal de confirmar eliminar pedido
+    useEffect(() => {
+        if (!showModalConfirmarEliminarPedido) return;
+        const handleEscape = (e) => {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                setShowModalConfirmarEliminarPedido(false);
+            }
+        };
+        document.addEventListener("keydown", handleEscape, true);
+        return () => document.removeEventListener("keydown", handleEscape, true);
+    }, [showModalConfirmarEliminarPedido]);
+
+    // Cerrar modal de confirmar eliminar cuando se abre el modal de referencia de pago o el POS
+    useEffect(() => {
+        if (showModalPosDebito || togglereferenciapago) {
+            setShowModalConfirmarEliminarPedido(false);
+        }
+    }, [showModalPosDebito, togglereferenciapago]);
 
     // Funciones para formato de moneda en inputs de pago (tiempo real)
     const formatMonedaLive = (value) => {
@@ -2439,12 +2462,12 @@ export default function PagarMain({
         },
         [refaddfast, debitoInputRef, showModalPosDebito, togglereferenciapago, toggleAddPersona]
     );
-    //f5 - ejecutar acción sin recargar la página (eliminar pedido). No permitir si hay débito aprobado o refs cargadas.
+    //f5 - abrir modal de confirmación para eliminar pedido. No permitir si hay débito aprobado, refs cargadas o otro modal abierto.
     useHotkeys(
         "f5",
         (e) => {
             e.preventDefault();
-            if (showModalPosDebito || togglereferenciapago) return;
+            if (showModalConfirmarEliminarPedido || showModalPosDebito || togglereferenciapago) return;
             const tieneDebitoAprobado = debitos && debitos.some((d) => d.bloqueado === true);
             if (tieneDebitoAprobado) {
                 notificar({ data: { msj: "No se puede eliminar el pedido: tiene un débito aprobado.", estado: false } });
@@ -2454,12 +2477,12 @@ export default function PagarMain({
                 notificar({ data: { msj: "No se puede eliminar el pedido: tiene referencias bancarias cargadas. Elimínelas primero.", estado: false } });
                 return;
             }
-            del_pedido();
+            setShowModalConfirmarEliminarPedido(true);
         },
         {
             enableOnTags: ["INPUT", "SELECT"],
         },
-        [showModalPosDebito, togglereferenciapago, debitos, del_pedido, notificar]
+        [showModalConfirmarEliminarPedido, showModalPosDebito, togglereferenciapago, debitos, notificar]
     );
     // F4: modal pantalla completa para exportar lista de productos (código, descripción, cantidad, precio)
     useHotkeys(
@@ -2695,6 +2718,9 @@ export default function PagarMain({
                         addNewPedidoFront={addNewPedidoFront}
                         togglereferenciapago={togglereferenciapago}
                         toggleAddPersona={toggleAddPersona}
+                        showModalConfirmarEliminarPedido={showModalConfirmarEliminarPedido}
+                        showModalPosDebito={showModalPosDebito}
+                        showTransferirSection={showTransferirSection}
                         orderColumn={orderColumn}
                         setOrderColumn={setOrderColumn}
                         orderBy={orderBy}
@@ -4870,6 +4896,57 @@ export default function PagarMain({
                     )}
                 </div>
             </div>
+
+            {/* Modal confirmación eliminar pedido (F5) - sin window.confirm */}
+            {showModalConfirmarEliminarPedido && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+                    <div className="w-full max-w-sm mx-4 bg-white rounded-lg shadow-xl">
+                        <div className="p-5">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                    Eliminar pedido
+                                </h3>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowModalConfirmarEliminarPedido(false)}
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
+                                    <i className="fa fa-times"></i>
+                                </button>
+                            </div>
+                            <p className="mb-5 text-sm text-gray-600">
+                                ¿Está seguro de eliminar este pedido? Esta acción no se puede deshacer.
+                            </p>
+                            {(showModalPosDebito || togglereferenciapago) && (
+                                <p className="mb-3 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1.5">
+                                    Cierre el modal de referencia de pago o el de punto de venta (POS) para poder eliminar el pedido.
+                                </p>
+                            )}
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowModalConfirmarEliminarPedido(false)}
+                                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (showModalPosDebito || togglereferenciapago) return;
+                                        setShowModalConfirmarEliminarPedido(false);
+                                        del_pedido();
+                                    }}
+                                    disabled={showModalPosDebito || togglereferenciapago}
+                                    className="px-4 py-2 text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Eliminar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modal de Código de Aprobación */}
             {showCodigoModal && (

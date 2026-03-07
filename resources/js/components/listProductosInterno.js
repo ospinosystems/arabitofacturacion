@@ -59,6 +59,9 @@ export default function ListProductosInterno({
   onClickEditPedido,
   togglereferenciapago,
   toggleAddPersona,
+  showModalConfirmarEliminarPedido = false,
+  showModalPosDebito = false,
+  showTransferirSection = false,
 
   cedula_referenciapago,
   setcedula_referenciapago,
@@ -186,9 +189,9 @@ export default function ListProductosInterno({
   useHotkeys(
     "tab",
     (event) => {
-      // No interceptar si el modal de referencia o el modal de cliente está abierto (dejar que TAB navegue entre inputs)
-      if (togglereferenciapago || toggleAddPersona) {
-        return; // Permitir comportamiento por defecto del TAB
+      // No interceptar si hay algún modal abierto (eliminación, POS, referencia, transferencia o cliente)
+      if (togglereferenciapago || toggleAddPersona || showModalConfirmarEliminarPedido || showModalPosDebito || showTransferirSection) {
+        return; // Permitir comportamiento por defecto del TAB o no hacer nada
       }
       
       // Prevenir ejecución si ya se está navegando
@@ -230,14 +233,14 @@ export default function ListProductosInterno({
         return event.target !== inputCantidadCarritoref?.current;
       },
     },
-    [pedidosFast, pedidosFrontPendientesList, pedidoData, onClickEditPedido, inputCantidadCarritoref, togglereferenciapago, toggleAddPersona]
+    [pedidosFast, pedidosFrontPendientesList, pedidoData, onClickEditPedido, inputCantidadCarritoref, togglereferenciapago, toggleAddPersona, showModalConfirmarEliminarPedido, showModalPosDebito, showTransferirSection]
   );
 
   // SHIFT+TAB: Seleccionar pedido anterior (incluye pedidos front y backend)
   useHotkeys(
     "shift+tab",
     (event) => {
-      if (togglereferenciapago || toggleAddPersona) {
+      if (togglereferenciapago || toggleAddPersona || showModalConfirmarEliminarPedido || showModalPosDebito || showTransferirSection) {
         return;
       }
       
@@ -279,7 +282,7 @@ export default function ListProductosInterno({
         return event.target !== inputCantidadCarritoref?.current;
       },
     },
-    [pedidosFast, pedidosFrontPendientesList, pedidoData, onClickEditPedido, inputCantidadCarritoref, togglereferenciapago, toggleAddPersona]
+    [pedidosFast, pedidosFrontPendientesList, pedidoData, onClickEditPedido, inputCantidadCarritoref, togglereferenciapago, toggleAddPersona, showModalConfirmarEliminarPedido, showModalPosDebito, showTransferirSection]
   );
 
 
