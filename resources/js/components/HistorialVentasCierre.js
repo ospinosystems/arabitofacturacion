@@ -87,6 +87,14 @@ export default function HistorialVentasCierre({ onClose }) {
 	const totalVentas = data?.numventas != null ? data.numventas : 0;
 	const totalPrecio = data?.precio ? parseNum(data.precio) : 0;
 
+	const verReporteCierre = (cierre) => {
+		db.openVerCierre({
+			type: "ver",
+			fechaCierre: cierre.fecha,
+			usuario: tipoCierre === "0" ? (cierre.id_usuario ?? "") : "",
+		});
+	};
+
 	return (
 		<div className="p-4 max-w-6xl mx-auto">
 			<div className="flex items-center justify-between mb-4">
@@ -368,6 +376,9 @@ export default function HistorialVentasCierre({ onClose }) {
 									<th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
 										Total
 									</th>
+									<th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">
+										Acción
+									</th>
 								</tr>
 							</thead>
 							<tbody className="bg-white divide-y divide-gray-200">
@@ -395,6 +406,15 @@ export default function HistorialVentasCierre({ onClose }) {
 										<td className="px-4 py-2 text-sm text-right font-medium text-gray-800">
 											{c.precio ?? "0.00"}
 										</td>
+										<td className="px-4 py-2 text-center">
+											<button
+												type="button"
+												onClick={() => verReporteCierre(c)}
+												className="px-3 py-1.5 text-sm font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded hover:bg-orange-100"
+											>
+												Ver reporte de cierre
+											</button>
+										</td>
 									</tr>
 								))}
 							</tbody>
@@ -413,6 +433,7 @@ export default function HistorialVentasCierre({ onClose }) {
 										{data.caja_biopago}
 									</td>
 									<td className="px-4 py-2 text-sm text-right">{data.precio}</td>
+									<td className="px-4 py-2" />
 								</tr>
 							</tfoot>
 						</table>

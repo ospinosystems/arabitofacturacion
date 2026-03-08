@@ -76,7 +76,7 @@ export default function Historicocierre({
 							<th>{e.fecha}</th>
 							<td>
 								<button className="btn btn-outline-success" onClick={()=>verCierreReq(e.fecha,"ver",e.id_usuario)} type="button">Ver</button>
-								<button className="btn btn-outline-primary ms-1" onClick={()=>verCierreReq(e.fecha,"ver",e.id_usuario)} type="button" title="Abrir reporte de cierre en nueva pestaña"><i className="fa fa-file-text-o me-1"></i>Ver reporte</button>
+								<button className="btn btn-outline-success" onClick={()=>verCierreReq(e.fecha,"enviar",e.id_usuario)} type="button"><i className="fa fa-send"></i></button>
 							</td>
 						</tr>
 
