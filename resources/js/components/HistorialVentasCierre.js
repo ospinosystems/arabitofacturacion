@@ -88,10 +88,12 @@ export default function HistorialVentasCierre({ onClose }) {
 	const totalPrecio = data?.precio ? parseNum(data.precio) : 0;
 
 	const verReporteCierre = (cierre) => {
+		// Cierre cajero (tipo_cierre 0): enviar id_usuario para ver esa caja. Cierre admin (1): no enviar usuario.
+		const esCierreCajero = cierre.tipo_cierre === 0 || cierre.tipo_cierre === "0";
 		db.openVerCierre({
 			type: "ver",
 			fechaCierre: cierre.fecha,
-			usuario: tipoCierre === "0" ? (cierre.id_usuario ?? "") : "",
+			usuario: esCierreCajero ? (cierre.id_usuario ?? "") : "",
 		});
 	};
 

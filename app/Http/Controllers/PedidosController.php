@@ -4179,13 +4179,14 @@ class PedidosController extends Controller
         $usuario = isset($req->usuario) ? $req->usuario : null;
 
         $usuarioLogin = $usuario ? $usuario : session("id_usuario");
-        
-        // Detectar si el usuario es administrador (nivel 1)
-        $es_admin = session("nivel") == 1 || session("tipo_usuario") == 1;
+
+        // Si se pide explícitamente un usuario (ej. desde historial ventas por cierre), mostrar su cierre individual
+        $forzarCierreCajero = ($usuario !== null && $usuario !== '');
+        $es_admin = !$forzarCierreCajero && (session("nivel") == 1 || session("tipo_usuario") == 1);
 
         $sucursal = sucursal::all()->first();
-        
-        // Si es admin, mostrar cierre consolidado; si es cajero, mostrar su cierre individual
+
+        // Si es admin (y no se forzó cierre de cajero), mostrar cierre consolidado; si es cajero, mostrar su cierre individual
         if ($es_admin) {
             // Obtener cierre de administrador (tipo_cierre = 1)
             $cierre = cierres::with("usuario")
