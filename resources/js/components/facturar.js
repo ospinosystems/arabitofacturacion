@@ -5501,21 +5501,40 @@ export default function Facturar({
             const coincideRefs = metodosPagoCoincidenConAprobados(actualesRefs, aprobados);
             const coincideEstado = metodosPagoCoincidenConAprobados(actualesEstado, aprobados);
             if (!coincideRefs && !coincideEstado) {
-                console.warn("[procesarPagoInterno] BLOQUEADO: métodos del formulario no coinciden con aprobados (Ctrl+Enter / facturar). Revise longitud, tipo, moneda y monto.", {
-                    origen: "procesarPagoInterno",
-                    frontUuid,
-                    aprobados: JSON.stringify(aprobados),
-                    actualesRefs: JSON.stringify(actualesRefs),
-                    actualesEstado: JSON.stringify(actualesEstado),
-                    coincideRefs,
-                    coincideEstado,
-                    debitosRefSnapshot: JSON.stringify(debitosRef.current),
-                    debitoMontoRefSnapshot: debitoMontoRef.current,
-                    efectivo_dolarRef: efectivo_dolarRef.current,
-                });
-                setLoading(false);
-                notificar({ data: { msj: "Complete los métodos de pago con los montos aprobados (y referencias si aplica) en el formulario y vuelva a guardar. La aprobación se mantiene.", estado: false } });
-                return;
+                // Si el formulario tiene débitos aprobados por POS, la aprobación viene del datáfono, no de una solicitud anterior (ej. efectivo 35 guardado por error). Usar métodos actuales como aprobados y continuar.
+                const debitosActuales = debitosRef.current || [];
+                const tienePosAprobado = Array.isArray(debitosActuales) && debitosActuales.some(
+                    (d) => d && d.posData && (d.posData.message === "APROBADO" || d.posData.responsecode === "00")
+                );
+                if (tienePosAprobado && actualesRefs.length > 0) {
+                    console.log("[procesarPagoInterno] Formulario con POS aprobado no coincide con aprobados guardados; actualizando aprobados a métodos actuales y continuando.", {
+                        frontUuid,
+                        aprobadosAnteriores: JSON.stringify(aprobados),
+                        nuevosAprobados: JSON.stringify(actualesRefs),
+                    });
+                    setMetodosPagoAprobadosPorUuid((prev) => {
+                        const next = { ...prev, [frontUuid]: actualesRefs };
+                        if (typeof setMetodosPagoAprobadosPorUuidStorage === "function") setMetodosPagoAprobadosPorUuidStorage(next);
+                        return next;
+                    });
+                    // No return: continuar con el flujo de facturación usando los métodos del formulario (refs).
+                } else {
+                    console.warn("[procesarPagoInterno] BLOQUEADO: métodos del formulario no coinciden con aprobados (Ctrl+Enter / facturar). Revise longitud, tipo, moneda y monto.", {
+                        origen: "procesarPagoInterno",
+                        frontUuid,
+                        aprobados: JSON.stringify(aprobados),
+                        actualesRefs: JSON.stringify(actualesRefs),
+                        actualesEstado: JSON.stringify(actualesEstado),
+                        coincideRefs,
+                        coincideEstado,
+                        debitosRefSnapshot: JSON.stringify(debitosRef.current),
+                        debitoMontoRefSnapshot: debitoMontoRef.current,
+                        efectivo_dolarRef: efectivo_dolarRef.current,
+                    });
+                    setLoading(false);
+                    notificar({ data: { msj: "Complete los métodos de pago con los montos aprobados (y referencias si aplica) en el formulario y vuelva a guardar. La aprobación se mantiene.", estado: false } });
+                    return;
+                }
             }
         }
         const efectivoBsActual = efectivo_bsRef.current;
