@@ -5436,8 +5436,21 @@ export default function Facturar({
                                     const coincideConGuardado = Array.isArray(aprobadosGuardados) && metodosPagoCoincidenConAprobados(aprobadosGuardados, aprobadosRes);
                                     const actualesRefs = buildMetodosPagoFromRefs();
                                     const actualesEstado = buildMetodosPagoFront();
-                                    const coincideConForm = metodosPagoCoincidenConAprobados(actualesRefs, aprobadosRes) || metodosPagoCoincidenConAprobados(actualesEstado, aprobadosRes);
+                                    const coincideRefsConRes = metodosPagoCoincidenConAprobados(actualesRefs, aprobadosRes);
+                                    const coincideEstadoConRes = metodosPagoCoincidenConAprobados(actualesEstado, aprobadosRes);
+                                    const coincideConForm = coincideRefsConRes || coincideEstadoConRes;
                                     if (!coincideConGuardado && !coincideConForm) {
+                                        console.warn("[setPagoPedido] BLOQUEADO: métodos no coinciden con aprobados (verificación central). Complete métodos y vuelva a guardar.", {
+                                            origen: "solicitudDescuentoFrontVerificar",
+                                            uuid,
+                                            aprobadosRes: JSON.stringify(aprobadosRes),
+                                            aprobadosGuardados: JSON.stringify(aprobadosGuardados),
+                                            actualesRefs: JSON.stringify(actualesRefs),
+                                            actualesEstado: JSON.stringify(actualesEstado),
+                                            coincideConGuardado,
+                                            coincideRefsConRes,
+                                            coincideEstadoConRes,
+                                        });
                                         notificar({ data: { msj: "Complete los métodos de pago con los montos aprobados (y referencias si aplica) y vuelva a guardar. La aprobación se mantiene.", estado: false } });
                                         return;
                                     }
@@ -5488,6 +5501,18 @@ export default function Facturar({
             const coincideRefs = metodosPagoCoincidenConAprobados(actualesRefs, aprobados);
             const coincideEstado = metodosPagoCoincidenConAprobados(actualesEstado, aprobados);
             if (!coincideRefs && !coincideEstado) {
+                console.warn("[procesarPagoInterno] BLOQUEADO: métodos del formulario no coinciden con aprobados (Ctrl+Enter / facturar). Revise longitud, tipo, moneda y monto.", {
+                    origen: "procesarPagoInterno",
+                    frontUuid,
+                    aprobados: JSON.stringify(aprobados),
+                    actualesRefs: JSON.stringify(actualesRefs),
+                    actualesEstado: JSON.stringify(actualesEstado),
+                    coincideRefs,
+                    coincideEstado,
+                    debitosRefSnapshot: JSON.stringify(debitosRef.current),
+                    debitoMontoRefSnapshot: debitoMontoRef.current,
+                    efectivo_dolarRef: efectivo_dolarRef.current,
+                });
                 setLoading(false);
                 notificar({ data: { msj: "Complete los métodos de pago con los montos aprobados (y referencias si aplica) en el formulario y vuelva a guardar. La aprobación se mantiene.", estado: false } });
                 return;
