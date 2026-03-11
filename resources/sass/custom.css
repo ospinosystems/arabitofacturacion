@@ -413,10 +413,7 @@ html, body {
   
 }
 
-body{
-  overflow-y: scroll !important;
-  
-}
+
 
 .user{
   font-size: 0.8em;
