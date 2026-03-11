@@ -180,7 +180,9 @@ export default function Facturar({
     // modalesPosAbiertos[pedidoId] = { pedidoId, debitoIndex, montoTotalOriginal, transaccionesAprobadas, cedulaTitular, tipoCuenta, montoDebito, loading, respuesta }
     const [modalesPosAbiertos, setModalesPosAbiertos] = useState({});
     const [forzarReferenciaManual, setForzarReferenciaManual] = useState(false); // Para bypassear PINPAD
-    // Mapa global de transacciones POS por pedido: { pedidoId: [{monto, cedula, referencia, ...}] }
+    /** Mapa de transacciones POS aprobadas por pedido: { pedidoId: [{ monto, cedula, referencia, refCorta, tipoCuenta, posData }] }.
+     *  Se usa en pagarMain para mostrar cuántas transacciones POS tiene el pedido (ej. "2 POS aprobado(s)").
+     *  Se persiste en localStorage y se limpia al cerrar el modal POS o al facturar. */
     const [posTransaccionesPorPedido, setPosTransaccionesPorPedido] = useState(() => {
         try {
             const saved = localStorage.getItem('posTransaccionesPorPedido');

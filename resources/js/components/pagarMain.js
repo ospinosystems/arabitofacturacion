@@ -200,7 +200,7 @@ export default function PagarMain({
     setOrderColumn,
     orderBy,
     setOrderBy,
-    // Props para transacciones POS por pedido
+    // Props para transacciones POS por pedido (solo para mostrar cantidad de POS aprobados en el pedido)
     posTransaccionesPorPedido,
     // Estado del modal POS para bloquear hotkeys
     showModalPosDebito,
@@ -271,8 +271,6 @@ export default function PagarMain({
     const debitoRefInputRef = useRef(null);
     // Refs para los inputs de referencia (Ref.) de cada débito
     const debitosRefInputRefs = useRef([]);
-    // Evitar ciclo infinito: solo auto-disparar facturar una vez por (pedidoId, totalAprobado)
-    const lastAutoSubmitPosRef = useRef({ pedidoId: null, totalAprobado: null });
     // Callback que listProductosInterno registra para ejecutar tras asignar factura original (flujo: aprobación → factura → agregar)
     const refEjecutarTrasFacturaOriginal = useRef(null);
     const prevPedidoIdRef = useRef(undefined);
@@ -2180,38 +2178,6 @@ export default function PagarMain({
         }
     }, [efectivo_dolar, efectivo_bs, efectivo_peso, dolar, peso]);
 
-    // Auto-procesar e imprimir cuando el total de transacciones POS aprobadas coincida con el total en Bolívares
-    useEffect(() => {
-        if (!pedidoData?.id || !posTransaccionesPorPedido || !posTransaccionesPorPedido[pedidoData.id]) {
-            return;
-        }
-
-        const transacciones = posTransaccionesPorPedido[pedidoData.id];
-        if (!transacciones || transacciones.length === 0) {
-            return;
-        }
-
-        // Calcular el total aprobado sumando todos los montos de las transacciones
-        const totalAprobado = transacciones.reduce((sum, t) => sum + parseFloat(t.monto || 0), 0);
-
-        // Obtener el total de la factura en bolívares (ya viene calculado en el pedido)
-        const totalFacturaBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
-
-        // Si el total aprobado coincide exactamente con el total de la factura, procesar e imprimir automáticamente
-        const diferencia = Math.abs(totalAprobado - totalFacturaBs);
-        if (diferencia < 0.01 && totalAprobado > 0 && totalFacturaBs > 0) {
-            // Evitar ciclo infinito: solo disparar una vez por (pedidoId, totalAprobado)
-            const { pedidoId: lastId, totalAprobado: lastTotal } = lastAutoSubmitPosRef.current;
-            if (lastId === pedidoData.id && lastTotal === totalAprobado) {
-                return;
-            }
-            lastAutoSubmitPosRef.current = { pedidoId: pedidoData.id, totalAprobado };
-            if (facturar_e_imprimir) {
-                facturar_e_imprimir();
-            }
-        }
-    }, [posTransaccionesPorPedido, pedidoData?.id, pedidoData?.bs_clean, pedidoData?.bs, facturar_e_imprimir]);
-
     // No llamar getPedidosFast al montar; se invoca tras getPedido, facturar, delpedido, etc.
 
     // Limpiar estados de factura original solo cuando se cambie a otro pedido (no al re-seleccionar el mismo ni al cargar por primera vez)
@@ -2221,7 +2187,6 @@ export default function PagarMain({
         const switchedToDifferentPedido = prevId !== undefined && currentId !== undefined && String(prevId) !== String(currentId);
         const clearedSelection = prevId !== undefined && currentId === undefined;
         if (switchedToDifferentPedido || clearedSelection) {
-            lastAutoSubmitPosRef.current = { pedidoId: null, totalAprobado: null };
             setPedidoOriginalAsignado(null);
             setItemsFacturaOriginal([]);
             setItemsDisponiblesDevolucion([]);
@@ -2596,18 +2561,19 @@ export default function PagarMain({
         [togglereferenciapago, toggleAddPersona]
     );
 
-    //r - Abrir modal de referencia de pago
+    //r - Abrir modal de referencia de pago (también cuando el foco está en el input de Monto de Transferencia)
     useHotkeys(
         "r",
         (event) => {
             if (showModalPosDebito || togglereferenciapago || toggleAddPersona) return; // Bloquear si modal POS, referencia o modal cliente está abierto
-            // Solo ejecutar si NO estamos en ningún input o select
             const isInputOrSelect =
                 event.target.tagName === "INPUT" ||
                 event.target.tagName === "SELECT" ||
                 event.target.tagName === "TEXTAREA";
+            const esInputTransferencia = event.target === transferenciaInputRef.current;
 
-            if (!isInputOrSelect) {
+            // Ejecutar si no estamos en un input/select, O si estamos específicamente en el input de Monto de Transferencia
+            if (!isInputOrSelect || esInputTransferencia) {
                 event.preventDefault();
                 event.stopPropagation();
 
@@ -2636,7 +2602,7 @@ export default function PagarMain({
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
             filter: false,
         },
-        [transferencia, debito, efectivo, credito, biopago, showModalPosDebito, toggleAddPersona]
+        [transferencia, debito, efectivo, credito, biopago, showModalPosDebito, togglereferenciapago, toggleAddPersona]
     );
 
     const {
