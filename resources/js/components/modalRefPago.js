@@ -59,6 +59,8 @@ export default function ModalRefPago({
     
     // Ref para bloqueo inmediato (evita múltiples envíos por Enter rápido)
     const validandoRef = useRef(false);
+    // Ref del contenedor del modal para navegación con flechas y foco inicial
+    const modalContainerRef = useRef(null);
 
     // Monto total del pedido en Bs
     const montoTotalPedido = parseFloat(pedidoData?.bs || 0);
@@ -430,13 +432,37 @@ export default function ModalRefPago({
     // Hotkey para cerrar con ESC
     useHotkeys('esc', handleClose, { enableOnTags: ['INPUT', 'SELECT'] });
 
-    // Auto-focus en el primer input al abrir
+    // Auto-focus en el input de Referencia al abrir el modal
     useEffect(() => {
-        const firstInput = document.querySelector('#cedula-input');
-        if (firstInput) {
-            setTimeout(() => firstInput.focus(), 100);
+        const refInput = modalContainerRef.current?.querySelector('[data-ref-input="true"]');
+        if (refInput) {
+            setTimeout(() => refInput.focus(), 100);
         }
     }, []);
+
+    // Navegación con flechas arriba/abajo solo dentro del modal (entre inputs/select/button)
+    const getFocusableInModal = () => {
+        if (!modalContainerRef.current) return [];
+        return [...modalContainerRef.current.querySelectorAll('input, select, textarea, button')].filter(
+            (el) => !el.disabled && el.tabIndex !== -1
+        );
+    };
+    const handleModalKeyDown = (e) => {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        if (!modalContainerRef.current?.contains(document.activeElement)) return;
+        const focusable = getFocusableInModal();
+        if (focusable.length === 0) return;
+        const idx = focusable.indexOf(document.activeElement);
+        if (idx === -1) return;
+        e.preventDefault();
+        if (e.key === 'ArrowDown') {
+            const next = idx < focusable.length - 1 ? idx + 1 : 0;
+            focusable[next].focus();
+        } else {
+            const prev = idx <= 0 ? focusable.length - 1 : idx - 1;
+            focusable[prev].focus();
+        }
+    };
 
     // Cargar monto cuando se abra el modal
     useEffect(() => {
@@ -460,8 +486,10 @@ export default function ModalRefPago({
             {/* Contenedor centrado */}
             <div className="fixed inset-0 z-50 flex items-center justify-center p-3 pointer-events-none">
                 <div
+                    ref={modalContainerRef}
                     className="pointer-events-auto w-full max-w-md max-h-[90vh] flex flex-col bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
                     onClick={(e) => e.stopPropagation()}
+                    onKeyDown={handleModalKeyDown}
                 >
                 {/* Header compacto */}
                 <div className="flex-shrink-0 px-3 py-1.5 border-b border-orange-100 bg-orange-50">
@@ -745,7 +773,64 @@ export default function ModalRefPago({
                                 </div>
                             )}
 
-                            {/* Fecha de Pago - Al final */}
+                            {/* Monto - justo debajo de Banco origen */}
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="text-xs font-medium text-gray-700">
+                                        Monto{" "}
+                                        <span className="px-2 py-0.5 text-xs font-medium text-blue-700 bg-blue-100 rounded">
+                                            Bs
+                                        </span>
+                                        <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="flex gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setmonto_referenciapago(montoTotalPedido.toFixed(2))}
+                                            className="px-2 py-0.5 text-[10px] font-medium text-green-700 bg-green-100 rounded hover:bg-green-200 transition-colors"
+                                            title="Usar monto total del pedido"
+                                        >
+                                            Total: {montoTotalPedido.toFixed(2)}
+                                        </button>
+                                        {sumaReferencias > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setmonto_referenciapago(montoRestante.toFixed(2))}
+                                                className="px-2 py-0.5 text-[10px] font-medium text-orange-700 bg-orange-100 rounded hover:bg-orange-200 transition-colors"
+                                                title="Usar monto restante (descontando transferencias previas)"
+                                            >
+                                                Restante: {montoRestante.toFixed(2)}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                                <input
+                                    type="text"
+                                    value={monto_referenciapago}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        const filtered = value.replace(/[^0-9.-]/g, '').replace(/(?!^)-/g, '').replace(/(\..*)\./g, '$1');
+                                        setmonto_referenciapago(filtered);
+                                    }}
+                                    onKeyPress={handleKeyPress}
+                                    className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400 ${
+                                        errors.monto
+                                            ? "border-red-300"
+                                            : "border-gray-200"
+                                    }`}
+                                />
+                                {errors.monto && (
+                                    <p className="mt-1 text-xs text-red-600">
+                                        {errors.monto}
+                                    </p>
+                                )}
+                                <p className="mt-1 text-xs text-gray-500">
+                                    <i className="mr-1 fa fa-info-circle"></i>
+                                    Máx: Bs {montoMaximoPedido.toFixed(2)} | Ya cargado: Bs {sumaReferencias.toFixed(2)}
+                                </p>
+                            </div>
+
+                            {/* Fecha de Pago - al final */}
                             {moduloConfig.showFechaPago && (
                                 <div>
                                     <label className="block mb-1 text-xs font-medium text-gray-700">
@@ -768,7 +853,8 @@ export default function ModalRefPago({
                         </>
                     )}
 
-                    {/* Monto */}
+                    {/* Monto - solo para módulo Central */}
+                    {moduloSeleccionado === 'Central' && (
                     <div>
                         <div className="flex items-center justify-between mb-1">
                             <label className="text-xs font-medium text-gray-700">
@@ -784,7 +870,6 @@ export default function ModalRefPago({
                                 )}
                                 <span className="text-red-500">*</span>
                             </label>
-                            {/* Botones para seleccionar monto */}
                             <div className="flex gap-1">
                                 <button
                                     type="button"
@@ -810,7 +895,6 @@ export default function ModalRefPago({
                             type="text"
                             value={monto_referenciapago}
                             onChange={(e) => {
-                                // Permitir números negativos: solo dígitos, punto decimal y signo negativo al inicio
                                 const value = e.target.value;
                                 const filtered = value.replace(/[^0-9.-]/g, '').replace(/(?!^)-/g, '').replace(/(\..*)\./g, '$1');
                                 setmonto_referenciapago(filtered);
@@ -832,6 +916,7 @@ export default function ModalRefPago({
                             Máx: Bs {montoMaximoPedido.toFixed(2)} | Ya cargado: Bs {sumaReferencias.toFixed(2)}
                         </p>
                     </div>
+                    )}
 
                     {/* Resultado de validación */}
                     {moduloSeleccionado === 'AutoValidar' && resultadoValidacion && (

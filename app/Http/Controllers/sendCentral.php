@@ -5307,7 +5307,8 @@ class sendCentral extends Controller
         ];
     } */
     /**
-     * Enviar transacción al POS físico de débito
+     * Enviar transacción al POS físico de débito.
+     * Si config('pos.simular_transaccion') es true, devuelve aprobación simulada (para pruebas).
      */
     public function enviarTransaccionPOS(Request $request)
     {
@@ -5319,7 +5320,29 @@ class sendCentral extends Controller
             'numeroOrden' => $request->input('numeroOrden'),
             'mensaje' => $request->input('mensaje', 'PowerBy:Ospino'),
         ];
-        
+
+        // Leer config directo (sin caché) para que al cambiar pos.php tenga efecto al instante
+        $posConfig = @include config_path('pos.php');
+        $simular = is_array($posConfig) && !empty($posConfig['simular_transaccion']);
+        if ($simular) {
+            $montoCents = (int) $request->input('monto', 0);
+            $amountDecimal = $montoCents / 100.0;
+            $numeroOrden = $request->input('numeroOrden', '');
+            $refSimulada = 'SIM-' . substr(str_replace(['-', ' ', '.'], '', $numeroOrden . microtime(true)), -10);
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'reference' => $refSimulada,
+                    'approval' => $refSimulada,
+                    'message' => 'Aprobado (simulado)',
+                    'amount' => $amountDecimal,
+                    'lote' => null,
+                    'responsecode' => '00',
+                    'terminal' => 'SIM',
+                ],
+            ]);
+        }
+
         // Obtener IP del PINPAD del request o usar la del usuario logueado
         $ipPinpad = $request->input('ip_pinpad');
         if (!$ipPinpad) {
