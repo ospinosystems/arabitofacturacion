@@ -11,9 +11,6 @@
     <link rel="icon" type="image/ico" href="{{ asset('images/icon.ico') }}">
     <link rel="manifest" href="{{ url('ppr-manifest.json') }}">
     <title>PPR - Pendiente por Retirar</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="{{ asset('css/app.css') }}" rel="stylesheet">
     <style>
         html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; -webkit-overflow-scrolling: touch; }
