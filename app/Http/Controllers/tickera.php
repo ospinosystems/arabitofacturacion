@@ -1275,42 +1275,17 @@ class tickera extends Controller
             }
             $printer->text("\n");
             $printer->setEmphasis(true);
-
-            // Moneda principal del pedido (primer pago o REF por defecto)
-            $monedaPedido = (isset($pedido->pagos) && count($pedido->pagos) > 0)
-                ? ($pedido->pagos[0]->moneda ?? '$')
-                : '$';
-            $totalDesRef = floatval($pedido->total_des ?? 0);
-            $totalDesBs = $totalDesRef * $dolar;
-            // Subtotal = suma de ítems sin restar descuento; Total = subtotal - descuento
-            $subtotal_ref = $total_dolares + $totalDesRef;
-            $subtotal_bs = $total_bs + $totalDesBs;
-            $total_final_ref = $total_dolares;
-            $total_final_bs = $total_bs;
-
-            if ($monedaPedido == 'bs') {
-                $printer->text("Desc: Bs" . number_format($totalDesBs, 2));
-                $printer->text("\n");
-                $printer->text("Sub-Total: Bs" . number_format($subtotal_bs, 2));
-                $printer->text("\n");
-                $printer->text("Total: Bs" . number_format($total_final_bs, 2));
-            } elseif ($monedaPedido == 'cop') {
-                $getMoneda = (new PedidosController)->get_moneda();
-                $tasaCop = $getMoneda['cop'] ?? 0;
-                $printer->text("Desc: COP" . number_format($totalDesRef * $tasaCop, 0));
-                $printer->text("\n");
-                $printer->text("Sub-Total: COP" . number_format($subtotal_ref * $tasaCop, 0));
-                $printer->text("\n");
-                $printer->text("Total: COP" . number_format($total_final_ref * $tasaCop, 0));
-            } else {
-                // REF / dólares
-                $printer->text("Desc: " . number_format($totalDesRef, 2) . " REF");
-                $printer->text("\n");
-                $printer->text("Sub-Total: " . number_format($subtotal_ref, 2) . " REF");
-                $printer->text("\n");
-                $printer->text("Total: " . number_format($total_final_ref, 2) . " REF");
-            }
+            
+            $printer->text("Desc: ". number_format(floatval($pedido->total_des ?? 0), 2));
             $printer->text("\n");
+            // Agregar detalle de montos y formas de pago al log
+            // Descuento ya en Bs
+            $descuento_bs = floatval($pedido->total_des ?? 0);
+            $total_final_bs = $total_bs - $descuento_bs;
+
+            $printer->text("Sub-Total: ". number_format($total_bs,2) );
+            $printer->text("\n");
+            $printer->text("Total: ". number_format($total_final_bs,2) );
             $printer->text("\n");
             
             $printer->text("\n");
