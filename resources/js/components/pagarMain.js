@@ -265,8 +265,13 @@ export default function PagarMain({
 
     // Estados para mostrar/ocultar efectivo dividido por moneda
     const [showEfectivoDetalle, setShowEfectivoDetalle] = useState(false);
-    const [showEfectivoPeso, setShowEfectivoPeso] = useState(false);
-    
+    const [showEfectivoPeso, setShowEfectivoPeso] = useState(() => user?.sucursal === "elorza");
+
+    // En sucursal Elorza, Efectivo COP y total Cop siempre visibles por defecto
+    useEffect(() => {
+        if (user?.sucursal === "elorza") setShowEfectivoPeso(true);
+    }, [user?.sucursal]);
+
     // Ref para input de referencia del débito
     const debitoRefInputRef = useRef(null);
     // Refs para los inputs de referencia (Ref.) de cada débito
@@ -1384,6 +1389,50 @@ export default function PagarMain({
         setLastPaymentMethodCalled('efectivo_bs');
     };
 
+    const getEfectivoCopLocal = () => {
+        const tasaBsPedido = getTasaPromedioCarrito();
+        const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
+
+        const debitosNoBloqueados = debitos.filter(d => !d.bloqueado);
+        const totalDebitosNoBloqueadosBs = debitosNoBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+
+        const debitosBloqueados = debitos.filter(d => d.bloqueado);
+        const totalDebitosBloqueadosBs = debitosBloqueados.reduce((sum, d) => sum + parseFloat(d.monto || 0), 0);
+        const totalDebitosBloqueadosUSD = totalDebitosBloqueadosBs / tasaBsPedido;
+
+        const totalBaseUSD = parseFloat(pedidoData.clean_total) - totalDebitosBloqueadosUSD;
+
+        const otrosTotal =
+            (totalDebitosNoBloqueadosBs / tasaBsPedido) +
+            parseFloat(efectivo_dolar || 0) +
+            (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
+            parseFloat(transferencia || 0) +
+            parseFloat(credito || 0) +
+            parseFloat(biopago || 0);
+
+        const restanteUSD = otrosTotal === 0
+            ? totalBaseUSD
+            : Math.max(0, totalBaseUSD - otrosTotal);
+
+        const montoEfectivoCop = Math.round(restanteUSD * tasaCopPedido);
+
+        if (lastPaymentMethodCalled === 'efectivo_cop' && parseFloat(efectivo_peso || 0) === montoEfectivoCop) {
+            const montoFinal = Math.round(totalBaseUSD * tasaCopPedido);
+            setEfectivo_peso(String(montoFinal));
+            setEfectivo_dolar("");
+            setEfectivo_bs("");
+            setDebito("");
+            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "" }]);
+            setTransferencia("");
+            setCredito("");
+            setBiopago("");
+        } else {
+            setEfectivo_peso(montoEfectivoCop > 0 ? String(montoEfectivoCop) : "");
+        }
+
+        setLastPaymentMethodCalled('efectivo_cop');
+    };
+
     const getTransferenciaLocal = () => {
         const tasaBsPedido = getTasaPromedioCarrito();
         const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
@@ -2271,33 +2320,26 @@ export default function PagarMain({
         },
         [refaddfast, showModalPosDebito, togglereferenciapago, toggleAddPersona]
     );
-    //p - Biopago (Pago móvil)
+    // p - Efectivo COP (Pesos)
     useHotkeys(
         "p",
         (event) => {
-            return;
-            if (showModalPosDebito || togglereferenciapago || toggleAddPersona) return; // Bloquear si modal POS, referencia o modal cliente está abierto
-            // No ejecutar si estamos en el input de búsqueda de productos
-            if (event.target === refaddfast?.current) {
-                return;
-            }
-
-            // No ejecutar si estamos en el modal de carnet
-            if (event.target?.getAttribute("data-carnet-input") === "true") {
-                return;
-            }
+            if (showModalPosDebito || togglereferenciapago || toggleAddPersona) return;
+            if (event.target === refaddfast?.current) return;
+            if (event.target?.getAttribute("data-carnet-input") === "true") return;
 
             event.preventDefault();
             event.stopPropagation();
 
-            getBiopagoLocal();
-            // Hacer foco en el input de biopago
+            setShowEfectivoPeso(true);
+            getEfectivoCopLocal();
             setTimeout(() => {
-                if (biopagoInputRef.current) {
-                    biopagoInputRef.current.focus();
-                    biopagoInputRef.current.select();
+                const efectivoCopInput = document.querySelector('[data-efectivo="cop"]');
+                if (efectivoCopInput) {
+                    efectivoCopInput.focus();
+                    efectivoCopInput.select();
                 }
-            }, 50);
+            }, 80);
         },
         {
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
@@ -2736,21 +2778,14 @@ export default function PagarMain({
                                                         <i className="fa fa-calculator"></i>
                                                     </button>
                                                 </div>
-                                            </div>
-
-                                            {user.sucursal == "elorza" && (
-                                                <>
-                                                    <div className="h-12 border-l border-gray-300"></div>
-                                                    <div className="text-left">
-                                                        <div className="text-xs font-semibold text-gray-700 mb-0.5">
-                                                            Total Cops
-                                                        </div>
-                                                        <div className="text-2xl font-bold text-blue-500 md:text-4xl">
-                                                            {moneda(totalCop)}
-                                                        </div>
+                                                {user.sucursal == "elorza" && (
+                                                    <div className="mt-0.5">
+                                                        <span className="text-lg font-bold text-blue-500 md:text-xl min-w-0 break-all">
+                                                            {moneda(totalCop)} <span className="text-xs">cop</span>
+                                                        </span>
                                                     </div>
-                                                </>
-                                            )}
+                                                )}
+                                            </div>
                                         </div>
 
                                         {/* Descuento */}
@@ -2947,7 +2982,7 @@ export default function PagarMain({
                                             )}
                                         </span>
                                     </div>
-                                    {user.sucursal == "elorza" && (
+                                   {/*  {user.sucursal == "elorza" && (
                                         <div className="pt-3 mt-3 text-right border-t border-gray-200">
                                             <div className="text-xs text-gray-500">
                                                 COP{" "}
@@ -2959,7 +2994,7 @@ export default function PagarMain({
                                                 </span>
                                             </div>
                                         </div>
-                                    )}
+                                    )} */}
                                     {totalRef < 0 ? (
                                         <div className="p-2 mt-3 text-xs border border-yellow-200 rounded bg-yellow-50">
                                             <i className="mr-2 text-yellow-600 fa fa-exclamation-triangle"></i>
@@ -3765,7 +3800,7 @@ export default function PagarMain({
                                             {/* Efectivo COP (oculto por defecto) */}
                                             {showEfectivoPeso && (
                                                 <div className="flex-1 min-w-[120px] flex flex-col gap-1">
-                                                    <span className="text-[10px] font-medium text-amber-600">Efectivo COP (C)</span>
+                                                    <span className="text-[10px] font-medium text-amber-600">Efectivo COP (P)</span>
                                                     <div className={`flex border rounded ${efectivo_peso != "" ? "bg-white border-amber-300" : "bg-white border-gray-200"}`}>
                                                         <label
                                                             className="flex items-center justify-center w-8 text-amber-600 border-r border-gray-200 rounded-l cursor-pointer bg-amber-100"
