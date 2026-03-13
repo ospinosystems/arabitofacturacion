@@ -249,19 +249,13 @@ class PagoPedidosController extends Controller
             if ($req->efectivo && floatval($req->efectivo)) {
                 $metodos_pago[] = ['tipo' => 'efectivo', 'monto' => floatval($req->efectivo)];
             }
-            // Débitos: si viene el array debitos con datos, usar solo ese (evita mezclar campo único + array y disparar "positivos y negativos")
-            $debitosArrayConMonto = $req->debitos && is_array($req->debitos)
-                ? array_filter($req->debitos, function ($d) { return floatval($d['monto'] ?? 0) != 0; })
-                : [];
-            if (count($debitosArrayConMonto) > 0) {
+            if ($req->debitos && is_array($req->debitos)) {
                 foreach ($req->debitos as $debitoItem) {
                     $montoDeb = floatval($debitoItem['monto'] ?? 0);
                     if ($montoDeb != 0) {
                         $metodos_pago[] = ['tipo' => 'debito', 'monto' => $montoDeb];
                     }
                 }
-            } elseif ($req->debito && floatval($req->debito)) {
-                $metodos_pago[] = ['tipo' => 'debito', 'monto' => floatval($req->debito)];
             }
             if ($req->transferencia && floatval($req->transferencia)) {
                 $metodos_pago[] = ['tipo' => 'transferencia', 'monto' => floatval($req->transferencia)];
@@ -381,17 +375,12 @@ class PagoPedidosController extends Controller
             if ($tasaPeso <= 0) $tasaPeso = 1;
             
             // Calcular total de métodos de pago principales
-            // NOTA: debito viene en Bs, hay que convertirlo a USD
-            // Soporta débito simple o múltiples débitos
+            // Débito viene en Bs, hay que convertirlo a USD
             $debitoUSD = 0;
             if ($req->debitos && is_array($req->debitos)) {
-                // Múltiples débitos: sumar todos y convertir a USD
                 foreach ($req->debitos as $debitoItem) {
                     $debitoUSD += floatval($debitoItem['monto']) / $tasaDolar;
                 }
-            } else {
-                // Débito simple
-                $debitoUSD = $req->debito ? floatval($req->debito) / $tasaDolar : 0;
             }
             
             $total_ins = $debitoUSD + floatval($req->efectivo) + floatval($req->transferencia) + floatval($req->biopago) + floatval($req->credito);
@@ -652,17 +641,15 @@ class PagoPedidosController extends Controller
                     if ($tasaDolar <= 0) $tasaDolar = 1;
                     if ($tasaPeso <= 0) $tasaPeso = 1;
                     
-                    // Procesar débitos: soporta modo simple (debito) o múltiple (debitos array)
+                    // Procesar débitos (array)
                     if($req->debitos && is_array($req->debitos)) {
-                        // Modo múltiples débitos
                         $totalDebitoUSD = 0;
                         
                         foreach($req->debitos as $index => $debitoItem) {
-                            $montoOriginalBs = floatval($debitoItem['monto']); // Viene en Bs
-                            $montoDebito = $montoOriginalBs / $tasaDolar; // Convertir a USD
+                            $montoOriginalBs = floatval($debitoItem['monto']);
+                            $montoDebito = $montoOriginalBs / $tasaDolar;
                             $referencia = $debitoItem['referencia'] ?? null;
                             
-                            // Validar referencia obligatoria para cada débito positivo
                             if ($montoOriginalBs > 0 && !$referencia) {
                                 \DB::rollback();
                                 return Response::json([
@@ -671,7 +658,6 @@ class PagoPedidosController extends Controller
                                 ]);
                             }
                             
-                            // Validar que la referencia tenga 4 dígitos
                             if ($montoOriginalBs > 0 && strlen($referencia) !== 4) {
                                 \DB::rollback();
                                 return Response::json([
@@ -682,24 +668,21 @@ class PagoPedidosController extends Controller
                             
                             $totalDebitoUSD += $montoDebito;
                             
-                            // Preparar datos para guardar
                             $datosPagoDebito = [
                                 "id_pedido" => $req->id,
-                                "tipo" => 2, // Débito
+                                "tipo" => 2,
                                 "cuenta" => $cuenta,
-                                "monto" => $montoDebito, // Convertido a USD
-                                "monto_original" => $montoOriginalBs, // Valor original en Bs
+                                "monto" => $montoDebito,
+                                "monto_original" => $montoOriginalBs,
                                 "moneda" => "bs",
                                 "referencia" => $referencia
                             ];
                             
-                            // Si vienen datos POS individuales para este débito, agregarlos
                             if (isset($debitoItem['posData']) && is_array($debitoItem['posData'])) {
                                 $posData = $debitoItem['posData'];
                                 $datosPagoDebito["pos_message"] = $posData['message'] ?? null;
                                 $datosPagoDebito["pos_lote"] = $posData['lote'] ?? null;
                                 $datosPagoDebito["pos_responsecode"] = $posData['responsecode'] ?? null;
-                                // pos_amount: decimal sin coma (ej. "3,481.82" -> 3481.82)
                                 $amountRaw = isset($posData['amount']) ? trim((string) $posData['amount']) : '';
                                 $amountClean = $amountRaw !== '' ? str_replace(',', '', $amountRaw) : '';
                                 $datosPagoDebito["pos_amount"] = $amountClean !== '' && is_numeric($amountClean) ? (float) $amountClean : null;
@@ -707,68 +690,15 @@ class PagoPedidosController extends Controller
                                 $datosPagoDebito["pos_json_response"] = $posData['json_response'] ?? null;
                             }
                             
-                            // Guardar cada débito como un registro separado
                             pago_pedidos::create($datosPagoDebito);
                         }
                         
-                        // Validar descuentos con el total de débitos
                         if ($totalDebitoUSD > 0) {
                             $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $totalDebitoUSD, $metodos_pago, $cuenta, 2, $req->front_only ? ($req->uuid ?? null) : null);
                             if ($resultadoValidacion !== true) {
                                 return $resultadoValidacion;
                             }
                         }
-                        
-                    } elseif($req->debito) {
-                        // Modo débito simple (original)
-                        $montoOriginalBs = floatval($req->debito); // Viene en Bs
-                        $montoDebito = $montoOriginalBs / $tasaDolar; // Convertir a USD
-                        
-                        // Validar referencia obligatoria para débito SOLO si es positivo (no devolución)
-                        if ($montoOriginalBs > 0 && !$req->debitoRef) {
-                            \DB::rollback();
-                            return Response::json([
-                                "msj" => "Error: Debe ingresar la referencia del pago con débito",
-                                "estado" => false
-                            ]);
-                        }
-                        
-                        // Validar descuentos solo para débito positivo (no para devoluciones)
-                        if ($montoDebito > 0) {
-                            $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $montoDebito, $metodos_pago, $cuenta, 2, $req->front_only ? ($req->uuid ?? null) : null);
-                            if ($resultadoValidacion !== true) {
-                                return $resultadoValidacion;
-                            }
-                        }
-                        
-                        // Preparar datos para guardar (permite monto negativo para devoluciones)
-                        $datosPago = [
-                            "cuenta" => $cuenta, 
-                            "monto" => $montoDebito, // Convertido a USD
-                            "monto_original" => $montoOriginalBs, // Valor original en Bs
-                            "moneda" => "bs", // Débito siempre es en Bs
-                            "referencia" => $req->debitoRef ?? null
-                        ];
-                        
-                        // Si vienen datos POS, agregarlos
-                        if ($req->posData && is_array($req->posData)) {
-                            $posData = $req->posData;
-                            $datosPago["pos_message"] = $posData['message'] ?? null;
-                            $datosPago["pos_lote"] = $posData['lote'] ?? null;
-                            $datosPago["pos_responsecode"] = $posData['responsecode'] ?? null;
-                            // pos_amount: decimal sin coma (ej. "3,481.82" -> 3481.82)
-                            $amountRaw = isset($posData['amount']) ? trim((string) $posData['amount']) : '';
-                            $amountClean = $amountRaw !== '' ? str_replace(',', '', $amountRaw) : '';
-                            $datosPago["pos_amount"] = $amountClean !== '' && is_numeric($amountClean) ? (float) $amountClean : null;
-                            $datosPago["pos_terminal"] = $posData['terminal'] ?? null;
-                            $datosPago["pos_json_response"] = $posData['json_response'] ?? null;
-                        }
-                        
-                        // Guardar pago de débito con referencia y datos POS
-                        pago_pedidos::updateOrCreate(
-                            ["id_pedido" => $req->id, "tipo" => 2],
-                            $datosPago
-                        );
                     }
                     // Función para recopilar todos los métodos de pago
                 
@@ -883,9 +813,7 @@ class PagoPedidosController extends Controller
                         // Usar siempre el id del pedido persistido (importante para pedidos front_only recién creados)
                         $idPedidoProcesado = (int) $pedido->id;
                         $isFullFiscal = (new SucursalController)->isFullFiscal();
-                        // "Solo débito": sin efectivo ni transferencia y con débito (campo único o array debitos)
-                        $tieneDebito = (floatval($req->debito ?? 0) != 0)
-                            || ($req->debitos && is_array($req->debitos) && count(array_filter($req->debitos, function ($d) { return floatval($d['monto'] ?? 0) != 0; })) > 0);
+                        $tieneDebito = $req->debitos && is_array($req->debitos) && count(array_filter($req->debitos, function ($d) { return floatval($d['monto'] ?? 0) != 0; })) > 0;
                         $soloDebito = $tieneDebito && !floatval($req->efectivo ?? 0) && !floatval($req->transferencia ?? 0);
 
                         if ($isFullFiscal || $soloDebito) {
@@ -940,8 +868,6 @@ class PagoPedidosController extends Controller
                     foreach ($req->debitos as $debitoItem) {
                         $debitoBsParaMsg += floatval($debitoItem['monto'] ?? 0);
                     }
-                } else {
-                    $debitoBsParaMsg = floatval($req->debito);
                 }
                 $detalle = [];
                 $detalle[] = "Pedido: ".round($total_real,4)." $";
@@ -1456,8 +1382,13 @@ class PagoPedidosController extends Controller
             if ($request->efectivo) {
                 $pagosFacturaGarantia[] = ['tipo' => 3, 'monto' => floatval($request->efectivo)]; // 3 = Efectivo
             }
-            if ($request->debito) {
-                $pagosFacturaGarantia[] = ['tipo' => 2, 'monto' => floatval($request->debito)]; // 2 = Débito
+            if ($request->debitos && is_array($request->debitos)) {
+                foreach ($request->debitos as $debitoItem) {
+                    $montoDeb = floatval($debitoItem['monto'] ?? 0);
+                    if ($montoDeb != 0) {
+                        $pagosFacturaGarantia[] = ['tipo' => 2, 'monto' => $montoDeb];
+                    }
+                }
             }
             if ($request->transferencia) {
                 $pagosFacturaGarantia[] = ['tipo' => 1, 'monto' => floatval($request->transferencia)]; // 1 = Transferencia
@@ -1520,7 +1451,7 @@ class PagoPedidosController extends Controller
                     'factura_garantia' => $facturaGarantia,
                     'request_data' => [
                         'efectivo' => $request->efectivo,
-                        'debito' => $request->debito,
+                        'debitos' => $request->debitos,
                         'transferencia' => $request->transferencia,
                         'biopago' => $request->biopago,
                         'credito' => $request->credito

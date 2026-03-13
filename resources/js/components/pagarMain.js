@@ -80,12 +80,6 @@ export default function PagarMain({
     lastAddedFrontItemId,
     getPedido,
     notificar,
-    debito,
-    setDebito,
-    debitoRef,
-    setDebitoRef,
-    debitoRefError,
-    setDebitoRefError,
     debitos,
     setDebitos,
     usarMultiplesDebitos,
@@ -653,7 +647,7 @@ export default function PagarMain({
         const totalPedidoUsd = parseFloat(pedidoData?.clean_total) || 0;
         
         // Calcular total de débitos (simple o múltiples)
-        const totalDebitosBs = usarMultiplesDebitos ? calcularTotalDebitos() : parseFloat(debito || 0);
+        const totalDebitosBs = calcularTotalDebitos();
         
         // Calcular lo que ya está cargado en pagos (en USD)
         const yaDebitoUsd = (totalDebitosBs / tasaBs);
@@ -699,14 +693,22 @@ export default function PagarMain({
             if (pagoDebito > 0 && disponibleUsd > 0) {
                 const montoAImportarUsd = Math.min(pagoDebitoUsd, disponibleUsd);
                 const montoAImportarBs = montoAImportarUsd * tasaBs;
-                setDebito(prev => ((parseFloat(prev) || 0) + montoAImportarBs).toFixed(2));
+                setDebitos(prev => {
+                    const first = prev[0] || { monto: "", referencia: "", bloqueado: false, posData: null };
+                    const newMonto = (parseFloat(first.monto) || 0) + montoAImportarBs;
+                    return [{ ...first, monto: newMonto.toFixed(2) }, ...prev.slice(1)];
+                });
                 setCalcPagoDebito(prev => {
                     const resto = (parseFloat(prev) || 0) - montoAImportarBs;
                     return resto > 0 ? resto.toFixed(2) : "";
                 });
                 disponibleUsd -= montoAImportarUsd;
             } else if (pagoDebito < 0) {
-                setDebito(prev => ((parseFloat(prev) || 0) + pagoDebito).toFixed(2));
+                setDebitos(prev => {
+                    const first = prev[0] || { monto: "", referencia: "", bloqueado: false, posData: null };
+                    const newMonto = (parseFloat(first.monto) || 0) + pagoDebito;
+                    return [{ ...first, monto: newMonto > 0 ? newMonto.toFixed(2) : "" }, ...prev.slice(1)];
+                });
                 setCalcPagoDebito("");
             }
         }
@@ -1203,19 +1205,12 @@ export default function PagarMain({
 
     const toggleModoDebito = () => {
         if (!usarMultiplesDebitos) {
-            // Cambiar a modo múltiple: migrar débito actual si existe
-            if (debito || debitoRef) {
-                setDebitos([{ monto: debito || "", referencia: debitoRef || "" }]);
-            } else {
-                setDebitos([{ monto: "", referencia: "" }]);
-            }
+            setDebitos(debitos.length ? debitos : [{ monto: "", referencia: "", bloqueado: false, posData: null }]);
             setUsarMultiplesDebitos(true);
         } else {
-            // Cambiar a modo simple: consolidar todos los débitos en uno
             const totalMonto = calcularTotalDebitos();
             const primeraRef = debitos.find(d => d.referencia)?.referencia || "";
-            setDebito(totalMonto > 0 ? totalMonto.toFixed(2) : "");
-            setDebitoRef(primeraRef);
+            setDebitos([{ monto: totalMonto > 0 ? totalMonto.toFixed(2) : "", referencia: primeraRef, bloqueado: false, posData: null }]);
             setUsarMultiplesDebitos(false);
         }
     };
@@ -1325,9 +1320,7 @@ export default function PagarMain({
             setEfectivo_dolar(totalBaseUSD.toFixed(2));
             setEfectivo_bs("");
             setEfectivo_peso("");
-            setDebito("");
-            // Mantener solo los débitos bloqueados
-            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "" }]);
+            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "", bloqueado: false, posData: null }]);
             setTransferencia("");
             setCredito("");
             setBiopago("");
@@ -1376,9 +1369,7 @@ export default function PagarMain({
             setEfectivo_bs(montoFinal);
             setEfectivo_dolar("");
             setEfectivo_peso("");
-            setDebito("");
-            // Mantener solo los débitos bloqueados
-            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "" }]);
+            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "", bloqueado: false, posData: null }]);
             setTransferencia("");
             setCredito("");
             setBiopago("");
@@ -1421,8 +1412,7 @@ export default function PagarMain({
             setEfectivo_peso(String(montoFinal));
             setEfectivo_dolar("");
             setEfectivo_bs("");
-            setDebito("");
-            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "" }]);
+            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "", bloqueado: false, posData: null }]);
             setTransferencia("");
             setCredito("");
             setBiopago("");
@@ -1467,9 +1457,7 @@ export default function PagarMain({
             setEfectivo_dolar("");
             setEfectivo_bs("");
             setEfectivo_peso("");
-            setDebito("");
-            // Mantener solo los débitos bloqueados
-            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "" }]);
+            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "", bloqueado: false, posData: null }]);
             setCredito("");
             setBiopago("");
         } else {
@@ -1514,8 +1502,7 @@ export default function PagarMain({
             setEfectivo_bs("");
             setEfectivo_peso("");
             setTransferencia("");
-            setDebito("");
-            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "" }]);
+            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "", bloqueado: false, posData: null }]);
             setBiopago("");
         } else {
             setCredito(montoCredito);
@@ -1560,9 +1547,7 @@ export default function PagarMain({
             setEfectivo_bs("");
             setEfectivo_peso("");
             setTransferencia("");
-            setDebito("");
-            // Mantener solo los débitos bloqueados
-            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "" }]);
+            setDebitos(debitosBloqueados.length > 0 ? debitosBloqueados : [{ monto: "", referencia: "", bloqueado: false, posData: null }]);
             setCredito("");
         } else {
             setBiopago(montoBiopago);
@@ -1576,10 +1561,9 @@ export default function PagarMain({
             const tasaPromedio = getTasaPromedioCarrito();
 
             if (met == "debito") {
-                if (debito == "") {
-                    return "";
-                }
-                return "Bs." + moneda(tasaPromedio * debito);
+                const totalDeb = calcularTotalDebitos();
+                if (!totalDeb || totalDeb === 0) return "";
+                return "Bs." + moneda(tasaPromedio * totalDeb);
             }
 
             if (met == "transferencia") {
@@ -1613,7 +1597,7 @@ export default function PagarMain({
         
         // Setear el valor del campo que se está editando
         if (type == "Debito") {
-            setDebito(val);
+            setDebitos(prev => [{ ...(prev[0] || {}), monto: val, referencia: (prev[0]?.referencia) || "", bloqueado: prev[0]?.bloqueado || false, posData: prev[0]?.posData || null }, ...prev.slice(1)]);
         } else if (type == "Efectivo") {
             setEfectivo(val);
         } else if (type == "EfectivoUSD") {
@@ -1641,7 +1625,7 @@ export default function PagarMain({
             : [];
         const totalDebitosNoBloqueadosBs = debitos && debitos.length > 0
             ? debitosNoBloqueados.reduce((sum, d) => sum + (parseFloat(d.monto) || 0), 0)
-            : parseFloat(debito || 0);
+            : 0;
         
         // Calcular total de débitos BLOQUEADOS (ya aprobados) - CRÍTICO: restar del total
         // IMPORTANTE: Siempre revisar el array debitos para débitos bloqueados
@@ -1657,8 +1641,9 @@ export default function PagarMain({
         // Todos los campos de pago con su valor actual en USD y su moneda
         // IMPORTANTE: Usar el nuevo valor (val) para el campo que se está editando
         // Débito ahora es en Bs - usar totalDebitosNoBloqueadosBs para considerar solo débitos no bloqueados
+        const setDebitoTotal = (v) => setDebitos(prev => [{ ...(prev[0] || {}), monto: v, referencia: (prev[0]?.referencia) || "", bloqueado: prev[0]?.bloqueado || false, posData: prev[0]?.posData || null }, ...prev.slice(1)]);
         const allInputs = [
-            { key: "Debito", val: type === "Debito" ? val : totalDebitosNoBloqueadosBs, set: setDebito, moneda: "bs", esEfectivo: false },
+            { key: "Debito", val: type === "Debito" ? val : totalDebitosNoBloqueadosBs, set: setDebitoTotal, moneda: "bs", esEfectivo: false },
             { key: "EfectivoUSD", val: type === "EfectivoUSD" ? val : efectivo_dolar, set: setEfectivo_dolar, moneda: "usd", esEfectivo: true },
             { key: "EfectivoBs", val: type === "EfectivoBs" ? val : efectivo_bs, set: setEfectivo_bs, moneda: "bs", esEfectivo: true },
             { key: "EfectivoCOP", val: type === "EfectivoCOP" ? val : efectivo_peso, set: setEfectivo_peso, moneda: "cop", esEfectivo: true },
@@ -1739,7 +1724,7 @@ export default function PagarMain({
                             if (pedidoData?.id && guardarDebitosPorPedido) guardarDebitosPorPedido(pedidoData.id, nuevosDebitos);
                         }
                     } else {
-                        setDebito(limitadoBs.toFixed(2));
+                        setDebitos(prev => [{ ...(prev[0] || {}), monto: limitadoBs.toFixed(2), referencia: (prev[0]?.referencia) || "", bloqueado: false, posData: null }, ...prev.slice(1)]);
                     }
                 } else if (type === "EfectivoUSD") setEfectivo_dolar(valLimitado.toFixed(2));
                 else if (type === "EfectivoBs") setEfectivo_bs(valLimitado.toFixed(2));
@@ -1836,7 +1821,7 @@ export default function PagarMain({
                                     guardarDebitosPorPedido(pedidoData.id, nuevosDebitos);
                                 }
                             } else {
-                                setDebito("0");
+                                setDebitos([{ monto: "0", referencia: "", bloqueado: false, posData: null }]);
                             }
                         } else {
                             e.set("0");
@@ -2623,8 +2608,9 @@ export default function PagarMain({
                 let montoActivo = transferencia;
                 let tipoActivo = "1"; // Transferencia por defecto
 
-                if (debito && debito > 0) {
-                    montoActivo = debito;
+                const totalDebito = calcularTotalDebitos();
+                if (totalDebito && totalDebito > 0) {
+                    montoActivo = totalDebito;
                     tipoActivo = "2"; // Débito
                 } else if (efectivo && efectivo > 0) {
                     montoActivo = efectivo;
@@ -2644,7 +2630,7 @@ export default function PagarMain({
             enableOnTags: ["INPUT", "SELECT", "TEXTAREA"],
             filter: false,
         },
-        [transferencia, debito, efectivo, credito, biopago, showModalPosDebito, togglereferenciapago, toggleAddPersona]
+        [transferencia, debitos, efectivo, credito, biopago, showModalPosDebito, togglereferenciapago, toggleAddPersona]
     );
 
     const {

@@ -158,11 +158,7 @@ export default function Facturar({
     const [orderbycolumpedidos, setorderbycolumpedidos] = useState("id");
     const [orderbyorderpedidos, setorderbyorderpedidos] = useState("desc");
 
-    const [debito, setDebito] = useState("");
-    const [debitoRef, setDebitoRef] = useState(""); // Referencia obligatoria del débito
-    const [debitoRefError, setDebitoRefError] = useState(false); // Error de referencia faltante
-    
-    // Estados para múltiples débitos (array de {monto, referencia, bloqueado, posData})
+    // Estados para múltiples débitos (debito/debitoRef/debitoRefError descontinuados, solo se usa debitos) (array de {monto, referencia, bloqueado, posData})
     const [debitos, setDebitos] = useState([{ monto: "", referencia: "", bloqueado: false, posData: null }]);
     const [usarMultiplesDebitos, setUsarMultiplesDebitos] = useState(false);
     // Mapa de débitos por pedido: { pedidoId: [{monto, referencia, bloqueado, posData}] }
@@ -2460,9 +2456,9 @@ export default function Facturar({
         // Convertir a Bs usando tasa del pedido
         const montoDebitoBs = (restanteUSD * tasaBsPedido).toFixed(2);
 
-        // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
-        if (lastPaymentMethodCalled === 'debito' && parseFloat(debito || 0).toFixed(2) === montoDebitoBs) {
-            setDebito((parseFloat(pedidoData.clean_total) * tasaBsPedido).toFixed(2));
+        const totalDebitosBs = (debitos && debitos.length) ? debitos.reduce((s, d) => s + (parseFloat(d.monto) || 0), 0) : 0;
+        if (lastPaymentMethodCalled === 'debito' && parseFloat(totalDebitosBs).toFixed(2) === montoDebitoBs) {
+            setDebitos([{ monto: (parseFloat(pedidoData.clean_total) * tasaBsPedido).toFixed(2), referencia: "", bloqueado: false, posData: null }]);
             setEfectivo("");
             setEfectivo_bs("");
             setEfectivo_dolar("");
@@ -2471,9 +2467,8 @@ export default function Facturar({
             setCredito("");
             setBiopago("");
         } else {
-            setDebito(montoDebitoBs);
+            setDebitos([{ monto: montoDebitoBs, referencia: "", bloqueado: false, posData: null }]);
         }
-        
         setLastPaymentMethodCalled('debito');
     };
     const getCredito = () => {
@@ -2481,24 +2476,21 @@ export default function Facturar({
         const tasaBsPedido = pedidoData?.items?.[0]?.tasa || dolar;
         const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
         
-        // Calcular la suma de los otros métodos de pago en USD
+        const totalDebitosBsCred = (debitos && debitos.length) ? debitos.reduce((s, d) => s + (parseFloat(d.monto) || 0), 0) : 0;
         const otrosTotal =
             parseFloat(efectivo || 0) +
             parseFloat(efectivo_dolar || 0) +
             (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
             (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
             parseFloat(transferencia || 0) +
-            (parseFloat(debito || 0) / tasaBsPedido) +
+            (totalDebitosBsCred / tasaBsPedido) +
             parseFloat(biopago || 0);
 
-        // Si los demás están en blanco, setear el total completo
-        // Si hay otros montos, setear la diferencia
         const montoCredito =
             otrosTotal === 0
                 ? parseFloat(pedidoData.clean_total).toFixed(2)
                 : Math.max(0, pedidoData.clean_total - otrosTotal).toFixed(2);
 
-        // Si es la segunda invocación seguida y el resultado es el mismo, setear total completo y limpiar los demás
         if (lastPaymentMethodCalled === 'credito' && parseFloat(credito || 0).toFixed(2) === montoCredito) {
             setCredito(parseFloat(pedidoData.clean_total).toFixed(2));
             setEfectivo("");
@@ -2506,7 +2498,7 @@ export default function Facturar({
             setEfectivo_dolar("");
             setEfectivo_peso("");
             setTransferencia("");
-            setDebito("");
+            setDebitos([{ monto: "", referencia: "", bloqueado: false, posData: null }]);
             setBiopago("");
         } else {
             setCredito(montoCredito);
@@ -2515,22 +2507,19 @@ export default function Facturar({
         setLastPaymentMethodCalled('credito');
     };
     const getTransferencia = () => {
-        // Usar tasas del pedido
         const tasaBsPedido = pedidoData?.items?.[0]?.tasa || dolar;
         const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
-        
-        // Calcular la suma de los otros métodos de pago en USD
+        const totalDebitosBsTrans = (debitos && debitos.length) ? debitos.reduce((s, d) => s + (parseFloat(d.monto) || 0), 0) : 0;
         const otrosTotal =
             parseFloat(efectivo || 0) +
             parseFloat(efectivo_dolar || 0) +
             (parseFloat(efectivo_bs || 0) / tasaBsPedido) +
             (parseFloat(efectivo_peso || 0) / tasaCopPedido) +
-            (parseFloat(debito || 0) / tasaBsPedido) +
+            parseFloat(transferencia || 0) +
+            (totalDebitosBsTrans / tasaBsPedido) +
             parseFloat(credito || 0) +
             parseFloat(biopago || 0);
 
-        // Si los demás están en blanco, setear el total completo
-        // Si hay otros montos, setear la diferencia
         const montoTransferencia =
             otrosTotal === 0
                 ? parseFloat(pedidoData.clean_total).toFixed(2)
@@ -2543,13 +2532,12 @@ export default function Facturar({
             setEfectivo_bs("");
             setEfectivo_dolar("");
             setEfectivo_peso("");
-            setDebito("");
+            setDebitos([{ monto: "", referencia: "", bloqueado: false, posData: null }]);
             setCredito("");
             setBiopago("");
         } else {
             setTransferencia(montoTransferencia);
         }
-        
         setLastPaymentMethodCalled('transferencia');
     };
     const getBio = () => {
@@ -2557,12 +2545,10 @@ export default function Facturar({
         
     };
     const getEfectivo = () => {
-        // Usar tasas del pedido
         const tasaBsPedido = pedidoData?.items?.[0]?.tasa || dolar;
-        
-        // Calcular la suma de los otros métodos de pago en USD
+        const totalDebitosBsEf = (debitos && debitos.length) ? debitos.reduce((s, d) => s + (parseFloat(d.monto) || 0), 0) : 0;
         const otrosTotal =
-            (parseFloat(debito || 0) / tasaBsPedido) +
+            (totalDebitosBsEf / tasaBsPedido) +
             parseFloat(transferencia || 0) +
             parseFloat(credito || 0) +
             parseFloat(biopago || 0);
@@ -2580,7 +2566,7 @@ export default function Facturar({
             setEfectivo_bs("");
             setEfectivo_dolar("");
             setEfectivo_peso("");
-            setDebito("");
+            setDebitos([{ monto: "", referencia: "", bloqueado: false, posData: null }]);
             setTransferencia("");
             setCredito("");
             setBiopago("");
@@ -3573,9 +3559,8 @@ export default function Facturar({
 
                 if (clearPagosPedido) {
                     setTransferencia("");
-                    setDebito("");
-                    setDebitoRef(""); // Limpiar referencia de débito
-                    setForzarReferenciaManual(false); // Resetear modo manual
+                    setDebitos([{ monto: "", referencia: "", bloqueado: false, posData: null }]);
+                    setForzarReferenciaManual(false);
                     setEfectivo("");
                     setEfectivo_bs("");
                     setEfectivo_dolar("");
@@ -3605,16 +3590,15 @@ export default function Facturar({
                     }
                     
                     // Débito (tipo 2) - Usar monto_original (Bs) si existe
-                    const pagoDebito = d.find((e) => e.tipo == 2);
-                    if (pagoDebito) {
-                        // monto_original tiene el valor en Bs que escribió la cajera
-                        // Mostrar todos los débitos sin importar el monto (importante para montos pequeños en Bs)
-                        const valorDebito = pagoDebito.monto_original || pagoDebito.monto;
-                        setDebito(valorDebito);
-                        // También setear la referencia si existe
-                        if (pagoDebito.referencia) {
-                            setDebitoRef(pagoDebito.referencia);
-                        }
+                    const pagosDebito = d.filter((e) => e.tipo == 2);
+                    if (pagosDebito && pagosDebito.length > 0) {
+                        const debitosFromPagos = pagosDebito.map((p) => ({
+                            monto: p.monto_original || p.monto,
+                            referencia: p.referencia || "",
+                            bloqueado: false,
+                            posData: null
+                        }));
+                        setDebitos(debitosFromPagos);
                     }
                     
                     // Efectivo (tipo 3) - Procesar según moneda
@@ -4401,7 +4385,7 @@ export default function Facturar({
         setTransferencia("");
         setCredito("");
         setBiopago("");
-        setDebito("");
+        setDebitos([{ monto: "", referencia: "", bloqueado: false, posData: null }]);
         const debitosFromMetodos = [];
         for (const m of metodos) {
             const tipo = (m.tipo || "").toLowerCase();
@@ -4444,9 +4428,6 @@ export default function Facturar({
                 const m = parseFloat(d.monto);
                 if (!Number.isNaN(m) && m !== 0) metodos.push({ tipo: "debito", monto: m, moneda: d.moneda || "Bs" });
             });
-        } else {
-            const dm = parseFloat(debitoMontoRef.current);
-            if (!Number.isNaN(dm) && dm !== 0) metodos.push({ tipo: "debito", monto: dm, moneda: "Bs" });
         }
         const tr = parseFloat(transferenciaRef.current);
         if (!Number.isNaN(tr) && tr !== 0) metodos.push({ tipo: "transferencia", monto: tr, moneda: "USD" });
@@ -4465,14 +4446,11 @@ export default function Facturar({
     const buildMetodosPagoFront = () => {
         const metodos_pago = [];
         if (efectivo_dolar && parseFloat(efectivo_dolar)) metodos_pago.push({ tipo: "efectivo", monto: parseFloat(efectivo_dolar), moneda: "USD" });
-        // Un solo bloque débito: si hay array debitos con montos, usar solo ese; si no, usar el campo único debito. Débito siempre en Bs.
         if (debitos && Array.isArray(debitos) && debitos.length > 0) {
             debitos.forEach((d) => {
                 const m = parseFloat(d.monto);
                 if (!Number.isNaN(m) && m !== 0) metodos_pago.push({ tipo: "debito", monto: m, moneda: d.moneda || "Bs" });
             });
-        } else if (debito && parseFloat(debito)) {
-            metodos_pago.push({ tipo: "debito", monto: parseFloat(debito), moneda: "Bs" });
         }
         if (transferencia && parseFloat(transferencia)) metodos_pago.push({ tipo: "transferencia", monto: parseFloat(transferencia), moneda: "USD" });
         if (biopago && parseFloat(biopago)) metodos_pago.push({ tipo: "biopago", monto: 0, moneda: "USD" });
@@ -5252,8 +5230,6 @@ export default function Facturar({
     const transferenciaRef = useRef("");
     const creditoRef = useRef("");
     const biopagoRef = useRef("");
-    const debitoRefRef = useRef("");
-    const debitoMontoRef = useRef("");
     const vueltoRef = useRef("");
     const procesarPagoInternoRef = useRef(null);
     useEffect(() => { debitosPorPedidoRef.current = debitosPorPedido; }, [debitosPorPedido]);
@@ -5265,8 +5241,6 @@ export default function Facturar({
     useEffect(() => { transferenciaRef.current = transferencia; }, [transferencia]);
     useEffect(() => { creditoRef.current = credito; }, [credito]);
     useEffect(() => { biopagoRef.current = biopago; }, [biopago]);
-    useEffect(() => { debitoRefRef.current = debitoRef; }, [debitoRef]);
-    useEffect(() => { debitoMontoRef.current = debito; }, [debito]);
     useEffect(() => { vueltoRef.current = vuelto; }, [vuelto]);
     const showModalPosDebito = Object.keys(modalesPosAbiertos).length > 0;
     const setPagoPedidoTimeoutRef = useRef(null);
@@ -5304,13 +5278,11 @@ export default function Facturar({
                 return;
             }
             
-            // Si hay débito pero sucursaldata está vacío o es string, intentar recargar datos de sucursal
-            if (debitoMontoActual && parseFloat(debitoMontoActual) > 0 && (!sucursaldata || typeof sucursaldata === 'string')) {
+            const debitosValidos = debitosActuales.filter(d => parseFloat(d.monto) > 0);
+            // Si hay débitos y sucursaldata está vacío o es string, intentar recargar datos de sucursal
+            if (debitosValidos.length > 0 && (!sucursaldata || typeof sucursaldata === 'string')) {
                 getSucursalFun();
             }
-            
-            // Verificar si hay débitos en el array
-            const debitosValidos = debitosActuales.filter(d => parseFloat(d.monto) > 0);
             
             // Si hay débitos y la sucursal tiene PINPAD activo (y NO está forzando manual)
             if (debitosValidos.length > 0 && sucursaldata?.pinpad && !forzarReferenciaManual) {
@@ -5349,9 +5321,6 @@ export default function Facturar({
                     }
                 }
             }
-            
-            // Limpiar error si la referencia está cargada
-            setDebitoRefError(false);
 
             // Bloquear si alguna referencia bancaria está pendiente de aprobación
             const refsPendientes = refPago.filter((e) => e.estatus === "pendiente");
@@ -5530,7 +5499,6 @@ export default function Facturar({
                         coincideRefs,
                         coincideEstado,
                         debitosRefSnapshot: JSON.stringify(debitosRef.current),
-                        debitoMontoRefSnapshot: debitoMontoRef.current,
                         efectivo_dolarRef: efectivo_dolarRef.current,
                     });
                     setLoading(false);
@@ -5548,18 +5516,9 @@ export default function Facturar({
         if (efectivoPesoActual && parseFloat(efectivoPesoActual) != 0) {
             pagosAdicionales.push({ moneda: 'peso', monto_original: parseFloat(efectivoPesoActual) });
         }
-        const debitoVal = posOverrides?.debitoOverride != null ? parseFloat(posOverrides.debitoOverride) : parseFloat(debitoMontoRef.current) || 0;
-        const debitoBs = !Number.isNaN(debitoVal) ? debitoVal : 0;
         const efectivoDolarVal = parseFloat(efectivo_dolarRef.current) || 0;
-        const refFinal = refOverride !== null ? refOverride : debitoRefRef.current;
-        let debitoParam = null;
-        let debitoRefParam = null;
         let debitosParam = null;
         let posDataParam = null;
-        if (debitoBs !== 0) {
-            debitoParam = debitoBs;
-            debitoRefParam = refFinal || null;
-        }
         const debitosParaUsar = (posOverrides?.debitosOverride && Array.isArray(posOverrides.debitosOverride))
             ? posOverrides.debitosOverride
             : (debitosRef.current || []);
@@ -5617,9 +5576,7 @@ export default function Facturar({
             formato_pago: (isFrontOnly && pedidoActual && pedidoActual.formato_pago != null) ? pedidoActual.formato_pago : undefined,
             isdevolucionOriginalid: (pedidoActual && pedidoActual.isdevolucionOriginalid) ? pedidoActual.isdevolucionOriginalid : undefined,
             items: frontItems || undefined,
-            // Si hay array de débitos, no enviar campo único para no mezclar positivos/negativos en backend
-            debito: (debitosParam && debitosParam.length > 0) ? null : debitoParam,
-            debitoRef: (debitosParam && debitosParam.length > 0) ? null : debitoRefParam,
+            // Solo se envía debitos (array). Los campos debito y debitoRef están descontinuados y no se envían.
             debitos: debitosParam,
             posData: posDataParam, // Este ya no se usa para múltiples débitos
             efectivo: efectivoDolarVal != 0 ? efectivoDolarVal : null,
@@ -5863,12 +5820,7 @@ export default function Facturar({
                     };
                     guardarDebitosPorPedido(inst.pedidoId, nuevosDebitos);
                     if (esPedidoActual) {
-                        flushSync(() => {
-                            setDebitos(nuevosDebitos);
-                            const totalAprobadoDebitos = nuevosDebitos.filter(d => d.bloqueado).reduce((s, d) => s + parseFloat(d.monto || 0), 0);
-                            setDebito(totalAprobadoDebitos.toFixed(2));
-                            setDebitoRef(refUltimos4);
-                        });
+                        flushSync(() => setDebitos(nuevosDebitos));
                     }
                     const totalFacturaBs = parseFloat(pedidoDataRef.current?.bs_clean || pedidoDataRef.current?.bs || 0);
                     const totalAprobadoDebitos = nuevosDebitos.filter(d => d.bloqueado).reduce((s, d) => s + parseFloat(d.monto || 0), 0);
@@ -5918,10 +5870,7 @@ export default function Facturar({
                         return next;
                     });
                     if (esPedidoActual) {
-                        flushSync(() => {
-                            setDebitoRef(refFinal);
-                            setDebito(totalAprobadoFinal.toFixed(2));
-                        });
+                        flushSync(() => setDebitos([{ monto: totalAprobadoFinal.toFixed(2), referencia: refFinal || "", bloqueado: true, posData: null }]));
                         const totalFacturaBs = parseFloat(pedidoData?.bs_clean || pedidoData?.bs || 0);
                         if (Math.abs(totalAprobadoFinal - totalFacturaBs) < 0.01) {
                             if (facturar_e_imprimir) facturar_e_imprimir();
@@ -5976,8 +5925,7 @@ export default function Facturar({
             return next;
         });
         if (esPedidoActual) {
-            setDebitoRef(refFinal);
-            setDebito(totalAprobado.toFixed(2));
+            setDebitos([{ monto: totalAprobado.toFixed(2), referencia: refFinal || "", bloqueado: true, posData: null }]);
         }
         if (totalCubierto && !forzarSinProcesar) {
             notificar({ data: { msj: `✓ POS Completado - ${numTransacciones} transacción(es) - Total: Bs ${totalAprobado.toFixed(2)}`, estado: true } });
@@ -5985,10 +5933,7 @@ export default function Facturar({
                 const totalFacturaBs = parseFloat(pedidoDataRef.current?.bs_clean || pedidoDataRef.current?.bs || 0);
                 const diferencia = Math.abs(totalAprobado - totalFacturaBs);
                 if (diferencia < 0.01) {
-                    flushSync(() => {
-                        setDebitoRef(refFinal);
-                        setDebito(totalAprobado.toFixed(2));
-                    });
+                    flushSync(() => setDebitos([{ monto: totalAprobado.toFixed(2), referencia: refFinal || "", bloqueado: true, posData: null }]));
                     if (facturar_e_imprimir) facturar_e_imprimir();
                 } else {
                     posProcesandoRef.current[instanceId] = false;
@@ -10158,12 +10103,6 @@ export default function Facturar({
                                     pedidosFrontPendientesList={Object.values(pedidosFrontPendientes).reverse()}
                                     pedidoData={pedidoData}
                                     getPedido={getPedido}
-                                    debito={debito}
-                                    setDebito={setDebito}
-                                    debitoRef={debitoRef}
-                                    setDebitoRef={setDebitoRef}
-                                    debitoRefError={debitoRefError}
-                                    setDebitoRefError={setDebitoRefError}
                                     debitos={debitos}
                                     setDebitos={setDebitos}
                                     usarMultiplesDebitos={usarMultiplesDebitos}
