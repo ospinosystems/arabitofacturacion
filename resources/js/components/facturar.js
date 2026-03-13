@@ -5260,7 +5260,6 @@ export default function Facturar({
             // Usar refs para validar con los mismos datos que se enviarán (evita montos obsoletos)
             const pedidoActual = pedidoDataRef.current;
             const debitosActuales = debitosRef.current || [];
-            const debitoMontoActual = debitoMontoRef.current;
 
             // Validar que si hay descuentos en algún ítem, debe haber un cliente registrado (distinto al por defecto id=1)
             const tieneDescuentos = pedidoActual?.items?.some(item => item.descuento && parseFloat(item.descuento) > 0);
@@ -5562,7 +5561,6 @@ export default function Facturar({
             : undefined;
 
         // vuelto siempre desde ref (no forma parte de metodos_pago aprobados)
-        const vueltoActual = vueltoRef.current;
 
         let params = {
             id: isFrontOnly ? null : (pedidoActual && pedidoActual.id),
@@ -5583,7 +5581,6 @@ export default function Facturar({
             transferencia: transferenciaActual,
             biopago: biopagoActual,
             credito: creditoActual,
-            vuelto: vueltoActual,
             pagosAdicionales: pagosAdicionales.length > 0 ? pagosAdicionales : null,
             referencias: referenciasFront,
         };
@@ -5597,8 +5594,10 @@ export default function Facturar({
             };
         }
         
-        console.log("[procesarPagoInterno] Enviando setPagoPedido →", params);
-        db.setPagoPedido(params).then((res) => {
+        // No enviar debito ni debitoRef (descontinuados); solo debitos
+        const { debito: _d, debitoRef: _dr, ...payload } = params;
+        console.log("[procesarPagoInterno] Enviando setPagoPedido →", payload);
+        db.setPagoPedido(payload).then((res) => {
             console.log("[setPagoPedido] Respuesta del backend →", res.data);
             setLoading(false);
             notificar(res);
