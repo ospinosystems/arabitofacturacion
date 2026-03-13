@@ -20,6 +20,7 @@ class pago_pedidos extends Model
         "tipo",
         "monto",
         "monto_original",
+        "monto_bs",
         "cuenta",
         "id_pedido",
         "moneda",

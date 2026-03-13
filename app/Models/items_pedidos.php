@@ -30,6 +30,7 @@ class items_pedidos extends Model
         "cantidad",
         "descuento",
         "monto",
+        "monto_bs",
         "lote",
         "created_at",
         "updated_at",

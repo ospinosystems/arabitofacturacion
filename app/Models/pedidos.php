@@ -24,6 +24,9 @@ class pedidos extends Model
         "isdevolucionOriginalid",
         "fecha_factura",
         "retencion",
+        "numero_factura",
+        "maquina_fiscal",
+        "valido",
     ];
     // use HasFactory;
 
