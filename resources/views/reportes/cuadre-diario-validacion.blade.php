@@ -54,7 +54,7 @@
                 <tr>
                     <td class="fecha">{{ $r->fecha }}</td>
                     <td class="text-left">{{ $r->maquina_fiscal }}</td>
-                    <td>{{ number_format($r->monto_bs, 4) }}</td>
+                    <td>{{ number_format($r->monto_bs, 2) }}</td>
                     <td>{{ $r->factura_inicio }} – {{ $r->factura_fin }}</td>
                     <td>{{ $r->cantidad }}</td>
                     <td>

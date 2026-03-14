@@ -39,6 +39,7 @@
                 <th>Nº factura</th>
                 <th>Máquina fiscal</th>
                 <th>Tasa Bs</th>
+                <th>Monto USD</th>
                 <th>Monto Bs</th>
                 <th>Cant. ítems</th>
                 <th>Acciones</th>
@@ -50,7 +51,8 @@
                     <td class="text-left">{{ $row->pedido->numero_factura ?? '—' }}</td>
                     <td class="text-left">{{ $row->pedido->maquina_fiscal ?? '—' }}</td>
                     <td>{{ isset($row->tasa_bs) ? number_format($row->tasa_bs, 4) : '—' }}</td>
-                    <td>{{ number_format($row->monto_bs, 4) }}</td>
+                    <td>{{ number_format($row->monto_usd ?? 0, 2) }}</td>
+                    <td>{{ number_format($row->monto_bs, 2) }}</td>
                     <td>{{ $row->cant_items }}</td>
                     <td class="text-left">
                         <a href="{{ route('reportes.cuadre-diario.pedido', ['id' => $row->pedido->id]) }}">Ver ítems</a>
@@ -58,7 +60,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6">No hay ventas para esta fecha.</td>
+                    <td colspan="7">No hay ventas para esta fecha.</td>
                 </tr>
             @endforelse
         </tbody>

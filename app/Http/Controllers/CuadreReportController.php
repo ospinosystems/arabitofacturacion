@@ -23,78 +23,63 @@ class CuadreReportController extends Controller
 
     /**
      * Construye el listado resumen (fecha, máquina, monto, rango facturas).
+     * Una sola consulta agregada con JOIN para evitar timeout en rangos grandes.
      */
     protected function buildResultados(?string $fechaDesde, ?string $fechaHasta): array
     {
         $dateExpr = $this->dateExpr();
-        $sub = DB::table('pedidos')
-            ->where('pedidos.valido', true)
-            ->whereNotNull('pedidos.numero_factura');
+        $maquinaExpr = Schema::hasColumn('pedidos', 'maquina_fiscal')
+            ? "COALESCE(pedidos.maquina_fiscal, '')"
+            : "''";
+        $groupBy = $dateExpr . ', ' . $maquinaExpr;
 
-        $numFacturaExpr = 'CAST(pedidos.numero_factura AS UNSIGNED)';
-        if (Schema::hasColumn('pedidos', 'maquina_fiscal')) {
-            $maquinaExpr = "COALESCE(pedidos.maquina_fiscal, '')";
-            $sub->selectRaw($dateExpr . ' as fecha, ' . $maquinaExpr . ' as maquina_fiscal, MIN(' . $numFacturaExpr . ') as factura_inicio, MAX(' . $numFacturaExpr . ') as factura_fin, COUNT(pedidos.id) as cantidad');
-            $sub->groupByRaw($dateExpr . ', ' . $maquinaExpr);
-        } else {
-            $sub->selectRaw($dateExpr . ' as fecha, \'\' as maquina_fiscal, MIN(' . $numFacturaExpr . ') as factura_inicio, MAX(' . $numFacturaExpr . ') as factura_fin, COUNT(pedidos.id) as cantidad');
-            $sub->groupBy(DB::raw($dateExpr));
-        }
+        $query = DB::table('pedidos')
+            ->join('items_pedidos', 'items_pedidos.id_pedido', '=', 'pedidos.id')
+            ->where('pedidos.valido', true)
+            ->whereNotNull('pedidos.numero_factura')
+            ->selectRaw($dateExpr . ' as fecha, ' . $maquinaExpr . ' as maquina_fiscal,
+                SUM(COALESCE(items_pedidos.monto_bs, 0)) as monto_bs,
+                SUM(COALESCE(items_pedidos.monto, 0)) as monto_usd,
+                MIN(CAST(pedidos.numero_factura AS UNSIGNED)) as factura_inicio,
+                MAX(CAST(pedidos.numero_factura AS UNSIGNED)) as factura_fin,
+                COUNT(DISTINCT pedidos.id) as cantidad')
+            ->groupByRaw($groupBy)
+            ->orderByRaw($dateExpr)
+            ->orderByRaw($maquinaExpr);
 
         if ($fechaDesde) {
-            $sub->whereRaw($dateExpr . ' >= ?', [$fechaDesde]);
+            $query->whereRaw($dateExpr . ' >= ?', [$fechaDesde]);
         }
         if ($fechaHasta) {
-            $sub->whereRaw($dateExpr . ' <= ?', [$fechaHasta]);
+            $query->whereRaw($dateExpr . ' <= ?', [$fechaHasta]);
         }
 
-        $dias = $sub->get();
+        $dias = $query->get();
         $resultados = [];
         foreach ($dias as $dia) {
-            $fecha = $dia->fecha;
+            $montoUsd = (float) ($dia->monto_usd ?? 0);
+            $montoBs = (float) ($dia->monto_bs ?? 0);
+            $tasaDia = ($montoUsd > 0 && $montoBs > 0) ? ($montoBs / $montoUsd) : null;
             $maquina = $dia->maquina_fiscal ?? '';
 
-            $qPedidos = DB::table('pedidos')
-                ->whereRaw($dateExpr . ' = ?', [$fecha])
-                ->where('pedidos.valido', true);
-            if (Schema::hasColumn('pedidos', 'maquina_fiscal')) {
-                if ($maquina === '') {
-                    $qPedidos->where(function ($q) {
-                        $q->whereNull('pedidos.maquina_fiscal')->orWhere('pedidos.maquina_fiscal', '');
-                    });
-                } else {
-                    $qPedidos->where('pedidos.maquina_fiscal', $maquina);
-                }
-            }
-            $idsPedidos = $qPedidos->pluck('pedidos.id');
-
-            $montoBs = 0;
-            if ($idsPedidos->isNotEmpty()) {
-                $montoBs = (float) DB::table('items_pedidos')
-                    ->whereIn('id_pedido', $idsPedidos)
-                    ->sum(DB::raw('COALESCE(monto_bs, 0)'));
-            }
-
             $resultados[] = (object) [
-                'fecha'           => $fecha,
-                'maquina_fiscal'  => $maquina !== '' ? $maquina : '—',
-                'monto_bs'        => $montoBs,
-                'factura_inicio'  => $dia->factura_inicio ?? '—',
-                'factura_fin'     => $dia->factura_fin ?? '—',
-                'cantidad'        => (int) $dia->cantidad,
+                'fecha'          => $dia->fecha,
+                'maquina_fiscal' => $maquina !== '' ? $maquina : '—',
+                'monto_usd'      => $montoUsd,
+                'monto_bs'       => $montoBs,
+                'tasa'           => $tasaDia,
+                'factura_inicio' => $dia->factura_inicio !== null ? (string) $dia->factura_inicio : '—',
+                'factura_fin'    => $dia->factura_fin !== null ? (string) $dia->factura_fin : '—',
+                'cantidad'       => (int) $dia->cantidad,
             ];
         }
-
-        usort($resultados, function ($a, $b) {
-            $c = strcmp($a->fecha, $b->fecha);
-            return $c !== 0 ? $c : strcmp($a->maquina_fiscal, $b->maquina_fiscal);
-        });
 
         return $resultados;
     }
 
     public function index(Request $request)
     {
+        set_time_limit(120);
         $fechaDesde = $request->get('fecha_desde');
         $fechaHasta = $request->get('fecha_hasta');
         $resultados = $this->buildResultados($fechaDesde, $fechaHasta);
@@ -108,6 +93,7 @@ class CuadreReportController extends Controller
 
     public function exportResumen(Request $request): StreamedResponse
     {
+        set_time_limit(120);
         $fechaDesde = $request->get('fecha_desde');
         $fechaHasta = $request->get('fecha_hasta');
         $resultados = $this->buildResultados($fechaDesde, $fechaHasta);
@@ -116,9 +102,10 @@ class CuadreReportController extends Controller
 
         return response()->streamDownload(function () use ($resultados) {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['FECHA', 'MAQUINA_FISCAL', 'MONTO_BS', 'FACTURA_INICIO', 'FACTURA_FIN', 'CANTIDAD_PEDIDOS']);
+            fputcsv($out, ['FECHA', 'MAQUINA_FISCAL', 'MONTO_USD', 'MONTO_BS', 'TASA_BS_USD', 'FACTURA_INICIO', 'FACTURA_FIN', 'CANTIDAD_PEDIDOS']);
             foreach ($resultados as $r) {
-                fputcsv($out, [$r->fecha, $r->maquina_fiscal, number_format($r->monto_bs, 4, '.', ''), $r->factura_inicio, $r->factura_fin, $r->cantidad]);
+                $tasaStr = $r->tasa !== null ? number_format($r->tasa, 4, '.', '') : '';
+                fputcsv($out, [$r->fecha, $r->maquina_fiscal, number_format($r->monto_usd ?? 0, 2, '.', ''), number_format($r->monto_bs, 2, '.', ''), $tasaStr, $r->factura_inicio, $r->factura_fin, $r->cantidad]);
             }
             fclose($out);
         }, $filename, [
@@ -145,10 +132,12 @@ class CuadreReportController extends Controller
         $pedidosConTotales = [];
         foreach ($pedidosList as $p) {
             $totalBs = (float) items_pedidos::where('id_pedido', $p->id)->sum(DB::raw('COALESCE(monto_bs, 0)'));
+            $totalUsd = (float) items_pedidos::where('id_pedido', $p->id)->sum(DB::raw('COALESCE(monto, 0)'));
             $cantItems = items_pedidos::where('id_pedido', $p->id)->count();
             $tasaBs = items_pedidos::where('id_pedido', $p->id)->whereNotNull('tasa')->value('tasa');
             $pedidosConTotales[] = (object) [
                 'pedido'     => $p,
+                'monto_usd'  => $totalUsd,
                 'monto_bs'   => $totalBs,
                 'cant_items' => $cantItems,
                 'tasa_bs'    => $tasaBs !== null ? (float) $tasaBs : null,
@@ -181,11 +170,12 @@ class CuadreReportController extends Controller
 
         return response()->streamDownload(function () use ($pedidosList) {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['NUMERO_FACTURA', 'MAQUINA_FISCAL', 'MONTO_BS', 'CANT_ITEMS', 'FECHA_FACTURA']);
+            fputcsv($out, ['NUMERO_FACTURA', 'MAQUINA_FISCAL', 'MONTO_USD', 'MONTO_BS', 'CANT_ITEMS', 'FECHA_FACTURA']);
             foreach ($pedidosList as $p) {
+                $montoUsd = (float) items_pedidos::where('id_pedido', $p->id)->sum(DB::raw('COALESCE(monto, 0)'));
                 $montoBs = (float) items_pedidos::where('id_pedido', $p->id)->sum(DB::raw('COALESCE(monto_bs, 0)'));
                 $cantItems = items_pedidos::where('id_pedido', $p->id)->count();
-                fputcsv($out, [$p->numero_factura ?? '', $p->maquina_fiscal ?? '', number_format($montoBs, 4, '.', ''), $cantItems, $p->fecha_factura ?? $p->created_at]);
+                fputcsv($out, [$p->numero_factura ?? '', $p->maquina_fiscal ?? '', number_format($montoUsd, 2, '.', ''), number_format($montoBs, 2, '.', ''), $cantItems, $p->fecha_factura ?? $p->created_at]);
             }
             fclose($out);
         }, $filename, [

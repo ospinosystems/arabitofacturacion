@@ -44,7 +44,9 @@
             <tr>
                 <th>Fecha</th>
                 <th>Máquina fiscal</th>
+                <th>Monto USD</th>
                 <th>Monto Bs</th>
+                <th>Tasa Bs/USD</th>
                 <th>Nº factura inicio</th>
                 <th>Nº factura fin</th>
                 <th>Cant. pedidos</th>
@@ -56,7 +58,9 @@
                 <tr>
                     <td class="fecha">{{ $r->fecha }}</td>
                     <td class="text-left">{{ $r->maquina_fiscal }}</td>
-                    <td>{{ number_format($r->monto_bs, 4) }}</td>
+                    <td>{{ number_format($r->monto_usd ?? 0, 2) }}</td>
+                    <td>{{ number_format($r->monto_bs, 2) }}</td>
+                    <td>{{ $r->tasa !== null ? number_format($r->tasa, 4) : '—' }}</td>
                     <td class="text-left">{{ $r->factura_inicio }}</td>
                     <td class="text-left">{{ $r->factura_fin }}</td>
                     <td>{{ $r->cantidad }}</td>
@@ -66,7 +70,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7">
+                    <td colspan="9">
                         @if($fecha_desde ?? $fecha_hasta ?? null)
                             No hay ventas en el rango indicado.
                         @else
