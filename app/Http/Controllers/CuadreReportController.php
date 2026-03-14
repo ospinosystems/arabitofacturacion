@@ -11,7 +11,7 @@ use App\Models\items_pedidos;
 use App\Models\pago_pedidos;
 
 /**
- * Reporte del cuadre diario: resumen por fecha+máquina, detalle por día (pedidos), detalle por pedido (ítems).
+ * Reporte de ventas: resumen por fecha+máquina, detalle por día (pedidos), detalle por pedido (ítems).
  * Export CSV en los tres niveles.
  */
 class CuadreReportController extends Controller
@@ -112,7 +112,7 @@ class CuadreReportController extends Controller
         $fechaHasta = $request->get('fecha_hasta');
         $resultados = $this->buildResultados($fechaDesde, $fechaHasta);
 
-        $filename = 'cuadre-diario-resumen-' . ($fechaDesde ?? 'todo') . '-' . ($fechaHasta ?? 'todo') . '.csv';
+        $filename = 'ventas-resumen-' . ($fechaDesde ?? 'todo') . '-' . ($fechaHasta ?? 'todo') . '.csv';
 
         return response()->streamDownload(function () use ($resultados) {
             $out = fopen('php://output', 'w');
@@ -177,7 +177,7 @@ class CuadreReportController extends Controller
         }
 
         $pedidosList = $query->get();
-        $filename = 'cuadre-diario-pedidos-' . $fecha . '.csv';
+        $filename = 'ventas-pedidos-' . $fecha . '.csv';
 
         return response()->streamDownload(function () use ($pedidosList) {
             $out = fopen('php://output', 'w');
@@ -196,7 +196,7 @@ class CuadreReportController extends Controller
 
     public function pedido(int $id)
     {
-        $pedido = pedidos::findOrFail($id);
+        $pedido = pedidos::with('cliente')->findOrFail($id);
         $items = items_pedidos::where('id_pedido', $id)
             ->leftJoin('inventarios', 'inventarios.id', '=', 'items_pedidos.id_producto')
             ->select(
@@ -208,9 +208,24 @@ class CuadreReportController extends Controller
             ->orderBy('items_pedidos.id')
             ->get();
 
+        $subtotalUsd = $items->sum(function ($i) { return (float) ($i->monto ?? 0); });
+        $subtotalBs = $items->sum(function ($i) { return (float) ($i->monto_bs ?? 0); });
+        $tasaPedido = null;
+        $itemConTasa = $items->first(function ($i) { return isset($i->tasa) && (float) $i->tasa > 0; });
+        if ($itemConTasa !== null) {
+            $tasaPedido = (float) $itemConTasa->tasa;
+        } elseif ($subtotalUsd > 0 && $subtotalBs > 0) {
+            $tasaPedido = $subtotalBs / $subtotalUsd;
+        }
+
         return view('reportes.cuadre-diario-pedido', [
-            'pedido' => $pedido,
-            'items'  => $items,
+            'pedido'       => $pedido,
+            'items'        => $items,
+            'subtotalUsd'  => $subtotalUsd,
+            'subtotalBs'   => $subtotalBs,
+            'montoTotalUsd'=> $subtotalUsd,
+            'montoTotalBs' => $subtotalBs,
+            'tasaPedido'   => $tasaPedido,
         ]);
     }
 
@@ -412,7 +427,7 @@ class CuadreReportController extends Controller
             ->orderBy('items_pedidos.id')
             ->get();
 
-        $filename = 'cuadre-diario-pedido-' . $id . '-items.csv';
+        $filename = 'ventas-pedido-' . $id . '-items.csv';
 
         return response()->streamDownload(function () use ($items) {
             $out = fopen('php://output', 'w');

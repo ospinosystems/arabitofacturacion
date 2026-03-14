@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cuadre Diario - Detalle {{ $fecha }}</title>
+    <title>Reporte de ventas - Detalle {{ $fecha }}</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         table { border-collapse: collapse; width: 100%; }
@@ -22,7 +22,7 @@
 </head>
 <body>
     <h1>Detalle del día {{ $fecha }}</h1>
-    <p class="subtitulo">Pedidos válidos de este día
+    <p class="subtitulo">Ventas de este día
         @if($maquina_fiscal)
             (máquina {{ $maquina_fiscal }})
         @endif
@@ -58,7 +58,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6">No hay pedidos válidos para esta fecha.</td>
+                    <td colspan="6">No hay ventas para esta fecha.</td>
                 </tr>
             @endforelse
         </tbody>

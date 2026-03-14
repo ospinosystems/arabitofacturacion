@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reporte Cuadre Diario</title>
+    <title>Reporte de ventas</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         table { border-collapse: collapse; width: 100%; }
@@ -22,8 +22,8 @@
     </style>
 </head>
 <body>
-    <h1>Reporte de Cuadre Diario</h1>
-    <p class="subtitulo">Pedidos válidos por fecha y máquina fiscal. Filtre por rango para ver monto Bs y rango de facturas por máquina.</p>
+    <h1>Reporte de ventas</h1>
+    <p class="subtitulo">Ventas por fecha y máquina fiscal. Filtre por rango para ver monto Bs y rango de facturas por máquina.</p>
 
     <form method="get" action="{{ url()->current() }}" class="filtro">
         <label for="fecha_desde">Desde:</label>
@@ -68,9 +68,9 @@
                 <tr>
                     <td colspan="7">
                         @if($fecha_desde ?? $fecha_hasta ?? null)
-                            No hay pedidos válidos en el rango indicado.
+                            No hay ventas en el rango indicado.
                         @else
-                            No hay pedidos válidos con número de factura.
+                            No hay ventas con número de factura.
                         @endif
                     </td>
                 </tr>

@@ -115,7 +115,7 @@
 						<h2>{{$sucursal->sucursal}}</h2>
 						@if(isset($url_descargar_csv) && $url_descargar_csv)
 						<p style="margin-top: 10px;">
-							<a href="{{ $url_descargar_csv }}" class="text-primary" style="font-weight: bold;" download>📥 Descargar CSV conciliación (una fila por pedido: pagos + ítems + totales)</a>
+							<a href="{{ $url_descargar_csv }}" class="text-primary" style="font-weight: bold;" download>📥 Descargar CSV (una fila por pedido: pagos + ítems + totales)</a>
 						</p>
 						@endif
 					</td>
@@ -158,11 +158,11 @@
 					
 				</tr>
 				
-				{{-- CUADRE CONSOLIDADO CON MONEDAS ORIGINALES --}}
-				@if(isset($cuadre_consolidado) && $cuadre_consolidado)
-				<tr>
-					<td colspan="6">
-						<h2 class="text-center">CUADRE CONSOLIDADO - TOTAL DE {{$numero_cajas ?? 1}} CAJA(S)</h2>
+{{-- RESUMEN CONSOLIDADO CON MONEDAS ORIGINALES --}}
+                @if(isset($cuadre_consolidado) && $cuadre_consolidado)
+                <tr>
+                    <td colspan="6">
+                        <h2 class="text-center">RESUMEN CONSOLIDADO - TOTAL DE {{$numero_cajas ?? 1}} CAJA(S)</h2>
 						<table class="table" style="margin-top: 20px;">
 							<thead>
 								<tr class="table-dark">
@@ -191,7 +191,7 @@
 					</td>
 									<td class="text-center" style="@if(($cuadre_consolidado['efectivo_usd']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_consolidado['efectivo_usd']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
 										@if(($cuadre_consolidado['efectivo_usd']['estado'] ?? '') == 'cuadrado')
-											<span class="badge bg-success">CUADRADO</span>
+											<span class="badge bg-success">OK</span>
 										@elseif(($cuadre_consolidado['efectivo_usd']['diferencia'] ?? 0) > 0)
 											<span class="badge bg-warning text-dark">SOBRAN</span>
 										@else
@@ -212,7 +212,7 @@
 									</td>
 									<td class="text-center" style="@if(($cuadre_consolidado['efectivo_bs']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_consolidado['efectivo_bs']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
 										@if(($cuadre_consolidado['efectivo_bs']['estado'] ?? '') == 'cuadrado')
-											<span class="badge bg-success">CUADRADO</span>
+											<span class="badge bg-success">OK</span>
 										@elseif(($cuadre_consolidado['efectivo_bs']['diferencia'] ?? 0) > 0)
 											<span class="badge bg-warning text-dark">SOBRAN</span>
 										@else
@@ -233,7 +233,7 @@
 									</td>
 									<td class="text-center" style="@if(($cuadre_consolidado['efectivo_cop']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_consolidado['efectivo_cop']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
 										@if(($cuadre_consolidado['efectivo_cop']['estado'] ?? '') == 'cuadrado')
-											<span class="badge bg-success">CUADRADO</span>
+											<span class="badge bg-success">OK</span>
 										@elseif(($cuadre_consolidado['efectivo_cop']['diferencia'] ?? 0) > 0)
 											<span class="badge bg-warning text-dark">SOBRAN</span>
 										@else
@@ -259,7 +259,7 @@
 									</td>
 									<td class="text-center" style="@if(($cuadre_consolidado['debito_pinpad']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_consolidado['debito_pinpad']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
 										@if(($cuadre_consolidado['debito_pinpad']['estado'] ?? '') == 'cuadrado')
-											<span class="badge bg-success">CUADRADO</span>
+											<span class="badge bg-success">OK</span>
 										@elseif(($cuadre_consolidado['debito_pinpad']['diferencia'] ?? 0) > 0)
 											<span class="badge bg-warning text-dark">SOBRAN</span>
 										@else
@@ -280,7 +280,7 @@
 									</td>
 									<td class="text-center" style="@if(($cuadre_consolidado['debito_otros']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_consolidado['debito_otros']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
 										@if(($cuadre_consolidado['debito_otros']['estado'] ?? '') == 'cuadrado')
-											<span class="badge bg-success">CUADRADO</span>
+											<span class="badge bg-success">OK</span>
 										@elseif(($cuadre_consolidado['debito_otros']['diferencia'] ?? 0) > 0)
 											<span class="badge bg-warning text-dark">SOBRAN</span>
 										@else
@@ -304,7 +304,7 @@
 										<strong>${{number_format(floatval($cuadre_consolidado['transferencia']['diferencia'] ?? 0), 2)}}</strong>
 									</td>
 									<td class="text-center" style="background-color: #d4edda; font-weight: bold;">
-										<span class="badge bg-success">CUADRADO</span>
+										<span class="badge bg-success">OK</span>
 									</td>
 								</tr>
 								@endif
@@ -462,7 +462,7 @@
 									</td>
 									<td class="text-center" style="@if(abs($efectivo_diff_usd) <= 5) background-color: #d4edda; @elseif($efectivo_diff_usd > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
 										@if(abs($efectivo_diff_usd) <= 5)
-											<span class="badge bg-success">CUADRADO</span>
+											<span class="badge bg-success">OK</span>
 										@elseif($efectivo_diff_usd > 0)
 											<span class="badge bg-warning text-dark">SOBRAN</span>
 										@else
@@ -501,7 +501,7 @@
 									</td>
 									<td class="text-center">
 										@if(abs($debito_diff_usd) <= 5)
-											<span class="badge bg-success">CUADRADO</span>
+											<span class="badge bg-success">OK</span>
 										@elseif($debito_diff_usd > 0)
 											<span class="badge bg-warning text-dark">SOBRAN</span>
 										@else
@@ -521,7 +521,7 @@
 										<strong>${{number_format(floatval($cuadre_consolidado['transferencia']['diferencia'] ?? 0), 2)}}</strong>
 									</td>
 									<td class="text-center" style="background-color: #d4edda; font-weight: bold;">
-										<span class="badge bg-success">CUADRADO</span>
+										<span class="badge bg-success">OK</span>
 									</td>
 								</tr>
 								@endif
@@ -549,7 +549,7 @@
 									</td>
 									<td class="text-center" style="@if(abs($total_diferencia) <= 5) background-color: #d4edda; @elseif($total_diferencia > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
 										@if(abs($total_diferencia) <= 5)
-											<span class="badge bg-success">CUADRADO</span>
+											<span class="badge bg-success">OK</span>
 										@elseif($total_diferencia > 0)
 											<span class="badge bg-warning text-dark">SOBRAN</span>
 										@else
@@ -683,7 +683,7 @@
 											</td>
 											<td class="text-center" style="@if(($cuadre_individual['cuadre_detallado']['efectivo_usd']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_individual['cuadre_detallado']['efectivo_usd']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
 												@if(($cuadre_individual['cuadre_detallado']['efectivo_usd']['estado'] ?? '') == 'cuadrado')
-													<span class="badge bg-success">CUADRADO</span>
+													<span class="badge bg-success">OK</span>
 												@elseif(($cuadre_individual['cuadre_detallado']['efectivo_usd']['diferencia'] ?? 0) > 0)
 													<span class="badge bg-warning text-dark">SOBRAN</span>
 												@else
@@ -703,7 +703,7 @@
 											</td>
 											<td class="text-center" style="@if(($cuadre_individual['cuadre_detallado']['efectivo_bs']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_individual['cuadre_detallado']['efectivo_bs']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
 												@if(($cuadre_individual['cuadre_detallado']['efectivo_bs']['estado'] ?? '') == 'cuadrado')
-													<span class="badge bg-success">CUADRADO</span>
+													<span class="badge bg-success">OK</span>
 												@elseif(($cuadre_individual['cuadre_detallado']['efectivo_bs']['diferencia'] ?? 0) > 0)
 													<span class="badge bg-warning text-dark">SOBRAN</span>
 												@else
@@ -723,7 +723,7 @@
 											</td>
 											<td class="text-center" style="@if(($cuadre_individual['cuadre_detallado']['efectivo_cop']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_individual['cuadre_detallado']['efectivo_cop']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
 												@if(($cuadre_individual['cuadre_detallado']['efectivo_cop']['estado'] ?? '') == 'cuadrado')
-													<span class="badge bg-success">CUADRADO</span>
+													<span class="badge bg-success">OK</span>
 												@elseif(($cuadre_individual['cuadre_detallado']['efectivo_cop']['diferencia'] ?? 0) > 0)
 													<span class="badge bg-warning text-dark">SOBRAN</span>
 												@else
@@ -747,7 +747,7 @@
 												<strong>Bs {{moneda($cuadre_individual['cuadre_detallado']['debito_pinpad']['diferencia'])}}</strong>
 											</td>
 											<td class="text-center" style="background-color: #d4edda; font-weight: bold;">
-												<span class="badge bg-success">CUADRADO</span>
+												<span class="badge bg-success">OK</span>
 											</td>
 										</tr>
 										@endif
@@ -762,7 +762,7 @@
 											</td>
 											<td class="text-center" style="@if(($cuadre_individual['cuadre_detallado']['debito_otros']['estado'] ?? '') == 'cuadrado') background-color: #d4edda; @elseif(($cuadre_individual['cuadre_detallado']['debito_otros']['diferencia'] ?? 0) > 0) background-color: #fff3cd; @else background-color: #f8d7da; @endif font-weight: bold;">
 												@if(($cuadre_individual['cuadre_detallado']['debito_otros']['estado'] ?? '') == 'cuadrado')
-													<span class="badge bg-success">CUADRADO</span>
+													<span class="badge bg-success">OK</span>
 												@elseif(($cuadre_individual['cuadre_detallado']['debito_otros']['diferencia'] ?? 0) > 0)
 													<span class="badge bg-warning text-dark">SOBRAN</span>
 												@else
@@ -786,7 +786,7 @@
 												<strong>${{moneda($cuadre_individual['cuadre_detallado']['transferencia']['diferencia'])}}</strong>
 											</td>
 											<td class="text-center" style="background-color: #d4edda; font-weight: bold;">
-												<span class="badge bg-success">CUADRADO</span>
+												<span class="badge bg-success">OK</span>
 											</td>
 										</tr>
 										@endif

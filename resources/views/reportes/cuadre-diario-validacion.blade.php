@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Validación Cuadre Diario</title>
+    <title>Validación del reporte de ventas</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         table { border-collapse: collapse; width: 100%; }
@@ -24,8 +24,8 @@
     </style>
 </head>
 <body>
-    <h1>Validación del cuadre diario</h1>
-    <p class="subtitulo">Estado de las órdenes validadas por día: monto, rango de facturas y comprobaciones.</p>
+    <h1>Validación del reporte de ventas</h1>
+    <p class="subtitulo">Estado de las ventas por día: monto, rango de facturas y comprobaciones.</p>
 
     <form method="get" action="{{ route('reportes.cuadre-diario.validacion') }}" class="filtro">
         <label for="fecha_desde">Desde:</label>
@@ -76,7 +76,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7">No hay pedidos válidos en el rango indicado.</td>
+                    <td colspan="7">No hay ventas en el rango indicado.</td>
                 </tr>
             @endforelse
         </tbody>
