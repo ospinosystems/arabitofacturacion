@@ -36,7 +36,6 @@
     <table>
         <thead>
             <tr>
-                <th>ID</th>
                 <th>Nº factura</th>
                 <th>Máquina fiscal</th>
                 <th>Tasa Bs</th>
@@ -48,7 +47,6 @@
         <tbody>
             @forelse($pedidos as $row)
                 <tr>
-                    <td>{{ $row->pedido->id }}</td>
                     <td class="text-left">{{ $row->pedido->numero_factura ?? '—' }}</td>
                     <td class="text-left">{{ $row->pedido->maquina_fiscal ?? '—' }}</td>
                     <td>{{ isset($row->tasa_bs) ? number_format($row->tasa_bs, 4) : '—' }}</td>
@@ -60,7 +58,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7">No hay pedidos válidos para esta fecha.</td>
+                    <td colspan="6">No hay pedidos válidos para esta fecha.</td>
                 </tr>
             @endforelse
         </tbody>

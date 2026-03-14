@@ -181,11 +181,11 @@ class CuadreReportController extends Controller
 
         return response()->streamDownload(function () use ($pedidosList) {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['ID_PEDIDO', 'NUMERO_FACTURA', 'MAQUINA_FISCAL', 'MONTO_BS', 'CANT_ITEMS', 'FECHA_FACTURA']);
+            fputcsv($out, ['NUMERO_FACTURA', 'MAQUINA_FISCAL', 'MONTO_BS', 'CANT_ITEMS', 'FECHA_FACTURA']);
             foreach ($pedidosList as $p) {
                 $montoBs = (float) items_pedidos::where('id_pedido', $p->id)->sum(DB::raw('COALESCE(monto_bs, 0)'));
                 $cantItems = items_pedidos::where('id_pedido', $p->id)->count();
-                fputcsv($out, [$p->id, $p->numero_factura ?? '', $p->maquina_fiscal ?? '', number_format($montoBs, 4, '.', ''), $cantItems, $p->fecha_factura ?? $p->created_at]);
+                fputcsv($out, [$p->numero_factura ?? '', $p->maquina_fiscal ?? '', number_format($montoBs, 4, '.', ''), $cantItems, $p->fecha_factura ?? $p->created_at]);
             }
             fclose($out);
         }, $filename, [

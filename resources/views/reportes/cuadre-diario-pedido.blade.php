@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cuadre Diario - Pedido #{{ $pedido->id }}</title>
+    <title>Cuadre Diario - Factura {{ $pedido->numero_factura ?? '—' }}</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         table { border-collapse: collapse; width: 100%; }
@@ -22,8 +22,8 @@
     </style>
 </head>
 <body>
-    <h1>Pedido #{{ $pedido->id }}</h1>
-    <p class="subtitulo">Nº factura: {{ $pedido->numero_factura ?? '—' }} | Máquina: {{ $pedido->maquina_fiscal ?? '—' }}</p>
+    <h1>Factura {{ $pedido->numero_factura ?? '—' }}</h1>
+    <p class="subtitulo">Máquina: {{ $pedido->maquina_fiscal ?? '—' }} | Fecha: {{ $pedido->fecha_factura ? date('Y-m-d', strtotime($pedido->fecha_factura)) : ($pedido->created_at ? date('Y-m-d', strtotime($pedido->created_at)) : '—') }}</p>
 
     <div class="toolbar">
         @php
