@@ -600,33 +600,44 @@ class CuadrePedidosDiario extends Command
                 '0'
             );
         } else {
-            $umbralPct = 0.05;
-            $maxSegundos = 10;
+            $maxSegundos = 15;
             $montoObjFloat = (float) $montoObjetivo;
             $montosFloat = array_map(fn ($p) => (float) $p['monto'], $pairs);
             $globalBestIndices = null;
             $globalBestSuma = null;
             $globalBestDiff = PHP_FLOAT_MAX;
             $inicio = microtime(true);
+            $deadline = $inicio + $maxSegundos;
 
-            // Greedy: 8 intentos rápidos
-            for ($run = 0; $run < 8; $run++) {
+            // Greedy: 20 intentos rápidos con distintas semillas
+            for ($run = 0; $run < 20; $run++) {
                 $result = $this->greedySeleccionRapida($montosFloat, $total, $cantidadObjetivo, $montoObjFloat);
                 if ($result !== null && $result['abs_diff'] < $globalBestDiff) {
                     $globalBestDiff = $result['abs_diff'];
                     $globalBestIndices = $result['indices'];
                     $globalBestSuma = $result['suma'];
                 }
-                if ($globalBestDiff / max($montoObjFloat, 0.01) <= $umbralPct) break;
+                if ($globalBestDiff < 0.005) break;
             }
 
-            // SA rápido con floats, máximo $maxSegundos
-            if ($globalBestIndices !== null && $globalBestDiff / max($montoObjFloat, 0.01) > $umbralPct) {
-                $saResult = $this->simulatedAnnealingRapido($montosFloat, $total, $globalBestIndices, $globalBestSuma, $cantidadObjetivo, $montoObjFloat, $maxSegundos, $inicio);
-                if ($saResult['abs_diff'] < $globalBestDiff) {
-                    $globalBestDiff = $saResult['abs_diff'];
-                    $globalBestIndices = $saResult['indices'];
-                    $globalBestSuma = $saResult['suma'];
+            // SA: múltiples corridas con distintas semillas hasta agotar el tiempo
+            if ($globalBestIndices !== null) {
+                $saRun = 0;
+                while (microtime(true) < $deadline) {
+                    $semilla = $saRun === 0
+                        ? $globalBestIndices
+                        : $this->greedySeleccionRapida($montosFloat, $total, $cantidadObjetivo, $montoObjFloat)['indices'] ?? $globalBestIndices;
+                    $semillaSuma = 0.0;
+                    foreach ($semilla as $idx) $semillaSuma += $montosFloat[$idx];
+
+                    $saResult = $this->simulatedAnnealingRapido($montosFloat, $total, $semilla, $semillaSuma, $cantidadObjetivo, $montoObjFloat, $maxSegundos, $inicio);
+                    if ($saResult['abs_diff'] < $globalBestDiff) {
+                        $globalBestDiff = $saResult['abs_diff'];
+                        $globalBestIndices = $saResult['indices'];
+                        $globalBestSuma = $saResult['suma'];
+                    }
+                    if ($globalBestDiff < 0.005) break;
+                    $saRun++;
                 }
             }
 
@@ -823,23 +834,35 @@ class CuadrePedidosDiario extends Command
         $bestSuma = $currentSuma;
         $bestAbs = $currentAbs;
         $selectedSet = array_flip($selectedIndices);
-        $maxIter = min(200000, 2000 * $total);
-        $t = 100.0;
-        $cooling = exp(log(0.0002 / 100.0) / $maxIter);
+        $noSeleccionados = [];
+        for ($u = 0; $u < $total; $u++) {
+            if (!isset($selectedSet[$u])) $noSeleccionados[] = $u;
+        }
+        $totalNoSel = count($noSeleccionados);
+        if ($totalNoSel === 0) {
+            return ['indices' => $bestIndices, 'suma' => $bestSuma, 'abs_diff' => $bestAbs];
+        }
+        $maxIter = 500000;
+        $tInicial = max(1.0, $montoObjetivo * 0.01);
+        $tFinal = 0.0001;
+        $cooling = exp(log($tFinal / $tInicial) / $maxIter);
+        $t = $tInicial;
         $deadline = $inicioTime + $maxSegundos;
 
         for ($it = 0; $it < $maxIter; $it++) {
-            if (($it & 4095) === 0 && microtime(true) >= $deadline) break;
-            $i = array_rand($selectedIndices);
+            if (($it & 8191) === 0 && microtime(true) >= $deadline) break;
+            if ($bestAbs < 0.005) break;
+            $i = mt_rand(0, $cantidadObjetivo - 1);
             $idxOut = $selectedIndices[$i];
-            $idxIn = mt_rand(0, $total - 1);
-            if (isset($selectedSet[$idxIn])) continue;
+            $j = mt_rand(0, $totalNoSel - 1);
+            $idxIn = $noSeleccionados[$j];
 
             $newSuma = $currentSuma - $montosFloat[$idxOut] + $montosFloat[$idxIn];
             $newAbs = abs($montoObjetivo - $newSuma);
             $delta = $newAbs - $currentAbs;
             if ($delta <= 0 || (mt_rand() / mt_getrandmax()) < exp(-$delta / $t)) {
                 $selectedIndices[$i] = $idxIn;
+                $noSeleccionados[$j] = $idxOut;
                 unset($selectedSet[$idxOut]);
                 $selectedSet[$idxIn] = true;
                 $currentSuma = $newSuma;
