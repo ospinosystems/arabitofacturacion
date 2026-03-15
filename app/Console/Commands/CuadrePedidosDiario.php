@@ -680,15 +680,37 @@ class CuadrePedidosDiario extends Command
             $nuevoTotal = bcadd($sumaSelected, $ajuste, $this->scale);
 
             if (bccomp($ajuste, '0', $this->scale) !== 0) {
-                items_pedidos::create([
-                    'id_pedido'   => $ultimo->id,
-                    'id_producto' => null,
-                    'cantidad'   => 1,
-                    'descuento'  => 0,
-                    'monto'      => 0,
-                    'monto_bs'   => (float) $ajuste,
-                    'condicion'  => 0,
-                ]);
+                $ajusteFloat = (float) $ajuste;
+                $idProductoAjuste = $this->obtenerProductoDisponibleParaAjuste($ultimo->id);
+                $tasa = $this->obtenerTasaParaPedido($ultimo->id);
+                if ($idProductoAjuste !== null) {
+                    // cantidad * precio_unitario = monto objetivo en Bs
+                    $cantidadAjuste = 1;
+                    $precioUnitarioAjuste = round($ajusteFloat, 4);
+                    $montoUsd = $tasa > 0 ? round($ajusteFloat / $tasa, 4) : 0;
+                    items_pedidos::create([
+                        'id_pedido'       => $ultimo->id,
+                        'id_producto'     => $idProductoAjuste,
+                        'cantidad'        => $cantidadAjuste,
+                        'precio_unitario' => $precioUnitarioAjuste,
+                        'descuento'       => 0,
+                        'monto'           => $montoUsd,
+                        'monto_bs'        => $ajusteFloat,
+                        'tasa'            => $tasa > 0 ? $tasa : null,
+                        'condicion'       => 0,
+                    ]);
+                } else {
+                    $this->warn("Sin producto disponible para ítem de ajuste en pedido {$ultimo->id}; se crea ítem sin producto.");
+                    items_pedidos::create([
+                        'id_pedido'   => $ultimo->id,
+                        'id_producto' => null,
+                        'cantidad'   => 1,
+                        'descuento'  => 0,
+                        'monto'      => 0,
+                        'monto_bs'   => $ajusteFloat,
+                        'condicion'  => 0,
+                    ]);
+                }
                 $pago = pago_pedidos::where('id_pedido', $ultimo->id)->first();
                 $nuevoTotalFloat = (float) $nuevoTotal;
                 if ($pago) {
@@ -724,6 +746,47 @@ class CuadrePedidosDiario extends Command
     {
         $d = bcsub($montoObjetivo, $suma, $scale);
         return $d[0] === '-' ? bcsub('0', $d, $scale) : $d;
+    }
+
+    /**
+     * Obtiene un id de producto del inventario disponible que no esté ya en el pedido.
+     * Criterio: inventarios activos (activo = 1) con precio > 0, excluyendo los ya usados en el pedido.
+     */
+    protected function obtenerProductoDisponibleParaAjuste(int $idPedido): ?int
+    {
+        $idsEnPedido = items_pedidos::where('id_pedido', $idPedido)
+            ->whereNotNull('id_producto')
+            ->pluck('id_producto')
+            ->all();
+        $query = DB::table('inventarios')
+            ->where(function ($q) {
+                $q->where('activo', 1)->orWhereNull('activo');
+            })
+            ->where(function ($q) {
+                $q->where('precio', '>', 0)->orWhere('precio_base', '>', 0);
+            })
+            ->whereNotNull('id');
+        if (count($idsEnPedido) > 0) {
+            $query->whereNotIn('id', $idsEnPedido);
+        }
+        $row = $query->orderBy('id')->first();
+        return $row ? (int) $row->id : null;
+    }
+
+    /**
+     * Obtiene la tasa Bs para un pedido: del primer ítem del pedido con tasa, o de monedas (tipo=1).
+     */
+    protected function obtenerTasaParaPedido(int $idPedido): float
+    {
+        $tasaItem = items_pedidos::where('id_pedido', $idPedido)
+            ->whereNotNull('tasa')
+            ->where('tasa', '>', 0)
+            ->value('tasa');
+        if ($tasaItem !== null) {
+            return (float) $tasaItem;
+        }
+        $tasaMoneda = DB::table('monedas')->where('tipo', 1)->orderBy('id', 'desc')->value('valor');
+        return $tasaMoneda !== null && (float) $tasaMoneda > 0 ? (float) $tasaMoneda : 1.0;
     }
 
     /**
