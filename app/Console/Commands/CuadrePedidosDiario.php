@@ -24,7 +24,8 @@ class CuadrePedidosDiario extends Command
                             {archivo : Ruta al CSV (FECHA, CONCEPTO, FACTURA, VENTA, TIPO)}
                             {--desde-cero : Antes de procesar, resetea el cuadre en el rango de fechas del CSV}
                             {--dry-run : Solo mostrar qué se haría, sin escribir}
-                            {--solo-fecha= : Procesar solo este día (YYYY-MM-DD)}';
+                            {--solo-fecha= : Procesar solo este día (YYYY-MM-DD)}
+                            {--anio= : Procesar solo los días de este año (ej. 2024)}';
 
     protected $description = 'Cuadre por día y máquina fiscal (CSV con FECHA, CONCEPTO, FACTURA, VENTA, TIPO).';
 
@@ -42,6 +43,7 @@ class CuadrePedidosDiario extends Command
         $desdeCero = $this->option('desde-cero');
         $dryRun = $this->option('dry-run');
         $soloFecha = $this->option('solo-fecha') ? trim((string) $this->option('solo-fecha')) : null;
+        $soloAnio = $this->option('anio') ? trim((string) $this->option('anio')) : null;
 
         if (!is_file($path)) {
             $this->error("Archivo no encontrado: {$path}");
@@ -98,6 +100,13 @@ class CuadrePedidosDiario extends Command
                 return isset($a['fecha']) && $a['fecha'] === $soloFecha;
             }));
             $this->info("Filtro --solo-fecha={$soloFecha}: se procesarán " . count($agregadas) . ' grupo(s) (fecha + máquina).');
+        }
+
+        if ($soloAnio !== null && $soloAnio !== '') {
+            $agregadas = array_values(array_filter($agregadas, function ($a) use ($soloAnio) {
+                return isset($a['fecha']) && substr($a['fecha'], 0, 4) === $soloAnio;
+            }));
+            $this->info("Filtro --anio={$soloAnio}: se procesarán " . count($agregadas) . ' grupo(s) (fecha + máquina).');
         }
 
         $this->info('Filas en CSV: ' . count($filas) . ' → Agrupadas por (fecha + máquina): ' . count($agregadas) . ' (REDUCE EL TOTAL DE ESE DIA resta del monto objetivo).');
@@ -632,7 +641,13 @@ class CuadrePedidosDiario extends Command
             ->orderBy('id')
             ->get();
 
-        \Log::info('CuadrePedidosDiario: pedidos candidatos obtenidos', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'total_pedidos' => $pedidos->count()]);
+        $totalPedidosDia = (int) pedidos::whereRaw('DATE(COALESCE(fecha_factura, created_at)) = ?', [$fechaStr])->count();
+        \Log::info('CuadrePedidosDiario: pedidos candidatos obtenidos', [
+            'fecha' => $fechaStr,
+            'maquina' => $maquinaFiscal,
+            'total_pedidos' => $pedidos->count(),
+            'total_pedidos_dia' => $totalPedidosDia,
+        ]);
         if ($pedidos->isEmpty()) {
             return null;
         }
