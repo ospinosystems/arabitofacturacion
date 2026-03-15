@@ -6,9 +6,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\Response;
 use App\Models\pedidos;
 use App\Models\items_pedidos;
 use App\Models\pago_pedidos;
+use Barryvdh\DomPDF\Facade\Pdf;
+use ZipArchive;
 
 /**
  * Reporte de ventas: resumen por fecha+máquina, detalle por día (pedidos), detalle por pedido (ítems).
@@ -105,6 +108,8 @@ class CuadreReportController extends Controller
             $totalMontoBs += (float) $r->monto_bs;
             $totalCantidadPedidos += (int) $r->cantidad;
         }
+        $diasUnicos = array_values(array_unique(array_map(function ($r) { return $r->fecha; }, $resultados)));
+        sort($diasUnicos);
 
         return view('reportes.cuadre-diario', [
             'resultados'            => $resultados,
@@ -114,6 +119,7 @@ class CuadreReportController extends Controller
             'total_monto_usd'       => $totalMontoUsd,
             'total_monto_bs'         => $totalMontoBs,
             'total_cantidad_pedidos' => $totalCantidadPedidos,
+            'dias_unicos'           => $diasUnicos,
         ]);
     }
 
@@ -547,6 +553,181 @@ class CuadreReportController extends Controller
             $out[$key] = $g;
         }
         return $out;
+    }
+
+    /**
+     * Descarga un solo pedido como PDF (misma vista que /reportes/cuadre-diario/pedido/{id}).
+     */
+    public function pedidoPdf(int $id): Response
+    {
+        $pedido = pedidos::with('cliente')->findOrFail($id);
+        $items = items_pedidos::where('id_pedido', $id)
+            ->leftJoin('inventarios', 'inventarios.id', '=', 'items_pedidos.id_producto')
+            ->select(
+                'items_pedidos.*',
+                'inventarios.codigo_barras',
+                'inventarios.codigo_proveedor',
+                'inventarios.descripcion as producto_descripcion'
+            )
+            ->orderBy('items_pedidos.id')
+            ->get();
+
+        $subtotalUsd = $items->sum(function ($i) { return (float) ($i->monto ?? 0); });
+        $subtotalBs = $items->sum(function ($i) { return (float) ($i->monto_bs ?? 0); });
+        $tasaPedido = null;
+        $itemConTasa = $items->first(function ($i) { return isset($i->tasa) && (float) $i->tasa > 0; });
+        if ($itemConTasa !== null) {
+            $tasaPedido = (float) $itemConTasa->tasa;
+        } elseif ($subtotalUsd > 0 && $subtotalBs > 0) {
+            $tasaPedido = $subtotalBs / $subtotalUsd;
+        }
+
+        $html = view('reportes.cuadre-diario-pedido', [
+            'pedido'        => $pedido,
+            'items'         => $items,
+            'subtotalUsd'   => $subtotalUsd,
+            'subtotalBs'    => $subtotalBs,
+            'montoTotalUsd' => $subtotalUsd,
+            'montoTotalBs'  => $subtotalBs,
+            'tasaPedido'    => $tasaPedido,
+            'pdf'           => true,
+        ])->render();
+
+        $pdf = Pdf::loadHTML($html)
+            ->setPaper('letter', 'portrait')
+            ->setOptions([
+                'isHtml5ParserEnabled' => true,
+                'isPhpEnabled'         => true,
+                'margin_left'           => 10,
+                'margin_right'          => 10,
+                'margin_top'            => 10,
+                'margin_bottom'         => 10,
+            ]);
+
+        $nombre = $pedido->numero_factura ? 'factura-' . $pedido->numero_factura : 'pedido-' . $id;
+        return $pdf->download($nombre . '.pdf');
+    }
+
+    /**
+     * Descarga masiva: ZIP con todos los pedidos de los días seleccionados.
+     * Estructura: Mes/Dia/factura-XXX.pdf (ej. 2025-03/2025-03-15/factura-123.pdf).
+     */
+    public function descargarMasivo(Request $request): Response
+    {
+        set_time_limit(300);
+        $fechas = $request->input('fechas', []);
+        if (!is_array($fechas)) {
+            $fechas = $fechas ? [$fechas] : [];
+        }
+        $fechas = array_values(array_unique(array_filter($fechas, function ($f) {
+            return is_string($f) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $f);
+        })));
+        sort($fechas);
+
+        if (empty($fechas)) {
+            if ($request->expectsJson()) {
+                return response()->json(['error' => 'Seleccione al menos un día.'], 422);
+            }
+            return redirect()->route('reportes.cuadre-diario', array_filter($request->only(['fecha_desde', 'fecha_hasta'])))
+                ->with('error', 'Seleccione al menos un día para descargar.');
+        }
+
+        $dateExpr = $this->dateExpr();
+        $pedidosPorFecha = [];
+        foreach ($fechas as $fecha) {
+            $list = pedidos::whereRaw($dateExpr . ' = ?', [$fecha])
+                ->where('pedidos.valido', true)
+                ->whereNotNull('pedidos.numero_factura')
+                ->orderBy('pedidos.numero_factura')
+                ->orderBy('pedidos.id')
+                ->get();
+            $pedidosPorFecha[$fecha] = $list;
+        }
+
+        $tempZip = tempnam(sys_get_temp_dir(), 'cuadre_');
+        $zip = new ZipArchive();
+        if ($zip->open($tempZip, ZipArchive::OVERWRITE | ZipArchive::CREATE) !== true) {
+            if ($request->expectsJson()) {
+                return response()->json(['error' => 'No se pudo crear el ZIP.'], 500);
+            }
+            return redirect()->route('reportes.cuadre-diario')->with('error', 'No se pudo crear el archivo ZIP.');
+        }
+
+        foreach ($pedidosPorFecha as $fecha => $pedidosList) {
+            $carpetaMes = date('Y-m', strtotime($fecha));
+            $carpetaDia = $fecha; // Y-m-d
+            $prefijo = $carpetaMes . '/' . $carpetaDia . '/';
+
+            foreach ($pedidosList as $pedido) {
+                $pdfContent = $this->generarPdfPedido($pedido->id);
+                if ($pdfContent === null) {
+                    continue;
+                }
+                $nombre = $pedido->numero_factura ? 'factura-' . $pedido->numero_factura : 'pedido-' . $pedido->id;
+                $zip->addFromString($prefijo . $nombre . '.pdf', $pdfContent);
+            }
+        }
+
+        $zip->close();
+        $nombreZip = 'cuadre-diario-pedidos-' . ($fechas[0] ?? '') . '-' . (end($fechas) ?: '') . '.zip';
+        return response()->download($tempZip, $nombreZip, [
+            'Content-Type' => 'application/zip',
+        ])->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Genera el PDF de un pedido (vista cuadre-diario-pedido) y devuelve el contenido binario.
+     */
+    protected function generarPdfPedido(int $id): ?string
+    {
+        $pedido = pedidos::with('cliente')->find($id);
+        if (!$pedido) {
+            return null;
+        }
+        $items = items_pedidos::where('id_pedido', $id)
+            ->leftJoin('inventarios', 'inventarios.id', '=', 'items_pedidos.id_producto')
+            ->select(
+                'items_pedidos.*',
+                'inventarios.codigo_barras',
+                'inventarios.codigo_proveedor',
+                'inventarios.descripcion as producto_descripcion'
+            )
+            ->orderBy('items_pedidos.id')
+            ->get();
+
+        $subtotalUsd = $items->sum(function ($i) { return (float) ($i->monto ?? 0); });
+        $subtotalBs = $items->sum(function ($i) { return (float) ($i->monto_bs ?? 0); });
+        $tasaPedido = null;
+        $itemConTasa = $items->first(function ($i) { return isset($i->tasa) && (float) $i->tasa > 0; });
+        if ($itemConTasa !== null) {
+            $tasaPedido = (float) $itemConTasa->tasa;
+        } elseif ($subtotalUsd > 0 && $subtotalBs > 0) {
+            $tasaPedido = $subtotalBs / $subtotalUsd;
+        }
+
+        $html = view('reportes.cuadre-diario-pedido', [
+            'pedido'        => $pedido,
+            'items'         => $items,
+            'subtotalUsd'   => $subtotalUsd,
+            'subtotalBs'    => $subtotalBs,
+            'montoTotalUsd' => $subtotalUsd,
+            'montoTotalBs'  => $subtotalBs,
+            'tasaPedido'    => $tasaPedido,
+            'pdf'           => true,
+        ])->render();
+
+        $pdf = Pdf::loadHTML($html)
+            ->setPaper('letter', 'portrait')
+            ->setOptions([
+                'isHtml5ParserEnabled' => true,
+                'isPhpEnabled'         => true,
+                'margin_left'           => 10,
+                'margin_right'          => 10,
+                'margin_top'            => 10,
+                'margin_bottom'         => 10,
+            ]);
+
+        return $pdf->output();
     }
 
     public function exportPedido(int $id): StreamedResponse

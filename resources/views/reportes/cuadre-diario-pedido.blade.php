@@ -131,12 +131,15 @@
             </div>
         </div>
 
+        @if(empty($pdf))
         <footer class="footer">
             @php $fechaDia = date('Y-m-d', strtotime($pedido->fecha_factura ?? $pedido->created_at)); @endphp
             <a href="{{ route('reportes.cuadre-diario.dia', ['fecha' => $fechaDia]) }}{{ $pedido->maquina_fiscal ? '?maquina_fiscal=' . urlencode($pedido->maquina_fiscal) : '' }}" class="btn btn-back">&larr; Volver al día</a>
             <a href="{{ route('reportes.cuadre-diario.pedido.export', ['id' => $pedido->id]) }}" class="btn btn-export">Exportar CSV</a>
+            <a href="{{ route('reportes.cuadre-diario.pedido.pdf', ['id' => $pedido->id]) }}" class="btn btn-export">Descargar PDF</a>
             <button type="button" class="btn btn-print" onclick="window.print();">Imprimir</button>
         </footer>
+        @endif
     </div>
 </body>
 </html>

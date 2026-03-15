@@ -672,7 +672,9 @@ Route::get('/reportes/cuadre-diario/export', [App\Http\Controllers\CuadreReportC
 Route::get('/reportes/cuadre-diario/dia/{fecha}', [App\Http\Controllers\CuadreReportController::class, 'dia'])->name('reportes.cuadre-diario.dia');
 Route::get('/reportes/cuadre-diario/dia/{fecha}/export', [App\Http\Controllers\CuadreReportController::class, 'exportDia'])->name('reportes.cuadre-diario.dia.export');
 Route::get('/reportes/cuadre-diario/pedido/{id}', [App\Http\Controllers\CuadreReportController::class, 'pedido'])->name('reportes.cuadre-diario.pedido');
+Route::get('/reportes/cuadre-diario/pedido/{id}/pdf', [App\Http\Controllers\CuadreReportController::class, 'pedidoPdf'])->name('reportes.cuadre-diario.pedido.pdf');
 Route::get('/reportes/cuadre-diario/pedido/{id}/export', [App\Http\Controllers\CuadreReportController::class, 'exportPedido'])->name('reportes.cuadre-diario.pedido.export');
+Route::post('/reportes/cuadre-diario/descargar-masivo', [App\Http\Controllers\CuadreReportController::class, 'descargarMasivo'])->name('reportes.cuadre-diario.descargar-masivo');
 Route::get('/reportes/cuadre-diario/validacion', [App\Http\Controllers\CuadreReportController::class, 'validacion'])->name('reportes.cuadre-diario.validacion');
 
 // NOTA: Las rutas API de garantías se movieron a routes/api.php para mejor organización

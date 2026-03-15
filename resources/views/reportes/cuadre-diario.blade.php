@@ -18,13 +18,19 @@
         .filtro button { padding: 6px 14px; cursor: pointer; }
         h1 { margin-bottom: 10px; }
         .subtitulo { color: #666; margin-bottom: 20px; }
-        .btn-export { padding: 6px 12px; background: #28a745; color: #fff; text-decoration: none; border-radius: 4px; font-size: 14px; }
+        .btn-export { padding: 6px 12px; background: #28a745; color: #fff; text-decoration: none; border-radius: 4px; font-size: 14px; border: none; cursor: pointer; }
         .btn-export:hover { background: #218838; color: #fff; }
+        .btn-check { padding: 4px 10px; font-size: 13px; cursor: pointer; background: #e9ecef; border: 1px solid #dee2e6; border-radius: 4px; }
+        .btn-check:hover { background: #dee2e6; }
     </style>
 </head>
 <body>
     <h1>Reporte de ventas</h1>
     <p class="subtitulo">Ventas por fecha y máquina fiscal. Filtre por rango para ver monto Bs y rango de facturas por máquina.</p>
+
+    @if(session('error'))
+        <p style="color: #c00; padding: 10px; background: #fee; border-radius: 4px;">{{ session('error') }}</p>
+    @endif
 
     <form method="get" action="{{ url()->current() }}" class="filtro">
         <label for="fecha_desde">Desde:</label>
@@ -39,6 +45,41 @@
             <a href="{{ route('reportes.cuadre-diario.export', request()->only(['fecha_desde', 'fecha_hasta'])) }}" style="margin-left: 15px;" class="btn-export">Exportar CSV (resumen)</a>
         @endif
     </form>
+
+    @if(count($dias_unicos ?? []) > 0)
+    <div class="filtro" style="margin-bottom: 20px;">
+        <form method="post" action="{{ route('reportes.cuadre-diario.descargar-masivo') }}" id="form-descarga-masiva">
+            @csrf
+            <input type="hidden" name="fecha_desde" value="{{ $fecha_desde ?? '' }}">
+            <input type="hidden" name="fecha_hasta" value="{{ $fecha_hasta ?? '' }}">
+            <strong>Descargar PDFs por día (carpetas Mes → Día):</strong>
+            <span style="margin-left: 10px;">
+                <button type="button" class="btn-check" data-action="select">Seleccionar todo</button>
+                <button type="button" class="btn-check" data-action="none">Quitar todo</button>
+            </span>
+            <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;">
+                @foreach($dias_unicos as $fecha)
+                <label style="display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+                    <input type="checkbox" name="fechas[]" value="{{ $fecha }}" class="cb-dia">
+                    {{ $fecha }}
+                </label>
+                @endforeach
+            </div>
+            <div style="margin-top: 12px;">
+                <button type="submit" class="btn-export">Descargar ZIP (pedidos en Mes/Día)</button>
+            </div>
+        </form>
+    </div>
+    <script>
+        document.querySelectorAll('[data-action]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var cbs = document.querySelectorAll('.cb-dia');
+                var action = this.getAttribute('data-action');
+                cbs.forEach(function(cb) { cb.checked = (action === 'select'); });
+            });
+        });
+    </script>
+    @endif
 
     <table>
         <thead>
