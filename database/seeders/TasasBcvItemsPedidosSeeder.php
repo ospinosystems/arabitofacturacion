@@ -226,9 +226,8 @@ class TasasBcvItemsPedidosSeeder extends Seeder
     }
 
     /**
-     * Actualiza tasa, monto y monto_bs en items_pedidos según la fecha created_at.
-     * monto = cantidad × precio_unitario (USD).
-     * monto_bs = monto × tasa.
+     * Actualiza tasa y monto_bs en items_pedidos según la fecha created_at.
+     * monto_bs = monto (USD, sin tocar) × tasa BCV del día.
      */
     protected function actualizarTasaEnItemsPedidos(array $tasasPorFecha): void
     {
@@ -240,7 +239,7 @@ class TasasBcvItemsPedidosSeeder extends Seeder
         $bar = null;
         if ($this->command && $total > 0) {
             $bar = $this->command->getOutput()->createProgressBar($total);
-            $bar->setFormat(' %current%/%max% [%bar%] %percent:3s%% — Tasa, monto y monto_bs');
+            $bar->setFormat(' %current%/%max% [%bar%] %percent:3s%% — Tasa y monto_bs');
             $bar->start();
         }
 
@@ -260,15 +259,10 @@ class TasasBcvItemsPedidosSeeder extends Seeder
                     $sinTasa++;
                     continue;
                 }
-                $cantidad = (float) ($item->cantidad ?? 0);
-                $precioUnitario = (float) ($item->precio_unitario ?? 0);
-                $monto = $precioUnitario > 0 && $cantidad > 0
-                    ? round($cantidad * $precioUnitario, 4)
-                    : (float) ($item->monto ?? 0);
+                $monto = (float) ($item->monto ?? 0);
                 $monto_bs = round($monto * $tasa, 4);
                 DB::table('items_pedidos')->where('id', $item->id)->update([
                     'tasa'     => $tasa,
-                    'monto'    => $monto,
                     'monto_bs' => $monto_bs,
                 ]);
                 $actualizados++;
@@ -282,7 +276,7 @@ class TasasBcvItemsPedidosSeeder extends Seeder
             }
         }
         if ($this->command) {
-            $this->command->info("[3/3] Items actualizados (tasa, monto y monto_bs): {$actualizados}. Sin tasa para la fecha: {$sinTasa}.");
+            $this->command->info("[3/3] Items actualizados (tasa y monto_bs): {$actualizados}. Sin tasa para la fecha: {$sinTasa}.");
         }
     }
 }
