@@ -498,20 +498,20 @@ class CuadrePedidosDiario extends Command
                     $razonRechazo = 'FISCAL RANGO pero máquina vacía (tipo="' . $tipoRaw . '")';
                     return null;
                 }
-                if ($factura !== '' && preg_match('/^(\d+)\s*-\s*(\d+)$/', $factura, $m)) {
-                    $inicio = (int) $m[1];
-                    $fin = (int) $m[2];
-                    if ($fin >= $inicio) {
-                        return [
-                            'fecha'           => $fecha,
-                            'maquina_fiscal'  => $maquina,
-                            'total_venta'     => $totalVenta,
-                            'factura_inicio'  => (string) $inicio,
-                            'factura_fin'     => (string) $fin,
-                            'cantidad'        => $fin - $inicio + 1,
-                            'tipo'            => self::TIPO_FISCAL_RANGO,
-                        ];
-                    }
+                if ($factura !== '' && preg_match('/^(\d+)\s*-\s*(\d+)$/', trim($factura), $m)) {
+                    $a = (int) $m[1];
+                    $b = (int) $m[2];
+                    $inicio = min($a, $b);
+                    $fin = max($a, $b);
+                    return [
+                        'fecha'           => $fecha,
+                        'maquina_fiscal'  => $maquina,
+                        'total_venta'     => $totalVenta,
+                        'factura_inicio'  => (string) $inicio,
+                        'factura_fin'     => (string) $fin,
+                        'cantidad'        => $fin - $inicio + 1,
+                        'tipo'            => self::TIPO_FISCAL_RANGO,
+                    ];
                 }
                 $razonRechazo = 'FISCAL RANGO pero factura no tiene formato inicio-fin (factura="' . substr($factura, 0, 40) . '")';
                 return null;
@@ -523,20 +523,20 @@ class CuadrePedidosDiario extends Command
             return null;
         }
 
-        if ($factura !== '' && preg_match('/^(\d+)\s*-\s*(\d+)$/', $factura, $m)) {
-            $inicio = (int) $m[1];
-            $fin = (int) $m[2];
-            if ($fin >= $inicio) {
-                return [
-                    'fecha'           => $fecha,
-                    'maquina_fiscal'  => $maquina,
-                    'total_venta'     => $totalVenta,
-                    'factura_inicio'  => (string) $inicio,
-                    'factura_fin'     => (string) $fin,
-                    'cantidad'        => $fin - $inicio + 1,
-                    'tipo'            => self::TIPO_FISCAL_RANGO,
-                ];
-            }
+        if ($factura !== '' && preg_match('/^(\d+)\s*-\s*(\d+)$/', trim($factura), $m)) {
+            $a = (int) $m[1];
+            $b = (int) $m[2];
+            $inicio = min($a, $b);
+            $fin = max($a, $b);
+            return [
+                'fecha'           => $fecha,
+                'maquina_fiscal'  => $maquina,
+                'total_venta'     => $totalVenta,
+                'factura_inicio'  => (string) $inicio,
+                'factura_fin'     => (string) $fin,
+                'cantidad'        => $fin - $inicio + 1,
+                'tipo'            => self::TIPO_FISCAL_RANGO,
+            ];
         }
 
         $num = preg_replace('/\D/', '', $factura);
