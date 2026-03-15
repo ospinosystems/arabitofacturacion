@@ -11,6 +11,7 @@
         th { background-color: #f2f2f2; text-align: center; }
         td.fecha, td.text-left { text-align: left; }
         tr:nth-child(even) { background-color: #f9f9f9; }
+        tr.total-row { background-color: #e8f4fc; font-weight: bold; }
         .filtro { margin-bottom: 20px; padding: 15px; background: #e8f4fc; border-radius: 6px; }
         .filtro label { margin-right: 8px; }
         .filtro input[type="date"] { margin-right: 15px; }
@@ -79,6 +80,19 @@
                     </td>
                 </tr>
             @endforelse
+            @if(count($resultados ?? []) > 0 && isset($total_dias))
+                <tr class="total-row">
+                    <td class="fecha text-left"><strong>{{ $total_dias }} {{ $total_dias === 1 ? 'día' : 'días' }}</strong></td>
+                    <td class="text-left">—</td>
+                    <td><strong>{{ number_format($total_monto_usd ?? 0, 2) }}</strong></td>
+                    <td><strong>{{ number_format($total_monto_bs ?? 0, 2) }}</strong></td>
+                    <td>—</td>
+                    <td class="text-left">—</td>
+                    <td class="text-left">—</td>
+                    <td><strong>{{ number_format($total_cantidad_pedidos ?? 0, 0) }}</strong></td>
+                    <td class="text-left"></td>
+                </tr>
+            @endif
         </tbody>
     </table>
 </body>

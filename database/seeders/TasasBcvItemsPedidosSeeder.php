@@ -22,15 +22,19 @@ class TasasBcvItemsPedidosSeeder extends Seeder
         $this->csvPath = $csvPath ?? base_path('database/data/Tasas_BCV_2023_2024_2025.csv');
     }
 
-    public function run(): void
+    public function run($stepBar = null): void
     {
         $tasasPorFecha = $this->extraerTasasDelCsv();
         if (empty($tasasPorFecha)) {
-            $this->command->error('No se pudieron extraer tasas del CSV. Revisa la ruta y el formato.');
+            if ($this->command) {
+                $this->command->error('No se pudieron extraer tasas del CSV. Revisa la ruta y el formato.');
+            }
             return;
         }
 
-        $this->command->info('Tasas cargadas: ' . count($tasasPorFecha) . ' fechas.');
+        if ($this->command) {
+            $this->command->info('Tasas cargadas: ' . count($tasasPorFecha) . ' fechas.');
+        }
         $this->actualizarTasaEnItemsPedidos($tasasPorFecha);
     }
 
@@ -41,7 +45,9 @@ class TasasBcvItemsPedidosSeeder extends Seeder
     protected function extraerTasasDelCsv(): array
     {
         if (!is_file($this->csvPath)) {
-            $this->command->warn("Archivo no encontrado: {$this->csvPath}");
+            if ($this->command) {
+                $this->command->warn("Archivo no encontrado: {$this->csvPath}");
+            }
             return [];
         }
 
@@ -224,22 +230,28 @@ class TasasBcvItemsPedidosSeeder extends Seeder
     protected function actualizarTasaEnItemsPedidos(array $tasasPorFecha): void
     {
         $tabla = 'items_pedidos';
+        $total = DB::table($tabla)->count();
         $actualizados = 0;
         $sinTasa = 0;
-        $ultimoDiaMostrado = null;
 
-        DB::table($tabla)->orderBy('id')->chunk(500, function ($items) use ($tasasPorFecha, &$actualizados, &$sinTasa, &$ultimoDiaMostrado) {
+        $bar = null;
+        if ($this->command && $total > 0) {
+            $bar = $this->command->getOutput()->createProgressBar($total);
+            $bar->setFormat(' %current%/%max% [%bar%] %percent:3s%% — Tasa y monto_bs');
+            $bar->start();
+        }
+
+        DB::table($tabla)->orderBy('id')->chunk(500, function ($items) use ($tasasPorFecha, &$actualizados, &$sinTasa, $bar) {
             foreach ($items as $item) {
+                if ($bar) {
+                    $bar->advance();
+                }
                 $createdAt = $item->created_at;
                 if (!$createdAt) {
                     $sinTasa++;
                     continue;
                 }
                 $fecha = date('Y-m-d', strtotime($createdAt));
-                if ($fecha !== $ultimoDiaMostrado) {
-                    $ultimoDiaMostrado = $fecha;
-                    $this->command->line("Procesando día: {$fecha}");
-                }
                 $tasa = $tasasPorFecha[$fecha] ?? null;
                 if ($tasa === null) {
                     $sinTasa++;
@@ -255,6 +267,14 @@ class TasasBcvItemsPedidosSeeder extends Seeder
             }
         });
 
-        $this->command->info("Items actualizados (tasa y monto_bs): {$actualizados}. Sin tasa para la fecha: {$sinTasa}.");
+        if ($bar) {
+            $bar->finish();
+            if ($this->command) {
+                $this->command->newLine();
+            }
+        }
+        if ($this->command) {
+            $this->command->info("[3/3] Items actualizados (tasa y monto_bs): {$actualizados}. Sin tasa para la fecha: {$sinTasa}.");
+        }
     }
 }

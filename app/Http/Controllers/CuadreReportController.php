@@ -40,6 +40,7 @@ class CuadreReportController extends Controller
             ->selectRaw($dateExpr . ' as fecha, ' . $maquinaExpr . ' as maquina_fiscal,
                 SUM(COALESCE(items_pedidos.monto_bs, 0)) as monto_bs,
                 SUM(COALESCE(items_pedidos.monto, 0)) as monto_usd,
+                SUM(CASE WHEN items_pedidos.tasa IS NOT NULL AND items_pedidos.tasa > 0 AND COALESCE(items_pedidos.monto, 0) > 0 THEN items_pedidos.tasa * COALESCE(items_pedidos.monto, 0) ELSE 0 END) / NULLIF(SUM(CASE WHEN items_pedidos.tasa IS NOT NULL AND items_pedidos.tasa > 0 AND COALESCE(items_pedidos.monto, 0) > 0 THEN COALESCE(items_pedidos.monto, 0) ELSE 0 END), 0) as tasa_ponderada,
                 MIN(CAST(pedidos.numero_factura AS UNSIGNED)) as factura_inicio,
                 MAX(CAST(pedidos.numero_factura AS UNSIGNED)) as factura_fin,
                 COUNT(DISTINCT pedidos.id) as cantidad')
@@ -59,7 +60,13 @@ class CuadreReportController extends Controller
         foreach ($dias as $dia) {
             $montoUsd = (float) ($dia->monto_usd ?? 0);
             $montoBs = (float) ($dia->monto_bs ?? 0);
-            $tasaDia = ($montoUsd > 0 && $montoBs > 0) ? ($montoBs / $montoUsd) : null;
+            // Tasa: promedio ponderado por monto USD de la tasa guardada en ítems (Bs/USD). Si no hay ítems con tasa, se usa total_bs/total_usd.
+            $tasaDia = null;
+            if (isset($dia->tasa_ponderada) && (float) $dia->tasa_ponderada > 0) {
+                $tasaDia = (float) $dia->tasa_ponderada;
+            } elseif ($montoUsd > 0 && $montoBs > 0) {
+                $tasaDia = $montoBs / $montoUsd;
+            }
             $maquina = $dia->maquina_fiscal ?? '';
 
             $resultados[] = (object) [
@@ -84,10 +91,29 @@ class CuadreReportController extends Controller
         $fechaHasta = $request->get('fecha_hasta');
         $resultados = $this->buildResultados($fechaDesde, $fechaHasta);
 
+        $totalDias = 0;
+        $totalMontoUsd = 0.0;
+        $totalMontoBs = 0.0;
+        $totalCantidadPedidos = 0;
+        $fechasVistas = [];
+        foreach ($resultados as $r) {
+            if (!in_array($r->fecha, $fechasVistas, true)) {
+                $fechasVistas[] = $r->fecha;
+                $totalDias++;
+            }
+            $totalMontoUsd += (float) ($r->monto_usd ?? 0);
+            $totalMontoBs += (float) $r->monto_bs;
+            $totalCantidadPedidos += (int) $r->cantidad;
+        }
+
         return view('reportes.cuadre-diario', [
-            'resultados'  => $resultados,
-            'fecha_desde' => $fechaDesde,
-            'fecha_hasta' => $fechaHasta,
+            'resultados'            => $resultados,
+            'fecha_desde'           => $fechaDesde,
+            'fecha_hasta'           => $fechaHasta,
+            'total_dias'            => $totalDias,
+            'total_monto_usd'       => $totalMontoUsd,
+            'total_monto_bs'         => $totalMontoBs,
+            'total_cantidad_pedidos' => $totalCantidadPedidos,
         ]);
     }
 
@@ -310,6 +336,7 @@ class CuadreReportController extends Controller
 
     /**
      * Parsea el CSV de indicaciones (mismo formato que cuadre:pedidos-diario) y devuelve [ 'fecha|maquina' => [ total_venta, factura_inicio, factura_fin, cantidad ] ]
+     * Soporta formato nuevo (FECHA, CONCEPTO, FACTURA, VENTA, TIPO) y antiguo (MAQUINA_FISCAL, RANGO_FACTURA, TOTAL_VENTA).
      */
     protected function parsearCsvValidacion(string $path): array
     {
@@ -326,28 +353,40 @@ class CuadreReportController extends Controller
             return $h;
         }, $header);
 
-        $lastIndex = count($header) - 1;
+        $lastIndex = -1;
         foreach ($header as $i => $h) {
-            if (stripos(mb_strtoupper($h), 'TOTAL') !== false && stripos(mb_strtoupper($h), 'VENTA') !== false) {
-                $lastIndex = $i;
-                break;
+            $u = mb_strtoupper($h);
+            if (stripos($u, 'VENTA') !== false || stripos($u, 'TIPO') !== false) {
+                $lastIndex = max($lastIndex, $i);
             }
+        }
+        if ($lastIndex < 0) {
+            $lastIndex = count($header) - 1;
         }
         $header = array_slice($header, 0, $lastIndex + 1);
 
-        $map = ['fecha' => null, 'maquina' => null, 'rango' => null, 'total_venta' => null];
+        $map = ['fecha' => null, 'maquina' => null, 'rango' => null, 'total_venta' => null, 'tipo' => null];
         foreach ($header as $key) {
             $u = mb_strtoupper($key);
             if (stripos($u, 'FECHA') !== false) {
                 $map['fecha'] = $key;
             }
+            if (stripos($u, 'CONCEPTO') !== false) {
+                $map['maquina'] = $key;
+            }
             if (stripos($u, 'TOTAL') !== false && stripos($u, 'VENTA') !== false) {
                 $map['total_venta'] = $key;
             }
-            if ((stripos($u, 'MAQUINA') !== false || stripos($u, 'MÁQUINA') !== false) && stripos($u, 'FISCAL') !== false) {
+            if (stripos($u, 'VENTA') !== false && stripos($u, 'TOTAL') === false && $map['total_venta'] === null) {
+                $map['total_venta'] = $key;
+            }
+            if (stripos($u, 'TIPO') !== false) {
+                $map['tipo'] = $key;
+            }
+            if ((stripos($u, 'MAQUINA') !== false || stripos($u, 'MÁQUINA') !== false) && stripos($u, 'FISCAL') !== false && $map['maquina'] === null) {
                 $map['maquina'] = $key;
             }
-            if (stripos($u, 'FACTURA') !== false && (stripos($u, 'RANGO') !== false || stripos($u, 'N°') !== false || stripos($u, 'NUMERO') !== false)) {
+            if (stripos($u, 'FACTURA') !== false) {
                 $map['rango'] = $key;
             }
         }
@@ -355,7 +394,7 @@ class CuadreReportController extends Controller
             return [];
         }
 
-        $grupos = [];
+        $normalizadas = [];
         foreach ($lines as $line) {
             if ($line === '') {
                 continue;
@@ -367,36 +406,147 @@ class CuadreReportController extends Controller
             if ($assoc === false) {
                 continue;
             }
-
-            $totalVenta = trim((string) ($assoc[$map['total_venta']] ?? '0'));
-            if ($totalVenta === '') {
-                continue;
-            }
-            $fecha = trim((string) ($assoc[$map['fecha']] ?? ''));
-            $maquina = $map['maquina'] !== null ? trim((string) ($assoc[$map['maquina']] ?? '')) : '';
-            if ($fecha === '' || $maquina === '') {
-                continue;
-            }
-            $rango = $map['rango'] !== null ? trim((string) ($assoc[$map['rango']] ?? '')) : '';
-            $inicio = null;
-            $fin = null;
-            if ($rango !== '' && preg_match('/^(\d+)\s*-\s*(\d+)$/', $rango, $m)) {
-                $inicio = (string) (int) $m[1];
-                $fin = (string) (int) $m[2];
-            }
-            $key = $fecha . '|' . $maquina;
-            if (!isset($grupos[$key])) {
-                $grupos[$key] = [
-                    'total_venta' => $totalVenta,
-                    'factura_inicio' => $inicio,
-                    'factura_fin' => $fin,
-                    'cantidad' => $inicio !== null && $fin !== null ? (int) $fin - (int) $inicio + 1 : 0,
-                ];
-            } else {
-                $grupos[$key]['total_venta'] = (string) (bcadd($grupos[$key]['total_venta'], $totalVenta, 4));
+            $norm = $this->normalizarFilaValidacion($assoc, $map);
+            if ($norm !== null) {
+                $normalizadas[] = $norm;
             }
         }
-        return $grupos;
+
+        return $this->agregarPorDiaMaquinaValidacion($normalizadas);
+    }
+
+    /**
+     * Normaliza una fila del CSV para validación (misma lógica que CuadrePedidosDiario).
+     */
+    protected function normalizarFilaValidacion(array $fila, array $map): ?array
+    {
+        $totalVenta = trim((string) ($fila[$map['total_venta']] ?? '0'));
+        $totalVenta = preg_replace('/\s+/', '', $totalVenta);
+        if ($totalVenta === '' || !is_numeric(str_replace(',', '.', $totalVenta))) {
+            return null;
+        }
+        $totalVenta = str_replace(',', '.', $totalVenta);
+        $fecha = trim((string) ($fila[$map['fecha']] ?? ''));
+        if ($fecha === '') {
+            return null;
+        }
+        $maquina = $map['maquina'] !== null ? trim((string) ($fila[$map['maquina']] ?? '')) : '';
+        $factura = $map['rango'] !== null ? trim((string) ($fila[$map['rango']] ?? '')) : '';
+        $tipoRaw = $map['tipo'] !== null ? trim(mb_strtoupper((string) ($fila[$map['tipo']] ?? ''))) : '';
+
+        if ($map['tipo'] !== null && $tipoRaw !== '') {
+            if (strpos($tipoRaw, 'REDUCE') !== false && strpos($tipoRaw, 'TOTAL') !== false) {
+                return ['fecha' => $fecha, 'maquina_fiscal' => $maquina, 'total_venta' => $totalVenta, 'factura_inicio' => null, 'factura_fin' => null, 'cantidad' => 0];
+            }
+            if (strpos($tipoRaw, 'FISCAL') !== false && strpos($tipoRaw, 'UNITARIA') !== false) {
+                if ($maquina === '') {
+                    return null;
+                }
+                $num = preg_replace('/\D/', '', $factura);
+                if ($num === '') {
+                    return null;
+                }
+                return ['fecha' => $fecha, 'maquina_fiscal' => $maquina, 'total_venta' => $totalVenta, 'factura_inicio' => $num, 'factura_fin' => $num, 'cantidad' => 1];
+            }
+            if (strpos($tipoRaw, 'FISCAL') !== false && strpos($tipoRaw, 'RANGO') !== false) {
+                if ($maquina === '') {
+                    return null;
+                }
+                if ($factura !== '' && preg_match('/^(\d+)\s*-\s*(\d+)$/', $factura, $m)) {
+                    $inicio = (int) $m[1];
+                    $fin = (int) $m[2];
+                    if ($fin >= $inicio) {
+                        return ['fecha' => $fecha, 'maquina_fiscal' => $maquina, 'total_venta' => $totalVenta, 'factura_inicio' => (string) $inicio, 'factura_fin' => (string) $fin, 'cantidad' => $fin - $inicio + 1];
+                    }
+                }
+                return null;
+            }
+        }
+
+        if ($maquina === '') {
+            return null;
+        }
+        if ($factura !== '' && preg_match('/^(\d+)\s*-\s*(\d+)$/', $factura, $m)) {
+            $inicio = (int) $m[1];
+            $fin = (int) $m[2];
+            if ($fin >= $inicio) {
+                return ['fecha' => $fecha, 'maquina_fiscal' => $maquina, 'total_venta' => $totalVenta, 'factura_inicio' => (string) $inicio, 'factura_fin' => (string) $fin, 'cantidad' => $fin - $inicio + 1];
+            }
+        }
+        $num = preg_replace('/\D/', '', $factura);
+        if ($num !== '') {
+            return ['fecha' => $fecha, 'maquina_fiscal' => $maquina, 'total_venta' => $totalVenta, 'factura_inicio' => $num, 'factura_fin' => $num, 'cantidad' => 1];
+        }
+        return ['fecha' => $fecha, 'maquina_fiscal' => $maquina, 'total_venta' => $totalVenta, 'factura_inicio' => null, 'factura_fin' => null, 'cantidad' => 0];
+    }
+
+    /**
+     * Agrupa por (fecha, maquina), aplica reducción diaria y combina rangos (misma lógica que CuadrePedidosDiario).
+     */
+    protected function agregarPorDiaMaquinaValidacion(array $normalizadas): array
+    {
+        $grupos = [];
+        $reduccionPorDia = [];
+        foreach ($normalizadas as $row) {
+            $key = $row['fecha'] . '|' . $row['maquina_fiscal'];
+            if ($row['maquina_fiscal'] === '') {
+                $reduccionPorDia[$row['fecha']] = bcadd($reduccionPorDia[$row['fecha']] ?? '0', $row['total_venta'], 4);
+                continue;
+            }
+            if (!isset($grupos[$key])) {
+                $grupos[$key] = [
+                    'total_venta' => $row['total_venta'],
+                    'factura_inicio' => $row['factura_inicio'],
+                    'factura_fin' => $row['factura_fin'],
+                    'cantidad' => (int) $row['cantidad'],
+                ];
+            } else {
+                $grupos[$key]['total_venta'] = bcadd($grupos[$key]['total_venta'], $row['total_venta'], 4);
+                if ($row['factura_inicio'] !== null && $row['factura_inicio'] !== '') {
+                    $inicio = (int) $row['factura_inicio'];
+                    $fin = (int) ($row['factura_fin'] ?? $row['factura_inicio']);
+                    $cant = (int) $row['cantidad'];
+                    $grupos[$key]['factura_inicio'] = $grupos[$key]['factura_inicio'] !== null && $grupos[$key]['factura_inicio'] !== ''
+                        ? (string) min((int) $grupos[$key]['factura_inicio'], $inicio)
+                        : (string) $inicio;
+                    $grupos[$key]['factura_fin'] = $grupos[$key]['factura_fin'] !== null && $grupos[$key]['factura_fin'] !== ''
+                        ? (string) max((int) $grupos[$key]['factura_fin'], $fin)
+                        : (string) $fin;
+                    $grupos[$key]['cantidad'] += $cant;
+                }
+            }
+        }
+        $ordenados = [];
+        foreach ($grupos as $key => $g) {
+            if ($g['factura_inicio'] !== null && $g['factura_inicio'] !== '' && $g['cantidad'] >= 1) {
+                $ordenados[] = array_merge($g, ['_key' => $key]);
+            }
+        }
+        usort($ordenados, function ($a, $b) {
+            $fechaA = explode('|', $a['_key'])[0];
+            $fechaB = explode('|', $b['_key'])[0];
+            $c = strcmp($fechaA, $fechaB);
+            return $c !== 0 ? $c : strcmp($a['_key'], $b['_key']);
+        });
+        $primeraPorFecha = [];
+        foreach ($ordenados as $g) {
+            $f = explode('|', $g['_key'])[0];
+            if (!isset($primeraPorFecha[$f])) {
+                $primeraPorFecha[$f] = $g['_key'];
+            }
+        }
+        $out = [];
+        foreach ($ordenados as $g) {
+            $key = $g['_key'];
+            unset($g['_key']);
+            $f = explode('|', $key)[0];
+            $reduc = $reduccionPorDia[$f] ?? '0';
+            if ($reduc !== '0' && $primeraPorFecha[$f] === $key) {
+                $g['total_venta'] = bcadd($g['total_venta'], $reduc, 4);
+            }
+            $out[$key] = $g;
+        }
+        return $out;
     }
 
     public function exportPedido(int $id): StreamedResponse

@@ -11,18 +11,22 @@ use App\Models\pago_pedidos;
 
 /**
  * Cuadra pedidos por día y por máquina fiscal.
- * CSV: FECHA, MAQUINA_FISCAL, N_Z, RANGO_FACTURA, TOTAL_VENTA.
- * El valor MAQUINA_FISCAL del CSV se guarda en pedidos.maquina_fiscal.
- * No usa tabla de mapeo: cada fila del CSV asigna un bloque de pedidos a esa máquina.
+ * CSV: FECHA, CONCEPTO, CEDULA, SERIE, NOTA DE CREDITO, AFECTADA, NUMERO DE Z, FACTURA, VENTA, TIPO.
+ * - TIPO "FISCAL RANGO": carga por rango (FACTURA = inicio-fin); máquina = CONCEPTO; monto en VENTA (positivo).
+ * - TIPO "FISCAL UNITARIA": una factura por pedido (FACTURA = número sin guión); máquina = CONCEPTO; monto en VENTA (positivo).
+ * - TIPO "REDUCE EL TOTAL DE ESE DIA": notas de crédito (VENTA negativo); reducen el monto objetivo del día.
+ * Monto objetivo del día = suma de positivos (FISCAL RANGO + FISCAL UNITARIA) menos negativos (REDUCE).
+ * El valor CONCEPTO se guarda en pedidos.maquina_fiscal.
  */
 class CuadrePedidosDiario extends Command
 {
     protected $signature = 'cuadre:pedidos-diario
-                            {archivo : Ruta al CSV (FECHA, MAQUINA_FISCAL, RANGO_FACTURA, TOTAL_VENTA)}
+                            {archivo : Ruta al CSV (FECHA, CONCEPTO, FACTURA, VENTA, TIPO)}
                             {--desde-cero : Antes de procesar, resetea el cuadre en el rango de fechas del CSV}
-                            {--dry-run : Solo mostrar qué se haría, sin escribir}';
+                            {--dry-run : Solo mostrar qué se haría, sin escribir}
+                            {--solo-fecha= : Procesar solo este día (YYYY-MM-DD)}';
 
-    protected $description = 'Cuadre por día y máquina fiscal; maquina_fiscal se setea en cada pedido desde el CSV.';
+    protected $description = 'Cuadre por día y máquina fiscal (CSV con FECHA, CONCEPTO, FACTURA, VENTA, TIPO).';
 
     protected int $scale = 4;
 
@@ -30,12 +34,14 @@ class CuadrePedidosDiario extends Command
     protected string $totalMontoAcumulado = '0';
     protected int $filasOmitidas = 0;
     protected int $filasProcesadas = 0;
+    protected int $filasRechazadasAjuste = 0;
 
     public function handle(): int
     {
         $path = $this->argument('archivo');
         $desdeCero = $this->option('desde-cero');
         $dryRun = $this->option('dry-run');
+        $soloFecha = $this->option('solo-fecha') ? trim((string) $this->option('solo-fecha')) : null;
 
         if (!is_file($path)) {
             $this->error("Archivo no encontrado: {$path}");
@@ -62,7 +68,15 @@ class CuadrePedidosDiario extends Command
         }
 
         $agregadas = $this->agregarPorDiaMaquina($normalizadas);
-        $this->info('Filas en CSV: ' . count($filas) . ' → Agrupadas por (fecha + máquina): ' . count($agregadas) . ' (notas de crédito suman negativo al monto objetivo).');
+
+        if ($soloFecha !== null && $soloFecha !== '') {
+            $agregadas = array_values(array_filter($agregadas, function ($a) use ($soloFecha) {
+                return isset($a['fecha']) && $a['fecha'] === $soloFecha;
+            }));
+            $this->info("Filtro --solo-fecha={$soloFecha}: se procesarán " . count($agregadas) . ' grupo(s) (fecha + máquina).');
+        }
+
+        $this->info('Filas en CSV: ' . count($filas) . ' → Agrupadas por (fecha + máquina): ' . count($agregadas) . ' (REDUCE EL TOTAL DE ESE DIA resta del monto objetivo).');
         if ($dryRun) {
             $this->warn('Modo dry-run: no se escribirá en la base de datos.');
         }
@@ -88,11 +102,28 @@ class CuadrePedidosDiario extends Command
             $this->line("Procesando <comment>{$fecha}</comment> | <comment>{$maquina}</comment>");
 
             if (!$dryRun) {
+                $maxReintentos = 6;
+                $intento = 0;
+                $resultado = null;
                 try {
-                    $resultado = $this->procesarDiaMaquina($fecha, $maquina, $montoObjetivo, $facturaInicio, $facturaFin, $cantidad);
+                    do {
+                        $resultado = $this->procesarDiaMaquina($fecha, $maquina, $montoObjetivo, $facturaInicio, $facturaFin, $cantidad);
+                        if ($resultado !== null && !empty($resultado['rechazado_ajuste']) && $intento < $maxReintentos - 1) {
+                            $pct = isset($resultado['pct']) ? round($resultado['pct'] * 100, 1) : 0;
+                            $this->line('  → ajuste ' . $pct . '%, reintentando (' . ($intento + 1) . '/' . $maxReintentos . ')…');
+                            $intento++;
+                        } else {
+                            break;
+                        }
+                    } while (true);
+
                     if ($resultado !== null && !empty($resultado['skipped'])) {
                         $this->filasOmitidas++;
                         $this->line('  → <fg=yellow>omitido (día+máquina ya procesado)</>');
+                    } elseif ($resultado !== null && !empty($resultado['rechazado_ajuste'])) {
+                        $this->filasRechazadasAjuste++;
+                        $pct = isset($resultado['pct']) ? round($resultado['pct'] * 100, 1) : 0;
+                        $this->line('  → <fg=red>rechazado tras ' . $maxReintentos . ' intentos: ajuste ' . $pct . '% (máximo 5%).</>');
                     } elseif ($resultado !== null) {
                         $this->filasProcesadas++;
                         $this->totalMontoAcumulado = bcadd($this->totalMontoAcumulado, $resultado['monto_total_dia'], $this->scale);
@@ -120,7 +151,7 @@ class CuadrePedidosDiario extends Command
         }
 
         if (empty($agregadas)) {
-            $this->warn('No se normalizó ninguna fila. Compruebe que el CSV tenga cabecera: FECHA, MAQUINA_FISCAL, RANGO_FACTURA, TOTAL_VENTA (y que RANGO_FACTURA sea tipo "1-48").');
+            $this->warn('No se normalizó ninguna fila. Compruebe que el CSV tenga cabecera: FECHA, CONCEPTO, FACTURA, VENTA, TIPO (FISCAL RANGO / FISCAL UNITARIA / REDUCE EL TOTAL DE ESE DIA).');
         }
 
         $this->mostrarResumen();
@@ -178,16 +209,21 @@ class CuadrePedidosDiario extends Command
     }
 
     /**
-     * Agrupa filas por (fecha, maquina_fiscal) y suma TOTAL_VENTA.
-     * Así, si el mismo día y máquina tiene dos filas (venta positiva y nota de crédito negativa),
-     * el monto objetivo es la suma (ej. 1000 + (-50) = 950).
-     * Rango de facturas (inicio, fin, cantidad) se toma de la primera fila del grupo.
+     * Agrupa filas por (fecha, maquina_fiscal). Suma total_venta (positivos FISCAL RANGO/UNITARIA y negativos REDUCE).
+     * Combina rangos/unitarias: factura_inicio = min, factura_fin = max, cantidad = suma.
+     * Si hay REDUCE con maquina vacía (reducción del día), se resta del primer grupo de esa fecha.
      */
     protected function agregarPorDiaMaquina(array $normalizadas): array
     {
         $grupos = [];
+        $reduccionPorDia = [];
+
         foreach ($normalizadas as $row) {
             $key = $row['fecha'] . '|' . $row['maquina_fiscal'];
+            if ($row['maquina_fiscal'] === '') {
+                $reduccionPorDia[$row['fecha']] = bcadd($reduccionPorDia[$row['fecha']] ?? '0', $row['total_venta'], $this->scale + 2);
+                continue;
+            }
             if (!isset($grupos[$key])) {
                 $grupos[$key] = [
                     'fecha'           => $row['fecha'],
@@ -195,31 +231,69 @@ class CuadrePedidosDiario extends Command
                     'total_venta'     => $row['total_venta'],
                     'factura_inicio'  => $row['factura_inicio'],
                     'factura_fin'     => $row['factura_fin'],
-                    'cantidad'        => $row['cantidad'],
+                    'cantidad'        => (int) $row['cantidad'],
                 ];
             } else {
                 $grupos[$key]['total_venta'] = bcadd($grupos[$key]['total_venta'], $row['total_venta'], $this->scale + 2);
-                if (($grupos[$key]['factura_inicio'] === null || $grupos[$key]['factura_inicio'] === '') && isset($row['factura_inicio']) && $row['factura_inicio'] !== null && $row['factura_inicio'] !== '') {
-                    $grupos[$key]['factura_inicio'] = $row['factura_inicio'];
-                    $grupos[$key]['factura_fin'] = $row['factura_fin'];
-                    $grupos[$key]['cantidad'] = $row['cantidad'];
+                if ($row['factura_inicio'] !== null && $row['factura_inicio'] !== '') {
+                    $inicio = (int) $row['factura_inicio'];
+                    $fin = (int) ($row['factura_fin'] ?? $row['factura_inicio']);
+                    $cant = (int) $row['cantidad'];
+                    $grupos[$key]['factura_inicio'] = $grupos[$key]['factura_inicio'] !== null && $grupos[$key]['factura_inicio'] !== ''
+                        ? (string) min((int) $grupos[$key]['factura_inicio'], $inicio)
+                        : (string) $inicio;
+                    $grupos[$key]['factura_fin'] = $grupos[$key]['factura_fin'] !== null && $grupos[$key]['factura_fin'] !== ''
+                        ? (string) max((int) $grupos[$key]['factura_fin'], $fin)
+                        : (string) $fin;
+                    $grupos[$key]['cantidad'] += $cant;
                 }
             }
         }
-        return array_values(array_filter($grupos, function ($g) {
-            return $g['factura_inicio'] !== null && $g['factura_inicio'] !== '' && (int) $g['cantidad'] >= 1;
+
+        // Grupos que solo tienen REDUCE (sin factura/cantidad) se filtran; pasar su monto a reducción del día.
+        foreach ($grupos as $key => $g) {
+            if (($g['factura_inicio'] === null || $g['factura_inicio'] === '' || $g['cantidad'] < 1) && bccomp($g['total_venta'], '0', $this->scale + 2) !== 0) {
+                $reduccionPorDia[$g['fecha']] = bcadd($reduccionPorDia[$g['fecha']] ?? '0', $g['total_venta'], $this->scale + 2);
+            }
+        }
+
+        $ordenados = array_values(array_filter($grupos, function ($g) {
+            return $g['factura_inicio'] !== null && $g['factura_inicio'] !== '' && $g['cantidad'] >= 1;
         }));
+
+        usort($ordenados, function ($a, $b) {
+            $c = strcmp($a['fecha'], $b['fecha']);
+            return $c !== 0 ? $c : strcmp($a['maquina_fiscal'], $b['maquina_fiscal']);
+        });
+
+        $primeraMaquinaPorFecha = [];
+        foreach ($ordenados as $g) {
+            $f = $g['fecha'];
+            if (!isset($primeraMaquinaPorFecha[$f])) {
+                $primeraMaquinaPorFecha[$f] = $g['fecha'] . '|' . $g['maquina_fiscal'];
+            }
+        }
+
+        foreach ($ordenados as $i => $g) {
+            $key = $g['fecha'] . '|' . $g['maquina_fiscal'];
+            $reduc = $reduccionPorDia[$g['fecha']] ?? '0';
+            if ($reduc !== '0' && $primeraMaquinaPorFecha[$g['fecha']] === $key) {
+                $ordenados[$i]['total_venta'] = bcadd($g['total_venta'], $reduc, $this->scale + 2);
+            }
+        }
+
+        return $ordenados;
     }
 
     /**
-     * Detecta qué claves del CSV corresponden a fecha, máquina, rango y total venta
-     * por contenido del encabezado (no por nombres fijos). Solo se considera hasta la columna "Total venta".
+     * Detecta columnas del CSV: FECHA, CONCEPTO (máquina), FACTURA, VENTA, TIPO.
+     * Acepta también formato antiguo: MAQUINA_FISCAL, RANGO_FACTURA, TOTAL_VENTA.
      */
     protected function detectarColumnas(array $headerKeys): array
     {
         $headerKeys = array_values($headerKeys);
-        $map = ['fecha' => null, 'maquina' => null, 'rango' => null, 'total_venta' => null];
-        $lastTotalVentaIndex = null;
+        $map = ['fecha' => null, 'maquina' => null, 'rango' => null, 'total_venta' => null, 'tipo' => null];
+        $lastIndex = count($headerKeys) - 1;
 
         foreach ($headerKeys as $index => $key) {
             $k = trim((string) $key);
@@ -229,17 +303,25 @@ class CuadrePedidosDiario extends Command
             if (stripos($u, 'FECHA') !== false) {
                 $map['fecha'] = $key;
             }
-            if (stripos($u, 'TOTAL') !== false && stripos($u, 'VENTA') !== false) {
-                $map['total_venta'] = $key;
-                $lastTotalVentaIndex = $index;
-            }
-            if ((stripos($u, 'MAQUINA') !== false || stripos($u, 'MÁQUINA') !== false) && stripos($u, 'FISCAL') !== false) {
+            if (stripos($u, 'CONCEPTO') !== false) {
                 $map['maquina'] = $key;
             }
-            if (stripos($u, 'FACTURA') !== false && (stripos($u, 'RANGO') !== false || stripos($u, 'N°') !== false || stripos($u, 'NUMERO') !== false || preg_match('/N[\s.]*FACTURA/', $uNorm))) {
+            if (stripos($u, 'TOTAL') !== false && stripos($u, 'VENTA') !== false) {
+                $map['total_venta'] = $key;
+            }
+            if (stripos($u, 'VENTA') !== false && stripos($u, 'TOTAL') === false && $map['total_venta'] === null) {
+                $map['total_venta'] = $key;
+            }
+            if (stripos($u, 'TIPO') !== false) {
+                $map['tipo'] = $key;
+            }
+            if ((stripos($u, 'MAQUINA') !== false || stripos($u, 'MÁQUINA') !== false) && stripos($u, 'FISCAL') !== false && $map['maquina'] === null) {
+                $map['maquina'] = $key;
+            }
+            if (stripos($u, 'FACTURA') !== false && (stripos($u, 'RANGO') !== false || stripos($u, 'N°') !== false || stripos($u, 'NUMERO') !== false || preg_match('/N[\s.]*FACTURA/', $uNorm) || $u === 'FACTURA')) {
                 $map['rango'] = $key;
             }
-            if (preg_match('/^ZZN\d+$/i', $k)) {
+            if (preg_match('/^ZZN\d+$/i', $k) && $map['maquina'] === null) {
                 $map['maquina'] = $key;
                 if ($map['total_venta'] === null) {
                     $map['total_venta'] = $key;
@@ -247,16 +329,27 @@ class CuadrePedidosDiario extends Command
             }
         }
 
-        if ($lastTotalVentaIndex !== null) {
-            $map['_solo_hasta_index'] = $lastTotalVentaIndex;
+        foreach (['total_venta', 'tipo'] as $col) {
+            if ($map[$col] !== null) {
+                $idx = array_search($map[$col], $headerKeys, true);
+                if ($idx !== false && $idx > $lastIndex) {
+                    $lastIndex = $idx;
+                }
+            }
         }
+        $map['_solo_hasta_index'] = $lastIndex;
         return $map;
     }
 
+    private const TIPO_FISCAL_RANGO = 'FISCAL RANGO';
+    private const TIPO_FISCAL_UNITARIA = 'FISCAL UNITARIA';
+    private const TIPO_REDUCE_DIA = 'REDUCE EL TOTAL DE ESE DIA';
+
     /**
      * Normaliza una fila usando el mapa de columnas detectado.
-     * Solo se considera el movimiento si hay valor en la columna de total venta (y fecha y máquina para agrupar).
-     * Si la columna de máquina fiscal tiene valor, se considera (resumen de ventas o nota de crédito).
+     * TIPO "FISCAL RANGO": rango en FACTURA (inicio-fin), monto positivo en VENTA, máquina = CONCEPTO.
+     * TIPO "FISCAL UNITARIA": un número en FACTURA (sin guión), monto positivo, máquina = CONCEPTO.
+     * TIPO "REDUCE EL TOTAL DE ESE DIA": monto negativo en VENTA; reduce el objetivo del día (CONCEPTO puede estar vacío).
      */
     protected function normalizarFila(array $fila, array $columnMap): ?array
     {
@@ -264,35 +357,90 @@ class CuadrePedidosDiario extends Command
         $fechaKey = $columnMap['fecha'] ?? null;
         $maquinaKey = $columnMap['maquina'] ?? null;
         $rangoKey = $columnMap['rango'] ?? null;
+        $tipoKey = $columnMap['tipo'] ?? null;
 
-        if ($totalVentaKey === null) {
+        if ($totalVentaKey === null || $fechaKey === null) {
             return null;
         }
 
         $totalVenta = trim((string) ($fila[$totalVentaKey] ?? '0'));
-        if ($totalVenta === '') {
+        $totalVenta = preg_replace('/\s+/', '', $totalVenta);
+        if ($totalVenta === '' || !is_numeric(str_replace(',', '.', $totalVenta))) {
             return null;
         }
+        $totalVenta = str_replace(',', '.', $totalVenta);
 
-        $fecha = $fechaKey !== null ? trim((string) ($fila[$fechaKey] ?? '')) : '';
-        if ($maquinaKey !== null) {
-            $maquina = trim((string) ($fila[$maquinaKey] ?? ''));
-            if ($maquina === '' && preg_match('/^ZZN\d+$/i', (string) $maquinaKey)) {
-                $maquina = (string) $maquinaKey;
-            }
-        } else {
-            $maquina = '';
-        }
-        $rango = $rangoKey !== null ? trim((string) ($fila[$rangoKey] ?? '')) : '';
-
+        $fecha = trim((string) ($fila[$fechaKey] ?? ''));
         if ($fecha === '') {
             return null;
         }
+
+        $maquina = $maquinaKey !== null ? trim((string) ($fila[$maquinaKey] ?? '')) : '';
+        if ($maquinaKey !== null && $maquina === '' && preg_match('/^ZZN\d+$/i', (string) $maquinaKey)) {
+            $maquina = (string) $maquinaKey;
+        }
+
+        $factura = $rangoKey !== null ? trim((string) ($fila[$rangoKey] ?? '')) : '';
+        $tipoRaw = $tipoKey !== null ? trim(mb_strtoupper((string) ($fila[$tipoKey] ?? ''))) : '';
+
+        if ($tipoKey !== null && $tipoRaw !== '') {
+            if (strpos($tipoRaw, 'REDUCE') !== false && strpos($tipoRaw, 'TOTAL') !== false) {
+                return [
+                    'fecha'           => $fecha,
+                    'maquina_fiscal'  => $maquina,
+                    'total_venta'     => $totalVenta,
+                    'factura_inicio'  => null,
+                    'factura_fin'     => null,
+                    'cantidad'        => 0,
+                    'tipo'            => self::TIPO_REDUCE_DIA,
+                ];
+            }
+            if (strpos($tipoRaw, 'FISCAL') !== false && strpos($tipoRaw, 'UNITARIA') !== false) {
+                if ($maquina === '') {
+                    return null;
+                }
+                $num = preg_replace('/\D/', '', $factura);
+                if ($num === '') {
+                    return null;
+                }
+                return [
+                    'fecha'           => $fecha,
+                    'maquina_fiscal'  => $maquina,
+                    'total_venta'     => $totalVenta,
+                    'factura_inicio'  => $num,
+                    'factura_fin'     => $num,
+                    'cantidad'        => 1,
+                    'tipo'            => self::TIPO_FISCAL_UNITARIA,
+                ];
+            }
+            if (strpos($tipoRaw, 'FISCAL') !== false && strpos($tipoRaw, 'RANGO') !== false) {
+                if ($maquina === '') {
+                    return null;
+                }
+                if ($factura !== '' && preg_match('/^(\d+)\s*-\s*(\d+)$/', $factura, $m)) {
+                    $inicio = (int) $m[1];
+                    $fin = (int) $m[2];
+                    if ($fin >= $inicio) {
+                        return [
+                            'fecha'           => $fecha,
+                            'maquina_fiscal'  => $maquina,
+                            'total_venta'     => $totalVenta,
+                            'factura_inicio'  => (string) $inicio,
+                            'factura_fin'     => (string) $fin,
+                            'cantidad'        => $fin - $inicio + 1,
+                            'tipo'            => self::TIPO_FISCAL_RANGO,
+                        ];
+                    }
+                }
+                return null;
+            }
+        }
+
         if ($maquina === '') {
             return null;
         }
 
-        if ($rango !== '' && preg_match('/^(\d+)\s*-\s*(\d+)$/', $rango, $m)) {
+        if ($factura !== '' && preg_match('/^(\d+)\s*-\s*(\d+)$/', $factura, $m)) {
             $inicio = (int) $m[1];
             $fin = (int) $m[2];
             if ($fin >= $inicio) {
@@ -303,8 +451,22 @@ class CuadrePedidosDiario extends Command
                     'factura_inicio'  => (string) $inicio,
                     'factura_fin'     => (string) $fin,
                     'cantidad'        => $fin - $inicio + 1,
+                    'tipo'            => self::TIPO_FISCAL_RANGO,
                 ];
             }
+        }
+
+        $num = preg_replace('/\D/', '', $factura);
+        if ($num !== '') {
+            return [
+                'fecha'           => $fecha,
+                'maquina_fiscal'  => $maquina,
+                'total_venta'     => $totalVenta,
+                'factura_inicio'  => $num,
+                'factura_fin'     => $num,
+                'cantidad'        => 1,
+                'tipo'            => self::TIPO_FISCAL_UNITARIA,
+            ];
         }
 
         return [
@@ -314,11 +476,12 @@ class CuadrePedidosDiario extends Command
             'factura_inicio'  => null,
             'factura_fin'     => null,
             'cantidad'        => 0,
+            'tipo'            => self::TIPO_REDUCE_DIA,
         ];
     }
 
     /**
-     * Lee el CSV y solo conserva columnas hasta la que dice "Total venta" (inclusive).
+     * Lee el CSV. Incluye columnas hasta "VENTA" o "TOTAL VENTA" y hasta "TIPO" si existe (formato nuevo).
      */
     protected function leerArchivo(string $path): array
     {
@@ -332,13 +495,15 @@ class CuadrePedidosDiario extends Command
             return preg_replace('/^\xEF\xBB\xBF/', '', $h);
         }, $header);
 
-        $lastIndex = count($header) - 1;
+        $lastIndex = -1;
         foreach ($header as $i => $h) {
             $u = mb_strtoupper($h);
-            if (stripos($u, 'TOTAL') !== false && stripos($u, 'VENTA') !== false) {
-                $lastIndex = $i;
-                break;
+            if (stripos($u, 'VENTA') !== false || stripos($u, 'TIPO') !== false) {
+                $lastIndex = max($lastIndex, $i);
             }
+        }
+        if ($lastIndex < 0) {
+            $lastIndex = count($header) - 1;
         }
         $header = array_slice($header, 0, $lastIndex + 1);
 
@@ -405,63 +570,99 @@ class CuadrePedidosDiario extends Command
                     '0'
                 );
             } else {
-                // Selección greedy: en cada paso se elige el pedido que deja la suma más cerca del objetivo.
-                // Así se obtiene una mezcla natural de montos (pequeños, medianos, grandes), no una banda igual.
-                $selectedIndices = [];
-                $suma = '0';
-                for ($k = 0; $k < $cantidadObjetivo; $k++) {
-                    $bestIdx = null;
+                // Ajuste obligatorio < 5%. No se avanza hasta conseguirlo: más fases, SA largo, reinicios aleatorios.
+                $umbralPct = 0.05;
+                $multiStartRuns = 48;
+                $fasesPorBloque = 80;
+                $maxBloques = 60;
+                $scale2 = $this->scale + 2;
+                $montoObjFloat = (float) $montoObjetivo;
+                $globalBestIndices = null;
+                $globalBestSuma = null;
+                $globalBestAbsDiff = null;
+
+                for ($bloque = 0; $bloque < $maxBloques; $bloque++) {
+                    $bestIndices = null;
+                    $bestSuma = null;
                     $bestAbsDiff = null;
-                    foreach (array_keys($pairs) as $idx) {
-                        if (in_array($idx, $selectedIndices, true)) {
+
+                    for ($run = 0; $run < $multiStartRuns; $run++) {
+                        $result = $this->greedySeleccion($pairs, $total, $cantidadObjetivo, $montoObjetivo);
+                        if ($result === null) {
                             continue;
                         }
-                        $newSum = bcadd($suma, $pairs[$idx]['monto'], $this->scale);
-                        $diff = bcsub($montoObjetivo, $newSum, $this->scale + 2);
-                        $absDiff = $diff[0] === '-' ? bcsub('0', $diff, $this->scale + 2) : $diff;
-                        if ($bestAbsDiff === null || bccomp($absDiff, $bestAbsDiff, $this->scale + 2) < 0) {
+                        $absDiff = $result['abs_diff'];
+                        if ($bestAbsDiff === null || bccomp($absDiff, $bestAbsDiff, $scale2) < 0) {
                             $bestAbsDiff = $absDiff;
-                            $bestIdx = $idx;
+                            $bestIndices = $result['indices'];
+                            $bestSuma = $result['suma'];
                         }
                     }
-                    $selectedIndices[] = $bestIdx;
-                    $suma = bcadd($suma, $pairs[$bestIdx]['monto'], $this->scale);
-                }
-                $sumaSelected = $suma;
 
-                // Búsqueda local: intercambiar un pedido seleccionado por uno no seleccionado si mejora el ajuste
-                $currentDiff = bcsub($montoObjetivo, $sumaSelected, $this->scale + 2);
-                $currentAbsDiff = $currentDiff[0] === '-' ? bcsub('0', $currentDiff, $this->scale + 2) : $currentDiff;
-                $maxSwaps = 5000; // límite para no demorar indefinidamente
-                $swaps = 0;
-                do {
-                    $improved = false;
-                    for ($i = 0; $i < $cantidadObjetivo && $swaps < $maxSwaps; $i++) {
-                        $s = $selectedIndices[$i];
-                        $restantes = array_diff(range(0, $total - 1), $selectedIndices);
-                        foreach ($restantes as $u) {
-                            $newSum = bcsub(bcadd($sumaSelected, $pairs[$u]['monto'], $this->scale), $pairs[$s]['monto'], $this->scale);
-                            $newDiff = bcsub($montoObjetivo, $newSum, $this->scale + 2);
-                            $newAbsDiff = $newDiff[0] === '-' ? bcsub('0', $newDiff, $this->scale + 2) : $newDiff;
-                            if (bccomp($newAbsDiff, $currentAbsDiff, $this->scale + 2) < 0) {
-                                $selectedIndices[$i] = (int) $u;
-                                $sumaSelected = $newSum;
-                                $currentAbsDiff = $newAbsDiff;
-                                $improved = true;
-                                $swaps++;
-                                break;
-                            }
+                    if ($bestIndices === null) {
+                        $result = $this->greedySeleccion($pairs, $total, $cantidadObjetivo, $montoObjetivo);
+                        if ($result !== null) {
+                            $bestIndices = $result['indices'];
+                            $bestSuma = $result['suma'];
+                            $bestAbsDiff = $result['abs_diff'];
                         }
                     }
-                } while ($improved && $swaps < $maxSwaps);
+                    if ($bestIndices !== null && ($globalBestAbsDiff === null || bccomp($bestAbsDiff, $globalBestAbsDiff, $scale2) < 0)) {
+                        $globalBestAbsDiff = $bestAbsDiff;
+                        $globalBestIndices = $bestIndices;
+                        $globalBestSuma = $bestSuma;
+                    }
+
+                    for ($fase = 0; $fase < $fasesPorBloque && $bestIndices !== null; $fase++) {
+                        $selectedIndices = $this->simulatedAnnealing($pairs, $total, $bestIndices, $bestSuma, $cantidadObjetivo, $montoObjetivo);
+                        $sumaFase = '0';
+                        foreach ($selectedIndices as $idx) {
+                            $sumaFase = bcadd($sumaFase, $pairs[$idx]['monto'], $this->scale);
+                        }
+                        $absAjusteFase = $this->absDiff($montoObjetivo, $sumaFase, $scale2);
+                        if ($globalBestAbsDiff === null || bccomp($absAjusteFase, $globalBestAbsDiff, $scale2) < 0) {
+                            $globalBestAbsDiff = $absAjusteFase;
+                            $globalBestIndices = $selectedIndices;
+                            $globalBestSuma = $sumaFase;
+                        }
+                        $bestIndices = $selectedIndices;
+                        $bestSuma = $sumaFase;
+                    }
+
+                    if ($montoObjFloat > 0 && $globalBestAbsDiff !== null) {
+                        $pct = (float) $globalBestAbsDiff / $montoObjFloat;
+                        if ($pct <= $umbralPct) {
+                            break;
+                        }
+                    }
+
+                    if ($bloque >= 2 && $globalBestIndices !== null) {
+                        $bestIndices = $globalBestIndices;
+                        $bestSuma = $globalBestSuma;
+                    }
+                }
+
+                $selectedIndices = $globalBestIndices ?? $bestIndices ?? [];
+                $sumaSelected = $globalBestSuma ?? $bestSuma ?? '0';
+                if ($sumaSelected === '0' && !empty($selectedIndices)) {
+                    foreach ($selectedIndices as $idx) {
+                        $sumaSelected = bcadd($sumaSelected, $pairs[$idx]['monto'], $this->scale);
+                    }
+                }
 
                 $selected = collect($selectedIndices)->map(fn ($idx) => $pairs[$idx]['pedido'])->values();
 
-                // Ordenar seleccionados por fecha/id para asignar numero_factura en orden cronológico
                 $selected = $selected->sortBy([
                     fn ($p) => $p->fecha_factura ?? $p->created_at,
                     fn ($p) => $p->id,
                 ])->values();
+            }
+
+            $ajuste = bcsub($montoObjetivo, $sumaSelected, $this->scale);
+            $montoObjFloat = (float) $montoObjetivo;
+            $pctAjuste = $montoObjFloat > 0 ? abs((float) $ajuste) / $montoObjFloat : 0.0;
+            if ($pctAjuste > 0.05) {
+                return ['rechazado_ajuste' => true, 'pct' => $pctAjuste];
             }
 
             $inicioNum = (int) $facturaInicio;
@@ -475,7 +676,6 @@ class CuadrePedidosDiario extends Command
                 $this->totalPedidosMarcados++;
             }
 
-            $ajuste = bcsub($montoObjetivo, $sumaSelected, $this->scale);
             $ultimo = $selected->last();
             $nuevoTotal = bcadd($sumaSelected, $ajuste, $this->scale);
 
@@ -520,6 +720,129 @@ class CuadrePedidosDiario extends Command
         });
     }
 
+    protected function absDiff(string $montoObjetivo, string $suma, int $scale): string
+    {
+        $d = bcsub($montoObjetivo, $suma, $scale);
+        return $d[0] === '-' ? bcsub('0', $d, $scale) : $d;
+    }
+
+    /**
+     * Una corrida greedy: elige cantidadObjetivo pedidos que minimicen |suma - montoObjetivo|.
+     * Desempate aleatorio cuando varios dan la misma distancia.
+     *
+     * @param array<int, array{pedido: mixed, monto: string}> $pairs
+     * @return array{indices: array<int>, suma: string, abs_diff: string}|null
+     */
+    protected function greedySeleccion(array $pairs, int $total, int $cantidadObjetivo, string $montoObjetivo): ?array
+    {
+        $indicesOrden = array_keys($pairs);
+        shuffle($indicesOrden);
+        $selectedIndices = [];
+        $suma = '0';
+
+        for ($k = 0; $k < $cantidadObjetivo; $k++) {
+            $bestAbsDiff = null;
+            $candidatos = [];
+            foreach ($indicesOrden as $idx) {
+                if (in_array($idx, $selectedIndices, true)) {
+                    continue;
+                }
+                $newSum = bcadd($suma, $pairs[$idx]['monto'], $this->scale);
+                $diff = bcsub($montoObjetivo, $newSum, $this->scale + 2);
+                $absDiff = $diff[0] === '-' ? bcsub('0', $diff, $this->scale + 2) : $diff;
+                $cmp = $bestAbsDiff === null ? -1 : bccomp($absDiff, $bestAbsDiff, $this->scale + 2);
+                if ($cmp < 0) {
+                    $bestAbsDiff = $absDiff;
+                    $candidatos = [$idx];
+                } elseif ($cmp === 0) {
+                    $candidatos[] = $idx;
+                }
+            }
+            if (empty($candidatos)) {
+                return null;
+            }
+            $bestIdx = $candidatos[array_rand($candidatos)];
+            $selectedIndices[] = $bestIdx;
+            $suma = bcadd($suma, $pairs[$bestIdx]['monto'], $this->scale);
+        }
+
+        $diff = bcsub($montoObjetivo, $suma, $this->scale + 2);
+        $absDiff = $diff[0] === '-' ? bcsub('0', $diff, $this->scale + 2) : $diff;
+
+        return [
+            'indices'   => $selectedIndices,
+            'suma'      => $suma,
+            'abs_diff'  => $absDiff,
+        ];
+    }
+
+    /**
+     * Simulated annealing: refina la selección con intercambios aleatorios.
+     * Acepta empeoras con probabilidad exp((oldDiff - newDiff) / T); T disminuye con el tiempo.
+     *
+     * @param array<int, array{pedido: mixed, monto: string}> $pairs
+     * @param array<int> $selectedIndices
+     * @return array<int>
+     */
+    protected function simulatedAnnealing(array $pairs, int $total, array $selectedIndices, string $currentSuma, int $cantidadObjetivo, string $montoObjetivo): array
+    {
+        $scale = $this->scale + 2;
+        $diffToAbs = function ($suma) use ($montoObjetivo, $scale) {
+            $d = bcsub($montoObjetivo, $suma, $scale);
+            return $d[0] === '-' ? bcsub('0', $d, $scale) : $d;
+        };
+
+        $currentAbs = $diffToAbs($currentSuma);
+        $bestIndices = $selectedIndices;
+        $bestSuma = $currentSuma;
+        $bestAbs = $currentAbs;
+
+        $selectedSet = array_flip($selectedIndices);
+        $iteraciones = min(150000, 1000 * $total);
+        $tInicial = 100.0;
+        $tFinal = 0.0002;
+        $t = $tInicial;
+        $cooling = exp(log($tFinal / $tInicial) / $iteraciones);
+
+        for ($it = 0; $it < $iteraciones; $it++) {
+            $i = array_rand($selectedIndices);
+            $idxOut = $selectedIndices[$i];
+            $restantes = [];
+            for ($u = 0; $u < $total; $u++) {
+                if (!isset($selectedSet[$u])) {
+                    $restantes[] = $u;
+                }
+            }
+            if (empty($restantes)) {
+                continue;
+            }
+            $idxIn = $restantes[array_rand($restantes)];
+
+            $newSuma = bcsub(bcadd($currentSuma, $pairs[$idxIn]['monto'], $this->scale), $pairs[$idxOut]['monto'], $this->scale);
+            $newAbs = $diffToAbs($newSuma);
+            $delta = bcsub($newAbs, $currentAbs, $scale);
+            $accept = bccomp($delta, '0', $scale) <= 0
+                || lcg_value() < exp(-max(0.0, (float) $delta) / $t);
+
+            if ($accept) {
+                $selectedIndices[$i] = $idxIn;
+                unset($selectedSet[$idxOut]);
+                $selectedSet[$idxIn] = true;
+                $currentSuma = $newSuma;
+                $currentAbs = $newAbs;
+                if (bccomp($newAbs, $bestAbs, $scale) < 0) {
+                    $bestAbs = $newAbs;
+                    $bestSuma = $newSuma;
+                    $bestIndices = $selectedIndices;
+                }
+            }
+
+            $t *= $cooling;
+        }
+
+        return $bestIndices;
+    }
+
     protected function mostrarResumen(): void
     {
         $this->newLine();
@@ -528,6 +851,9 @@ class CuadrePedidosDiario extends Command
         $this->info('═══════════════════════════════════════');
         $this->info('Filas (día+máquina) procesadas .....: ' . $this->filasProcesadas);
         $this->info('Filas omitidas (ya procesadas) ....: ' . $this->filasOmitidas);
+        if ($this->filasRechazadasAjuste > 0) {
+            $this->warn('Filas rechazadas (ajuste > 5%) ..: ' . $this->filasRechazadasAjuste);
+        }
         $this->info('Pedidos marcados válidos ...........: ' . $this->totalPedidosMarcados);
         $this->info('Monto total (Bs) ...................: ' . number_format((float) $this->totalMontoAcumulado, 4, ',', '.'));
         $this->info('═══════════════════════════════════════');
