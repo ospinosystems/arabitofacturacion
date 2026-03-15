@@ -505,12 +505,9 @@ class CuadrePedidosDiario extends Command
     protected function leerArchivo(string $path): array
     {
         $content = file_get_contents($path);
-        if (!is_string($content)) {
-            return [];
-        }
         $content = preg_replace('/^\xEF\xBB\xBF/', '', $content);
         $delim = (strpos($path, '.tsv') !== false || (strpos($content, "\t") !== false && strpos($content, ',') === false)) ? "\t" : ',';
-        $lines = array_map('trim', explode("\n", (string) $content));
+        $lines = array_map('trim', explode("\n", $content));
         $header = str_getcsv(array_shift($lines), $delim);
         $header = array_map(function ($h) {
             $h = trim($h);
@@ -563,15 +560,12 @@ class CuadrePedidosDiario extends Command
 
         // Lectura y cómputo pesado FUERA de la transacción para evitar "MySQL server has gone away"
         // (en Cloudways la conexión se cierra si la transacción está abierta mucho tiempo sin consultas).
-        // Limitar candidatos en función del objetivo (menos candidatos = más rápido).
-        $limiteCandidatos = (int) max($cantidadObjetivo + 1, min(300, (int) round($cantidadObjetivo * 1.5)));
         $pedidos = pedidos::whereRaw('DATE(COALESCE(fecha_factura, created_at)) = ?', [$fechaStr])
             ->where(function ($q) {
                 $q->whereNull('valido')->orWhere('valido', false)->orWhere('valido', 0);
             })
             ->orderByRaw('COALESCE(fecha_factura, created_at) ASC')
             ->orderBy('id')
-            ->limit($limiteCandidatos)
             ->get();
 
         \Log::info('CuadrePedidosDiario: pedidos candidatos obtenidos', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'total_pedidos' => $pedidos->count()]);
@@ -606,11 +600,11 @@ class CuadrePedidosDiario extends Command
                 '0'
             );
         } else {
-            // Ajuste: se aplica la mejor solución encontrada. Parámetros bajos para terminar en minutos, no horas.
+            // Ajuste obligatorio < 5%. Parámetros reducidos para menor tiempo (sigue buscando <5%).
             $umbralPct = 0.05;
-            $multiStartRuns = 8;
-            $fasesPorBloque = 15;
-            $maxBloques = 12;
+            $multiStartRuns = 24;
+            $fasesPorBloque = 50;
+            $maxBloques = 40;
             $scale2 = $this->scale + 2;
             $montoObjFloat = (float) $montoObjetivo;
             $globalBestIndices = null;
@@ -719,66 +713,41 @@ class CuadrePedidosDiario extends Command
 
             if (bccomp($ajuste, '0', $this->scale) !== 0) {
                 $ajusteFloat = (float) $ajuste;
+                $idProductoAjuste = $this->obtenerProductoDisponibleParaAjuste($ultimo->id);
                 $tasa = $this->obtenerTasaParaPedido($ultimo->id);
-                $itemAjustar = $this->obtenerItemExistenteParaAjuste($ultimo->id, $ajusteFloat);
-                if ($itemAjustar !== null) {
-                    // Alterar precio_unitario (USD) del ítem existente; 1 decimal o entero. monto = cantidad * precio_unitario, monto_bs = monto * tasa.
-                    $cantidad = (float) $itemAjustar->cantidad;
-                    $montoBsActual = (float) ($itemAjustar->monto_bs ?? $itemAjustar->monto * $tasa);
-                    $nuevoMontoBsItem = $montoBsActual + $ajusteFloat;
-                    if ($cantidad > 0 && $tasa > 0 && $nuevoMontoBsItem >= 0) {
-                        $precioUnitarioNuevo = ($nuevoMontoBsItem / $tasa) / $cantidad;
-                        $precioUnitarioNuevo = round($precioUnitarioNuevo, 1); // un solo decimal o entero
-                        $montoNuevo = round($cantidad * $precioUnitarioNuevo, 4);
-                        $montoBsNuevo = round($montoNuevo * $tasa, 4);
-                        $itemAjustar->precio_unitario = $precioUnitarioNuevo;
-                        $itemAjustar->monto = $montoNuevo;
-                        $itemAjustar->monto_bs = $montoBsNuevo;
-                        if ($tasa > 0) {
-                            $itemAjustar->tasa = $tasa;
-                        }
-                        $itemAjustar->save();
-                    }
+                if ($idProductoAjuste !== null) {
+                    $cantidadAjuste = 1;
+                    $precioUnitarioAjuste = round($ajusteFloat, 4);
+                    $montoUsd = $tasa > 0 ? round($ajusteFloat / $tasa, 4) : 0;
+                    items_pedidos::create([
+                        'id_pedido'       => $ultimo->id,
+                        'id_producto'     => $idProductoAjuste,
+                        'cantidad'        => $cantidadAjuste,
+                        'precio_unitario' => $precioUnitarioAjuste,
+                        'descuento'       => 0,
+                        'monto'           => $montoUsd,
+                        'monto_bs'        => $ajusteFloat,
+                        'tasa'            => $tasa > 0 ? $tasa : null,
+                        'condicion'       => 0,
+                    ]);
                 } else {
-                    // Fallback: sin ítem modificable, se crea ítem de ajuste (producto real o sin producto).
-                    $idProductoAjuste = $this->obtenerProductoDisponibleParaAjuste($ultimo->id);
-                    if ($idProductoAjuste !== null) {
-                        $cantidadAjuste = 1;
-                        $precioUnitarioAjuste = round($ajusteFloat / $tasa, 1);
-                        $montoUsd = $cantidadAjuste * $precioUnitarioAjuste;
-                        items_pedidos::create([
-                            'id_pedido'       => $ultimo->id,
-                            'id_producto'     => $idProductoAjuste,
-                            'cantidad'        => $cantidadAjuste,
-                            'precio_unitario' => $precioUnitarioAjuste,
-                            'descuento'       => 0,
-                            'monto'           => round($montoUsd, 4),
-                            'monto_bs'        => round($montoUsd * $tasa, 4),
-                            'tasa'            => $tasa > 0 ? $tasa : null,
-                            'condicion'       => 0,
-                        ]);
-                    } else {
-                        $this->warn("Sin ítem para ajustar ni producto en pedido {$ultimo->id}; se crea ítem sin producto.");
-                        items_pedidos::create([
-                            'id_pedido'   => $ultimo->id,
-                            'id_producto' => null,
-                            'cantidad'   => 1,
-                            'descuento'  => 0,
-                            'monto'      => round($ajusteFloat / $tasa, 4),
-                            'monto_bs'   => $ajusteFloat,
-                            'condicion'  => 0,
-                        ]);
-                    }
+                    $this->warn("Sin producto disponible para ítem de ajuste en pedido {$ultimo->id}; se crea ítem sin producto.");
+                    items_pedidos::create([
+                        'id_pedido'   => $ultimo->id,
+                        'id_producto' => null,
+                        'cantidad'   => 1,
+                        'descuento'  => 0,
+                        'monto'      => 0,
+                        'monto_bs'   => $ajusteFloat,
+                        'condicion'  => 0,
+                    ]);
                 }
-                // Recalcular total del pedido desde ítems y actualizar pago.
-                $sumaItemsBs = (float) items_pedidos::where('id_pedido', $ultimo->id)
-                    ->get()
-                    ->sum(fn ($i) => (float) ($i->monto_bs ?? $i->monto * ($i->tasa ?: $tasa)));
                 $pago = pago_pedidos::where('id_pedido', $ultimo->id)->first();
+                $nuevoTotalFloat = (float) $nuevoTotal;
                 if ($pago) {
-                    $pago->monto = $sumaItemsBs;
+                    $pago->monto = $nuevoTotalFloat;
                     if (Schema::hasColumn('pago_pedidos', 'monto_bs')) {
-                        $pago->monto_bs = $sumaItemsBs;
+                        $pago->monto_bs = $nuevoTotalFloat;
                     }
                     $pago->save();
                 } else {
@@ -786,11 +755,11 @@ class CuadrePedidosDiario extends Command
                         'id_pedido'      => $ultimo->id,
                         'tipo'           => '5',
                         'cuenta'         => 1,
-                        'monto'          => $sumaItemsBs,
-                        'monto_original' => $sumaItemsBs,
+                        'monto'          => $nuevoTotalFloat,
+                        'monto_original' => $nuevoTotalFloat,
                     ];
                     if (Schema::hasColumn('pago_pedidos', 'monto_bs')) {
-                        $datosPago['monto_bs'] = $sumaItemsBs;
+                        $datosPago['monto_bs'] = $nuevoTotalFloat;
                     }
                     pago_pedidos::create($datosPago);
                 }
@@ -829,31 +798,6 @@ class CuadrePedidosDiario extends Command
             }
         }
         return false;
-    }
-
-    /**
-     * Obtiene un ítem existente del pedido al que se puede aplicar el ajuste alterando precio_unitario (USD).
-     * Preferible ítem con id_producto (producto real). Si ajuste < 0, el ítem debe tener monto_bs >= |ajuste|.
-     */
-    protected function obtenerItemExistenteParaAjuste(int $idPedido, float $ajusteFloat): ?items_pedidos
-    {
-        $query = items_pedidos::where('id_pedido', $idPedido)->where('cantidad', '>', 0)->orderBy('id');
-        if ($ajusteFloat < 0) {
-            $minMontoBs = abs($ajusteFloat);
-            $items = $query->get()->filter(function ($i) use ($minMontoBs) {
-                $tasa = (float) ($i->tasa ?: 1);
-                $montoBs = (float) ($i->monto_bs ?? $i->monto * $tasa);
-                return $montoBs >= $minMontoBs;
-            });
-        } else {
-            $items = $query->get();
-        }
-        if ($items->isEmpty()) {
-            return null;
-        }
-        // Preferir ítem con producto real (id_producto not null).
-        $conProducto = $items->firstWhere(fn ($i) => $i->id_producto !== null);
-        return $conProducto ?? $items->first();
     }
 
     /**
