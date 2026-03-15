@@ -55,16 +55,40 @@ class CuadrePedidosDiario extends Command
         }
 
         $columnMap = $this->detectarColumnas(empty($filas) ? [] : array_keys($filas[0]));
+        $headerKeys = array_keys($filas[0] ?? []);
+        \Log::info('CuadrePedidosDiario: cabecera CSV', [
+            'header_keys' => $headerKeys,
+            'column_map'  => $columnMap,
+            'total_filas' => count($filas),
+        ]);
+        $this->line('<comment>Cabecera CSV detectada:</comment> ' . implode(', ', $headerKeys));
+        $this->line('<comment>Mapa columnas:</comment> fecha=' . ($columnMap['fecha'] ?? 'null') . ', maquina=' . ($columnMap['maquina'] ?? 'null') . ', total_venta=' . ($columnMap['total_venta'] ?? 'null') . ', rango=' . ($columnMap['rango'] ?? 'null') . ', tipo=' . ($columnMap['tipo'] ?? 'null'));
+        if (!empty($filas)) {
+            \Log::info('CuadrePedidosDiario: muestra primera fila CSV', ['fila' => $filas[0]]);
+            $this->line('<comment>Primera fila (muestra):</comment> ' . json_encode($filas[0], JSON_UNESCAPED_UNICODE));
+            if (count($filas) > 1) {
+                \Log::info('CuadrePedidosDiario: muestra segunda fila CSV', ['fila' => $filas[1]]);
+            }
+        }
         $normalizadas = [];
+        $razonesRechazo = [];
         foreach ($filas as $idx => $fila) {
-            $normalized = $this->normalizarFila($fila, $columnMap);
+            $razonRechazo = null;
+            $normalized = $this->normalizarFila($fila, $columnMap, $razonRechazo);
             if ($normalized === null) {
+                if (count($razonesRechazo) < 10) {
+                    $razonesRechazo[] = sprintf('fila %d: %s', $idx + 1, $razonRechazo ?? 'desconocido');
+                }
                 if (empty($normalizadas) && $idx === 0) {
                     $this->warn('Primera fila ignorada (sin valor en columna de total venta o fecha/máquina).');
                 }
                 continue;
             }
             $normalizadas[] = $normalized;
+        }
+        if (!empty($razonesRechazo)) {
+            \Log::info('CuadrePedidosDiario: primeras razones de rechazo en normalizarFila', ['razones' => $razonesRechazo]);
+            $this->line('<comment>Log: primeras razones de rechazo:</comment> ' . implode('; ', array_slice($razonesRechazo, 0, 3)));
         }
 
         $agregadas = $this->agregarPorDiaMaquina($normalizadas);
@@ -228,6 +252,31 @@ class CuadrePedidosDiario extends Command
     }
 
     /**
+     * Convierte fecha del CSV a YYYY-MM-DD. Acepta: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, D/M/YYYY.
+     * Si no reconoce el formato devuelve cadena vacía (la fila se rechazará).
+     */
+    protected function normalizarFechaCsv(string $fecha): string
+    {
+        $f = trim($fecha);
+        if ($f === '') {
+            return '';
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $f)) {
+            return $f;
+        }
+        if (preg_match('/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/', $f, $m)) {
+            $d = str_pad((string) (int) $m[1], 2, '0', STR_PAD_LEFT);
+            $mes = str_pad((string) (int) $m[2], 2, '0', STR_PAD_LEFT);
+            $a = $m[3];
+            return $a . '-' . $mes . '-' . $d;
+        }
+        if (preg_match('/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/', $f, $m)) {
+            return $m[1] . '-' . str_pad((string) (int) $m[2], 2, '0', STR_PAD_LEFT) . '-' . str_pad((string) (int) $m[3], 2, '0', STR_PAD_LEFT);
+        }
+        return '';
+    }
+
+    /**
      * Agrupa filas por (fecha, maquina_fiscal). Suma total_venta (positivos FISCAL RANGO/UNITARIA y negativos REDUCE).
      * Combina rangos/unitarias: factura_inicio = min, factura_fin = max, cantidad = suma.
      * Si hay REDUCE con maquina vacía (reducción del día), se resta del primer grupo de esa fecha.
@@ -369,9 +418,11 @@ class CuadrePedidosDiario extends Command
      * TIPO "FISCAL RANGO": rango en FACTURA (inicio-fin), monto positivo en VENTA, máquina = CONCEPTO.
      * TIPO "FISCAL UNITARIA": un número en FACTURA (sin guión), monto positivo, máquina = CONCEPTO.
      * TIPO "REDUCE EL TOTAL DE ESE DIA": monto negativo en VENTA; reduce el objetivo del día (CONCEPTO puede estar vacío).
+     * @param string|null $razonRechazo Se rellena cuando se devuelve null (para logs).
      */
-    protected function normalizarFila(array $fila, array $columnMap): ?array
+    protected function normalizarFila(array $fila, array $columnMap, ?string &$razonRechazo = null): ?array
     {
+        $razonRechazo = null;
         $totalVentaKey = $columnMap['total_venta'] ?? null;
         $fechaKey = $columnMap['fecha'] ?? null;
         $maquinaKey = $columnMap['maquina'] ?? null;
@@ -379,18 +430,26 @@ class CuadrePedidosDiario extends Command
         $tipoKey = $columnMap['tipo'] ?? null;
 
         if ($totalVentaKey === null || $fechaKey === null) {
+            $razonRechazo = 'falta columna total_venta o fecha en CSV (map: total_venta=' . ($totalVentaKey ?? 'null') . ', fecha=' . ($fechaKey ?? 'null') . ')';
             return null;
         }
 
         $totalVenta = trim((string) ($fila[$totalVentaKey] ?? '0'));
         $totalVenta = preg_replace('/\s+/', '', $totalVenta);
         if ($totalVenta === '' || !is_numeric(str_replace(',', '.', $totalVenta))) {
+            $razonRechazo = 'total_venta vacío o no numérico (valor="' . substr($fila[$totalVentaKey] ?? '', 0, 30) . '")';
             return null;
         }
         $totalVenta = str_replace(',', '.', $totalVenta);
 
         $fecha = trim((string) ($fila[$fechaKey] ?? ''));
         if ($fecha === '') {
+            $razonRechazo = 'fecha vacía';
+            return null;
+        }
+        $fecha = $this->normalizarFechaCsv($fecha);
+        if ($fecha === '') {
+            $razonRechazo = 'fecha no reconocible (original="' . trim((string) ($fila[$fechaKey] ?? '')) . '")';
             return null;
         }
 
@@ -416,10 +475,12 @@ class CuadrePedidosDiario extends Command
             }
             if (strpos($tipoRaw, 'FISCAL') !== false && strpos($tipoRaw, 'UNITARIA') !== false) {
                 if ($maquina === '') {
+                    $razonRechazo = 'FISCAL UNITARIA pero máquina vacía (tipo="' . $tipoRaw . '")';
                     return null;
                 }
                 $num = preg_replace('/\D/', '', $factura);
                 if ($num === '') {
+                    $razonRechazo = 'FISCAL UNITARIA pero factura sin números (factura="' . substr($factura, 0, 30) . '")';
                     return null;
                 }
                 return [
@@ -434,6 +495,7 @@ class CuadrePedidosDiario extends Command
             }
             if (strpos($tipoRaw, 'FISCAL') !== false && strpos($tipoRaw, 'RANGO') !== false) {
                 if ($maquina === '') {
+                    $razonRechazo = 'FISCAL RANGO pero máquina vacía (tipo="' . $tipoRaw . '")';
                     return null;
                 }
                 if ($factura !== '' && preg_match('/^(\d+)\s*-\s*(\d+)$/', $factura, $m)) {
@@ -451,11 +513,13 @@ class CuadrePedidosDiario extends Command
                         ];
                     }
                 }
+                $razonRechazo = 'FISCAL RANGO pero factura no tiene formato inicio-fin (factura="' . substr($factura, 0, 40) . '")';
                 return null;
             }
         }
 
         if ($maquina === '') {
+            $razonRechazo = 'sin TIPO reconocido y máquina vacía (tipo_raw="' . substr($tipoRaw ?? '', 0, 50) . '")';
             return null;
         }
 
