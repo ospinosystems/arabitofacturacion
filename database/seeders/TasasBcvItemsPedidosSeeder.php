@@ -57,7 +57,6 @@ class TasasBcvItemsPedidosSeeder extends Seeder
         }
 
         $tasasPorFecha = [];
-        $ultimaTasa = null;
         $year = null;
         $months = []; // [1,2,3,4] o [5,6,7,8] o [9,10,11,12]
         $dataStartIndex = -1;
@@ -106,6 +105,7 @@ class TasasBcvItemsPedidosSeeder extends Seeder
 
             // Cada fila tiene 12 columnas: 4 meses x (DÍA, BCV, PARALELO)
             // Columnas BCV: 1, 4, 7, 10
+            // Solo guardar días con tasa real; el forward-fill posterior cubre fines de semana/feriados.
             foreach ([0, 1, 2, 3] as $monthIdx) {
                 $colDia = $monthIdx * 3;
                 $colBcv = $monthIdx * 3 + 1;
@@ -125,11 +125,11 @@ class TasasBcvItemsPedidosSeeder extends Seeder
                 }
 
                 $tasa = $this->extraerTasaBcv($bcvRaw);
-                if ($tasa !== null && $tasa > 0) {
-                    $ultimaTasa = $tasa;
-                }
                 $fecha = sprintf('%04d-%02d-%02d', $year, $month, $day);
-                $tasasPorFecha[$fecha] = $ultimaTasa ?? $tasa;
+                if ($tasa !== null && $tasa > 0) {
+                    $tasasPorFecha[$fecha] = $tasa;
+                }
+                // No guardar nada para fines de semana/feriados; el forward-fill los llenará correctamente.
             }
         }
 
@@ -140,14 +140,16 @@ class TasasBcvItemsPedidosSeeder extends Seeder
         $rangoMax = max(array_keys($tasasPorFecha));
         $filled = [];
 
-        // Forward-fill: cada día sin tasa toma la última tasa válida conocida
+        // Forward-fill: cada día sin tasa toma la tasa del último día hábil anterior
         $ultima = null;
         $current = $rangoMin;
         while ($current <= $rangoMax) {
-            if (isset($tasasPorFecha[$current]) && $tasasPorFecha[$current] !== null) {
+            if (isset($tasasPorFecha[$current])) {
                 $ultima = $tasasPorFecha[$current];
+                $filled[$current] = $ultima;
+            } else {
+                $filled[$current] = $ultima;
             }
-            $filled[$current] = $tasasPorFecha[$current] ?? $ultima;
             $current = date('Y-m-d', strtotime($current . ' +1 day'));
         }
 
@@ -224,8 +226,9 @@ class TasasBcvItemsPedidosSeeder extends Seeder
     }
 
     /**
-     * Actualiza tasa y monto_bs en items_pedidos según la fecha created_at.
-     * monto_bs = tasa del día × monto.
+     * Actualiza tasa, monto y monto_bs en items_pedidos según la fecha created_at.
+     * monto = cantidad × precio_unitario (USD).
+     * monto_bs = monto × tasa.
      */
     protected function actualizarTasaEnItemsPedidos(array $tasasPorFecha): void
     {
@@ -237,7 +240,7 @@ class TasasBcvItemsPedidosSeeder extends Seeder
         $bar = null;
         if ($this->command && $total > 0) {
             $bar = $this->command->getOutput()->createProgressBar($total);
-            $bar->setFormat(' %current%/%max% [%bar%] %percent:3s%% — Tasa y monto_bs');
+            $bar->setFormat(' %current%/%max% [%bar%] %percent:3s%% — Tasa, monto y monto_bs');
             $bar->start();
         }
 
@@ -257,10 +260,15 @@ class TasasBcvItemsPedidosSeeder extends Seeder
                     $sinTasa++;
                     continue;
                 }
-                $monto = (float) ($item->monto ?? 0);
+                $cantidad = (float) ($item->cantidad ?? 0);
+                $precioUnitario = (float) ($item->precio_unitario ?? 0);
+                $monto = $precioUnitario > 0 && $cantidad > 0
+                    ? round($cantidad * $precioUnitario, 4)
+                    : (float) ($item->monto ?? 0);
                 $monto_bs = round($monto * $tasa, 4);
                 DB::table('items_pedidos')->where('id', $item->id)->update([
-                    'tasa' => $tasa,
+                    'tasa'     => $tasa,
+                    'monto'    => $monto,
                     'monto_bs' => $monto_bs,
                 ]);
                 $actualizados++;
@@ -274,7 +282,7 @@ class TasasBcvItemsPedidosSeeder extends Seeder
             }
         }
         if ($this->command) {
-            $this->command->info("[3/3] Items actualizados (tasa y monto_bs): {$actualizados}. Sin tasa para la fecha: {$sinTasa}.");
+            $this->command->info("[3/3] Items actualizados (tasa, monto y monto_bs): {$actualizados}. Sin tasa para la fecha: {$sinTasa}.");
         }
     }
 }
