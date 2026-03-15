@@ -102,6 +102,10 @@ class CuadrePedidosDiario extends Command
             $this->line("Procesando <comment>{$fecha}</comment> | <comment>{$maquina}</comment>");
 
             if (!$dryRun) {
+                // Reconexión preventiva cada iteración (evita "MySQL server has gone away" por inactividad en Cloudways).
+                \Log::info('CuadrePedidosDiario: inicio iteración', ['fecha' => $fecha, 'maquina' => $maquina, 'paso' => 'antes_reconnect']);
+                DB::reconnect();
+                \Log::info('CuadrePedidosDiario: reconnect hecho', ['fecha' => $fecha, 'maquina' => $maquina]);
                 $maxReintentos = 6;
                 $maxReintentosConexion = 3;
                 $intento = 0;
@@ -144,16 +148,29 @@ class CuadrePedidosDiario extends Command
                         }
                         $procesado = true;
                     } catch (\Throwable $e) {
+                        \Log::warning('CuadrePedidosDiario: excepción capturada', [
+                            'fecha' => $fecha,
+                            'maquina' => $maquina,
+                            'mensaje' => $e->getMessage(),
+                            'codigo' => $e->getCode(),
+                            'archivo' => $e->getFile(),
+                            'linea' => $e->getLine(),
+                            'es_gone_away' => $this->esErrorMysqlGoneAway($e),
+                            'reintento_actual' => $reintentoConexion,
+                            'max_reintentos' => $maxReintentosConexion,
+                        ]);
                         if ($this->esErrorMysqlGoneAway($e) && $reintentoConexion < $maxReintentosConexion) {
                             $reintentoConexion++;
                             $this->line('  → MySQL cerró la conexión, reconectando e intentando de nuevo (' . $reintentoConexion . '/' . $maxReintentosConexion . ')…');
+                            \Log::info('CuadrePedidosDiario: reconectando por gone away', ['fecha' => $fecha, 'maquina' => $maquina, 'intento' => $reintentoConexion]);
                             DB::reconnect();
                             continue;
                         }
                         $this->error("Error: " . $e->getMessage());
-                        \Log::error('CuadrePedidosDiario: ' . $e->getMessage(), [
+                        \Log::error('CuadrePedidosDiario: fallo definitivo', [
                             'fecha' => $fecha,
                             'maquina' => $maquina,
+                            'mensaje' => $e->getMessage(),
                             'trace' => $e->getTraceAsString(),
                         ]);
                         return Command::FAILURE;
@@ -540,15 +557,18 @@ class CuadrePedidosDiario extends Command
     {
         $fechaStr = $fecha;
 
+        \Log::info('CuadrePedidosDiario: procesarDiaMaquina inicio', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'paso' => 'yaProcesado_check']);
         $yaProcesado = Schema::hasColumn('pedidos', 'maquina_fiscal')
             && pedidos::whereRaw('DATE(COALESCE(fecha_factura, created_at)) = ?', [$fechaStr])
                 ->where('maquina_fiscal', $maquinaFiscal)
                 ->where('valido', true)
                 ->exists();
         if ($yaProcesado) {
+            \Log::info('CuadrePedidosDiario: día+máquina ya procesado', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal]);
             return ['skipped' => true];
         }
 
+        \Log::info('CuadrePedidosDiario: iniciando transacción', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal]);
         return DB::transaction(function () use ($fechaStr, $maquinaFiscal, $montoObjetivo, $facturaInicio, $facturaFin, $cantidadObjetivo) {
             $pedidos = pedidos::whereRaw('DATE(COALESCE(fecha_factura, created_at)) = ?', [$fechaStr])
                 ->where(function ($q) {
@@ -558,6 +578,7 @@ class CuadrePedidosDiario extends Command
                 ->orderBy('id')
                 ->get();
 
+            \Log::info('CuadrePedidosDiario: pedidos candidatos obtenidos', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'total_pedidos' => $pedidos->count()]);
             if ($pedidos->isEmpty()) {
                 return null;
             }
@@ -569,6 +590,7 @@ class CuadrePedidosDiario extends Command
                     ->sum(DB::raw('COALESCE(monto_bs, monto * COALESCE(NULLIF(tasa, 0), 1), 0)'));
                 $pairs[] = ['pedido' => $ped, 'monto' => $monto];
             }
+            \Log::info('CuadrePedidosDiario: montos por pedido calculados', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'pairs' => count($pairs)]);
 
             $total = count($pairs);
             $selected = collect();
@@ -677,6 +699,7 @@ class CuadrePedidosDiario extends Command
                 return ['rechazado_ajuste' => true, 'pct' => $pctAjuste];
             }
 
+            \Log::info('CuadrePedidosDiario: asignando factura y guardando pedidos', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'selected_count' => $selected->count()]);
             $inicioNum = (int) $facturaInicio;
             foreach ($selected as $i => $ped) {
                 $ped->numero_factura = (string) ($inicioNum + $i);
@@ -746,6 +769,7 @@ class CuadrePedidosDiario extends Command
                 }
             }
 
+            \Log::info('CuadrePedidosDiario: transacción completada', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal]);
             return [
                 'cantidad_facturas' => $selected->count(),
                 'monto_total_dia'   => $nuevoTotal,
