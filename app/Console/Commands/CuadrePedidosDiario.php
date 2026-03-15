@@ -560,8 +560,8 @@ class CuadrePedidosDiario extends Command
 
         // Lectura y cómputo pesado FUERA de la transacción para evitar "MySQL server has gone away"
         // (en Cloudways la conexión se cierra si la transacción está abierta mucho tiempo sin consultas).
-        // Limitar candidatos en función del objetivo: no considerar todos los pedidos del día, solo hasta (objetivo × factor).
-        $limiteCandidatos = (int) max($cantidadObjetivo + 1, min(500, $cantidadObjetivo * 2));
+        // Limitar candidatos en función del objetivo (menos candidatos = más rápido).
+        $limiteCandidatos = (int) max($cantidadObjetivo + 1, min(300, (int) round($cantidadObjetivo * 1.5)));
         $pedidos = pedidos::whereRaw('DATE(COALESCE(fecha_factura, created_at)) = ?', [$fechaStr])
             ->where(function ($q) {
                 $q->whereNull('valido')->orWhere('valido', false)->orWhere('valido', 0);
@@ -603,11 +603,11 @@ class CuadrePedidosDiario extends Command
                 '0'
             );
         } else {
-            // Ajuste obligatorio < 5%. Parámetros reducidos para menor tiempo (sigue buscando <5%).
+            // Ajuste: se aplica la mejor solución encontrada. Parámetros bajos para terminar en minutos, no horas.
             $umbralPct = 0.05;
-            $multiStartRuns = 24;
-            $fasesPorBloque = 50;
-            $maxBloques = 40;
+            $multiStartRuns = 8;
+            $fasesPorBloque = 15;
+            $maxBloques = 12;
             $scale2 = $this->scale + 2;
             $montoObjFloat = (float) $montoObjetivo;
             $globalBestIndices = null;
