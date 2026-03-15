@@ -103,49 +103,61 @@ class CuadrePedidosDiario extends Command
 
             if (!$dryRun) {
                 $maxReintentos = 6;
+                $maxReintentosConexion = 3;
                 $intento = 0;
                 $resultado = null;
-                try {
-                    do {
-                        $resultado = $this->procesarDiaMaquina($fecha, $maquina, $montoObjetivo, $facturaInicio, $facturaFin, $cantidad);
-                        if ($resultado !== null && !empty($resultado['rechazado_ajuste']) && $intento < $maxReintentos - 1) {
-                            $pct = isset($resultado['pct']) ? round($resultado['pct'] * 100, 1) : 0;
-                            $this->line('  → ajuste ' . $pct . '%, reintentando (' . ($intento + 1) . '/' . $maxReintentos . ')…');
-                            $intento++;
-                        } else {
-                            break;
-                        }
-                    } while (true);
+                $reintentoConexion = 0;
+                $procesado = false;
+                while (!$procesado) {
+                    try {
+                        do {
+                            $resultado = $this->procesarDiaMaquina($fecha, $maquina, $montoObjetivo, $facturaInicio, $facturaFin, $cantidad);
+                            if ($resultado !== null && !empty($resultado['rechazado_ajuste']) && $intento < $maxReintentos - 1) {
+                                $pct = isset($resultado['pct']) ? round($resultado['pct'] * 100, 1) : 0;
+                                $this->line('  → ajuste ' . $pct . '%, reintentando (' . ($intento + 1) . '/' . $maxReintentos . ')…');
+                                $intento++;
+                            } else {
+                                break;
+                            }
+                        } while (true);
 
-                    if ($resultado !== null && !empty($resultado['skipped'])) {
-                        $this->filasOmitidas++;
-                        $this->line('  → <fg=yellow>omitido (día+máquina ya procesado)</>');
-                    } elseif ($resultado !== null && !empty($resultado['rechazado_ajuste'])) {
-                        $this->filasRechazadasAjuste++;
-                        $pct = isset($resultado['pct']) ? round($resultado['pct'] * 100, 1) : 0;
-                        $this->line('  → <fg=red>rechazado tras ' . $maxReintentos . ' intentos: ajuste ' . $pct . '% (máximo 5%).</>');
-                    } elseif ($resultado !== null) {
-                        $this->filasProcesadas++;
-                        $this->totalMontoAcumulado = bcadd($this->totalMontoAcumulado, $resultado['monto_total_dia'], $this->scale);
-                        $this->line(sprintf(
-                            '  → <info>%d facturas</info> (%s–%s), <info>%s Bs</info> (ajuste: <comment>%s Bs</comment>)',
-                            $resultado['cantidad_facturas'],
-                            $facturaInicio,
-                            $facturaFin,
-                            number_format((float) $resultado['monto_total_dia'], 4, ',', '.'),
-                            number_format((float) $resultado['diferencia'], 4, ',', '.')
-                        ));
-                    } else {
-                        $this->line('  → sin pedidos no válidos para esta fecha');
+                        if ($resultado !== null && !empty($resultado['skipped'])) {
+                            $this->filasOmitidas++;
+                            $this->line('  → <fg=yellow>omitido (día+máquina ya procesado)</>');
+                        } elseif ($resultado !== null && !empty($resultado['rechazado_ajuste'])) {
+                            $this->filasRechazadasAjuste++;
+                            $pct = isset($resultado['pct']) ? round($resultado['pct'] * 100, 1) : 0;
+                            $this->line('  → <fg=red>rechazado tras ' . $maxReintentos . ' intentos: ajuste ' . $pct . '% (máximo 5%).</>');
+                        } elseif ($resultado !== null) {
+                            $this->filasProcesadas++;
+                            $this->totalMontoAcumulado = bcadd($this->totalMontoAcumulado, $resultado['monto_total_dia'], $this->scale);
+                            $this->line(sprintf(
+                                '  → <info>%d facturas</info> (%s–%s), <info>%s Bs</info> (ajuste: <comment>%s Bs</comment>)',
+                                $resultado['cantidad_facturas'],
+                                $facturaInicio,
+                                $facturaFin,
+                                number_format((float) $resultado['monto_total_dia'], 4, ',', '.'),
+                                number_format((float) $resultado['diferencia'], 4, ',', '.')
+                            ));
+                        } else {
+                            $this->line('  → sin pedidos no válidos para esta fecha');
+                        }
+                        $procesado = true;
+                    } catch (\Throwable $e) {
+                        if ($this->esErrorMysqlGoneAway($e) && $reintentoConexion < $maxReintentosConexion) {
+                            $reintentoConexion++;
+                            $this->line('  → MySQL cerró la conexión, reconectando e intentando de nuevo (' . $reintentoConexion . '/' . $maxReintentosConexion . ')…');
+                            DB::reconnect();
+                            continue;
+                        }
+                        $this->error("Error: " . $e->getMessage());
+                        \Log::error('CuadrePedidosDiario: ' . $e->getMessage(), [
+                            'fecha' => $fecha,
+                            'maquina' => $maquina,
+                            'trace' => $e->getTraceAsString(),
+                        ]);
+                        return Command::FAILURE;
                     }
-                } catch (\Throwable $e) {
-                    $this->error("Error: " . $e->getMessage());
-                    \Log::error('CuadrePedidosDiario: ' . $e->getMessage(), [
-                        'fecha' => $fecha,
-                        'maquina' => $maquina,
-                        'trace' => $e->getTraceAsString(),
-                    ]);
-                    return Command::FAILURE;
                 }
             }
         }
@@ -746,6 +758,25 @@ class CuadrePedidosDiario extends Command
     {
         $d = bcsub($montoObjetivo, $suma, $scale);
         return $d[0] === '-' ? bcsub('0', $d, $scale) : $d;
+    }
+
+    /**
+     * Detecta si la excepción es "MySQL server has gone away" (timeout/conexión cerrada).
+     */
+    protected function esErrorMysqlGoneAway(\Throwable $e): bool
+    {
+        $msg = $e->getMessage();
+        if (str_contains($msg, '2006') || str_contains(strtolower($msg), 'gone away')) {
+            return true;
+        }
+        $previous = $e->getPrevious();
+        if ($previous instanceof \Throwable) {
+            $prevMsg = $previous->getMessage();
+            if (str_contains($prevMsg, '2006') || str_contains(strtolower($prevMsg), 'gone away')) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
