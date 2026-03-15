@@ -341,12 +341,12 @@ class CuadreReportController extends Controller
     protected function parsearCsvValidacion(string $path): array
     {
         $content = @file_get_contents($path);
-        if ($content === false) {
+        if ($content === false || !is_string($content)) {
             return [];
         }
         $content = preg_replace('/^\xEF\xBB\xBF/', '', $content);
         $delim = (strpos($path, '.tsv') !== false || (strpos($content, "\t") !== false && strpos($content, ',') === false)) ? "\t" : ',';
-        $lines = array_map('trim', explode("\n", $content));
+        $lines = array_map('trim', explode("\n", (string) $content));
         $header = str_getcsv(array_shift($lines), $delim);
         $header = array_map(function ($h) {
             $h = trim(preg_replace('/^\xEF\xBB\xBF/', '', $h));
@@ -523,14 +523,14 @@ class CuadreReportController extends Controller
             }
         }
         usort($ordenados, function ($a, $b) {
-            $fechaA = explode('|', $a['_key'])[0];
-            $fechaB = explode('|', $b['_key'])[0];
+            $fechaA = explode('|', (string) ($a['_key'] ?? ''))[0] ?? '';
+            $fechaB = explode('|', (string) ($b['_key'] ?? ''))[0] ?? '';
             $c = strcmp($fechaA, $fechaB);
-            return $c !== 0 ? $c : strcmp($a['_key'], $b['_key']);
+            return $c !== 0 ? $c : strcmp((string) ($a['_key'] ?? ''), (string) ($b['_key'] ?? ''));
         });
         $primeraPorFecha = [];
         foreach ($ordenados as $g) {
-            $f = explode('|', $g['_key'])[0];
+            $f = explode('|', (string) ($g['_key'] ?? ''))[0] ?? '';
             if (!isset($primeraPorFecha[$f])) {
                 $primeraPorFecha[$f] = $g['_key'];
             }
@@ -539,7 +539,7 @@ class CuadreReportController extends Controller
         foreach ($ordenados as $g) {
             $key = $g['_key'];
             unset($g['_key']);
-            $f = explode('|', $key)[0];
+            $f = explode('|', (string) $key)[0] ?? '';
             $reduc = $reduccionPorDia[$f] ?? '0';
             if ($reduc !== '0' && $primeraPorFecha[$f] === $key) {
                 $g['total_venta'] = bcadd($g['total_venta'], $reduc, 4);

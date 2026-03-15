@@ -505,9 +505,12 @@ class CuadrePedidosDiario extends Command
     protected function leerArchivo(string $path): array
     {
         $content = file_get_contents($path);
+        if (!is_string($content)) {
+            return [];
+        }
         $content = preg_replace('/^\xEF\xBB\xBF/', '', $content);
         $delim = (strpos($path, '.tsv') !== false || (strpos($content, "\t") !== false && strpos($content, ',') === false)) ? "\t" : ',';
-        $lines = array_map('trim', explode("\n", $content));
+        $lines = array_map('trim', explode("\n", (string) $content));
         $header = str_getcsv(array_shift($lines), $delim);
         $header = array_map(function ($h) {
             $h = trim($h);
