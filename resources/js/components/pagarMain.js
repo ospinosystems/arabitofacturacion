@@ -5288,8 +5288,9 @@ export default function PagarMain({
                                         const fmtP = (n) => Number(n).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                         ventana.document.write(`
                                             <!DOCTYPE html><html><head><title>Lista de productos - Pedido ${id}</title>
-                                            <style>body{font-family:sans-serif;padding:1rem;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;}</style>
+                                            <style>body{font-family:sans-serif;padding:1rem;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;} .titulo-guia{text-align:center;font-weight:bold;margin-bottom:1rem;}</style>
                                             </head><body>
+                                            <div class="titulo-guia">GUIA DE DESPACHO</div>
                                             <div class="header">
                                                 <div><strong>Cliente</strong></div>
                                                 <div>Razón Social: ${clienteRazon}</div>
