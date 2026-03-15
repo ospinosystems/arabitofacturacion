@@ -583,12 +583,18 @@ class CuadrePedidosDiario extends Command
             return null;
         }
 
+        // Una sola consulta para todos los montos por pedido (evita N+1).
+        $ids = $pedidos->pluck('id')->all();
+        $montosPorPedido = DB::table('items_pedidos')
+            ->whereIn('id_pedido', $ids)
+            ->selectRaw('id_pedido, SUM(COALESCE(monto_bs, monto * COALESCE(NULLIF(tasa, 0), 1), 0)) as total')
+            ->groupBy('id_pedido')
+            ->pluck('total', 'id_pedido')
+            ->map(fn ($v) => (string) $v)
+            ->all();
         $pairs = [];
         foreach ($pedidos as $ped) {
-            $monto = (string) DB::table('items_pedidos')
-                ->where('id_pedido', $ped->id)
-                ->sum(DB::raw('COALESCE(monto_bs, monto * COALESCE(NULLIF(tasa, 0), 1), 0)'));
-            $pairs[] = ['pedido' => $ped, 'monto' => $monto];
+            $pairs[] = ['pedido' => $ped, 'monto' => $montosPorPedido[$ped->id] ?? '0'];
         }
         \Log::info('CuadrePedidosDiario: montos por pedido calculados', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'pairs' => count($pairs)]);
 
@@ -604,11 +610,11 @@ class CuadrePedidosDiario extends Command
                 '0'
             );
         } else {
-            // Ajuste obligatorio < 5%. No se avanza hasta conseguirlo: más fases, SA largo, reinicios aleatorios.
+            // Ajuste obligatorio < 5%. Parámetros reducidos para menor tiempo (sigue buscando <5%).
             $umbralPct = 0.05;
-            $multiStartRuns = 48;
-            $fasesPorBloque = 80;
-            $maxBloques = 60;
+            $multiStartRuns = 24;
+            $fasesPorBloque = 50;
+            $maxBloques = 40;
             $scale2 = $this->scale + 2;
             $montoObjFloat = (float) $montoObjetivo;
             $globalBestIndices = null;
