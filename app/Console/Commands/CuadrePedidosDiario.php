@@ -568,139 +568,145 @@ class CuadrePedidosDiario extends Command
             return ['skipped' => true];
         }
 
-        \Log::info('CuadrePedidosDiario: iniciando transacción', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal]);
-        return DB::transaction(function () use ($fechaStr, $maquinaFiscal, $montoObjetivo, $facturaInicio, $facturaFin, $cantidadObjetivo) {
-            $pedidos = pedidos::whereRaw('DATE(COALESCE(fecha_factura, created_at)) = ?', [$fechaStr])
-                ->where(function ($q) {
-                    $q->whereNull('valido')->orWhere('valido', false)->orWhere('valido', 0);
-                })
-                ->orderByRaw('COALESCE(fecha_factura, created_at) ASC')
-                ->orderBy('id')
-                ->get();
+        // Lectura y cómputo pesado FUERA de la transacción para evitar "MySQL server has gone away"
+        // (en Cloudways la conexión se cierra si la transacción está abierta mucho tiempo sin consultas).
+        $pedidos = pedidos::whereRaw('DATE(COALESCE(fecha_factura, created_at)) = ?', [$fechaStr])
+            ->where(function ($q) {
+                $q->whereNull('valido')->orWhere('valido', false)->orWhere('valido', 0);
+            })
+            ->orderByRaw('COALESCE(fecha_factura, created_at) ASC')
+            ->orderBy('id')
+            ->get();
 
-            \Log::info('CuadrePedidosDiario: pedidos candidatos obtenidos', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'total_pedidos' => $pedidos->count()]);
-            if ($pedidos->isEmpty()) {
-                return null;
-            }
+        \Log::info('CuadrePedidosDiario: pedidos candidatos obtenidos', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'total_pedidos' => $pedidos->count()]);
+        if ($pedidos->isEmpty()) {
+            return null;
+        }
 
-            $pairs = [];
-            foreach ($pedidos as $ped) {
-                $monto = (string) DB::table('items_pedidos')
-                    ->where('id_pedido', $ped->id)
-                    ->sum(DB::raw('COALESCE(monto_bs, monto * COALESCE(NULLIF(tasa, 0), 1), 0)'));
-                $pairs[] = ['pedido' => $ped, 'monto' => $monto];
-            }
-            \Log::info('CuadrePedidosDiario: montos por pedido calculados', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'pairs' => count($pairs)]);
+        $pairs = [];
+        foreach ($pedidos as $ped) {
+            $monto = (string) DB::table('items_pedidos')
+                ->where('id_pedido', $ped->id)
+                ->sum(DB::raw('COALESCE(monto_bs, monto * COALESCE(NULLIF(tasa, 0), 1), 0)'));
+            $pairs[] = ['pedido' => $ped, 'monto' => $monto];
+        }
+        \Log::info('CuadrePedidosDiario: montos por pedido calculados', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'pairs' => count($pairs)]);
 
-            $total = count($pairs);
-            $selected = collect();
-            $sumaSelected = '0';
+        $total = count($pairs);
+        $selected = collect();
+        $sumaSelected = '0';
 
-            if ($total <= $cantidadObjetivo) {
-                $selected = collect($pairs)->map(fn ($p) => $p['pedido'])->values();
-                $sumaSelected = array_reduce(
-                    array_column($pairs, 'monto'),
-                    fn ($c, $m) => bcadd($c ?? '0', $m, $this->scale),
-                    '0'
-                );
-            } else {
-                // Ajuste obligatorio < 5%. No se avanza hasta conseguirlo: más fases, SA largo, reinicios aleatorios.
-                $umbralPct = 0.05;
-                $multiStartRuns = 48;
-                $fasesPorBloque = 80;
-                $maxBloques = 60;
-                $scale2 = $this->scale + 2;
-                $montoObjFloat = (float) $montoObjetivo;
-                $globalBestIndices = null;
-                $globalBestSuma = null;
-                $globalBestAbsDiff = null;
-
-                for ($bloque = 0; $bloque < $maxBloques; $bloque++) {
-                    $bestIndices = null;
-                    $bestSuma = null;
-                    $bestAbsDiff = null;
-
-                    for ($run = 0; $run < $multiStartRuns; $run++) {
-                        $result = $this->greedySeleccion($pairs, $total, $cantidadObjetivo, $montoObjetivo);
-                        if ($result === null) {
-                            continue;
-                        }
-                        $absDiff = $result['abs_diff'];
-                        if ($bestAbsDiff === null || bccomp($absDiff, $bestAbsDiff, $scale2) < 0) {
-                            $bestAbsDiff = $absDiff;
-                            $bestIndices = $result['indices'];
-                            $bestSuma = $result['suma'];
-                        }
-                    }
-
-                    if ($bestIndices === null) {
-                        $result = $this->greedySeleccion($pairs, $total, $cantidadObjetivo, $montoObjetivo);
-                        if ($result !== null) {
-                            $bestIndices = $result['indices'];
-                            $bestSuma = $result['suma'];
-                            $bestAbsDiff = $result['abs_diff'];
-                        }
-                    }
-                    if ($bestIndices !== null && ($globalBestAbsDiff === null || bccomp($bestAbsDiff, $globalBestAbsDiff, $scale2) < 0)) {
-                        $globalBestAbsDiff = $bestAbsDiff;
-                        $globalBestIndices = $bestIndices;
-                        $globalBestSuma = $bestSuma;
-                    }
-
-                    for ($fase = 0; $fase < $fasesPorBloque && $bestIndices !== null; $fase++) {
-                        $selectedIndices = $this->simulatedAnnealing($pairs, $total, $bestIndices, $bestSuma, $cantidadObjetivo, $montoObjetivo);
-                        $sumaFase = '0';
-                        foreach ($selectedIndices as $idx) {
-                            $sumaFase = bcadd($sumaFase, $pairs[$idx]['monto'], $this->scale);
-                        }
-                        $absAjusteFase = $this->absDiff($montoObjetivo, $sumaFase, $scale2);
-                        if ($globalBestAbsDiff === null || bccomp($absAjusteFase, $globalBestAbsDiff, $scale2) < 0) {
-                            $globalBestAbsDiff = $absAjusteFase;
-                            $globalBestIndices = $selectedIndices;
-                            $globalBestSuma = $sumaFase;
-                        }
-                        $bestIndices = $selectedIndices;
-                        $bestSuma = $sumaFase;
-                    }
-
-                    if ($montoObjFloat > 0 && $globalBestAbsDiff !== null) {
-                        $pct = (float) $globalBestAbsDiff / $montoObjFloat;
-                        if ($pct <= $umbralPct) {
-                            break;
-                        }
-                    }
-
-                    if ($bloque >= 2 && $globalBestIndices !== null) {
-                        $bestIndices = $globalBestIndices;
-                        $bestSuma = $globalBestSuma;
-                    }
-                }
-
-                $selectedIndices = $globalBestIndices ?? $bestIndices ?? [];
-                $sumaSelected = $globalBestSuma ?? $bestSuma ?? '0';
-                if ($sumaSelected === '0' && !empty($selectedIndices)) {
-                    foreach ($selectedIndices as $idx) {
-                        $sumaSelected = bcadd($sumaSelected, $pairs[$idx]['monto'], $this->scale);
-                    }
-                }
-
-                $selected = collect($selectedIndices)->map(fn ($idx) => $pairs[$idx]['pedido'])->values();
-
-                $selected = $selected->sortBy([
-                    fn ($p) => $p->fecha_factura ?? $p->created_at,
-                    fn ($p) => $p->id,
-                ])->values();
-            }
-
-            $ajuste = bcsub($montoObjetivo, $sumaSelected, $this->scale);
+        if ($total <= $cantidadObjetivo) {
+            $selected = collect($pairs)->map(fn ($p) => $p['pedido'])->values();
+            $sumaSelected = array_reduce(
+                array_column($pairs, 'monto'),
+                fn ($c, $m) => bcadd($c ?? '0', $m, $this->scale),
+                '0'
+            );
+        } else {
+            // Ajuste obligatorio < 5%. No se avanza hasta conseguirlo: más fases, SA largo, reinicios aleatorios.
+            $umbralPct = 0.05;
+            $multiStartRuns = 48;
+            $fasesPorBloque = 80;
+            $maxBloques = 60;
+            $scale2 = $this->scale + 2;
             $montoObjFloat = (float) $montoObjetivo;
-            $pctAjuste = $montoObjFloat > 0 ? abs((float) $ajuste) / $montoObjFloat : 0.0;
-            if ($pctAjuste > 0.05) {
-                return ['rechazado_ajuste' => true, 'pct' => $pctAjuste];
+            $globalBestIndices = null;
+            $globalBestSuma = null;
+            $globalBestAbsDiff = null;
+
+            for ($bloque = 0; $bloque < $maxBloques; $bloque++) {
+                $bestIndices = null;
+                $bestSuma = null;
+                $bestAbsDiff = null;
+
+                for ($run = 0; $run < $multiStartRuns; $run++) {
+                    $result = $this->greedySeleccion($pairs, $total, $cantidadObjetivo, $montoObjetivo);
+                    if ($result === null) {
+                        continue;
+                    }
+                    $absDiff = $result['abs_diff'];
+                    if ($bestAbsDiff === null || bccomp($absDiff, $bestAbsDiff, $scale2) < 0) {
+                        $bestAbsDiff = $absDiff;
+                        $bestIndices = $result['indices'];
+                        $bestSuma = $result['suma'];
+                    }
+                }
+
+                if ($bestIndices === null) {
+                    $result = $this->greedySeleccion($pairs, $total, $cantidadObjetivo, $montoObjetivo);
+                    if ($result !== null) {
+                        $bestIndices = $result['indices'];
+                        $bestSuma = $result['suma'];
+                        $bestAbsDiff = $result['abs_diff'];
+                    }
+                }
+                if ($bestIndices !== null && ($globalBestAbsDiff === null || bccomp($bestAbsDiff, $globalBestAbsDiff, $scale2) < 0)) {
+                    $globalBestAbsDiff = $bestAbsDiff;
+                    $globalBestIndices = $bestIndices;
+                    $globalBestSuma = $bestSuma;
+                }
+
+                for ($fase = 0; $fase < $fasesPorBloque && $bestIndices !== null; $fase++) {
+                    $selectedIndices = $this->simulatedAnnealing($pairs, $total, $bestIndices, $bestSuma, $cantidadObjetivo, $montoObjetivo);
+                    $sumaFase = '0';
+                    foreach ($selectedIndices as $idx) {
+                        $sumaFase = bcadd($sumaFase, $pairs[$idx]['monto'], $this->scale);
+                    }
+                    $absAjusteFase = $this->absDiff($montoObjetivo, $sumaFase, $scale2);
+                    if ($globalBestAbsDiff === null || bccomp($absAjusteFase, $globalBestAbsDiff, $scale2) < 0) {
+                        $globalBestAbsDiff = $absAjusteFase;
+                        $globalBestIndices = $selectedIndices;
+                        $globalBestSuma = $sumaFase;
+                    }
+                    $bestIndices = $selectedIndices;
+                    $bestSuma = $sumaFase;
+                }
+
+                if ($montoObjFloat > 0 && $globalBestAbsDiff !== null) {
+                    $pct = (float) $globalBestAbsDiff / $montoObjFloat;
+                    if ($pct <= $umbralPct) {
+                        break;
+                    }
+                }
+
+                if ($bloque >= 2 && $globalBestIndices !== null) {
+                    $bestIndices = $globalBestIndices;
+                    $bestSuma = $globalBestSuma;
+                }
             }
 
+            $selectedIndices = $globalBestIndices ?? $bestIndices ?? [];
+            $sumaSelected = $globalBestSuma ?? $bestSuma ?? '0';
+            if ($sumaSelected === '0' && !empty($selectedIndices)) {
+                foreach ($selectedIndices as $idx) {
+                    $sumaSelected = bcadd($sumaSelected, $pairs[$idx]['monto'], $this->scale);
+                }
+            }
+
+            $selected = collect($selectedIndices)->map(fn ($idx) => $pairs[$idx]['pedido'])->values();
+
+            $selected = $selected->sortBy([
+                fn ($p) => $p->fecha_factura ?? $p->created_at,
+                fn ($p) => $p->id,
+            ])->values();
+        }
+
+        $ajuste = bcsub($montoObjetivo, $sumaSelected, $this->scale);
+        $montoObjFloat = (float) $montoObjetivo;
+        $pctAjuste = $montoObjFloat > 0 ? abs((float) $ajuste) / $montoObjFloat : 0.0;
+        if ($pctAjuste > 0.05) {
+            return ['rechazado_ajuste' => true, 'pct' => $pctAjuste];
+        }
+
+        $inicioNum = (int) $facturaInicio;
+        $ultimo = $selected->last();
+        $nuevoTotal = bcadd($sumaSelected, $ajuste, $this->scale);
+
+        // Transacción corta: solo escrituras (evita timeout por conexión inactiva en Cloudways).
+        \Log::info('CuadrePedidosDiario: iniciando transacción de escritura', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'selected_count' => $selected->count()]);
+        return DB::transaction(function () use ($selected, $fechaStr, $maquinaFiscal, $facturaInicio, $sumaSelected, $ajuste, $nuevoTotal, $inicioNum, $ultimo) {
             \Log::info('CuadrePedidosDiario: asignando factura y guardando pedidos', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'selected_count' => $selected->count()]);
-            $inicioNum = (int) $facturaInicio;
             foreach ($selected as $i => $ped) {
                 $ped->numero_factura = (string) ($inicioNum + $i);
                 if (Schema::hasColumn('pedidos', 'maquina_fiscal')) {
@@ -711,15 +717,11 @@ class CuadrePedidosDiario extends Command
                 $this->totalPedidosMarcados++;
             }
 
-            $ultimo = $selected->last();
-            $nuevoTotal = bcadd($sumaSelected, $ajuste, $this->scale);
-
             if (bccomp($ajuste, '0', $this->scale) !== 0) {
                 $ajusteFloat = (float) $ajuste;
                 $idProductoAjuste = $this->obtenerProductoDisponibleParaAjuste($ultimo->id);
                 $tasa = $this->obtenerTasaParaPedido($ultimo->id);
                 if ($idProductoAjuste !== null) {
-                    // cantidad * precio_unitario = monto objetivo en Bs
                     $cantidadAjuste = 1;
                     $precioUnitarioAjuste = round($ajusteFloat, 4);
                     $montoUsd = $tasa > 0 ? round($ajusteFloat / $tasa, 4) : 0;
