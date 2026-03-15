@@ -46,44 +46,22 @@
         @endif
     </form>
 
-    @if(count($dias_unicos ?? []) > 0)
-    <div class="filtro" style="margin-bottom: 20px;">
-        <form method="post" action="{{ route('reportes.cuadre-diario.descargar-masivo') }}" id="form-descarga-masiva">
-            @csrf
-            <input type="hidden" name="fecha_desde" value="{{ $fecha_desde ?? '' }}">
-            <input type="hidden" name="fecha_hasta" value="{{ $fecha_hasta ?? '' }}">
-            <strong>Descargar PDFs por día (carpetas Mes → Día):</strong>
-            <span style="margin-left: 10px;">
-                <button type="button" class="btn-check" data-action="select">Seleccionar todo</button>
-                <button type="button" class="btn-check" data-action="none">Quitar todo</button>
-            </span>
-            <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;">
-                @foreach($dias_unicos as $fecha)
-                <label style="display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
-                    <input type="checkbox" name="fechas[]" value="{{ $fecha }}" class="cb-dia">
-                    {{ $fecha }}
-                </label>
-                @endforeach
-            </div>
-            <div style="margin-top: 12px;">
-                <button type="submit" class="btn-export">Descargar ZIP (pedidos en Mes/Día)</button>
-            </div>
-        </form>
-    </div>
-    <script>
-        document.querySelectorAll('[data-action]').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                var cbs = document.querySelectorAll('.cb-dia');
-                var action = this.getAttribute('data-action');
-                cbs.forEach(function(cb) { cb.checked = (action === 'select'); });
-            });
-        });
-    </script>
+    @if(count($resultados ?? []) > 0)
+    <form method="post" action="{{ route('reportes.cuadre-diario.descargar-masivo') }}" id="form-descarga-masiva">
+        @csrf
+        <input type="hidden" name="fecha_desde" value="{{ $fecha_desde ?? '' }}">
+        <input type="hidden" name="fecha_hasta" value="{{ $fecha_hasta ?? '' }}">
     @endif
-
     <table>
         <thead>
             <tr>
+                @if(count($resultados ?? []) > 0)
+                <th style="width: 44px; text-align: center;">
+                    <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-weight: normal;">
+                        <input type="checkbox" id="cb-seleccionar-todo" title="Seleccionar todo">
+                    </label>
+                </th>
+                @endif
                 <th>Fecha</th>
                 <th>Máquina fiscal</th>
                 <th>Monto USD</th>
@@ -98,6 +76,11 @@
         <tbody>
             @forelse($resultados as $r)
                 <tr>
+                    @if(count($resultados ?? []) > 0)
+                    <td style="text-align: center;">
+                        <input type="checkbox" name="fechas[]" value="{{ $r->fecha }}" class="cb-dia">
+                    </td>
+                    @endif
                     <td class="fecha">{{ $r->fecha }}</td>
                     <td class="text-left">{{ $r->maquina_fiscal }}</td>
                     <td>{{ number_format($r->monto_usd ?? 0, 2) }}</td>
@@ -123,6 +106,7 @@
             @endforelse
             @if(count($resultados ?? []) > 0 && isset($total_dias))
                 <tr class="total-row">
+                    <td style="text-align: center;">—</td>
                     <td class="fecha text-left"><strong>{{ $total_dias }} {{ $total_dias === 1 ? 'día' : 'días' }}</strong></td>
                     <td class="text-left">—</td>
                     <td><strong>{{ number_format($total_monto_usd ?? 0, 2) }}</strong></td>
@@ -136,5 +120,22 @@
             @endif
         </tbody>
     </table>
+    @if(count($resultados ?? []) > 0)
+        <div style="margin-top: 12px;">
+            <button type="submit" class="btn-export">Descargar ZIP (pedidos en Mes/Día)</button>
+        </div>
+    </form>
+    <script>
+        (function() {
+            var selectAll = document.getElementById('cb-seleccionar-todo');
+            var rows = document.querySelectorAll('.cb-dia');
+            if (selectAll && rows.length) {
+                selectAll.addEventListener('change', function() {
+                    rows.forEach(function(cb) { cb.checked = selectAll.checked; });
+                });
+            }
+        })();
+    </script>
+    @endif
 </body>
 </html>
