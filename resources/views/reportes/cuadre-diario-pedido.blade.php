@@ -51,7 +51,7 @@
         $rifCliente = $cliente && $cliente->identificacion && $cliente->identificacion !== 'CF' ? $cliente->identificacion : '—';
         $direccionCliente = $cliente && $cliente->direccion && trim((string)$cliente->direccion) !== '' ? $cliente->direccion : '—';
         $nombreOrigen = '—';
-        $fechaPedido = $pedido->fecha_factura ? date('Y-m-d H:i', strtotime($pedido->fecha_factura)) : ($pedido->created_at ? date('Y-m-d H:i', strtotime($pedido->created_at)) : '');
+        $fechaPedido = $pedido->fecha_factura ? date('Y-m-d', strtotime($pedido->fecha_factura)) : ($pedido->created_at ? date('Y-m-d', strtotime($pedido->created_at)) : '');
         $fmt = function($n) { return number_format((float)$n, 2, ',', '.'); };
         $fmtPrecio = function($n) { return number_format((float)$n, 4, ',', '.'); };
         $tasaPedido = $tasaPedido ?? null;

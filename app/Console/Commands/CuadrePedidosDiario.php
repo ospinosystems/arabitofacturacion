@@ -560,12 +560,15 @@ class CuadrePedidosDiario extends Command
 
         // Lectura y cómputo pesado FUERA de la transacción para evitar "MySQL server has gone away"
         // (en Cloudways la conexión se cierra si la transacción está abierta mucho tiempo sin consultas).
+        // Limitar candidatos en función del objetivo: no considerar todos los pedidos del día, solo hasta (objetivo × factor).
+        $limiteCandidatos = (int) max($cantidadObjetivo + 1, min(500, $cantidadObjetivo * 2));
         $pedidos = pedidos::whereRaw('DATE(COALESCE(fecha_factura, created_at)) = ?', [$fechaStr])
             ->where(function ($q) {
                 $q->whereNull('valido')->orWhere('valido', false)->orWhere('valido', 0);
             })
             ->orderByRaw('COALESCE(fecha_factura, created_at) ASC')
             ->orderBy('id')
+            ->limit($limiteCandidatos)
             ->get();
 
         \Log::info('CuadrePedidosDiario: pedidos candidatos obtenidos', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'total_pedidos' => $pedidos->count()]);
