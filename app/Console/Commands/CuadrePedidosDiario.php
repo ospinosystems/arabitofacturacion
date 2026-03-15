@@ -713,41 +713,66 @@ class CuadrePedidosDiario extends Command
 
             if (bccomp($ajuste, '0', $this->scale) !== 0) {
                 $ajusteFloat = (float) $ajuste;
-                $idProductoAjuste = $this->obtenerProductoDisponibleParaAjuste($ultimo->id);
                 $tasa = $this->obtenerTasaParaPedido($ultimo->id);
-                if ($idProductoAjuste !== null) {
-                    $cantidadAjuste = 1;
-                    $precioUnitarioAjuste = round($ajusteFloat, 4);
-                    $montoUsd = $tasa > 0 ? round($ajusteFloat / $tasa, 4) : 0;
-                    items_pedidos::create([
-                        'id_pedido'       => $ultimo->id,
-                        'id_producto'     => $idProductoAjuste,
-                        'cantidad'        => $cantidadAjuste,
-                        'precio_unitario' => $precioUnitarioAjuste,
-                        'descuento'       => 0,
-                        'monto'           => $montoUsd,
-                        'monto_bs'        => $ajusteFloat,
-                        'tasa'            => $tasa > 0 ? $tasa : null,
-                        'condicion'       => 0,
-                    ]);
+                $itemAjustar = $this->obtenerItemExistenteParaAjuste($ultimo->id, $ajusteFloat);
+                if ($itemAjustar !== null) {
+                    // Alterar precio_unitario (USD) del ítem existente; 1 decimal o entero. monto = cantidad * precio_unitario, monto_bs = monto * tasa.
+                    $cantidad = (float) $itemAjustar->cantidad;
+                    $montoBsActual = (float) ($itemAjustar->monto_bs ?? $itemAjustar->monto * $tasa);
+                    $nuevoMontoBsItem = $montoBsActual + $ajusteFloat;
+                    if ($cantidad > 0 && $tasa > 0 && $nuevoMontoBsItem >= 0) {
+                        $precioUnitarioNuevo = ($nuevoMontoBsItem / $tasa) / $cantidad;
+                        $precioUnitarioNuevo = round($precioUnitarioNuevo, 1); // un solo decimal o entero
+                        $montoNuevo = round($cantidad * $precioUnitarioNuevo, 4);
+                        $montoBsNuevo = round($montoNuevo * $tasa, 4);
+                        $itemAjustar->precio_unitario = $precioUnitarioNuevo;
+                        $itemAjustar->monto = $montoNuevo;
+                        $itemAjustar->monto_bs = $montoBsNuevo;
+                        if ($tasa > 0) {
+                            $itemAjustar->tasa = $tasa;
+                        }
+                        $itemAjustar->save();
+                    }
                 } else {
-                    $this->warn("Sin producto disponible para ítem de ajuste en pedido {$ultimo->id}; se crea ítem sin producto.");
-                    items_pedidos::create([
-                        'id_pedido'   => $ultimo->id,
-                        'id_producto' => null,
-                        'cantidad'   => 1,
-                        'descuento'  => 0,
-                        'monto'      => 0,
-                        'monto_bs'   => $ajusteFloat,
-                        'condicion'  => 0,
-                    ]);
+                    // Fallback: sin ítem modificable, se crea ítem de ajuste (producto real o sin producto).
+                    $idProductoAjuste = $this->obtenerProductoDisponibleParaAjuste($ultimo->id);
+                    if ($idProductoAjuste !== null) {
+                        $cantidadAjuste = 1;
+                        $precioUnitarioAjuste = round($ajusteFloat / $tasa, 1);
+                        $montoUsd = $cantidadAjuste * $precioUnitarioAjuste;
+                        items_pedidos::create([
+                            'id_pedido'       => $ultimo->id,
+                            'id_producto'     => $idProductoAjuste,
+                            'cantidad'        => $cantidadAjuste,
+                            'precio_unitario' => $precioUnitarioAjuste,
+                            'descuento'       => 0,
+                            'monto'           => round($montoUsd, 4),
+                            'monto_bs'        => round($montoUsd * $tasa, 4),
+                            'tasa'            => $tasa > 0 ? $tasa : null,
+                            'condicion'       => 0,
+                        ]);
+                    } else {
+                        $this->warn("Sin ítem para ajustar ni producto en pedido {$ultimo->id}; se crea ítem sin producto.");
+                        items_pedidos::create([
+                            'id_pedido'   => $ultimo->id,
+                            'id_producto' => null,
+                            'cantidad'   => 1,
+                            'descuento'  => 0,
+                            'monto'      => round($ajusteFloat / $tasa, 4),
+                            'monto_bs'   => $ajusteFloat,
+                            'condicion'  => 0,
+                        ]);
+                    }
                 }
+                // Recalcular total del pedido desde ítems y actualizar pago.
+                $sumaItemsBs = (float) items_pedidos::where('id_pedido', $ultimo->id)
+                    ->get()
+                    ->sum(fn ($i) => (float) ($i->monto_bs ?? $i->monto * ($i->tasa ?: $tasa)));
                 $pago = pago_pedidos::where('id_pedido', $ultimo->id)->first();
-                $nuevoTotalFloat = (float) $nuevoTotal;
                 if ($pago) {
-                    $pago->monto = $nuevoTotalFloat;
+                    $pago->monto = $sumaItemsBs;
                     if (Schema::hasColumn('pago_pedidos', 'monto_bs')) {
-                        $pago->monto_bs = $nuevoTotalFloat;
+                        $pago->monto_bs = $sumaItemsBs;
                     }
                     $pago->save();
                 } else {
@@ -755,11 +780,11 @@ class CuadrePedidosDiario extends Command
                         'id_pedido'      => $ultimo->id,
                         'tipo'           => '5',
                         'cuenta'         => 1,
-                        'monto'          => $nuevoTotalFloat,
-                        'monto_original' => $nuevoTotalFloat,
+                        'monto'          => $sumaItemsBs,
+                        'monto_original' => $sumaItemsBs,
                     ];
                     if (Schema::hasColumn('pago_pedidos', 'monto_bs')) {
-                        $datosPago['monto_bs'] = $nuevoTotalFloat;
+                        $datosPago['monto_bs'] = $sumaItemsBs;
                     }
                     pago_pedidos::create($datosPago);
                 }
@@ -798,6 +823,31 @@ class CuadrePedidosDiario extends Command
             }
         }
         return false;
+    }
+
+    /**
+     * Obtiene un ítem existente del pedido al que se puede aplicar el ajuste alterando precio_unitario (USD).
+     * Preferible ítem con id_producto (producto real). Si ajuste < 0, el ítem debe tener monto_bs >= |ajuste|.
+     */
+    protected function obtenerItemExistenteParaAjuste(int $idPedido, float $ajusteFloat): ?items_pedidos
+    {
+        $query = items_pedidos::where('id_pedido', $idPedido)->where('cantidad', '>', 0)->orderBy('id');
+        if ($ajusteFloat < 0) {
+            $minMontoBs = abs($ajusteFloat);
+            $items = $query->get()->filter(function ($i) use ($minMontoBs) {
+                $tasa = (float) ($i->tasa ?: 1);
+                $montoBs = (float) ($i->monto_bs ?? $i->monto * $tasa);
+                return $montoBs >= $minMontoBs;
+            });
+        } else {
+            $items = $query->get();
+        }
+        if ($items->isEmpty()) {
+            return null;
+        }
+        // Preferir ítem con producto real (id_producto not null).
+        $conProducto = $items->firstWhere(fn ($i) => $i->id_producto !== null);
+        return $conProducto ?? $items->first();
     }
 
     /**
