@@ -106,43 +106,33 @@ class CuadrePedidosDiario extends Command
                 \Log::info('CuadrePedidosDiario: inicio iteración', ['fecha' => $fecha, 'maquina' => $maquina, 'paso' => 'antes_reconnect']);
                 DB::reconnect();
                 \Log::info('CuadrePedidosDiario: reconnect hecho', ['fecha' => $fecha, 'maquina' => $maquina]);
-                $maxReintentos = 6;
                 $maxReintentosConexion = 3;
-                $intento = 0;
                 $resultado = null;
                 $reintentoConexion = 0;
                 $procesado = false;
                 while (!$procesado) {
                     try {
-                        do {
-                            $resultado = $this->procesarDiaMaquina($fecha, $maquina, $montoObjetivo, $facturaInicio, $facturaFin, $cantidad);
-                            if ($resultado !== null && !empty($resultado['rechazado_ajuste']) && $intento < $maxReintentos - 1) {
-                                $pct = isset($resultado['pct']) ? round($resultado['pct'] * 100, 1) : 0;
-                                $this->line('  → ajuste ' . $pct . '%, reintentando (' . ($intento + 1) . '/' . $maxReintentos . ')…');
-                                $intento++;
-                            } else {
-                                break;
-                            }
-                        } while (true);
+                        $resultado = $this->procesarDiaMaquina($fecha, $maquina, $montoObjetivo, $facturaInicio, $facturaFin, $cantidad);
 
                         if ($resultado !== null && !empty($resultado['skipped'])) {
                             $this->filasOmitidas++;
                             $this->line('  → <fg=yellow>omitido (día+máquina ya procesado)</>');
-                        } elseif ($resultado !== null && !empty($resultado['rechazado_ajuste'])) {
-                            $this->filasRechazadasAjuste++;
-                            $pct = isset($resultado['pct']) ? round($resultado['pct'] * 100, 1) : 0;
-                            $this->line('  → <fg=red>rechazado tras ' . $maxReintentos . ' intentos: ajuste ' . $pct . '% (máximo 5%).</>');
                         } elseif ($resultado !== null) {
                             $this->filasProcesadas++;
                             $this->totalMontoAcumulado = bcadd($this->totalMontoAcumulado, $resultado['monto_total_dia'], $this->scale);
-                            $this->line(sprintf(
+                            $linea = sprintf(
                                 '  → <info>%d facturas</info> (%s–%s), <info>%s Bs</info> (ajuste: <comment>%s Bs</comment>)',
                                 $resultado['cantidad_facturas'],
                                 $facturaInicio,
                                 $facturaFin,
                                 number_format((float) $resultado['monto_total_dia'], 4, ',', '.'),
                                 number_format((float) $resultado['diferencia'], 4, ',', '.')
-                            ));
+                            );
+                            $pctAjuste = $resultado['pct_ajuste'] ?? 0;
+                            if ($pctAjuste > 0.05) {
+                                $linea .= ' <fg=yellow>(ajuste alto: ' . round($pctAjuste * 100, 1) . '%)</>';
+                            }
+                            $this->line($linea);
                         } else {
                             $this->line('  → sin pedidos no válidos para esta fecha');
                         }
@@ -701,9 +691,7 @@ class CuadrePedidosDiario extends Command
         $ajuste = bcsub($montoObjetivo, $sumaSelected, $this->scale);
         $montoObjFloat = (float) $montoObjetivo;
         $pctAjuste = $montoObjFloat > 0 ? abs((float) $ajuste) / $montoObjFloat : 0.0;
-        if ($pctAjuste > 0.05) {
-            return ['rechazado_ajuste' => true, 'pct' => $pctAjuste];
-        }
+        // Siempre aplicamos la mejor solución encontrada (aunque ajuste > 5%); se avisa en salida si es alto.
 
         $inicioNum = (int) $facturaInicio;
         $ultimo = $selected->last();
@@ -711,7 +699,7 @@ class CuadrePedidosDiario extends Command
 
         // Transacción corta: solo escrituras (evita timeout por conexión inactiva en Cloudways).
         \Log::info('CuadrePedidosDiario: iniciando transacción de escritura', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'selected_count' => $selected->count()]);
-        return DB::transaction(function () use ($selected, $fechaStr, $maquinaFiscal, $facturaInicio, $sumaSelected, $ajuste, $nuevoTotal, $inicioNum, $ultimo) {
+        return DB::transaction(function () use ($selected, $fechaStr, $maquinaFiscal, $facturaInicio, $sumaSelected, $ajuste, $nuevoTotal, $inicioNum, $ultimo, $pctAjuste) {
             \Log::info('CuadrePedidosDiario: asignando factura y guardando pedidos', ['fecha' => $fechaStr, 'maquina' => $maquinaFiscal, 'selected_count' => $selected->count()]);
             foreach ($selected as $i => $ped) {
                 $ped->numero_factura = (string) ($inicioNum + $i);
@@ -782,6 +770,7 @@ class CuadrePedidosDiario extends Command
                 'cantidad_facturas' => $selected->count(),
                 'monto_total_dia'   => $nuevoTotal,
                 'diferencia'        => $ajuste,
+                'pct_ajuste'        => $pctAjuste,
             ];
         });
     }
