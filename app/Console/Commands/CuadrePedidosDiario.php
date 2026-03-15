@@ -600,84 +600,40 @@ class CuadrePedidosDiario extends Command
                 '0'
             );
         } else {
-            // Ajuste obligatorio < 5%. Parámetros reducidos para menor tiempo (sigue buscando <5%).
             $umbralPct = 0.05;
-            $multiStartRuns = 24;
-            $fasesPorBloque = 50;
-            $maxBloques = 40;
-            $scale2 = $this->scale + 2;
+            $maxSegundos = 10;
             $montoObjFloat = (float) $montoObjetivo;
+            $montosFloat = array_map(fn ($p) => (float) $p['monto'], $pairs);
             $globalBestIndices = null;
             $globalBestSuma = null;
-            $globalBestAbsDiff = null;
+            $globalBestDiff = PHP_FLOAT_MAX;
+            $inicio = microtime(true);
 
-            for ($bloque = 0; $bloque < $maxBloques; $bloque++) {
-                $bestIndices = null;
-                $bestSuma = null;
-                $bestAbsDiff = null;
-
-                for ($run = 0; $run < $multiStartRuns; $run++) {
-                    $result = $this->greedySeleccion($pairs, $total, $cantidadObjetivo, $montoObjetivo);
-                    if ($result === null) {
-                        continue;
-                    }
-                    $absDiff = $result['abs_diff'];
-                    if ($bestAbsDiff === null || bccomp($absDiff, $bestAbsDiff, $scale2) < 0) {
-                        $bestAbsDiff = $absDiff;
-                        $bestIndices = $result['indices'];
-                        $bestSuma = $result['suma'];
-                    }
+            // Greedy: 8 intentos rápidos
+            for ($run = 0; $run < 8; $run++) {
+                $result = $this->greedySeleccionRapida($montosFloat, $total, $cantidadObjetivo, $montoObjFloat);
+                if ($result !== null && $result['abs_diff'] < $globalBestDiff) {
+                    $globalBestDiff = $result['abs_diff'];
+                    $globalBestIndices = $result['indices'];
+                    $globalBestSuma = $result['suma'];
                 }
+                if ($globalBestDiff / max($montoObjFloat, 0.01) <= $umbralPct) break;
+            }
 
-                if ($bestIndices === null) {
-                    $result = $this->greedySeleccion($pairs, $total, $cantidadObjetivo, $montoObjetivo);
-                    if ($result !== null) {
-                        $bestIndices = $result['indices'];
-                        $bestSuma = $result['suma'];
-                        $bestAbsDiff = $result['abs_diff'];
-                    }
-                }
-                if ($bestIndices !== null && ($globalBestAbsDiff === null || bccomp($bestAbsDiff, $globalBestAbsDiff, $scale2) < 0)) {
-                    $globalBestAbsDiff = $bestAbsDiff;
-                    $globalBestIndices = $bestIndices;
-                    $globalBestSuma = $bestSuma;
-                }
-
-                for ($fase = 0; $fase < $fasesPorBloque && $bestIndices !== null; $fase++) {
-                    $selectedIndices = $this->simulatedAnnealing($pairs, $total, $bestIndices, $bestSuma, $cantidadObjetivo, $montoObjetivo);
-                    $sumaFase = '0';
-                    foreach ($selectedIndices as $idx) {
-                        $sumaFase = bcadd($sumaFase, $pairs[$idx]['monto'], $this->scale);
-                    }
-                    $absAjusteFase = $this->absDiff($montoObjetivo, $sumaFase, $scale2);
-                    if ($globalBestAbsDiff === null || bccomp($absAjusteFase, $globalBestAbsDiff, $scale2) < 0) {
-                        $globalBestAbsDiff = $absAjusteFase;
-                        $globalBestIndices = $selectedIndices;
-                        $globalBestSuma = $sumaFase;
-                    }
-                    $bestIndices = $selectedIndices;
-                    $bestSuma = $sumaFase;
-                }
-
-                if ($montoObjFloat > 0 && $globalBestAbsDiff !== null) {
-                    $pct = (float) $globalBestAbsDiff / $montoObjFloat;
-                    if ($pct <= $umbralPct) {
-                        break;
-                    }
-                }
-
-                if ($bloque >= 2 && $globalBestIndices !== null) {
-                    $bestIndices = $globalBestIndices;
-                    $bestSuma = $globalBestSuma;
+            // SA rápido con floats, máximo $maxSegundos
+            if ($globalBestIndices !== null && $globalBestDiff / max($montoObjFloat, 0.01) > $umbralPct) {
+                $saResult = $this->simulatedAnnealingRapido($montosFloat, $total, $globalBestIndices, $globalBestSuma, $cantidadObjetivo, $montoObjFloat, $maxSegundos, $inicio);
+                if ($saResult['abs_diff'] < $globalBestDiff) {
+                    $globalBestDiff = $saResult['abs_diff'];
+                    $globalBestIndices = $saResult['indices'];
+                    $globalBestSuma = $saResult['suma'];
                 }
             }
 
-            $selectedIndices = $globalBestIndices ?? $bestIndices ?? [];
-            $sumaSelected = $globalBestSuma ?? $bestSuma ?? '0';
-            if ($sumaSelected === '0' && !empty($selectedIndices)) {
-                foreach ($selectedIndices as $idx) {
-                    $sumaSelected = bcadd($sumaSelected, $pairs[$idx]['monto'], $this->scale);
-                }
+            $selectedIndices = $globalBestIndices ?? [];
+            $sumaSelected = '0';
+            foreach ($selectedIndices as $idx) {
+                $sumaSelected = bcadd($sumaSelected, $pairs[$idx]['monto'], $this->scale);
             }
 
             $selected = collect($selectedIndices)->map(fn ($idx) => $pairs[$idx]['pedido'])->values();
@@ -825,6 +781,78 @@ class CuadrePedidosDiario extends Command
     {
         $tasaMoneda = DB::table('monedas')->where('tipo', 1)->orderBy('id', 'desc')->value('valor');
         return $tasaMoneda !== null && (float) $tasaMoneda > 0 ? (float) $tasaMoneda : 1.0;
+    }
+
+    /**
+     * Greedy rápido con floats: elige cantidadObjetivo índices que minimicen |suma - objetivo|.
+     */
+    protected function greedySeleccionRapida(array $montosFloat, int $total, int $cantidadObjetivo, float $montoObjetivo): ?array
+    {
+        if ($total < $cantidadObjetivo || $cantidadObjetivo < 1) return null;
+        $indices = range(0, $total - 1);
+        shuffle($indices);
+        $selectedIndices = [];
+        $suma = 0.0;
+        for ($k = 0; $k < $cantidadObjetivo; $k++) {
+            $bestIdx = null;
+            $bestDiff = PHP_FLOAT_MAX;
+            $remaining = $cantidadObjetivo - $k - 1;
+            foreach ($indices as $idx) {
+                if (in_array($idx, $selectedIndices, true)) continue;
+                $candidata = $suma + $montosFloat[$idx];
+                $diff = abs($montoObjetivo - $candidata);
+                if ($diff < $bestDiff || ($diff === $bestDiff && mt_rand(0, 1) === 0)) {
+                    $bestDiff = $diff;
+                    $bestIdx = $idx;
+                }
+            }
+            if ($bestIdx === null) return null;
+            $selectedIndices[] = $bestIdx;
+            $suma += $montosFloat[$bestIdx];
+        }
+        return ['indices' => $selectedIndices, 'suma' => $suma, 'abs_diff' => abs($montoObjetivo - $suma)];
+    }
+
+    /**
+     * SA rápido con floats y límite de tiempo.
+     */
+    protected function simulatedAnnealingRapido(array $montosFloat, int $total, array $selectedIndices, float $currentSuma, int $cantidadObjetivo, float $montoObjetivo, int $maxSegundos, float $inicioTime): array
+    {
+        $currentAbs = abs($montoObjetivo - $currentSuma);
+        $bestIndices = $selectedIndices;
+        $bestSuma = $currentSuma;
+        $bestAbs = $currentAbs;
+        $selectedSet = array_flip($selectedIndices);
+        $maxIter = min(200000, 2000 * $total);
+        $t = 100.0;
+        $cooling = exp(log(0.0002 / 100.0) / $maxIter);
+        $deadline = $inicioTime + $maxSegundos;
+
+        for ($it = 0; $it < $maxIter; $it++) {
+            if (($it & 4095) === 0 && microtime(true) >= $deadline) break;
+            $i = array_rand($selectedIndices);
+            $idxOut = $selectedIndices[$i];
+            $idxIn = mt_rand(0, $total - 1);
+            if (isset($selectedSet[$idxIn])) continue;
+
+            $newSuma = $currentSuma - $montosFloat[$idxOut] + $montosFloat[$idxIn];
+            $newAbs = abs($montoObjetivo - $newSuma);
+            $delta = $newAbs - $currentAbs;
+            if ($delta <= 0 || (mt_rand() / mt_getrandmax()) < exp(-$delta / $t)) {
+                $selectedIndices[$i] = $idxIn;
+                unset($selectedSet[$idxOut]);
+                $selectedSet[$idxIn] = true;
+                $currentSuma = $newSuma;
+                $currentAbs = $newAbs;
+                if ($newAbs < $bestAbs) {
+                    $bestAbs = $newAbs;
+                    $bestSuma = $newSuma;
+                    $bestIndices = $selectedIndices;
+                }
+            }
+            $t *= $cooling;
+        }
+        return ['indices' => $bestIndices, 'suma' => $bestSuma, 'abs_diff' => $bestAbs];
     }
 
     /**
