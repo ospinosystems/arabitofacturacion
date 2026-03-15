@@ -123,6 +123,7 @@
     @if(count($resultados ?? []) > 0)
         <div style="margin-top: 12px;">
             <button type="submit" class="btn-export">Descargar ZIP (pedidos en Mes/Día)</button>
+            <span style="margin-left: 12px; color: #666; font-size: 13px;">Si selecciona más de 30 días, la descarga se preparará en segundo plano y podrá descargarla cuando esté lista.</span>
         </div>
     </form>
     <script>

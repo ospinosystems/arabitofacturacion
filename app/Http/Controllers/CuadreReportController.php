@@ -10,6 +10,8 @@ use Symfony\Component\HttpFoundation\Response;
 use App\Models\pedidos;
 use App\Models\items_pedidos;
 use App\Models\pago_pedidos;
+use App\Services\CuadrePdfService;
+use App\Jobs\CuadreDiarioDescargaMasivaJob;
 use Barryvdh\DomPDF\Facade\Pdf;
 use ZipArchive;
 
@@ -608,13 +610,16 @@ class CuadreReportController extends Controller
         return $pdf->download($nombre . '.pdf');
     }
 
+    /** Umbral: por encima de este número de días se usa cola en segundo plano. */
+    protected const DESCARGAR_MASIVO_INLINE_MAX_DIAS = 30;
+
     /**
      * Descarga masiva: ZIP con todos los pedidos de los días seleccionados.
-     * Estructura: Mes/Dia/factura-XXX.pdf (ej. 2025-03/2025-03-15/factura-123.pdf).
+     * Si hay más de DESCARGAR_MASIVO_INLINE_MAX_DIAS días, se encola un job y se redirige a la página de estado.
+     * Estructura del ZIP: Mes/Dia/factura-XXX.pdf (ej. 2025-03/2025-03-15/factura-123.pdf).
      */
-    public function descargarMasivo(Request $request): Response
+    public function descargarMasivo(Request $request)
     {
-        set_time_limit(300);
         $fechas = $request->input('fechas', []);
         if (!is_array($fechas)) {
             $fechas = $fechas ? [$fechas] : [];
@@ -632,6 +637,22 @@ class CuadreReportController extends Controller
                 ->with('error', 'Seleccione al menos un día para descargar.');
         }
 
+        // Muchos días: cola en segundo plano
+        if (count($fechas) > static::DESCARGAR_MASIVO_INLINE_MAX_DIAS) {
+            $token = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode(random_bytes(32)));
+            $id = DB::table('cuadre_descargas')->insertGetId([
+                'token'  => $token,
+                'fechas' => json_encode($fechas),
+                'status' => 'pending',
+            ]);
+            CuadreDiarioDescargaMasivaJob::dispatch($id);
+
+            return redirect()->route('reportes.cuadre-diario.descarga-masiva.estado', ['token' => $token])
+                ->with('info', 'Se está preparando la descarga en segundo plano. Esta página se actualizará cuando esté lista (puede tardar varios minutos).');
+        }
+
+        // Pocos días: descarga inmediata
+        set_time_limit(600);
         $dateExpr = $this->dateExpr();
         $pedidosPorFecha = [];
         foreach ($fechas as $fecha) {
@@ -655,11 +676,9 @@ class CuadreReportController extends Controller
 
         foreach ($pedidosPorFecha as $fecha => $pedidosList) {
             $carpetaMes = date('Y-m', strtotime($fecha));
-            $carpetaDia = $fecha; // Y-m-d
-            $prefijo = $carpetaMes . '/' . $carpetaDia . '/';
-
+            $prefijo = $carpetaMes . '/' . $fecha . '/';
             foreach ($pedidosList as $pedido) {
-                $pdfContent = $this->generarPdfPedido($pedido->id);
+                $pdfContent = CuadrePdfService::generarPdfPedido($pedido->id);
                 if ($pdfContent === null) {
                     continue;
                 }
@@ -676,58 +695,48 @@ class CuadreReportController extends Controller
     }
 
     /**
+     * Página de estado de una descarga masiva (por token). Si está lista, muestra enlace de descarga.
+     */
+    public function descargaMasivaEstado(string $token)
+    {
+        $row = DB::table('cuadre_descargas')->where('token', $token)->first();
+        if (!$row) {
+            return redirect()->route('reportes.cuadre-diario')->with('error', 'Enlace no válido o expirado.');
+        }
+        return view('reportes.cuadre-diario-descarga-estado', [
+            'token'   => $token,
+            'status'  => $row->status,
+            'path'    => $row->path,
+            'error'   => $row->error_message,
+            'ready_at'=> $row->ready_at,
+        ]);
+    }
+
+    /**
+     * Descarga el ZIP generado por el job (cuando status = ready).
+     */
+    public function descargarMasivoPorToken(string $token): Response
+    {
+        $row = DB::table('cuadre_descargas')->where('token', $token)->first();
+        if (!$row || $row->status !== 'ready' || empty($row->path)) {
+            return redirect()->route('reportes.cuadre-diario')->with('error', 'La descarga no está disponible.');
+        }
+        $fullPath = storage_path('app/' . $row->path);
+        if (!is_file($fullPath)) {
+            return redirect()->route('reportes.cuadre-diario')->with('error', 'El archivo ya no está disponible.');
+        }
+        $nombreZip = 'cuadre-diario-pedidos-' . $token . '.zip';
+        return response()->download($fullPath, $nombreZip, [
+            'Content-Type' => 'application/zip',
+        ]);
+    }
+
+    /**
      * Genera el PDF de un pedido (vista cuadre-diario-pedido) y devuelve el contenido binario.
      */
     protected function generarPdfPedido(int $id): ?string
     {
-        $pedido = pedidos::with('cliente')->find($id);
-        if (!$pedido) {
-            return null;
-        }
-        $items = items_pedidos::where('id_pedido', $id)
-            ->leftJoin('inventarios', 'inventarios.id', '=', 'items_pedidos.id_producto')
-            ->select(
-                'items_pedidos.*',
-                'inventarios.codigo_barras',
-                'inventarios.codigo_proveedor',
-                'inventarios.descripcion as producto_descripcion'
-            )
-            ->orderBy('items_pedidos.id')
-            ->get();
-
-        $subtotalUsd = $items->sum(function ($i) { return (float) ($i->monto ?? 0); });
-        $subtotalBs = $items->sum(function ($i) { return (float) ($i->monto_bs ?? 0); });
-        $tasaPedido = null;
-        $itemConTasa = $items->first(function ($i) { return isset($i->tasa) && (float) $i->tasa > 0; });
-        if ($itemConTasa !== null) {
-            $tasaPedido = (float) $itemConTasa->tasa;
-        } elseif ($subtotalUsd > 0 && $subtotalBs > 0) {
-            $tasaPedido = $subtotalBs / $subtotalUsd;
-        }
-
-        $html = view('reportes.cuadre-diario-pedido', [
-            'pedido'        => $pedido,
-            'items'         => $items,
-            'subtotalUsd'   => $subtotalUsd,
-            'subtotalBs'    => $subtotalBs,
-            'montoTotalUsd' => $subtotalUsd,
-            'montoTotalBs'  => $subtotalBs,
-            'tasaPedido'    => $tasaPedido,
-            'pdf'           => true,
-        ])->render();
-
-        $pdf = Pdf::loadHTML($html)
-            ->setPaper('letter', 'portrait')
-            ->setOptions([
-                'isHtml5ParserEnabled' => true,
-                'isPhpEnabled'         => true,
-                'margin_left'           => 10,
-                'margin_right'          => 10,
-                'margin_top'            => 10,
-                'margin_bottom'         => 10,
-            ]);
-
-        return $pdf->output();
+        return CuadrePdfService::generarPdfPedido($id);
     }
 
     public function exportPedido(int $id): StreamedResponse
