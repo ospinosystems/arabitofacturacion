@@ -10,7 +10,6 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use ZipArchive;
 
 class CuadreDiarioDescargaMasivaJob implements ShouldQueue
@@ -50,14 +49,22 @@ class CuadreDiarioDescargaMasivaJob implements ShouldQueue
         }
 
         $dateExpr = $this->dateExpr();
-        $dir = 'descargas_cuadre';
-        Storage::makeDirectory($dir);
-        $tempZip = storage_path('app/' . $dir . '/' . $row->token . '.zip');
+        $dirName = 'descargas_cuadre';
+        $dirFull = storage_path('app/' . $dirName);
+        if (!is_dir($dirFull)) {
+            if (!@mkdir($dirFull, 0755, true)) {
+                throw new \RuntimeException('No se pudo crear el directorio: ' . $dirFull);
+            }
+        }
+        $tempZip = $dirFull . '/' . $row->token . '.zip';
 
         try {
+            if (!class_exists('ZipArchive')) {
+                throw new \RuntimeException('La extensión PHP ZipArchive no está instalada.');
+            }
             $zip = new ZipArchive();
             if ($zip->open($tempZip, ZipArchive::OVERWRITE | ZipArchive::CREATE) !== true) {
-                throw new \RuntimeException('No se pudo crear el archivo ZIP.');
+                throw new \RuntimeException('No se pudo crear el archivo ZIP en: ' . $tempZip);
             }
 
             $totalPedidos = 0;
@@ -89,19 +96,24 @@ class CuadreDiarioDescargaMasivaJob implements ShouldQueue
 
             $zip->close();
 
-            $pathRel = $dir . '/' . $row->token . '.zip';
+            $pathRel = $dirName . '/' . $row->token . '.zip';
             DB::table('cuadre_descargas')->where('id', $this->descargaId)->update([
                 'status'   => 'ready',
                 'path'     => $pathRel,
                 'ready_at' => now(),
             ]);
         } catch (\Throwable $e) {
-            if (file_exists($tempZip)) {
+            if (isset($tempZip) && file_exists($tempZip)) {
                 @unlink($tempZip);
             }
+            $message = $e->getMessage();
+            \Log::error('CuadreDiarioDescargaMasivaJob failed: ' . $message, [
+                'descarga_id' => $this->descargaId,
+                'exception'   => (string) $e,
+            ]);
             DB::table('cuadre_descargas')->where('id', $this->descargaId)->update([
                 'status'        => 'failed',
-                'error_message' => $e->getMessage(),
+                'error_message' => $message,
             ]);
             throw $e;
         }
