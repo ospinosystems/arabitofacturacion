@@ -704,11 +704,16 @@ class CuadreReportController extends Controller
             return redirect()->route('reportes.cuadre-diario')->with('error', 'Enlace no válido o expirado.');
         }
         return view('reportes.cuadre-diario-descarga-estado', [
-            'token'   => $token,
-            'status'  => $row->status,
-            'path'    => $row->path,
-            'error'   => $row->error_message,
-            'ready_at'=> $row->ready_at,
+            'token'             => $token,
+            'status'            => $row->status,
+            'path'              => $row->path,
+            'error'             => $row->error_message,
+            'ready_at'          => $row->ready_at,
+            'total_fechas'      => $row->total_fechas ?? 0,
+            'fechas_procesadas' => $row->fechas_procesadas ?? 0,
+            'total_pedidos'     => $row->total_pedidos ?? 0,
+            'fecha_actual'      => $row->fecha_actual ?? null,
+            'started_at'        => $row->started_at ?? null,
         ]);
     }
 

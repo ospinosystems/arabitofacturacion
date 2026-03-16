@@ -38,7 +38,13 @@ class CuadreDiarioDescargaMasivaJob implements ShouldQueue
             return;
         }
 
-        DB::table('cuadre_descargas')->where('id', $this->descargaId)->update(['status' => 'processing']);
+        DB::table('cuadre_descargas')->where('id', $this->descargaId)->update([
+            'status'     => 'processing',
+            'started_at' => now(),
+            'total_fechas' => 0,
+            'fechas_procesadas' => 0,
+            'total_pedidos' => 0,
+        ]);
         $fechas = json_decode($row->fechas, true);
         if (!is_array($fechas) || empty($fechas)) {
             DB::table('cuadre_descargas')->where('id', $this->descargaId)->update([
@@ -47,6 +53,10 @@ class CuadreDiarioDescargaMasivaJob implements ShouldQueue
             ]);
             return;
         }
+
+        DB::table('cuadre_descargas')->where('id', $this->descargaId)->update([
+            'total_fechas' => count($fechas),
+        ]);
 
         $dateExpr = $this->dateExpr();
         $dirName = 'descargas_cuadre';
@@ -68,7 +78,12 @@ class CuadreDiarioDescargaMasivaJob implements ShouldQueue
             }
 
             $totalPedidos = 0;
+            $fechasProcesadas = 0;
             foreach ($fechas as $fecha) {
+                DB::table('cuadre_descargas')->where('id', $this->descargaId)->update([
+                    'fecha_actual' => $fecha,
+                ]);
+
                 $pedidosList = pedidos::whereRaw($dateExpr . ' = ?', [$fecha])
                     ->where('pedidos.valido', true)
                     ->whereNotNull('pedidos.numero_factura')
@@ -92,6 +107,12 @@ class CuadreDiarioDescargaMasivaJob implements ShouldQueue
                         gc_collect_cycles();
                     }
                 }
+
+                $fechasProcesadas++;
+                DB::table('cuadre_descargas')->where('id', $this->descargaId)->update([
+                    'fechas_procesadas' => $fechasProcesadas,
+                    'total_pedidos'     => $totalPedidos,
+                ]);
             }
 
             $zip->close();
