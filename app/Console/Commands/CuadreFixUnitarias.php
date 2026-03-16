@@ -11,15 +11,13 @@ use App\Models\pago_pedidos;
 
 /**
  * Corrige pedidos FISCAL UNITARIA cuyo ajuste dejó precios irreales.
- * Reemplaza los ítems del pedido por una combinación de 3-8 productos reales del inventario
+ * Reemplaza los ítems del pedido por 3-8 productos DISTINTOS del inventario (cantidad 1-3 cada uno)
  * cuyos precios (USD) × tasa ≈ monto_bs objetivo del pedido.
- * Usa fuerza bruta con poda para encontrar combinaciones válidas.
  */
 class CuadreFixUnitarias extends Command
 {
     protected $signature = 'cuadre:fix-unitarias
                             {--dry-run : Solo mostrar qué se haría, sin escribir}
-                            {--umbral=3 : Factor multiplicador: un ítem se considera irreal si precio_unitario > precio_inventario × umbral}
                             {--tolerancia=0.02 : Tolerancia en Bs para aceptar una combinación (default 0.02 Bs)}';
 
     protected $description = 'Reemplaza ítems con precios irreales en pedidos específicos por combinaciones de productos reales del inventario.';
@@ -31,15 +29,12 @@ class CuadreFixUnitarias extends Command
     ];
 
     protected float $tolerancia;
-    protected float $umbral;
     protected int $fixedCount = 0;
-    protected int $skippedCount = 0;
     protected int $failedCount = 0;
 
     public function handle(): int
     {
         $dryRun = $this->option('dry-run');
-        $this->umbral = (float) $this->option('umbral');
         $this->tolerancia = (float) $this->option('tolerancia');
 
         if ($dryRun) {
@@ -55,15 +50,15 @@ class CuadreFixUnitarias extends Command
         }
         $this->info('Productos del inventario con precio > 0: ' . count($productosInventario));
 
-        $pedidosIrreales = $this->buscarPedidosObjetivo();
-        if (empty($pedidosIrreales)) {
-            $this->info('No se encontraron pedidos FISCAL UNITARIA con precios irreales.');
+        $pedidosObjetivo = $this->buscarPedidosObjetivo();
+        if (empty($pedidosObjetivo)) {
+            $this->info('No se encontraron los pedidos objetivo.');
             return Command::SUCCESS;
         }
-        $this->info('Pedidos con precios irreales encontrados: ' . count($pedidosIrreales));
+        $this->info('Pedidos a procesar: ' . count($pedidosObjetivo));
         $this->newLine();
 
-        foreach ($pedidosIrreales as $info) {
+        foreach ($pedidosObjetivo as $info) {
             $pedido = $info['pedido'];
             $montoBsObjetivo = $info['monto_bs_total'];
             $tasa = $info['tasa'];
@@ -74,18 +69,18 @@ class CuadreFixUnitarias extends Command
             $combinacion = $this->buscarCombinacion($productosInventario, $montoUsdObjetivo, $tasa, $montoBsObjetivo);
 
             if ($combinacion === null) {
-                $this->line("  → <fg=red>No se encontró combinación válida (tolerancia: {$this->tolerancia} Bs)</>");
+                $this->line("  → <fg=red>No se encontró combinación válida</>");
                 $this->failedCount++;
                 continue;
             }
 
-            $sumaUsd = array_sum(array_column($combinacion, 'monto_usd'));
+            $sumaUsd = array_sum(array_column($combinacion, 'monto'));
             $sumaBs = array_sum(array_column($combinacion, 'monto_bs'));
             $diff = abs($montoBsObjetivo - $sumaBs);
             $this->line("  → <info>" . count($combinacion) . " ítems</info>, total USD: " . number_format($sumaUsd, 4) . ", total Bs: " . number_format($sumaBs, 4) . " (diff: " . number_format($diff, 4) . " Bs)");
 
             foreach ($combinacion as $item) {
-                $this->line("    - {$item['descripcion']} × {$item['cantidad']} @ {$item['precio_unitario']} USD = " . number_format($item['monto_bs'], 4) . " Bs");
+                $this->line("    - {$item['descripcion']} × {$item['cantidad']} @ " . number_format($item['precio_unitario'], 4) . " USD = " . number_format($item['monto_bs'], 4) . " Bs");
             }
 
             if (!$dryRun) {
@@ -106,10 +101,6 @@ class CuadreFixUnitarias extends Command
         return Command::SUCCESS;
     }
 
-    /**
-     * Carga productos del inventario con precio > 0.
-     * Devuelve array de ['id', 'precio', 'descripcion', 'codigo_barras', 'codigo_proveedor'].
-     */
     protected function cargarProductosInventario(): array
     {
         return DB::table('inventarios')
@@ -130,9 +121,6 @@ class CuadreFixUnitarias extends Command
             ->all();
     }
 
-    /**
-     * Carga los 15 pedidos objetivo y sus montos/tasa actuales.
-     */
     protected function buscarPedidosObjetivo(): array
     {
         $pedidosList = pedidos::whereIn('id', self::PEDIDOS_OBJETIVO)->orderBy('id')->get();
@@ -165,103 +153,102 @@ class CuadreFixUnitarias extends Command
     }
 
     /**
-     * Busca una combinación de 3-8 productos reales cuyo total en Bs ≈ objetivo.
-     * Estrategia: fuerza bruta con poda inteligente.
-     *  1. Ordena productos por precio.
-     *  2. Para cada cantidad (3..8), intenta construir combinaciones:
-     *     - Llena N-1 slots con productos aleatorios.
-     *     - El último slot intenta cubrir el residuo exacto (busca producto con precio ≈ residuo).
-     *  3. Permite cantidades > 1 del mismo producto.
+     * Busca combinación de 3-8 productos DISTINTOS (cantidad 1-3 cada uno).
+     * Cada producto aparece UNA sola vez. El último se ajusta para cuadrar al centavo.
      */
     protected function buscarCombinacion(array $productos, float $montoUsdObjetivo, float $tasa, float $montoBsObjetivo): ?array
     {
-        $preciosUsd = array_column($productos, 'precio');
         $totalProductos = count($productos);
-        $bestCombinacion = null;
+        $bestLineas = null;
         $bestDiff = PHP_FLOAT_MAX;
-        $maxIntentos = 50000;
+        $maxIntentos = 100000;
 
         for ($numItems = 3; $numItems <= 8; $numItems++) {
+            if ($numItems > $totalProductos) break;
+
             for ($intento = 0; $intento < $maxIntentos; $intento++) {
-                $seleccion = [];
+                $usados = [];
+                $lineas = [];
                 $sumaUsd = 0.0;
+                $ok = true;
 
                 for ($slot = 0; $slot < $numItems - 1; $slot++) {
-                    $idx = mt_rand(0, $totalProductos - 1);
-                    $precio = $preciosUsd[$idx];
-                    $maxCant = max(1, (int) floor(($montoUsdObjetivo - $sumaUsd) / max($precio, 0.01)));
-                    $maxCant = min($maxCant, 5);
-                    if ($maxCant < 1) $maxCant = 1;
-                    $cant = mt_rand(1, $maxCant);
+                    $intentosSlot = 0;
+                    do {
+                        $idx = mt_rand(0, $totalProductos - 1);
+                        $intentosSlot++;
+                    } while (isset($usados[$idx]) && $intentosSlot < 30);
+                    if (isset($usados[$idx])) { $ok = false; break; }
+
+                    $usados[$idx] = true;
+                    $precio = $productos[$idx]['precio'];
+                    $cant = mt_rand(1, 3);
+
+                    if ($sumaUsd + $precio * $cant >= $montoUsdObjetivo * 1.1) {
+                        $cant = 1;
+                    }
+
                     $sumaUsd += $precio * $cant;
-                    $seleccion[] = ['idx' => $idx, 'cantidad' => $cant, 'precio' => $precio];
+                    $lineas[] = ['idx' => $idx, 'cantidad' => $cant];
 
-                    if ($sumaUsd >= $montoUsdObjetivo * 1.1) break;
+                    if ($sumaUsd >= $montoUsdObjetivo * 1.1) { $ok = false; break; }
                 }
-
-                if ($sumaUsd >= $montoUsdObjetivo * 1.1) continue;
+                if (!$ok) continue;
 
                 $residuoUsd = $montoUsdObjetivo - $sumaUsd;
                 if ($residuoUsd <= 0) continue;
 
                 $mejorIdx = null;
-                $mejorCant = 1;
                 $mejorDiffLocal = PHP_FLOAT_MAX;
-
                 for ($i = 0; $i < $totalProductos; $i++) {
-                    $p = $preciosUsd[$i];
+                    if (isset($usados[$i])) continue;
+                    $p = $productos[$i]['precio'];
                     if ($p <= 0) continue;
-                    $cantMax = max(1, (int) round($residuoUsd / $p));
-                    for ($c = max(1, $cantMax - 2); $c <= min($cantMax + 2, 10); $c++) {
-                        $d = abs($residuoUsd - $p * $c);
-                        $dBs = $d * $tasa;
-                        if ($dBs < $mejorDiffLocal) {
-                            $mejorDiffLocal = $dBs;
-                            $mejorIdx = $i;
-                            $mejorCant = $c;
-                        }
+                    $d = abs($residuoUsd - $p);
+                    if ($d < $mejorDiffLocal) {
+                        $mejorDiffLocal = $d;
+                        $mejorIdx = $i;
                     }
                 }
-
                 if ($mejorIdx === null) continue;
 
-                $seleccion[] = ['idx' => $mejorIdx, 'cantidad' => $mejorCant, 'precio' => $preciosUsd[$mejorIdx]];
-                $sumaUsdFinal = $sumaUsd + $preciosUsd[$mejorIdx] * $mejorCant;
+                $lineas[] = ['idx' => $mejorIdx, 'cantidad' => 1];
+                $sumaUsdFinal = $sumaUsd + $productos[$mejorIdx]['precio'];
                 $sumaBsFinal = $sumaUsdFinal * $tasa;
                 $diff = abs($montoBsObjetivo - $sumaBsFinal);
 
                 if ($diff < $bestDiff) {
                     $bestDiff = $diff;
-                    $bestCombinacion = $seleccion;
+                    $bestLineas = $lineas;
                 }
 
-                if ($diff <= $this->tolerancia) {
-                    return $this->formatearCombinacion($bestCombinacion, $productos, $tasa);
-                }
+                if ($diff <= $this->tolerancia) break;
             }
+
+            if ($bestDiff <= $this->tolerancia) break;
         }
 
-        if ($bestCombinacion !== null && $bestDiff <= $this->tolerancia * 50) {
-            return $this->ajustarUltimoItem($bestCombinacion, $productos, $tasa, $montoBsObjetivo);
+        if ($bestLineas === null) {
+            return null;
         }
 
-        return null;
+        return $this->formatearResultado($bestLineas, $productos, $tasa, $montoBsObjetivo);
     }
 
     /**
-     * Formatea la combinación para inserción.
+     * Formatea la combinación y ajusta el último ítem para cuadrar al centavo exacto.
      */
-    protected function formatearCombinacion(array $seleccion, array $productos, float $tasa): array
+    protected function formatearResultado(array $lineas, array $productos, float $tasa, float $montoBsObjetivo): array
     {
         $result = [];
-        foreach ($seleccion as $s) {
-            $prod = $productos[$s['idx']];
-            $montoUsd = round($s['precio'] * $s['cantidad'], 4);
+        foreach ($lineas as $l) {
+            $prod = $productos[$l['idx']];
+            $montoUsd = round($prod['precio'] * $l['cantidad'], 4);
             $montoBs = round($montoUsd * $tasa, 4);
             $result[] = [
                 'id_producto'      => $prod['id'],
-                'cantidad'         => $s['cantidad'],
-                'precio_unitario'  => $s['precio'],
+                'cantidad'         => $l['cantidad'],
+                'precio_unitario'  => $prod['precio'],
                 'monto'            => $montoUsd,
                 'monto_bs'         => $montoBs,
                 'descripcion'      => $prod['descripcion'],
@@ -269,15 +256,6 @@ class CuadreFixUnitarias extends Command
                 'codigo_proveedor' => $prod['codigo_proveedor'],
             ];
         }
-        return $result;
-    }
-
-    /**
-     * Si la combinación no es exacta, ajusta el precio del último ítem para cuadrar al centavo.
-     */
-    protected function ajustarUltimoItem(array $seleccion, array $productos, float $tasa, float $montoBsObjetivo): array
-    {
-        $result = $this->formatearCombinacion($seleccion, $productos, $tasa);
 
         $sumaBs = array_sum(array_column($result, 'monto_bs'));
         $diff = $montoBsObjetivo - $sumaBs;
@@ -296,9 +274,6 @@ class CuadreFixUnitarias extends Command
         return $result;
     }
 
-    /**
-     * Reemplaza los ítems del pedido por la nueva combinación y actualiza el pago.
-     */
     protected function reemplazarItems(pedidos $pedido, array $combinacion, float $tasa): void
     {
         DB::transaction(function () use ($pedido, $combinacion, $tasa) {
