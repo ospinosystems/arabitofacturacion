@@ -1597,7 +1597,13 @@ export default function PagarMain({
         
         // Setear el valor del campo que se está editando
         if (type == "Debito") {
-            setDebitos(prev => [{ ...(prev[0] || {}), monto: val, referencia: (prev[0]?.referencia) || "", bloqueado: prev[0]?.bloqueado || false, posData: prev[0]?.posData || null }, ...prev.slice(1)]);
+            setDebitos(prev => {
+                const idx = prev.findIndex(d => !d.bloqueado);
+                if (idx === -1) return prev;
+                const updated = [...prev];
+                updated[idx] = { ...updated[idx], monto: val };
+                return updated;
+            });
         } else if (type == "Efectivo") {
             setEfectivo(val);
         } else if (type == "EfectivoUSD") {
@@ -1641,7 +1647,13 @@ export default function PagarMain({
         // Todos los campos de pago con su valor actual en USD y su moneda
         // IMPORTANTE: Usar el nuevo valor (val) para el campo que se está editando
         // Débito ahora es en Bs - usar totalDebitosNoBloqueadosBs para considerar solo débitos no bloqueados
-        const setDebitoTotal = (v) => setDebitos(prev => [{ ...(prev[0] || {}), monto: v, referencia: (prev[0]?.referencia) || "", bloqueado: prev[0]?.bloqueado || false, posData: prev[0]?.posData || null }, ...prev.slice(1)]);
+        const setDebitoTotal = (v) => setDebitos(prev => {
+            const idx = prev.findIndex(d => !d.bloqueado);
+            if (idx === -1) return prev;
+            const updated = [...prev];
+            updated[idx] = { ...updated[idx], monto: v };
+            return updated;
+        });
         const allInputs = [
             { key: "Debito", val: type === "Debito" ? val : totalDebitosNoBloqueadosBs, set: setDebitoTotal, moneda: "bs", esEfectivo: false },
             { key: "EfectivoUSD", val: type === "EfectivoUSD" ? val : efectivo_dolar, set: setEfectivo_dolar, moneda: "usd", esEfectivo: true },

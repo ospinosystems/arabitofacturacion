@@ -5779,8 +5779,10 @@ export default function Facturar({
             if (response.data.success && posData && Object.keys(posData).length > 0) {
                 const posReference = String(posData.reference || posData.approval || "").trim();
                 const refUltimos4 = posReference.replace(/\D/g, '').slice(-4).padStart(4, '0');
+                // Monto realmente aprobado por la API (puede diferir del enviado); fallback al enviado
+                const montoAprobado = (posData.amount != null && posData.amount !== '') ? Number(posData.amount) : montoActual;
                 const nuevaTransaccion = {
-                    monto: montoActual,
+                    monto: montoAprobado,
                     cedula: inst.cedulaTitular,
                     referencia: posReference,
                     refCorta: refUltimos4,
@@ -5812,7 +5814,7 @@ export default function Facturar({
                         json_response: JSON.stringify(posData)
                     };
                     nuevosDebitos[index] = {
-                        monto: montoActual.toFixed(2),
+                        monto: montoAprobado.toFixed(2),
                         referencia: refUltimos4,
                         bloqueado: true,
                         posData: posDataParaDebito
@@ -5824,7 +5826,7 @@ export default function Facturar({
                     const totalFacturaBs = parseFloat(pedidoDataRef.current?.bs_clean || pedidoDataRef.current?.bs || 0);
                     const totalAprobadoDebitos = nuevosDebitos.filter(d => d.bloqueado).reduce((s, d) => s + parseFloat(d.monto || 0), 0);
                     const debeFacturarImprimir = esPedidoActual && Math.abs(totalAprobadoDebitos - totalFacturaBs) < 0.01;
-                    notificar({ data: { msj: `POS APROBADO - Ref: ${posReference} - Bs ${montoActual.toFixed(2)}`, estado: true } });
+                    notificar({ data: { msj: `POS APROBADO - Ref: ${posReference} - Bs ${montoAprobado.toFixed(2)}`, estado: true } });
                     actualizarInstanciaPos(instanceId, { respuesta: { mensaje: `✓ APROBADO - Ref: ${posReference}`, exito: true }, loading: false });
                     setTimeout(() => {
                         setModalesPosAbiertos(prev => {
