@@ -163,7 +163,7 @@ class CuadreFixUnitarias extends Command
         $bestDiff = PHP_FLOAT_MAX;
         $maxIntentos = 100000;
 
-        for ($numItems = 3; $numItems <= 8; $numItems++) {
+        for ($numItems = 3; $numItems <= 20; $numItems++) {
             if ($numItems > $totalProductos) break;
 
             for ($intento = 0; $intento < $maxIntentos; $intento++) {
