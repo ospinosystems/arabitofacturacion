@@ -207,10 +207,10 @@ class sendCentral extends Controller
             
             \Log::info('Enviando petición a central con código origen: ' . $codigo_origen);
             
-            // Primera petición: Obtener datos
+            // Primera petición: Obtener datos (timeout ampliado: la respuesta puede ser muy grande)
             $response = $this->requestToCentral('get', "/getTareasEliminacionInventarioFromCentral", [
                 "codigo_origen" => $codigo_origen
-            ]);
+            ], ['timeout' => 120]);
 
             if ($response->ok()) {
                 $res = $response->json();
