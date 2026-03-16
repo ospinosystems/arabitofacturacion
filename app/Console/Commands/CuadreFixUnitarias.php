@@ -23,9 +23,8 @@ class CuadreFixUnitarias extends Command
     protected $description = 'Reemplaza ítems con precios irreales en pedidos específicos por combinaciones de productos reales del inventario.';
 
     protected const PEDIDOS_OBJETIVO = [
-        271122, 269613, 267833, 270150, 272689,
-        265875, 268846, 272023, 271498, 262731,
-        270450, 266862, 268578, 272556, 269322,
+        269613, 270150, 270450, 271122, 271498,
+        272023, 272556, 272689,
     ];
 
     protected float $tolerancia;
@@ -153,20 +152,23 @@ class CuadreFixUnitarias extends Command
     }
 
     /**
-     * Busca combinación de 3-8 productos DISTINTOS (cantidad 1-3 cada uno).
+     * Busca combinación de 3-20 productos DISTINTOS (cantidad 1-3 cada uno).
      * Cada producto aparece UNA sola vez. El último se ajusta para cuadrar al centavo.
+     * Usa búsqueda binaria para encontrar el producto que cierre el residuo.
      */
     protected function buscarCombinacion(array $productos, float $montoUsdObjetivo, float $tasa, float $montoBsObjetivo): ?array
     {
         $totalProductos = count($productos);
+        $precios = array_column($productos, 'precio');
         $bestLineas = null;
         $bestDiff = PHP_FLOAT_MAX;
-        $maxIntentos = 100000;
 
         for ($numItems = 3; $numItems <= 20; $numItems++) {
             if ($numItems > $totalProductos) break;
 
-            for ($intento = 0; $intento < $maxIntentos; $intento++) {
+            $intentos = min(5000, 2000 + $numItems * 200);
+
+            for ($intento = 0; $intento < $intentos; $intento++) {
                 $usados = [];
                 $lineas = [];
                 $sumaUsd = 0.0;
@@ -177,45 +179,34 @@ class CuadreFixUnitarias extends Command
                     do {
                         $idx = mt_rand(0, $totalProductos - 1);
                         $intentosSlot++;
-                    } while (isset($usados[$idx]) && $intentosSlot < 30);
+                    } while (isset($usados[$idx]) && $intentosSlot < 20);
                     if (isset($usados[$idx])) { $ok = false; break; }
 
                     $usados[$idx] = true;
-                    $precio = $productos[$idx]['precio'];
+                    $precio = $precios[$idx];
                     $cant = mt_rand(1, 3);
 
-                    if ($sumaUsd + $precio * $cant >= $montoUsdObjetivo * 1.1) {
+                    if ($sumaUsd + $precio * $cant >= $montoUsdObjetivo * 1.05) {
                         $cant = 1;
+                    }
+                    if ($sumaUsd + $precio * $cant >= $montoUsdObjetivo * 1.05) {
+                        $ok = false; break;
                     }
 
                     $sumaUsd += $precio * $cant;
                     $lineas[] = ['idx' => $idx, 'cantidad' => $cant];
-
-                    if ($sumaUsd >= $montoUsdObjetivo * 1.1) { $ok = false; break; }
                 }
                 if (!$ok) continue;
 
                 $residuoUsd = $montoUsdObjetivo - $sumaUsd;
                 if ($residuoUsd <= 0) continue;
 
-                $mejorIdx = null;
-                $mejorDiffLocal = PHP_FLOAT_MAX;
-                for ($i = 0; $i < $totalProductos; $i++) {
-                    if (isset($usados[$i])) continue;
-                    $p = $productos[$i]['precio'];
-                    if ($p <= 0) continue;
-                    $d = abs($residuoUsd - $p);
-                    if ($d < $mejorDiffLocal) {
-                        $mejorDiffLocal = $d;
-                        $mejorIdx = $i;
-                    }
-                }
+                $mejorIdx = $this->buscarProductoCercano($precios, $residuoUsd, $usados);
                 if ($mejorIdx === null) continue;
 
                 $lineas[] = ['idx' => $mejorIdx, 'cantidad' => 1];
-                $sumaUsdFinal = $sumaUsd + $productos[$mejorIdx]['precio'];
-                $sumaBsFinal = $sumaUsdFinal * $tasa;
-                $diff = abs($montoBsObjetivo - $sumaBsFinal);
+                $sumaUsdFinal = $sumaUsd + $precios[$mejorIdx];
+                $diff = abs($montoBsObjetivo - $sumaUsdFinal * $tasa);
 
                 if ($diff < $bestDiff) {
                     $bestDiff = $diff;
@@ -233,6 +224,39 @@ class CuadreFixUnitarias extends Command
         }
 
         return $this->formatearResultado($bestLineas, $productos, $tasa, $montoBsObjetivo);
+    }
+
+    /**
+     * Búsqueda binaria: encuentra el producto no usado cuyo precio esté más cerca del objetivo.
+     */
+    protected function buscarProductoCercano(array $precios, float $objetivo, array $usados): ?int
+    {
+        $total = count($precios);
+        $lo = 0;
+        $hi = $total - 1;
+
+        while ($lo < $hi) {
+            $mid = (int)(($lo + $hi) / 2);
+            if ($precios[$mid] < $objetivo) {
+                $lo = $mid + 1;
+            } else {
+                $hi = $mid;
+            }
+        }
+
+        $mejorIdx = null;
+        $mejorDiff = PHP_FLOAT_MAX;
+        $rango = 5;
+        for ($i = max(0, $lo - $rango); $i <= min($total - 1, $lo + $rango); $i++) {
+            if (isset($usados[$i])) continue;
+            $d = abs($precios[$i] - $objetivo);
+            if ($d < $mejorDiff) {
+                $mejorDiff = $d;
+                $mejorIdx = $i;
+            }
+        }
+
+        return $mejorIdx;
     }
 
     /**
