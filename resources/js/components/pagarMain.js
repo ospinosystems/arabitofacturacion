@@ -1596,14 +1596,10 @@ export default function PagarMain({
         const tasaCopPedido = pedidoData?.items?.[0]?.tasa_cop || peso;
         
         // Setear el valor del campo que se está editando
+        // Débito se omite aquí: actualizarMontoDebito ya lo seteó con el string
+        // original (preservando punto decimal intermedio, ej. "0.").
         if (type == "Debito") {
-            setDebitos(prev => {
-                const idx = prev.findIndex(d => !d.bloqueado);
-                if (idx === -1) return prev;
-                const updated = [...prev];
-                updated[idx] = { ...updated[idx], monto: val };
-                return updated;
-            });
+            // No re-setear: el valor ya está en el state vía actualizarMontoDebito
         } else if (type == "Efectivo") {
             setEfectivo(val);
         } else if (type == "EfectivoUSD") {
