@@ -845,7 +845,7 @@ class PagoPedidosController extends Controller
                             $imprimirTicketMsj = 'Error al imprimir: ' . $e->getMessage();
                             \Log::error('setPagoPedido imprimir_ticket: ' . $e->getMessage());
                         }
-                    }
+                    } 
 
                     return Response::json([
                         "msj" => "Éxito",
