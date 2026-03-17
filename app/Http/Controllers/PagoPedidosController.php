@@ -847,13 +847,7 @@ class PagoPedidosController extends Controller
                         }
                     } 
 
-                    return Response::json([
-                        "msj" => "Éxito",
-                        "estado" => true,
-                        "id_pedido" => $idParaBuscar,
-                        "imprimir_ticket_ok" => $imprimirTicketOk,
-                        "imprimir_ticket_msj" => $imprimirTicketMsj,
-                    ]);
+                    return Response::json(["msj"=>"Éxito","estado"=>true,"id_pedido"=>$idParaBuscar,"imprimir_ticket_ok"=>$imprimirTicketOk,"imprimir_ticket_msj"=>$imprimirTicketMsj]);
                 } catch (\Exception $e) {
                     \DB::rollback();
                     return Response::json(["msj"=>"Error: ".$e->getMessage(),"estado"=>false]);
