@@ -6358,6 +6358,23 @@ export default function Facturar({
             }
         }
 
+        // Validar que todos los puntos de venta adicionales tengan banco seleccionado
+        if (dataPuntosAdicionales && dataPuntosAdicionales.length > 0) {
+            const puntosSinBanco = dataPuntosAdicionales.filter(punto => {
+                return !punto.banco || punto.banco === '' || punto.banco === null || punto.banco === undefined;
+            });
+            
+            if (puntosSinBanco.length > 0) {
+                const numeros = puntosSinBanco.map((_, index) => {
+                    const indiceReal = dataPuntosAdicionales.indexOf(puntosSinBanco[index]);
+                    return indiceReal + 1;
+                });
+                
+                alert(`Error: Debe seleccionar un banco para todos los puntos de venta adicionales antes de guardar el cierre.\n\nPuntos sin banco: ${numeros.join(", ")}`);
+                return;
+            }
+        }
+
         // Validar que todos los lotes Pinpad tengan banco seleccionado
         if (lotesPinpad && lotesPinpad.length > 0) {
             const lotesSinBanco = lotesPinpad.filter(lote => {
