@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class CreateSucursalsTable extends Migration
@@ -14,46 +15,45 @@ class CreateSucursalsTable extends Migration
     public function up()
     {
         Schema::create('sucursals', function (Blueprint $table) {
-            $table->increments("id");
+            $table->increments('id');
 
-            $table->string("sucursal");
-            $table->string("codigo")->unique();
-            $table->string("direccion_registro");
-            $table->string("direccion_sucursal");
-            $table->string("telefono1");
-            $table->string("telefono2");
+            $table->string('sucursal');
+            $table->string('codigo')->unique();
+            $table->string('direccion_registro');
+            $table->string('direccion_sucursal');
+            $table->string('telefono1');
+            $table->string('telefono2');
 
-            $table->string("correo");
-            $table->string("nombre_registro");
-            $table->string("rif");
-            $table->boolean("iscentral")->default(0);
+            $table->string('correo');
+            $table->string('nombre_registro');
+            $table->string('rif');
+            $table->boolean('iscentral')->default(0);
 
-
-            $table->string("tickera")->nullable();
-            $table->string("fiscal")->nullable();
-            $table->string("app_version")->default("1");
-            
-// SUCURSAL="Mantecal"
-// CODIGO="ARAMCAL"
-// DIRECCION_REGISTRO="Av. Bolívar Cruce con Indio Figueredo, Casa Nro. S/N Sector Centro Elorza, Estado Aure Zona Postal 7011"
-// DIRECCION_SUCURSAL="Av. Libertador Local S/N Sector centro, Parroquia Mantecal Municipio Muñoz, Estado Apure Zona postal 7011"
+            $table->string('tickera')->nullable();
+            $table->string('fiscal')->nullable();
+            $table->string('app_version')->default('1');
 
             $table->timestamps();
         });
 
-       /*  DB::table("sucursals")->insert([
-            [
-                "sucursal" => "aaa",
-                "codigo" => "ARAMCAL",
-                "direccion_registro" => "aaa",
-                "direccion_sucursal" => "aaa",
-                "telefono1" => "aaa",
-                "telefono2" => "aaa",
-                "correo" => "aaa",
-                "nombre_registro" => "aaa",
-                "rif" => "aaa",
-            ],
-        ]); */
+        $now = now();
+        DB::table('sucursals')->insert([
+            'sucursal' => 'SUCURSAL',
+            'codigo' => 'sucursal',
+            'direccion_registro' => '',
+            'direccion_sucursal' => '',
+            'telefono1' => '04269414946',
+            'telefono2' => '04264712991',
+            'correo' => 'arabitoferreteria@gmail.com',
+            'nombre_registro' => '',
+            'rif' => '',
+            'iscentral' => true,
+            'tickera' => 'smb://CAJA 1:12345678@caja1/XP-58',
+            'fiscal' => '0',
+            'app_version' => '1',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
     }
 
     /**
