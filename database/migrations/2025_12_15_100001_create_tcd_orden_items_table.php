@@ -16,7 +16,8 @@ class CreateTcdOrdenItemsTable extends Migration
         Schema::create('tcd_orden_items', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tcd_orden_id');
-            $table->unsignedBigInteger('inventario_id'); // Producto del inventario
+            // Must match inventarios.id (increments = unsigned INT, not BIGINT)
+            $table->unsignedInteger('inventario_id');
             $table->string('codigo_barras')->nullable();
             $table->string('codigo_proveedor')->nullable();
             $table->string('descripcion');

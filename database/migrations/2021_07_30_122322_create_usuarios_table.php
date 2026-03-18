@@ -2,8 +2,9 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 
 class CreateUsuariosTable extends Migration
 {
@@ -20,41 +21,59 @@ class CreateUsuariosTable extends Migration
             $table->string('usuario')->unique();
             $table->string('clave');
             $table->integer('tipo_usuario');
-            //1 Administrador
-            //2 Caja
-            //3 Vendedor
-            //4 Cajero Vendedor
+            // 1 Administrador
+            // 2 Caja
+            // 3 Vendedor
+            // 4 Cajero Vendedor
             $table->timestamps();
         });
-         /* DB::table("usuarios")->insert([
-            [
-            "nombre" => "Alvaro Ospino",
-            "usuario" => "admin",
-            "clave" => Hash::make("1234"),
-            "tipo_usuario" => "1",
-            ],
 
-            [
-            "nombre" => "Perez",
-            "usuario" => "caja",
-            "clave" => Hash::make("1234"),
-            "tipo_usuario" => "2",
-            ],
+        $now = now();
+        $cajaHash = Hash::make('1234');
+        $adminHash = Hash::make('M0u8HHqNMP15p8Z');
 
+        DB::table('usuarios')->insert([
             [
-            "nombre" => "Rodiguez",
-            "usuario" => "vendedor",
-            "clave" => Hash::make("1234"),
-            "tipo_usuario" => "3",
+                'nombre' => 'Caja 1',
+                'usuario' => 'caja1',
+                'clave' => $cajaHash,
+                'tipo_usuario' => 4,
+                'created_at' => $now,
+                'updated_at' => $now,
             ],
-
             [
-            "nombre" => "Alfonzo",
-            "usuario" => "cajero_vendedor",
-            "clave" => Hash::make("1234"),
-            "tipo_usuario" => "4",
+                'nombre' => 'Caja 2',
+                'usuario' => 'caja2',
+                'clave' => $cajaHash,
+                'tipo_usuario' => 4,
+                'created_at' => $now,
+                'updated_at' => $now,
             ],
-        ]);  */
+            [
+                'nombre' => 'Caja 3',
+                'usuario' => 'caja3',
+                'clave' => $cajaHash,
+                'tipo_usuario' => 4,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                'nombre' => 'Caja 4',
+                'usuario' => 'caja4',
+                'clave' => $cajaHash,
+                'tipo_usuario' => 4,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                'nombre' => 'Administrador',
+                'usuario' => 'admin',
+                'clave' => $adminHash,
+                'tipo_usuario' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+        ]);
     }
 
     /**
