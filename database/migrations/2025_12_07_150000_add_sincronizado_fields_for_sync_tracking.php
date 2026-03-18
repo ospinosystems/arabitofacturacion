@@ -63,13 +63,7 @@ class AddSincronizadoFieldsForSyncTracking extends Migration
         }
 
         // Campo sincronizado en cierres_puntos
-        if (!Schema::hasColumn('cierres_puntos', 'sincronizado')) {
-            Schema::table('cierres_puntos', function (Blueprint $table) {
-                $table->boolean('sincronizado')->default(0)->after('id_usuario');
-                $table->timestamp('sincronizado_at')->nullable()->after('sincronizado');
-                $table->index('sincronizado');
-            });
-        }
+      
 
         // Campo sincronizado en pagos_referencias
         if (!Schema::hasColumn('pagos_referencias', 'sincronizado')) {
@@ -81,13 +75,7 @@ class AddSincronizadoFieldsForSyncTracking extends Migration
         }
 
         // Campo sincronizado en cajas
-        if (!Schema::hasColumn('cajas', 'sincronizado')) {
-            Schema::table('cajas', function (Blueprint $table) {
-                $table->boolean('sincronizado')->default(0)->after('tipo');
-                $table->timestamp('sincronizado_at')->nullable()->after('sincronizado');
-                $table->index('sincronizado');
-            });
-        }
+      
     }
 
     /**
@@ -103,9 +91,7 @@ class AddSincronizadoFieldsForSyncTracking extends Migration
             'pago_pedidos',
             'items_pedidos',
             'cierres',
-            'cierres_puntos',
             'pagos_referencias',
-            'cajas'
         ];
 
         foreach ($tables as $tableName) {

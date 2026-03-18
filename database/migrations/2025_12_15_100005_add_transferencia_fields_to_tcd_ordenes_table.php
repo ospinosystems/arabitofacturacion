@@ -8,6 +8,7 @@ class AddTransferenciaFieldsToTcdOrdenesTable extends Migration
 {
     /**
      * Run the migrations.
+     * Runs after create_tcd_ordenes_table (100000).
      *
      * @return void
      */
@@ -18,7 +19,7 @@ class AddTransferenciaFieldsToTcdOrdenesTable extends Migration
             $table->string('sucursal_destino_codigo')->nullable()->after('sucursal_destino_id');
             $table->timestamp('fecha_transferencia')->nullable()->after('sucursal_destino_codigo');
             $table->string('pedido_central_numero')->nullable()->after('fecha_transferencia');
-            
+
             $table->index('sucursal_destino_id');
             $table->index('fecha_transferencia');
         });
@@ -38,7 +39,7 @@ class AddTransferenciaFieldsToTcdOrdenesTable extends Migration
                 'sucursal_destino_id',
                 'sucursal_destino_codigo',
                 'fecha_transferencia',
-                'pedido_central_numero'
+                'pedido_central_numero',
             ]);
         });
     }

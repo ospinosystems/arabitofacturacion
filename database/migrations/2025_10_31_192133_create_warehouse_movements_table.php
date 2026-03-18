@@ -37,7 +37,7 @@ class CreateWarehouseMovementsTable extends Migration
             
             // Información adicional
             $table->unsignedInteger('usuario_id')->nullable(); // Usuario que realizó el movimiento
-            $table->foreign('usuario_id')->references('id')->on('users')->onDelete('set null');
+            $table->foreign('usuario_id')->references('id')->on('usuarios')->onDelete('set null');
             
             $table->string('documento_referencia')->nullable(); // Número de orden, factura, etc.
             $table->text('observaciones')->nullable();

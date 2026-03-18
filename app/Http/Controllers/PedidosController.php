@@ -3653,55 +3653,10 @@ class PedidosController extends Controller
                 $CajaFuerteEntradaCierreBs = floatval($req->CajaFuerteEntradaCierreBs);
 
                 if ($tipo_cierre==1) {
-                    cajas::where("concepto","INGRESO DESDE CIERRE")->where("fecha",$today)->delete();
-                    cajas::where("concepto","FALTANTE DE CAJA $today")->where("fecha",$today)->delete();
 
                     // Usar descuadre calculado internamente
                     $descuadre_calculado = floatval($calculos['descuadre'] ?? 0);
-                    if ($descuadre_calculado < -5) {
-                        cajas::updateOrCreate([
-                            "fecha"=>$today,
-                            "concepto" => "FALTANTE DE CAJA $today",
-                        ],[
-                            "concepto" => "FALTANTE DE CAJA $today",
-                            "categoria" => 27,
-                            "id_departamento" => null,
-                            "tipo" => 1,
-                            "fecha" => $today,
-
-                            "montodolar" => abs($descuadre_calculado),
-                            "montopeso" => 0,
-                            "montobs" => 0,
-                            "montoeuro" => 0,
-                            
-                            "dolarbalance" => 0,
-                            "pesobalance" => 0,
-                            "bsbalance" => 0,
-                            "eurobalance" => 0,
-
-                            "estatus" => 1,
-                        ]);
-                    }
-
-                    cajas::updateOrCreate([
-                        "fecha"=>$today,
-                        "concepto" => "INGRESO DESDE CIERRE",
-                    ],[
-                        "concepto" => "INGRESO DESDE CIERRE",
-                        "categoria" => 26,
-                        "id_departamento" => null,
-                        "tipo" => 1,
-                        "fecha" => $today,
-                        "montodolar" => $CajaFuerteEntradaCierreDolar,
-                        "montopeso" => $CajaFuerteEntradaCierreCop,
-                        "montobs" => $CajaFuerteEntradaCierreBs,
-                        "montoeuro" => 0,
-                        "dolarbalance" => 0,
-                        "pesobalance" => 0,
-                        "bsbalance" => 0,
-                        "eurobalance" => 0,
-                        "estatus" => 1,
-                    ]);
+                   
                 }
                 
             } else {

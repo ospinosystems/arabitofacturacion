@@ -21,7 +21,7 @@ class CreateFacturasTable extends Migration
             $table->integer("id_usuario");
             $table->integer("estatus");
             $table->integer("id_proveedor")->nullable(true);
-            $table->integer("id_pedido_central",12)->nullable(true);
+            $table->integer("id_pedido_central")->nullable(true);
             $table->decimal("subtotal",10,4)->nullable(true);
             $table->decimal("descuento",10,4)->nullable(true);
             $table->decimal("monto_exento",10,4)->nullable(true);

@@ -97,17 +97,7 @@ class AddSyncIndexesForOptimization extends Migration
         }
 
         // ============ CIERRES_PUNTOS ============
-        if (!$this->indexExists('cierres_puntos', 'idx_cierres_puntos_sincronizado')) {
-            Schema::table('cierres_puntos', function (Blueprint $table) {
-                $table->index('sincronizado', 'idx_cierres_puntos_sincronizado');
-            });
-        }
         
-        if (!$this->indexExists('cierres_puntos', 'idx_cierres_puntos_sync_fecha')) {
-            Schema::table('cierres_puntos', function (Blueprint $table) {
-                $table->index(['sincronizado', 'fecha'], 'idx_cierres_puntos_sync_fecha');
-            });
-        }
 
         // ============ PAGOS_REFERENCIAS ============
         if (!$this->indexExists('pagos_referencias', 'idx_pagos_referencias_sincronizado')) {
@@ -123,17 +113,7 @@ class AddSyncIndexesForOptimization extends Migration
         }
 
         // ============ CAJAS ============
-        if (!$this->indexExists('cajas', 'idx_cajas_sincronizado')) {
-            Schema::table('cajas', function (Blueprint $table) {
-                $table->index('sincronizado', 'idx_cajas_sincronizado');
-            });
-        }
         
-        if (!$this->indexExists('cajas', 'idx_cajas_sync_fecha')) {
-            Schema::table('cajas', function (Blueprint $table) {
-                $table->index(['sincronizado', 'fecha'], 'idx_cajas_sync_fecha');
-            });
-        }
 
         // ============ MOVIMIENTOS_INVENTARIOUNITARIOS ============
         if (!$this->indexExists('movimientos_inventariounitarios', 'idx_movinv_sincronizado')) {

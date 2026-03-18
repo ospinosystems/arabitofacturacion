@@ -4,7 +4,9 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class AddIsPrintingToPedidos extends Migration
+// Anonymous class: avoids "Cannot declare class ... already in use" on Windows when Laravel
+// re-requires this file because realpath() !== ReflectionClass::getFileName().
+return new class extends Migration
 {
     public function up()
     {
@@ -19,4 +21,4 @@ class AddIsPrintingToPedidos extends Migration
             $table->dropColumn('is_printing');
         });
     }
-} 
+};

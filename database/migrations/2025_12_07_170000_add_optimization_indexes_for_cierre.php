@@ -66,19 +66,7 @@ return new class extends Migration
         });
 
         // 5. Índices para CIERRES_PUNTOS
-        Schema::table('cierres_puntos', function (Blueprint $table) {
-            // Optimiza: whereIn("id_usuario", ...)->where("fecha", ...)
-            $table->index(['fecha', 'id_usuario'], 'idx_cierrespuntos_fecha_usuario');
-        });
-        
-        // 6. Índices para CAJAS
-        Schema::table('cajas', function (Blueprint $table) {
-            // Optimiza: where("estatus",0)
-            $table->index('estatus', 'idx_cajas_estatus');
-            
-            // Optimiza: where("concepto", ...)->where("fecha", ...)
-            $table->index(['fecha', 'concepto'], 'idx_cajas_fecha_concepto');
-        });
+     
     }
 
     /**
