@@ -4384,7 +4384,7 @@ class PedidosController extends Controller
                         $resumen_electronicos_por_banco[$banco_key]['pinpad'] += $monto_raw;
                     }
                 } else if ($metodo_pago->subtipo == 'otros_puntos') {
-                    $lotes = $metadatos['lotes'] ?? [];
+                    $lotes = $metadatos['puntos'] ?? $metadatos['lotes'] ?? [];
                     foreach ($lotes as $lote) {
                         $banco = $lote['banco'] ?? '';
                         $monto_raw = floatval($lote['monto'] ?? 0);
