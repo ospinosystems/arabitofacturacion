@@ -62,6 +62,7 @@ const db = {
   setpersonacarrito: data=>axios.post(host+"setpersonacarrito",data),
 
   setPagoPedido: data=>axios.post(host+"setPagoPedido",data),
+  verificarUuidsPedidos: data=>axios.post(host+"verificarUuidsPedidos",data),
   setPagoPedidoTrans: data=>axios.post(host+"setPagoPedidoTrans",data),
   enviarTransaccionPOS: data=>axios.post(host+"enviarTransaccionPOS",data),
   queryTransaccionPosYActualizarPago: data=>axios.post(host+"queryTransaccionPosYActualizarPago",data),

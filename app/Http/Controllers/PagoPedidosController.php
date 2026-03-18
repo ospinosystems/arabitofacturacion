@@ -98,6 +98,19 @@ class PagoPedidosController extends Controller
 
         
     }
+    public function verificarUuidsPedidos(Request $req)
+    {
+        $uuids = $req->uuids;
+        if (!is_array($uuids) || count($uuids) === 0) {
+            return Response::json(['procesados' => []]);
+        }
+        $procesados = pedidos::whereIn('uuid', array_slice($uuids, 0, 50))
+            ->where('estado', 1)
+            ->pluck('uuid')
+            ->toArray();
+        return Response::json(['procesados' => $procesados]);
+    }
+
     function setPagoPedidoTrans(Request $req) {
         $id = $req->id;
         pago_pedidos::where("id_pedido",$id)->delete();

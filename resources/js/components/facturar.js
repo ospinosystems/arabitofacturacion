@@ -1455,6 +1455,19 @@ export default function Facturar({
                 }
             }
             pedidosFrontHydratedRef.current = true;
+
+            // Safety net: verificar contra el backend si algún pedido local ya fue registrado
+            const uuids = Object.keys(pedidos);
+            if (uuids.length > 0) {
+                db.verificarUuidsPedidos({ uuids }).then((verRes) => {
+                    const procesados = verRes.data?.procesados || [];
+                    if (procesados.length > 0) {
+                        console.warn("[mount] Pedidos front ya registrados en backend detectados:", procesados);
+                        procesados.forEach((uuid) => limpiarPedidoFrontLocal(uuid));
+                        getPedidosFast();
+                    }
+                }).catch(() => {});
+            }
         });
     }, []);
 
@@ -5600,123 +5613,45 @@ export default function Facturar({
         db.setPagoPedido(payload).then((res) => {
             console.log("[setPagoPedido] Respuesta del backend →", res.data);
             setLoading(false);
+
+            // Limpieza del pedido front PRIMERO y protegida: si algo falla después, el pedido ya no queda huérfano
+            if (params.front_only && params.uuid && (res.data.estado || res.data.uuid_ya_procesado || res.data.id_tarea)) {
+                try {
+                    limpiarPedidoFrontLocal(params.uuid);
+                } catch (e) {
+                    console.error("[setPagoPedido] Error en limpieza de pedido front (protegido):", e);
+                }
+            }
+
             notificar(res);
 
             if (res.data.estado) {
-                // Limpiar datos de localStorage para este pedido procesado
                 const pedidoId = res.data.id_pedido ?? params.id;
                 if (pedidoId) {
                     limpiarTransaccionesPedido(pedidoId);
-                }
-                // Si era pedido front, quitarlo del state y de IndexedDB y limpiar sus referencias locales
-                if (params.front_only && params.uuid) {
-                    setRefPagoPorPedidoFront((prev) => {
-                        const next = { ...prev };
-                        delete next[params.uuid];
-                        return next;
-                    });
-                    setPedidosFrontPendientes((prev) => {
-                        const next = { ...prev };
-                        delete next[params.uuid];
-                        return next;
-                    });
-                    setPendienteDescuentoMetodoPago((prev) => {
-                        const next = { ...prev };
-                        delete next[params.uuid];
-                        return next;
-                    });
-                    setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
-                        const next = { ...prev };
-                        delete next[params.uuid];
-                        return next;
-                    });
-                    setMetodosPagoAprobadosPorUuid((prev) => {
-                        const next = { ...prev };
-                        delete next[params.uuid];
-                        return next;
-                    });
-                    getPedidosFront().then((obj) => {
-                        const next = { ...(obj || {}) };
-                        delete next[params.uuid];
-                        setPedidosFront(next);
-                    });
                 }
                 
                 getPedidosFast();
                 setPedidoData({});
                 setSelectItem(null);
                 setviewconfigcredito(false);
-                // Si el backend ya imprimió (una sola petición), no llamar callback para evitar doble /imprimirTicked
-                const backendImprimio = params.imprimir_ticket && res.data.imprimir_ticket_ok === true;
-                const backendIntentóImprimir = params.imprimir_ticket && res.data.imprimir_ticket_msj;
-                if (backendIntentóImprimir) {
-                    notificar(res.data.imprimir_ticket_msj);
-                }
-                if (callback && !backendImprimio) {
+                if (params.imprimir_ticket) {
+                    if (res.data.imprimir_ticket_msj) {
+                        notificar(res.data.imprimir_ticket_msj);
+                    }
+                } else if (callback) {
                     callback();
                 }
             }
             if (res.data.estado === false) {
-                // Pedido front ya procesado en el backend (UUID duplicado): limpiar estado local igual que si hubiera tenido éxito
                 if (res.data.uuid_ya_procesado && params.front_only && params.uuid) {
-                    setRefPagoPorPedidoFront((prev) => {
-                        const next = { ...prev };
-                        delete next[params.uuid];
-                        return next;
-                    });
-                    setPedidosFrontPendientes((prev) => {
-                        const next = { ...prev };
-                        delete next[params.uuid];
-                        return next;
-                    });
-                    setPendienteDescuentoMetodoPago((prev) => {
-                        const next = { ...prev };
-                        delete next[params.uuid];
-                        return next;
-                    });
-                    setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
-                        const next = { ...prev };
-                        delete next[params.uuid];
-                        return next;
-                    });
-                    setMetodosPagoAprobadosPorUuid((prev) => {
-                        const next = { ...prev };
-                        delete next[params.uuid];
-                        return next;
-                    });
-                    getPedidosFront().then((obj) => {
-                        const next = { ...(obj || {}) };
-                        delete next[params.uuid];
-                        setPedidosFront(next);
-                    });
                     getPedidosFast();
                     setPedidoData({});
                     setSelectItem(null);
                     setviewconfigcredito(false);
                     return;
                 }
-                // Crédito pendiente de aprobación: backend ya registró la orden (estado 0) y envió solicitud a central → quitar pedido del front y refrescar lista
                 if (res.data.id_tarea && params.front_only && params.uuid) {
-                    setPedidosFrontPendientes((prev) => {
-                        const next = { ...prev };
-                        delete next[params.uuid];
-                        return next;
-                    });
-                    setPendienteDescuentoMetodoPago((prev) => {
-                        const next = { ...prev };
-                        delete next[params.uuid];
-                        return next;
-                    });
-                    setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
-                        const next = { ...prev };
-                        delete next[params.uuid];
-                        return next;
-                    });
-                    getPedidosFront().then((obj) => {
-                        const next = { ...(obj || {}) };
-                        delete next[params.uuid];
-                        setPedidosFront(next);
-                    });
                     getPedidosFast();
                     setPedidoData({});
                     setSelectItem(null);
@@ -5731,6 +5666,19 @@ export default function Facturar({
         }).catch((error) => {
             console.error("[setPagoPedido] Error en la petición (catch):", error?.response?.status, error?.response?.data ?? error?.message ?? error);
             setLoading(false);
+            if (params.front_only && params.uuid) {
+                db.verificarUuidsPedidos({ uuids: [params.uuid] }).then((verRes) => {
+                    const procesados = verRes.data?.procesados || [];
+                    if (procesados.includes(params.uuid)) {
+                        console.warn("[setPagoPedido] catch: el backend SÍ registró el pedido UUID", params.uuid, "→ limpiando del front");
+                        limpiarPedidoFrontLocal(params.uuid);
+                        getPedidosFast();
+                        setPedidoData({});
+                        setSelectItem(null);
+                        notificar("El pedido se registró correctamente (verificación automática).");
+                    }
+                }).catch(() => {});
+            }
         });
     };
     procesarPagoInternoRef.current = procesarPagoInterno;
@@ -5774,7 +5722,22 @@ export default function Facturar({
         };
 
         try {
-            const response = await db.enviarTransaccionPOS(payload);
+            let response = null;
+            let intentosFront = 0;
+            const maxIntentosFront = 3;
+            while (intentosFront < maxIntentosFront) {
+                intentosFront++;
+                try {
+                    response = await db.enviarTransaccionPOS(payload);
+                    break;
+                } catch (netErr) {
+                    const esErrorRed = !netErr.response;
+                    console.warn(`[POS] Intento ${intentosFront}/${maxIntentosFront} falló:`, netErr.message, esErrorRed ? "(Network Error)" : "(HTTP Error)");
+                    if (!esErrorRed || intentosFront >= maxIntentosFront) throw netErr;
+                    actualizarInstanciaPos(instanceId, { respuesta: { mensaje: `⏳ Verificando transacción... (intento ${intentosFront}/${maxIntentosFront})`, exito: null }, loading: true });
+                    await new Promise(r => setTimeout(r, [2000, 4000, 6000][intentosFront - 1] || 5000));
+                }
+            }
             const posData = response.data.data || {};
             if (response.data.success && posData && Object.keys(posData).length > 0) {
                 const posReference = String(posData.reference || posData.approval || "").trim();
@@ -5782,7 +5745,7 @@ export default function Facturar({
                 // Monto realmente aprobado por la API (viene en centavos); fallback al monto enviado
                 const montoAprobado = (posData.amount != null && posData.amount !== '') ? (Number(posData.amount) / 100) : montoActual;
                 const nuevaTransaccion = {
-                    monto: montoActual,
+                    monto: montoAprobado,
                     cedula: inst.cedulaTitular,
                     referencia: posReference,
                     refCorta: refUltimos4,
@@ -5814,7 +5777,7 @@ export default function Facturar({
                         json_response: JSON.stringify(posData)
                     };
                     nuevosDebitos[index] = {
-                        monto: montoActual.toFixed(2),
+                        monto: montoAprobado.toFixed(2),
                         referencia: refUltimos4,
                         bloqueado: true,
                         posData: posDataParaDebito
@@ -5826,7 +5789,7 @@ export default function Facturar({
                     const totalFacturaBs = parseFloat(pedidoDataRef.current?.bs_clean || pedidoDataRef.current?.bs || 0);
                     const totalAprobadoDebitos = nuevosDebitos.filter(d => d.bloqueado).reduce((s, d) => s + parseFloat(d.monto || 0), 0);
                     const debeFacturarImprimir = esPedidoActual && Math.abs(totalAprobadoDebitos - totalFacturaBs) < 0.01;
-                    notificar({ data: { msj: `POS APROBADO - Ref: ${posReference} - Bs ${montoActual.toFixed(2)}`, estado: true } });
+                    notificar({ data: { msj: `POS APROBADO - Ref: ${posReference} - Bs ${montoAprobado.toFixed(2)}`, estado: true } });
                     actualizarInstanciaPos(instanceId, { respuesta: { mensaje: `✓ APROBADO - Ref: ${posReference}`, exito: true }, loading: false });
                     setTimeout(() => {
                         setModalesPosAbiertos(prev => {
@@ -5858,7 +5821,7 @@ export default function Facturar({
                     respuesta: { mensaje: `✓ APROBADO - Ref: ${posReference}`, exito: true },
                     loading: false,
                 });
-                notificar({ data: { msj: `POS APROBADO - Ref: ${posReference} - Bs ${montoActual.toFixed(2)}`, estado: true } });
+                notificar({ data: { msj: `POS APROBADO - Ref: ${posReference} - Bs ${montoAprobado.toFixed(2)}`, estado: true } });
 
                 if (restante <= 0) {
                     const ultimaTrans = nuevasTransacciones[nuevasTransacciones.length - 1];
@@ -6056,6 +6019,40 @@ export default function Facturar({
         });
     };
     
+    const limpiarPedidoFrontLocal = (uuid) => {
+        if (!uuid) return;
+        setRefPagoPorPedidoFront((prev) => {
+            const next = { ...prev };
+            delete next[uuid];
+            return next;
+        });
+        setPedidosFrontPendientes((prev) => {
+            const next = { ...prev };
+            delete next[uuid];
+            return next;
+        });
+        setPendienteDescuentoMetodoPago((prev) => {
+            const next = { ...prev };
+            delete next[uuid];
+            return next;
+        });
+        setDescuentoMetodoPagoAprobadoPorUuid((prev) => {
+            const next = { ...prev };
+            delete next[uuid];
+            return next;
+        });
+        setMetodosPagoAprobadosPorUuid((prev) => {
+            const next = { ...prev };
+            delete next[uuid];
+            return next;
+        });
+        getPedidosFront().then((obj) => {
+            const next = { ...(obj || {}) };
+            delete next[uuid];
+            setPedidosFront(next);
+        }).catch(() => {});
+    };
+
     // Función para limpiar transacciones de un pedido específico
     const limpiarTransaccionesPedido = (pedidoId) => {
         setPosTransaccionesPorPedido(prev => {
@@ -8578,7 +8575,14 @@ export default function Facturar({
     };
 
     const [isCierre, setisCierre] = useState(false);
-    const getPermisoCierre = () => {
+
+    /** Estados de pedido central que bloquean cierre: 1 problema, 3 en revisión, 4 pendiente de importar */
+    const pedidosImportacionActivosEnLista = (list) =>
+        (Array.isArray(list) ? list : []).filter((p) =>
+            [1, 3, 4].includes(Number(p?.estado))
+        );
+
+    const solicitarPermisoCierreCajero = () => {
         if (!isCierre) {
             let params = {};
             db.getPermisoCierre(params).then((res) => {
@@ -8587,13 +8591,97 @@ export default function Facturar({
                     setisCierre(true);
                     setView("cierres");
                 } else if (res.data.estado === false) {
-                    //setLastDbRequest({ dbFunction: db.getPermisoCierre, params });
                     openValidationTarea(res.data.id_tarea);
                 }
             });
         } else {
             setView("cierres");
         }
+    };
+
+    /** Abre cierre solo sin pedidos UUID (azul) ni importaciones pendientes */
+    const abrirModuloCierre = () => {
+        const uuidsFront = Object.keys(pedidosFrontPendientes || {});
+        if (uuidsFront.length > 0) {
+            notificar({
+                data: {
+                    msj:
+                        "No puede abrir el módulo de cierre: hay pedido(es) en pestaña azul (UUID / solo en caja). Procese, pague o elimine esos pedidos antes de cerrar.",
+                    estado: false,
+                },
+            });
+            return;
+        }
+
+        const abrirSiPermite = () => {
+            if (auth(1)) {
+                setView("cierres");
+            } else {
+                solicitarPermisoCierreCajero();
+            }
+        };
+
+        if (user?.iscentral && pathcentral) {
+            setLoading(true);
+            db.reqpedidos({
+                path: pathcentral,
+                qpedidoscentralq: "",
+                qpedidocentrallimit: "100",
+                qpedidocentralestado: "",
+                qpedidocentralemisor: "",
+            })
+                .then((res) => {
+                    setLoading(false);
+                    let list = [];
+                    if (
+                        res.data &&
+                        Array.isArray(res.data) &&
+                        res.data.length &&
+                        res.data[0]?.id
+                    ) {
+                        list = res.data;
+                    }
+                    const activos = pedidosImportacionActivosEnLista(list);
+                    if (activos.length > 0) {
+                        notificar({
+                            data: {
+                                msj: `No puede abrir el módulo de cierre: hay ${activos.length} pedido(s) de importación pendiente(s) en centro de acopio.`,
+                                estado: false,
+                            },
+                        });
+                        return;
+                    }
+                    abrirSiPermite();
+                })
+                .catch(() => {
+                    setLoading(false);
+                    const activosLocal =
+                        pedidosImportacionActivosEnLista(pedidosCentral);
+                    if (activosLocal.length > 0) {
+                        notificar({
+                            data: {
+                                msj: "Hay pedidos de importación pendientes. Resuélvalos antes de cerrar (no se pudo verificar en línea).",
+                                estado: false,
+                            },
+                        });
+                        return;
+                    }
+                    abrirSiPermite();
+                });
+            return;
+        }
+
+        const activos = pedidosImportacionActivosEnLista(pedidosCentral);
+        if (activos.length > 0) {
+            notificar({
+                data: {
+                    msj: `No puede abrir el módulo de cierre: hay ${activos.length} pedido(s) de importación pendiente(s).`,
+                    estado: false,
+                },
+            });
+            return;
+        }
+        abrirSiPermite();
     };
 
     const inputsetclaveadminref = useRef(null);
@@ -8674,7 +8762,7 @@ export default function Facturar({
                     settoggleClientesBtn={settoggleClientesBtn}
                     setView={setView}
                     isCierre={isCierre}
-                    getPermisoCierre={getPermisoCierre}
+                    abrirModuloCierre={abrirModuloCierre}
                     setsubViewInventario={setsubViewInventario}
                     subViewInventario={subViewInventario}
                     showHeaderAndMenu={showHeaderAndMenu}

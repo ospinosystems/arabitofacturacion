@@ -1260,49 +1260,75 @@ class sendCentral extends Controller
             'pos_error_body' => $posErrorBody,
         ]);
         $codigoOrigen = $this->getOrigen();
-        try {
-            $params = [
-                'codigo_sucursal' => $codigoOrigen,
-                'order_number' => $orderNumber,
-                'amount' => $amount,
-            ];
-            if ($posErrorBody !== null) {
-                $params['pos_error_body'] = is_array($posErrorBody) ? $posErrorBody : ['raw' => $posErrorBody];
-            }
-            $logPos('queryTransaccionPosCentral REQUEST', ['path' => '/pos/query-transaction', 'params_keys' => array_keys($params)]);
-            $response = $this->requestToCentral('post', '/pos/query-transaction', $params, ['timeout' => 30]);
-            $httpStatus = $response->status();
-            $body = $response->body();
-            $responseJson = $response->json();
-            $logPos('queryTransaccionPosCentral RESPONSE', [
-                'http_status' => $httpStatus,
-                'body' => $body,
-                'json' => $responseJson,
-            ]);
-            $approved = $response->ok() && $responseJson ? (bool) ($responseJson['approved'] ?? false) : false;
-            $data = $responseJson && isset($responseJson['data']) ? $responseJson['data'] : null;
-            return [
-                'http_status' => $httpStatus,
-                'body' => $body,
-                'json' => $responseJson,
-                'approved' => $approved,
-                'data' => $data,
-            ];
-        } catch (\Exception $e) {
-            $logPos('queryTransaccionPosCentral EXCEPCIÓN', [
-                'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-            ]);
-            \Log::warning('queryTransaccionPosCentral exception: ' . $e->getMessage());
-            return [
-                'http_status' => 0,
-                'body' => $e->getMessage(),
-                'json' => null,
-                'approved' => false,
-                'data' => null,
-            ];
+
+        $params = [
+            'codigo_sucursal' => $codigoOrigen,
+            'order_number' => $orderNumber,
+            'amount' => $amount,
+        ];
+        if ($posErrorBody !== null) {
+            $params['pos_error_body'] = is_array($posErrorBody) ? $posErrorBody : ['raw' => $posErrorBody];
         }
+
+        $maxIntentos = 3;
+        $delaySegundos = [2, 3, 5];
+
+        for ($intento = 1; $intento <= $maxIntentos; $intento++) {
+            try {
+                $logPos('queryTransaccionPosCentral REQUEST', [
+                    'path' => '/pos/query-transaction',
+                    'intento' => $intento,
+                    'max_intentos' => $maxIntentos,
+                ]);
+                $response = $this->requestToCentral('post', '/pos/query-transaction', $params, ['timeout' => 10]);
+                $httpStatus = $response->status();
+                $body = $response->body();
+                $responseJson = $response->json();
+                $logPos('queryTransaccionPosCentral RESPONSE', [
+                    'http_status' => $httpStatus,
+                    'body' => $body,
+                    'json' => $responseJson,
+                    'intento' => $intento,
+                ]);
+                $approved = $response->ok() && $responseJson ? (bool) ($responseJson['approved'] ?? false) : false;
+                $data = $responseJson && isset($responseJson['data']) ? $responseJson['data'] : null;
+                return [
+                    'http_status' => $httpStatus,
+                    'body' => $body,
+                    'json' => $responseJson,
+                    'approved' => $approved,
+                    'data' => $data,
+                ];
+            } catch (\Exception $e) {
+                $logPos('queryTransaccionPosCentral EXCEPCIÓN (intento ' . $intento . '/' . $maxIntentos . ')', [
+                    'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ]);
+                if ($intento < $maxIntentos) {
+                    $wait = $delaySegundos[$intento - 1] ?? 10;
+                    $logPos('queryTransaccionPosCentral reintentando en ' . $wait . 's...', ['intento' => $intento]);
+                    sleep($wait);
+                } else {
+                    \Log::warning('queryTransaccionPosCentral agotó reintentos (' . $maxIntentos . '): ' . $e->getMessage());
+                    return [
+                        'http_status' => 0,
+                        'body' => $e->getMessage(),
+                        'json' => null,
+                        'approved' => false,
+                        'data' => null,
+                    ];
+                }
+            }
+        }
+
+        return [
+            'http_status' => 0,
+            'body' => 'Se agotaron los reintentos',
+            'json' => null,
+            'approved' => false,
+            'data' => null,
+        ];
     }
 
     /**
@@ -5326,19 +5352,36 @@ class sendCentral extends Controller
         $simular = is_array($posConfig) && !empty($posConfig['simular_transaccion']);
         if ($simular) {
             $montoCents = (int) $request->input('monto', 0);
-            $amountDecimal = $montoCents / 100.0;
             $numeroOrden = $request->input('numeroOrden', '');
-            $refSimulada = 'SIM-' . substr(str_replace(['-', ' ', '.'], '', $numeroOrden . microtime(true)), -10);
+            $refNum = str_pad((string) random_int(1, 999999), 6, '0', STR_PAD_LEFT);
+            $approvalNum = str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'reference' => $refSimulada,
-                    'approval' => $refSimulada,
-                    'message' => 'Aprobado (simulado)',
-                    'amount' => $amountDecimal,
-                    'lote' => null,
+                    'success' => true,
+                    'message' => 'APROBADO',
+                    'reference' => $refNum,
+                    'ordernumber' => $numeroOrden,
+                    'sequence' => (int) ($refNum . $approvalNum),
+                    'approval' => $approvalNum,
+                    'lote' => 1,
                     'responsecode' => '00',
-                    'terminal' => 'SIM',
+                    'datetime' => now()->format('d/m/Y h:i:s A'),
+                    'amount' => $montoCents,
+                    'commerce' => 'SIMULADO',
+                    'cardtype' => 3,
+                    'authid' => $approvalNum,
+                    'cardNumber' => '541105....0000',
+                    'cardholderid' => '00000000',
+                    'idmerchant' => '0000000000',
+                    'terminal' => 'SIM00001',
+                    'bank' => '0000',
+                    'bankmessage' => $refNum,
+                    'tvr' => '0000000000',
+                    'arqc' => strtoupper(bin2hex(random_bytes(8))),
+                    'tsi' => 'E800',
+                    'na' => strtoupper(bin2hex(random_bytes(4))),
+                    'aid' => 'A0000000041010',
                 ],
             ]);
         }

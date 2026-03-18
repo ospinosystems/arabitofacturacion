@@ -23,7 +23,7 @@ function Header({
     showModalMovimientos,
     auth,
     isCierre,
-    getPermisoCierre,
+    abrirModuloCierre,
     setsubViewInventario,
     subViewInventario,
     // Props para pedidos
@@ -386,9 +386,7 @@ function Header({
                                             : "text-gray-700 hover:bg-gray-100"
                                     }`}
                                     onClick={() => {
-                                        auth(1)
-                                            ? setView("cierres")
-                                            : getPermisoCierre();
+                                        abrirModuloCierre();
                                         setSidebarOpen(false);
                                     }}
                                 >
