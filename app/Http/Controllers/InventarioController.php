@@ -1091,85 +1091,83 @@ class InventarioController extends Controller
 
     public function getInventarioFun($req)
     {
-        // Get currency rates once
-        $mon = (new PedidosController)->get_moneda();
-        $cop = $mon['cop'];
-        $bs = $mon['bs'];
+        try {
+            $mon = (new PedidosController)->get_moneda();
+            $cop = $mon['cop'];
+            $bs = $mon['bs'];
 
-        // Extract and validate request parameters
-        $exacto = isset($req['exacto']) ? $req['exacto'] : false;
-        $q = $req['qProductosMain'] ?? '';
-        $num = $req['num'] ?? 10;
-        $itemCero = $req['itemCero'] ?? false;
-        $orderColumn = $req['orderColumn'] ?? 'id';
-        $orderBy = $req['orderBy'] ?? 'desc';
-        $view = $req['view'] ?? null;
-        $id_factura = $req['id_factura'] ?? null;
+            $exacto = isset($req['exacto']) ? $req['exacto'] : false;
+            $q = $req['qProductosMain'] ?? '';
+            $num = $req['num'] ?? 10;
+            $itemCero = $req['itemCero'] ?? false;
+            $orderColumn = $req['orderColumn'] ?? 'id';
+            $orderBy = $req['orderBy'] ?? 'desc';
+            $view = $req['view'] ?? null;
+            $id_factura = $req['id_factura'] ?? null;
 
-        // Base query with eager loading
-        $query = inventario::with([
-        ])
-            ->where('activo', 1)
-            ->selectRaw("*, @bs := (inventarios.precio*$bs) as bs, @cop := (inventarios.precio*$cop) as cop");
-        // Handle advanced search
-        if (isset($req['busquedaAvanazadaInv']) && $req['busquedaAvanazadaInv']) {
-            $busqAvanzInputs = $req['busqAvanzInputs'];
-            $query->where(function ($e) use ($busqAvanzInputs) {
-                foreach ($busqAvanzInputs as $field => $value) {
-                    if (!empty($value)) {
-                        $e->where($field, 'LIKE', $value . '%');
+            $query = inventario::with([
+            ])
+                ->where('activo', 1)
+                ->selectRaw("*, @bs := (inventarios.precio*$bs) as bs, @cop := (inventarios.precio*$cop) as cop");
+
+            if (isset($req['busquedaAvanazadaInv']) && $req['busquedaAvanazadaInv']) {
+                $busqAvanzInputs = $req['busqAvanzInputs'];
+                $query->where(function ($e) use ($busqAvanzInputs) {
+                    foreach ($busqAvanzInputs as $field => $value) {
+                        if (!empty($value)) {
+                            $e->where($field, 'LIKE', $value . '%');
+                        }
                     }
+                });
+            } else {
+                if (!empty($q)) {
+                    $query->where(function ($e) use ($q, $exacto) {
+                        if ($exacto === 'id_only') {
+                            $e->where('id', $q);
+                        } else if ($exacto === 'si') {
+                            $e
+                                ->where('codigo_barras', $q)
+                                ->orWhere('codigo_proveedor', $q);
+                        } else {
+                            $e
+                                ->where('descripcion', 'LIKE', "%$q%")
+                                ->orWhere('codigo_proveedor', 'LIKE', "%$q%")
+                                ->orWhere('codigo_barras', 'LIKE', "%$q%");
+                        }
+                    });
                 }
-            });
-        } else {
-            // Handle regular search
-            if (!empty($q)) {
-                $query->where(function ($e) use ($q, $exacto) {
-                    if ($exacto === 'id_only') {
-                        $e->where('id', $q);
-                    } else if ($exacto === 'si') {
-                        $e
-                            ->where('codigo_barras', $q)
-                            ->orWhere('codigo_proveedor', $q);
-                    } else {
-                        $e
-                            ->where('descripcion', 'LIKE', "%$q%")
-                            ->orWhere('codigo_proveedor', 'LIKE', "%$q%")
-                            ->orWhere('codigo_barras', 'LIKE', "%$q%");
-                    }
+
+                if (!$itemCero) {
+                    $query->where('cantidad', '>', 0);
+                }
+            }
+
+            if ($view === 'SelectFacturasInventario' && $id_factura) {
+                $query->whereIn('id', function ($q) use ($id_factura) {
+                    $q
+                        ->from('items_factura')
+                        ->where('id_factura', $id_factura)
+                        ->select('id_producto');
                 });
             }
 
-            // Handle item zero filter
-            if (!$itemCero) {
-                $query->where('cantidad', '>', 0);
+            $query
+                ->orderBy($orderColumn, $orderBy)
+                ->limit($num);
+
+            if ($view == 'inventario') {
+                return $query->get()->map(function ($item) {
+                    $item->ppr = 0;
+                    $item->garantia = 0;
+                    $item->pendiente_enviar = (new TransferenciasInventarioController)->sumPendingTransfers($item->id);
+                    return $item;
+                });
+            } else {
+                return $query->get();
             }
-        }
-
-        // Handle factura view filter
-        if ($view === 'SelectFacturasInventario' && $id_factura) {
-            $query->whereIn('id', function ($q) use ($id_factura) {
-                $q
-                    ->from('items_factura')
-                    ->where('id_factura', $id_factura)
-                    ->select('id_producto');
-            });
-        }
-
-        // Apply ordering and limit
-        $query
-            ->orderBy($orderColumn, $orderBy)
-            ->limit($num);
-
-        if ($view == 'inventario') {
-            return $query->get()->map(function ($item) {
-                $item->ppr = 0;
-                $item->garantia = 0;
-                $item->pendiente_enviar = (new TransferenciasInventarioController)->sumPendingTransfers($item->id);
-                return $item;
-            });
-        } else {
-            return $query->get();
+        } catch (\Exception $e) {
+            \Log::error('getInventarioFun: ' . $e->getMessage() . ' | ' . $e->getFile() . ':' . $e->getLine());
+            return \Response::json(['msj' => 'Error al consultar inventario: ' . $e->getMessage(), 'estado' => false], 500);
         }
     }
 
