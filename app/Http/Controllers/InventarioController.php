@@ -753,10 +753,8 @@ class InventarioController extends Controller
                 if ($idinsucursal_vinculo) {
                     if ($vinculo_quetengo) {
                         if ($item['idinsucursal_vinculo'] != $vinculo_quetengo->id) {
-                                if (!$vinculo_real) {
-                                $msjVinculo = '#' . ($i + 1) . ' -> ERROR VINCULO CENTRAL, SUGIERA UN VINCULO NUEVO =  ' . $item['producto']['codigo_barras'];
-                                \Log::warning('checkPedidosCentral: error vínculo central', ['msj' => $msjVinculo, 'id_item' => $item['id']]);
-                                return Response::json(['msj' => $msjVinculo, 'estado' => false, 'id_item' => $item['id']]);
+                            if (!$vinculo_real) {
+                                return ['msj' => '#' . ($i + 1) . ' -> ERROR VINCULO CENTRAL, SUGIERA UN VINCULO NUEVO =  ' . $item['producto']['codigo_barras'], 'estado' => false, 'id_item' => $item['id']];
                             }
                         }
                     }
@@ -774,14 +772,12 @@ class InventarioController extends Controller
             $chekedPedidoByCentral = (new sendCentral)->sendItemsPedidosChecked($ped_id['items']);
             if (isset($chekedPedidoByCentral['estado'])) {
                 if ($chekedPedidoByCentral['estado'] === false) {
-                    \Log::warning('checkPedidosCentral: Central rechazó items', ['msj' => $chekedPedidoByCentral['msj'] ?? '']);
-                    return Response::json(['msj' => $chekedPedidoByCentral['msj'] ?? 'Error al verificar con Central.', 'estado' => false]);
+                    return $chekedPedidoByCentral['msj'];  // ESTADO 3
                 } else if ($chekedPedidoByCentral['estado'] === true) {
                     // YA REVISADO...Procede ESTADO 4
                 }
             } else {
-                \Log::warning('checkPedidosCentral: Respuesta inesperada de Central', ['data' => $chekedPedidoByCentral]);
-                return Response::json(['msj' => 'Error: respuesta de Central no válida.', 'estado' => false]);
+                return $chekedPedidoByCentral;
             }
 
             // IMPORTAR AL SISTEMA YA CHECKEADO POR CENTRAL 4
@@ -826,8 +822,7 @@ class InventarioController extends Controller
                              DB::commit(); // Commit de la transacción actual (aunque no hay cambios locales nuevos, cierra el proceso limpiamente)
                              return Response::json(['msj' => '¡Factura ya existía, se recuperó la conexión y se notificó a Central con éxito!', 'estado' => true]);
                         } else {
-                             \Log::warning('checkPedidosCentral: falló notificar a Central (factura existía)', ['tareaSend' => $tareaSend]);
-                             return Response::json(['msj' => $tareaSend['msj'] ?? 'Error al notificar a Central.', 'estado' => false]);
+                             return $tareaSend; // Retornar error de Central si falla de nuevo
                         }
                     }
                 } else {
@@ -929,11 +924,24 @@ class InventarioController extends Controller
                                 $arr_insert['id_productoincentral'] = $id_productoincentral;
                                 $insertOrUpdateInv = $this->guardarProducto($arr_insert);
 
-                                if (is_numeric($insertOrUpdateInv)) {
-                                    array_push($tareaspendientescentralArr['ids'], [
-                                        'id_productoincentral' => $id_productoincentral,
-                                        'id_productosucursal' => $insertOrUpdateInv
-                                    ]);
+                                if (!is_numeric($insertOrUpdateInv)) {
+                                    $errorMsj = is_array($insertOrUpdateInv) && isset($insertOrUpdateInv['msj'])
+                                        ? $insertOrUpdateInv['msj']
+                                        : 'Error desconocido al guardar producto';
+                                    \Log::error('checkPedidosCentral: Error guardando producto #' . ($i + 1) . ' (barras: ' . @$item['producto']['codigo_barras'] . '): ' . $errorMsj);
+                                    throw new \Exception('#' . ($i + 1) . ' -> Error al guardar producto (' . @$item['producto']['codigo_barras'] . '): ' . $errorMsj, 1);
+                                }
+
+                                $productoVerificado = inventario::find($insertOrUpdateInv);
+                                if (!$productoVerificado) {
+                                    \Log::error('checkPedidosCentral: Producto #' . ($i + 1) . ' retornó ID ' . $insertOrUpdateInv . ' pero NO existe en inventarios');
+                                    throw new \Exception('#' . ($i + 1) . ' -> Producto no se insertó realmente en la base de datos (ID: ' . $insertOrUpdateInv . ', barras: ' . @$item['producto']['codigo_barras'] . ')', 1);
+                                }
+
+                                array_push($tareaspendientescentralArr['ids'], [
+                                    'id_productoincentral' => $id_productoincentral,
+                                    'id_productosucursal' => $insertOrUpdateInv
+                                ]);
 
                                 items_factura::updateOrCreate([
                                     'id_factura' => $id_factura,
@@ -943,78 +951,70 @@ class InventarioController extends Controller
                                     'tipo' => 'actualizacion',
                                 ]);
 
-                                // NUEVO: Asignar warehouse si se proporcionó warehouse_codigo
-                                if (isset($item['warehouse_codigo']) && !empty($item['warehouse_codigo'])) {
-                                    $warehouseCodigo = $this->normalizarCodigoUbicacion($item['warehouse_codigo']);
-                                    $warehouse = \App\Models\Warehouse::where('codigo', $warehouseCodigo)
-                                        ->where('estado', 'activa')
-                                        ->first();
-                                    
-                                    if ($warehouse) {
-                                        // Verificar si ya existe una asignación para este producto en este warehouse
-                                        $warehouseInventory = \App\Models\WarehouseInventory::where('warehouse_id', $warehouse->id)
-                                            ->where('inventario_id', $insertOrUpdateInv)
+                                try {
+                                    if (isset($item['warehouse_codigo']) && !empty($item['warehouse_codigo'])) {
+                                        $warehouseCodigo = $this->normalizarCodigoUbicacion($item['warehouse_codigo']);
+                                        $warehouse = \App\Models\Warehouse::where('codigo', $warehouseCodigo)
+                                            ->where('estado', 'activa')
                                             ->first();
                                         
-                                        if ($warehouseInventory) {
-                                            // Si existe, actualizar la cantidad
-                                            $warehouseInventory->cantidad += $ctNew;
-                                            $warehouseInventory->save();
-                                        } else {
-                                            // Si no existe, crear nueva asignación
-                                            $warehouseInventory = new \App\Models\WarehouseInventory;
-                                            $warehouseInventory->warehouse_id = $warehouse->id;
-                                            $warehouseInventory->inventario_id = $insertOrUpdateInv;
-                                            $warehouseInventory->cantidad = $ctNew;
-                                            $warehouseInventory->estado = 'disponible';
-                                            $warehouseInventory->fecha_entrada = now();
-                                            $warehouseInventory->save();
+                                        if ($warehouse) {
+                                            $warehouseInventory = \App\Models\WarehouseInventory::where('warehouse_id', $warehouse->id)
+                                                ->where('inventario_id', $insertOrUpdateInv)
+                                                ->first();
+                                            
+                                            if ($warehouseInventory) {
+                                                $warehouseInventory->cantidad += $ctNew;
+                                                $warehouseInventory->save();
+                                            } else {
+                                                $warehouseInventory = new \App\Models\WarehouseInventory;
+                                                $warehouseInventory->warehouse_id = $warehouse->id;
+                                                $warehouseInventory->inventario_id = $insertOrUpdateInv;
+                                                $warehouseInventory->cantidad = $ctNew;
+                                                $warehouseInventory->estado = 'disponible';
+                                                $warehouseInventory->fecha_entrada = now();
+                                                $warehouseInventory->save();
+                                            }
+                                            
+                                            $warehouseMovement = new \App\Models\WarehouseMovement;
+                                            $warehouseMovement->warehouse_id = $warehouse->id;
+                                            $warehouseMovement->inventario_id = $insertOrUpdateInv;
+                                            $warehouseMovement->tipo = 'entrada';
+                                            $warehouseMovement->cantidad = $ctNew;
+                                            $warehouseMovement->cantidad_anterior = $warehouseInventory->cantidad - $ctNew;
+                                            $warehouseMovement->cantidad_nueva = $warehouseInventory->cantidad;
+                                            $warehouseMovement->referencia = "Recepción TCR - Pedido #$id_pedido";
+                                            $warehouseMovement->usuario_id = session('id_usuario');
+                                            $warehouseMovement->save();
                                         }
-                                        
-                                        // Registrar el movimiento
-                                        $warehouseMovement = new \App\Models\WarehouseMovement;
-                                        $warehouseMovement->warehouse_id = $warehouse->id;
-                                        $warehouseMovement->inventario_id = $insertOrUpdateInv;
-                                        $warehouseMovement->tipo = 'entrada';
-                                        $warehouseMovement->cantidad = $ctNew;
-                                        $warehouseMovement->cantidad_anterior = $warehouseInventory->cantidad - $ctNew;
-                                        $warehouseMovement->cantidad_nueva = $warehouseInventory->cantidad;
-                                        $warehouseMovement->referencia = "Recepción TCR - Pedido #$id_pedido";
-                                        $warehouseMovement->usuario_id = session('id_usuario');
-                                        $warehouseMovement->save();
                                     }
+                                } catch (\Exception $whEx) {
+                                    \Log::warning('checkPedidosCentral: Warehouse error (no crítico) producto #' . ($i + 1) . ': ' . $whEx->getMessage());
                                 }
 
                                 $ids_to_csv[] = $insertOrUpdateInv;
-                                    $num++;
-                                } else {
-                                    // guardarProducto falló: nunca decir éxito
-                                    $errorMsj = is_array($insertOrUpdateInv) ? ($insertOrUpdateInv['msj'] ?? 'Error al insertar/actualizar producto.') : 'Error al insertar/actualizar producto.';
-                                    \Log::error('checkPedidosCentral: falló insertar producto', [
-                                        'pedido_id' => $id_pedido,
-                                        'item_index' => $i,
-                                        'error' => $errorMsj,
-                                        'response' => $insertOrUpdateInv,
-                                    ]);
-                                    $resp = ['msj' => $errorMsj, 'estado' => false];
-                                    if (is_array($insertOrUpdateInv) && isset($insertOrUpdateInv['id_item'])) {
-                                        $resp['id_item'] = $insertOrUpdateInv['id_item'];
-                                    }
-                                    return Response::json($resp);
-                                }
+                                $num++;
                             }
                             /*   $tareaspendientescentral = new tareaspendientescentral;
                               $tareaspendientescentral->ids = $tareaspendientescentralArr;
                               $tareaspendientescentral->estado = 0; */
                             /* if ($tareaspendientescentral->save()) { */
                             // $t = tareaspendientescentral::find($tareaspendientescentral->id);
+                            $totalEsperado = count($pedido['items']);
+                            if ($num === 0) {
+                                \Log::error('checkPedidosCentral: 0 productos procesados de ' . $totalEsperado . ' esperados. Pedido #' . $id_pedido);
+                                throw new \Exception('No se procesó ningún producto (0 de ' . $totalEsperado . ')', 1);
+                            }
+                            if ($num < $totalEsperado) {
+                                \Log::warning('checkPedidosCentral: Solo ' . $num . ' de ' . $totalEsperado . ' productos procesados. Pedido #' . $id_pedido);
+                            }
+
                             $tareaSend = (new sendCentral)->sendTareasPendientesCentral($tareaspendientescentralArr);
                             if (isset($tareaSend['estado'])) {
                                 if ($tareaSend['estado'] === false) {
-                                    \Log::warning('checkPedidosCentral: Central rechazó tareas pendientes', ['msj' => $tareaSend['msj'] ?? '']);
-                                    return Response::json(['msj' => $tareaSend['msj'] ?? 'Error al notificar a Central.', 'estado' => false]);
+                                    \Log::error('checkPedidosCentral: Error al enviar tareas a central. Pedido #' . $id_pedido . ': ' . json_encode($tareaSend));
+                                    throw new \Exception('Error al notificar a Central: ' . ($tareaSend['msj'] ?? 'Sin detalle'), 1);
                                 } else if ($tareaSend['estado'] === true) {
-                                    // return ["estado"=>true,"msj"=>"Éxito al Importar PEDIDO!"];
                                     $this->setCsvInventario($ids_to_csv);
 
                                     \DB::statement('UPDATE `inventarios` SET iva=1');
@@ -1028,12 +1028,19 @@ class InventarioController extends Controller
                                     \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'FUMIGADORA%'");
                                     \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MANGUERA%'");
 
+                                    $verificacionFinal = inventario::whereIn('id', $ids_to_csv)->count();
+                                    if ($verificacionFinal !== $num) {
+                                        \Log::error('checkPedidosCentral: Verificación final FALLÓ. Esperados: ' . $num . ', encontrados: ' . $verificacionFinal . '. Pedido #' . $id_pedido);
+                                        throw new \Exception('Verificación final falló: se esperaban ' . $num . ' productos pero solo existen ' . $verificacionFinal . ' en BD', 1);
+                                    }
+
                                     DB::commit();
+                                    \Log::info('checkPedidosCentral: ÉXITO VERIFICADO. ' . $num . ' productos procesados. Pedido #' . $id_pedido . '. IDs: ' . implode(',', $ids_to_csv));
                                     return Response::json(['msj' => '¡Éxito ' . $num . ' productos procesados!', 'estado' => true]);
                                 }
                             } else {
-                                \Log::warning('checkPedidosCentral: respuesta inesperada al enviar tareas a Central', ['tareaSend' => $tareaSend]);
-                                return Response::json(['msj' => $tareaSend['msj'] ?? 'Error al notificar a Central.', 'estado' => false]);
+                                \Log::error('checkPedidosCentral: Respuesta inesperada de Central: ' . json_encode($tareaSend));
+                                throw new \Exception('Respuesta inesperada de Central al notificar', 1);
                             }
 
                             /* } */
@@ -1043,16 +1050,11 @@ class InventarioController extends Controller
             }
             // END IMPORTAR AL SISTEMA
 
-            // No se importó nada: no devolver éxito
-            \Log::warning('checkPedidosCentral: no se importó el pedido (datos Central no disponibles o incompletos)', ['id_pedido' => $id_pedido ?? null, 'getPedido_keys' => is_array($getPedido) ? array_keys($getPedido) : gettype($getPedido)]);
-            return Response::json(['msj' => 'No se pudo importar el pedido. Datos de Central no disponibles o incompletos.', 'estado' => false]);
+            return $getPedido;
         } catch (\Exception $e) {
             DB::rollback();
-            \Log::error('checkPedidosCentral: excepción', [
-                'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'pedido_id' => $ped_id['id'] ?? null,
-            ]);
+            \Log::error('checkPedidosCentral: ROLLBACK completo. Error: ' . $e->getMessage() . ' | Archivo: ' . $e->getFile() . ':' . $e->getLine() . ' | Trace: ' . $e->getTraceAsString());
+
             return Response::json(['msj' => 'Error: ' . $e->getMessage(), 'estado' => false]);
         }
     }
@@ -1795,11 +1797,7 @@ class InventarioController extends Controller
             }
         } catch (\Exception $e) {
             DB::rollback();
-            \Log::error('InventarioController::guardarProducto: excepción', [
-                'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'arrproducto_id' => $arrproducto['id'] ?? null,
-            ]);
+            \Log::error('guardarProducto: Error al guardar producto (barras: ' . @$arrproducto['codigo_barras'] . ', id: ' . @$arrproducto['id'] . '): ' . $e->getMessage() . ' | ' . $e->getFile() . ':' . $e->getLine());
             return ['estado' => false, 'msj' => $e->getMessage()];
         }
     }
