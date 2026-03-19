@@ -1453,6 +1453,14 @@ class tickera extends Controller
             //}
         }
 
+        if($codigo_origen=="clarines"){
+            //if ($caja=="caja1"||$caja=="caja2") {
+                $nombre_equipo = "caja2";
+                $ipReal = gethostbyname($nombre_equipo);
+                $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
+            //}
+        }
+
         if($codigo_origen=="araguadebarcelona"){
             //if ($caja=="caja1"||$caja=="caja2") {
                 $nombre_equipo = "caja2";
