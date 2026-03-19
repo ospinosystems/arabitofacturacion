@@ -753,8 +753,10 @@ class InventarioController extends Controller
                 if ($idinsucursal_vinculo) {
                     if ($vinculo_quetengo) {
                         if ($item['idinsucursal_vinculo'] != $vinculo_quetengo->id) {
-                            if (!$vinculo_real) {
-                                return ['msj' => '#' . ($i + 1) . ' -> ERROR VINCULO CENTRAL, SUGIERA UN VINCULO NUEVO =  ' . $item['producto']['codigo_barras'], 'estado' => false, 'id_item' => $item['id']];
+                                if (!$vinculo_real) {
+                                $msjVinculo = '#' . ($i + 1) . ' -> ERROR VINCULO CENTRAL, SUGIERA UN VINCULO NUEVO =  ' . $item['producto']['codigo_barras'];
+                                \Log::warning('checkPedidosCentral: error vínculo central', ['msj' => $msjVinculo, 'id_item' => $item['id']]);
+                                return Response::json(['msj' => $msjVinculo, 'estado' => false, 'id_item' => $item['id']]);
                             }
                         }
                     }
@@ -772,12 +774,14 @@ class InventarioController extends Controller
             $chekedPedidoByCentral = (new sendCentral)->sendItemsPedidosChecked($ped_id['items']);
             if (isset($chekedPedidoByCentral['estado'])) {
                 if ($chekedPedidoByCentral['estado'] === false) {
-                    return $chekedPedidoByCentral['msj'];  // ESTADO 3
+                    \Log::warning('checkPedidosCentral: Central rechazó items', ['msj' => $chekedPedidoByCentral['msj'] ?? '']);
+                    return Response::json(['msj' => $chekedPedidoByCentral['msj'] ?? 'Error al verificar con Central.', 'estado' => false]);
                 } else if ($chekedPedidoByCentral['estado'] === true) {
                     // YA REVISADO...Procede ESTADO 4
                 }
             } else {
-                return $chekedPedidoByCentral;
+                \Log::warning('checkPedidosCentral: Respuesta inesperada de Central', ['data' => $chekedPedidoByCentral]);
+                return Response::json(['msj' => 'Error: respuesta de Central no válida.', 'estado' => false]);
             }
 
             // IMPORTAR AL SISTEMA YA CHECKEADO POR CENTRAL 4
@@ -822,7 +826,8 @@ class InventarioController extends Controller
                              DB::commit(); // Commit de la transacción actual (aunque no hay cambios locales nuevos, cierra el proceso limpiamente)
                              return Response::json(['msj' => '¡Factura ya existía, se recuperó la conexión y se notificó a Central con éxito!', 'estado' => true]);
                         } else {
-                             return $tareaSend; // Retornar error de Central si falla de nuevo
+                             \Log::warning('checkPedidosCentral: falló notificar a Central (factura existía)', ['tareaSend' => $tareaSend]);
+                             return Response::json(['msj' => $tareaSend['msj'] ?? 'Error al notificar a Central.', 'estado' => false]);
                         }
                     }
                 } else {
@@ -983,7 +988,19 @@ class InventarioController extends Controller
                                 $ids_to_csv[] = $insertOrUpdateInv;
                                     $num++;
                                 } else {
-                                    return $insertOrUpdateInv;
+                                    // guardarProducto falló: nunca decir éxito
+                                    $errorMsj = is_array($insertOrUpdateInv) ? ($insertOrUpdateInv['msj'] ?? 'Error al insertar/actualizar producto.') : 'Error al insertar/actualizar producto.';
+                                    \Log::error('checkPedidosCentral: falló insertar producto', [
+                                        'pedido_id' => $id_pedido,
+                                        'item_index' => $i,
+                                        'error' => $errorMsj,
+                                        'response' => $insertOrUpdateInv,
+                                    ]);
+                                    $resp = ['msj' => $errorMsj, 'estado' => false];
+                                    if (is_array($insertOrUpdateInv) && isset($insertOrUpdateInv['id_item'])) {
+                                        $resp['id_item'] = $insertOrUpdateInv['id_item'];
+                                    }
+                                    return Response::json($resp);
                                 }
                             }
                             /*   $tareaspendientescentral = new tareaspendientescentral;
@@ -994,7 +1011,8 @@ class InventarioController extends Controller
                             $tareaSend = (new sendCentral)->sendTareasPendientesCentral($tareaspendientescentralArr);
                             if (isset($tareaSend['estado'])) {
                                 if ($tareaSend['estado'] === false) {
-                                    return $tareaSend;
+                                    \Log::warning('checkPedidosCentral: Central rechazó tareas pendientes', ['msj' => $tareaSend['msj'] ?? '']);
+                                    return Response::json(['msj' => $tareaSend['msj'] ?? 'Error al notificar a Central.', 'estado' => false]);
                                 } else if ($tareaSend['estado'] === true) {
                                     // return ["estado"=>true,"msj"=>"Éxito al Importar PEDIDO!"];
                                     $this->setCsvInventario($ids_to_csv);
@@ -1014,7 +1032,8 @@ class InventarioController extends Controller
                                     return Response::json(['msj' => '¡Éxito ' . $num . ' productos procesados!', 'estado' => true]);
                                 }
                             } else {
-                                return $tareaSend;
+                                \Log::warning('checkPedidosCentral: respuesta inesperada al enviar tareas a Central', ['tareaSend' => $tareaSend]);
+                                return Response::json(['msj' => $tareaSend['msj'] ?? 'Error al notificar a Central.', 'estado' => false]);
                             }
 
                             /* } */
@@ -1024,11 +1043,17 @@ class InventarioController extends Controller
             }
             // END IMPORTAR AL SISTEMA
 
-            return $getPedido;
+            // No se importó nada: no devolver éxito
+            \Log::warning('checkPedidosCentral: no se importó el pedido (datos Central no disponibles o incompletos)', ['id_pedido' => $id_pedido ?? null, 'getPedido_keys' => is_array($getPedido) ? array_keys($getPedido) : gettype($getPedido)]);
+            return Response::json(['msj' => 'No se pudo importar el pedido. Datos de Central no disponibles o incompletos.', 'estado' => false]);
         } catch (\Exception $e) {
             DB::rollback();
-
-            return Response::json(['msj' => 'Error:   ' . $e->getMessage(), 'estado' => false]);
+            \Log::error('checkPedidosCentral: excepción', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'pedido_id' => $ped_id['id'] ?? null,
+            ]);
+            return Response::json(['msj' => 'Error: ' . $e->getMessage(), 'estado' => false]);
         }
     }
 
@@ -1770,6 +1795,11 @@ class InventarioController extends Controller
             }
         } catch (\Exception $e) {
             DB::rollback();
+            \Log::error('InventarioController::guardarProducto: excepción', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'arrproducto_id' => $arrproducto['id'] ?? null,
+            ]);
             return ['estado' => false, 'msj' => $e->getMessage()];
         }
     }
