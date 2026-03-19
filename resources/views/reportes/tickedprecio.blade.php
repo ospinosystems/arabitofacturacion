@@ -38,7 +38,7 @@
         font-family: Arial, Helvetica, sans-serif;
         display: flex;
         flex-direction: column;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
         box-sizing: border-box;
     }
@@ -46,7 +46,7 @@
     .etiqueta-barcode {
         width: 100%;
         display: flex;
-        justify-content: center;
+        justify-content: flex-start;
         flex-shrink: 0;
     }
 
@@ -59,20 +59,20 @@
     .etiqueta-descripcion {
         font-size: 7.5pt;
         font-weight: 600;
-        text-align: center;
+        text-align: left;
         line-height: 1.15;
         width: 100%;
         overflow: hidden;
         /* Firefox no respeta bien -webkit-line-clamp; forzamos recorte con altura máxima */
         display: block;
         max-height: 17.5pt; /* 2 lineas aprox: 7.5pt * 1.15 * 2 */
-        padding: 0 1mm;
+        padding: 0 1mm 0 0.5mm;
     }
 
     .etiqueta-precio {
         font-size: 20pt;
         font-weight: 900;
-        text-align: center;
+        text-align: left;
         letter-spacing: 0.5mm;
         width: 100%;
         flex-shrink: 0;
