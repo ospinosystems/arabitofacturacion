@@ -18,13 +18,12 @@
         }
 
         html, body {
-            width: 57mm !important;
-            height: 44mm !important;
+            width: 100% !important;
+            height: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
             overflow: hidden !important;
             min-width: 0 !important;
-            max-width: 57mm !important;
         }
 
         #app, .modal, .modal-backdrop, .modal-dialog, nav, header, footer {
@@ -32,8 +31,24 @@
         }
 
         #divEtiqueta {
+            width: 100% !important;
+            height: 100% !important;
             margin: 0 !important;
+            padding: 3mm 3.5mm 2.5mm !important;
             position: relative !important;
+        }
+
+        .etiqueta-barcode svg {
+            width: 90% !important;
+            max-height: 34% !important;
+        }
+
+        .etiqueta-descripcion {
+            font-size: 8pt !important;
+        }
+
+        .etiqueta-precio {
+            font-size: 22pt !important;
         }
     }
 
