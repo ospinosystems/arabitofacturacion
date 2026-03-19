@@ -7581,6 +7581,7 @@ export default function Facturar({
     const [qpedidocentrallimit, setqpedidocentrallimit] = useState("5");
     const [qpedidocentralestado, setqpedidocentralestado] = useState("");
     const [qpedidocentralemisor, setqpedidocentralemisor] = useState("");
+    const [permitirPasteCentral, setPermitirPasteCentral] = useState(false);
     const getPedidosCentral = () => {
         setLoading(true);
         db.reqpedidos({
@@ -7593,18 +7594,20 @@ export default function Facturar({
             setLoading(false);
             setpedidoCentral([]);
 
-            if (res.data) {
-                if (res.data.length) {
-                    if (res.data[0]) {
-                        if (res.data[0].id) {
-                            setpedidoCentral(res.data);
-                        }
-                    }
+            const d = res.data;
+            const pedidos = d?.pedidos ?? d;
+            if (d?.permitir_paste !== undefined) {
+                setPermitirPasteCentral(!!d.permitir_paste);
+            }
+
+            if (pedidos) {
+                if (Array.isArray(pedidos) && pedidos.length && pedidos[0]?.id) {
+                    setpedidoCentral(pedidos);
                 } else {
                     setpedidoCentral([]);
                 }
 
-                if (res.data.msj) {
+                if (d?.msj) {
                     notificar(res);
                 }
             } else {
@@ -8650,13 +8653,14 @@ export default function Facturar({
                 .then((res) => {
                     setLoading(false);
                     let list = [];
+                    const raw = res.data?.pedidos ?? res.data;
                     if (
-                        res.data &&
-                        Array.isArray(res.data) &&
-                        res.data.length &&
-                        res.data[0]?.id
+                        raw &&
+                        Array.isArray(raw) &&
+                        raw.length &&
+                        raw[0]?.id
                     ) {
-                        list = res.data;
+                        list = raw;
                     }
                     const activos = pedidosImportacionActivosEnLista(list);
                     if (activos.length > 0) {
@@ -9101,6 +9105,7 @@ export default function Facturar({
 
                     {view == "pedidosCentral" ? (
                         <PedidosCentralComponent
+                            permitirPaste={permitirPasteCentral}
                             openBarcodeScan={openBarcodeScan}
                             buscarDatosFact={buscarDatosFact}
                             setbuscarDatosFact={setbuscarDatosFact}

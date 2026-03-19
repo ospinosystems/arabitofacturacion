@@ -55,6 +55,11 @@ use Illuminate\Support\Facades\File;
 class sendCentral extends Controller
 {
 
+    const SUCURSALES_PERMITIR_PASTE = [
+        "clarines"
+        // Códigos de sucursal que pueden pegar en el input de chequeo de ítems
+    ];
+
     public function path()
     {
         //return "http://127.0.0.1:8001";
@@ -2068,7 +2073,10 @@ class sendCentral extends Controller
                         //$pedidos[$pedidokey];
                     }
 
-                    return $pedidos;
+                    return Response::json([
+                        "pedidos" => $pedidos,
+                        "permitir_paste" => in_array($codigo_origen, self::SUCURSALES_PERMITIR_PASTE),
+                    ]);
                 } else {
                     return "Not [pedido] " . var_dump($res);
                 }

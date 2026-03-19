@@ -67,7 +67,8 @@ export default function PedidosCentralComponent({
 	
 	openBarcodeScan,
 	buscarDatosFact,
-	setbuscarDatosFact
+	setbuscarDatosFact,
+	permitirPaste = false
 }){
 
 	const [subviewcentral, setsubviewcentral] = useState("pedidos")
@@ -571,7 +572,7 @@ export default function PedidosCentralComponent({
 																value={buscarDatosFact}
 																onChange={e => { setfiltrarSoloIndex(null); setMensajeValidacion(""); setbuscarDatosFact(e.target.value); }}
 																onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); validarBusqueda(e.target.value); } }}
-																onPaste={e => e.preventDefault()}
+																onPaste={permitirPaste ? undefined : e => e.preventDefault()}
 															/>
 															<span className="inline-flex items-center px-3 text-gray-400 border-l border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100" onClick={() => openBarcodeScan("setbuscarDatosFact")}>
 																<i className="fas fa-barcode"></i>

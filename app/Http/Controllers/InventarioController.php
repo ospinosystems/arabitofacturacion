@@ -1093,8 +1093,8 @@ class InventarioController extends Controller
     {
         try {
             $mon = (new PedidosController)->get_moneda();
-            $cop = $mon['cop'];
-            $bs = $mon['bs'];
+            $cop = $mon['cop'] ?? 1;
+            $bs = $mon['bs'] ?? 1;
 
             $exacto = isset($req['exacto']) ? $req['exacto'] : false;
             $q = $req['qProductosMain'] ?? '';

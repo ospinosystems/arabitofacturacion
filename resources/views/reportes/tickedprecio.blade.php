@@ -1,97 +1,122 @@
-
 @extends('layouts.app')
 @section('tittle'," Mucho más que una ferreteria")
 @section('content')
 
-<div class= "" id = "divEtiqueta">
-    
-    
-    
-    <label class="titulo">
-        CODIGO:
-    </label>
-    <label>
-        {{$codigo_barras}}
-    </label>
-    <br>
-    <label class="titulo" hidden>
-        DESCRIPCION:
-    </label>
-    <label class= "descripcion">
-        {{substr($descripcion, 0, 56)}}
-    
-    </label>
-
-    <label class="titulo">
-        REF:
-    </label>
-    <label class ="precio">
-            {{$pu}}
-        
-        </label>
-
+<div id="divEtiqueta">
+    <div class="etiqueta-barcode">
+        <svg id="barcode"></svg>
     </div>
+    <div class="etiqueta-descripcion">{{ substr($descripcion, 0, 60) }}</div>
+    <div class="etiqueta-precio">{{ $pu }}</div>
+</div>
 
-
-
-
-
-    <style>
-        #divEtiqueta{
-            width: 57mm;
-            height: 44mm;
-            padding: 3px;
-            overflow: hidden;
-            font-family: arial;
-      
+<style>
+    @media print {
+        body * {
+            visibility: hidden !important;
         }
-        .titulo{
-            width: 100%;
-            font-size: 0.5rem;
-            margin-bottom: -4px;
+        #divEtiqueta, #divEtiqueta * {
+            visibility: visible !important;
         }
-        .descripcion{
-            font-size: 0.7rem;
-            font-weight: bold;
+        #divEtiqueta {
+            position: fixed;
+            top: 0;
+            left: 0;
+            margin: 0;
+        }
+        @page {
+            size: 57mm 44mm;
+            margin: 0;
+        }
+    }
+
+    #divEtiqueta {
+        width: 57mm;
+        height: 44mm;
+        padding: 2.5mm 3mm 2mm;
+        overflow: hidden;
+        font-family: Arial, Helvetica, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        box-sizing: border-box;
+    }
+
+    .etiqueta-barcode {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .etiqueta-barcode svg {
+        width: 48mm;
+        height: auto;
+        max-height: 15mm;
+    }
+
+    .etiqueta-descripcion {
+        font-size: 7.5pt;
+        font-weight: 600;
+        text-align: center;
+        line-height: 1.15;
+        width: 100%;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        padding: 0 1mm;
+    }
+
+    .etiqueta-precio {
+        font-size: 20pt;
+        font-weight: 900;
+        text-align: center;
+        letter-spacing: 0.5mm;
+        width: 100%;
+        flex-shrink: 0;
+        line-height: 1;
+        border-top: 0.3mm solid #000;
+        padding-top: 1mm;
+    }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var codigoBarras = @json($codigo_barras);
+
+        if (codigoBarras) {
+            try {
+                JsBarcode("#barcode", codigoBarras, {
+                    format: "CODE128",
+                    width: 1.4,
+                    height: 28,
+                    displayValue: true,
+                    fontSize: 9,
+                    font: "Arial",
+                    margin: 0,
+                    textMargin: 1
+                });
+            } catch (e) {
+                document.getElementById('barcode').style.display = 'none';
+            }
+        } else {
+            document.getElementById('barcode').style.display = 'none';
         }
 
-        .precio{
-            font-size: 2rem;
-            font-weight: bold;
-            width: 90%;
-            text-align: center;
-            margin-top: -10px;
-            letter-spacing: 0.3rem;
-            
+        setTimeout(function () {
+            window.print();
+        }, 1500);
 
-        }
+        setTimeout(function () {
+            window.close();
+        }, 2500);
 
-
-    </style>
-
-    <script>
-
-    setTimeout(() => {
-
-    window.print();  
-
-    }, 2000);
-   
-
-
-
-
-    setTimeout(() => {
-
-    window.close();
-
-    }, 3000);
-
-    window.onfocus = function () { setTimeout(function () { window.close(); }, 3000); }
-   
-    </script>
+        window.onfocus = function () {
+            setTimeout(function () { window.close(); }, 2500);
+        };
+    });
+</script>
 @endsection
-
-
-
-

@@ -230,7 +230,8 @@ class PedidosController extends Controller
         if (Cache::has('cop')) {
             $cop = Cache::get('cop');
         } else {
-            $cop = moneda::where("tipo", 2)->orderBy("id", "desc")->first()["valor"];
+            $row = moneda::where("tipo", 2)->orderBy("id", "desc")->first();
+            $cop = $row ? (float) $row->valor : 1;
             Cache::put('cop', $cop);
         }
 
@@ -239,7 +240,8 @@ class PedidosController extends Controller
             $bs = Cache::get('bs');
             //
         } else {
-            $bs = moneda::where("tipo", 1)->orderBy("id", "desc")->first()["valor"];
+            $row = moneda::where("tipo", 1)->orderBy("id", "desc")->first();
+            $bs = $row ? (float) $row->valor : 1;
             Cache::put('bs', $bs);
         }
 

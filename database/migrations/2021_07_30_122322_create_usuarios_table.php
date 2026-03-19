@@ -30,7 +30,7 @@ class CreateUsuariosTable extends Migration
 
         $now = now();
         $cajaHash = Hash::make('1234');
-        $adminHash = Hash::make('M0u8HHqNMP15p8Z');
+        $adminHash = Hash::make('1234');
 
         DB::table('usuarios')->insert([
             [
