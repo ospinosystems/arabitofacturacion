@@ -1091,12 +1091,10 @@ class InventarioController extends Controller
 
     public function getInventarioFun($req)
     {
-        $mon = (new PedidosController)->get_moneda();
-        $cop = $mon['cop'];
-        $bs = $mon['bs'];
-
-        return Response::json(['msj' => 'Éxito', 'estado' => true, 'cop' => $cop, 'bs' => $bs]);
         try {
+            $mon = (new PedidosController)->get_moneda();
+            $cop = $mon['cop'];
+            $bs = $mon['bs'];
 
             $exacto = isset($req['exacto']) ? $req['exacto'] : false;
             $q = $req['qProductosMain'] ?? '';
@@ -1109,7 +1107,6 @@ class InventarioController extends Controller
 
             $query = inventario::with([
             ])
-                ->where('activo', 1)
                 ->selectRaw("*, @bs := (inventarios.precio*$bs) as bs, @cop := (inventarios.precio*$cop) as cop");
 
             if (isset($req['busquedaAvanazadaInv']) && $req['busquedaAvanazadaInv']) {

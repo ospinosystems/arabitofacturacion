@@ -47,7 +47,7 @@ class CreateInventariosTable extends Migration
             $table->boolean("push")->nullable()->default(0);
             $table->integer('id_vinculacion')->nullable();
 
-            $table->integer('activo')->nullable();
+            $table->integer('activo')->nullable()->default(1);
             $table->integer('last_mov')->nullable();
             $table->unique(["id_vinculacion"]);
             $table->timestamps();
