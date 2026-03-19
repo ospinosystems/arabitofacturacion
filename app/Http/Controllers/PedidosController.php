@@ -1,8 +1,6 @@
 <?php
 namespace App\Http\Controllers;
 
-use App\Models\cajas;
-use App\Models\catcajas;
 use App\Models\cierres;
 use App\Models\pedidos;
 use App\Models\moneda;
@@ -4497,34 +4495,21 @@ class PedidosController extends Controller
         
     
         
-        $arr_send["cajas"]["balance"]["chica"]["dolarbalance"] = (new CajasController)->getBalance(0, "dolarbalance");
-        $arr_send["cajas"]["balance"]["chica"]["pesobalance"] = (new CajasController)->getBalance(0, "pesobalance");
-        $arr_send["cajas"]["balance"]["chica"]["bsbalance"] = (new CajasController)->getBalance(0, "bsbalance");
+        // Tabla cajas ya no se usa: valores por defecto para la vista de cierre
+        $arr_send["cajas"]["balance"]["chica"]["dolarbalance"] = 0;
+        $arr_send["cajas"]["balance"]["chica"]["pesobalance"] = 0;
+        $arr_send["cajas"]["balance"]["chica"]["bsbalance"] = 0;
 
-        $arr_send["cajas"]["balance"]["fuerte"]["dolarbalance"] = (new CajasController)->getBalance(1, "dolarbalance");
-        $arr_send["cajas"]["balance"]["fuerte"]["pesobalance"] = (new CajasController)->getBalance(1, "pesobalance");
-        $arr_send["cajas"]["balance"]["fuerte"]["bsbalance"] = (new CajasController)->getBalance(1, "bsbalance");
+        $arr_send["cajas"]["balance"]["fuerte"]["dolarbalance"] = 0;
+        $arr_send["cajas"]["balance"]["fuerte"]["pesobalance"] = 0;
+        $arr_send["cajas"]["balance"]["fuerte"]["bsbalance"] = 0;
 
-        $detalles_fuerte = cajas::with("cat")->whereBetween("created_at",[$fechareq." 00:00:00",$fechareq." 23:59:59"])
-        ->where("tipo","1")
-        ->orderBy("id","desc")
-        ->get();
-        
-        $arr_send["cajas"]["detalles"]["fuerte"] = $detalles_fuerte;
-        
-        $detalles_chica = cajas::with("cat")->whereBetween("created_at",[$fechareq." 00:00:00",$fechareq." 23:59:59"])
-        ->where("tipo","0")
-        ->orderBy("id","desc")
-        ->get();
+        $arr_send["cajas"]["detalles"]["fuerte"] = collect([]);
+        $arr_send["cajas"]["detalles"]["chica"] = collect([]);
 
-        $arr_send["cajas"]["detalles"]["chica"] = $detalles_chica;
-
-
-
-        $caja_montodolar = cajas::where("created_at", "LIKE", $fechareq."%")->whereIn("categoria",[10,11])->sum("montodolar");
-
-        $caja_montopeso = cajas::where("created_at", "LIKE", $fechareq."%")->whereIn("categoria",[10,11])->sum("montopeso");
-        $caja_montobs = cajas::where("created_at", "LIKE", $fechareq."%")->whereIn("categoria",[10,11])->sum("montobs");
+        $caja_montodolar = 0;
+        $caja_montopeso = 0;
+        $caja_montobs = 0;
 
 
 
