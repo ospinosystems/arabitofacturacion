@@ -12,21 +12,28 @@
 
 <style>
     @media print {
-        body * {
-            visibility: hidden !important;
-        }
-        #divEtiqueta, #divEtiqueta * {
-            visibility: visible !important;
-        }
-        #divEtiqueta {
-            position: fixed;
-            top: 0;
-            left: 0;
-            margin: 0;
-        }
         @page {
             size: 57mm 44mm;
             margin: 0;
+        }
+
+        html, body {
+            width: 57mm !important;
+            height: 44mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            min-width: 0 !important;
+            max-width: 57mm !important;
+        }
+
+        #app, .modal, .modal-backdrop, .modal-dialog, nav, header, footer {
+            display: none !important;
+        }
+
+        #divEtiqueta {
+            margin: 0 !important;
+            position: relative !important;
         }
     }
 
