@@ -38,10 +38,12 @@
             display: flex;
             justify-content: center;
             flex-shrink: 0;
+            overflow: hidden;
         }
 
         .etiqueta-barcode svg {
-            width: 48mm;
+            display: block;
+            max-width: 100%;
             height: auto;
             max-height: 15mm;
         }
@@ -99,6 +101,14 @@
                     margin: 0,
                     textMargin: 1
                 });
+
+                var svg = document.getElementById('barcode');
+                var origW = svg.getAttribute('width');
+                var origH = svg.getAttribute('height');
+                svg.setAttribute('viewBox', '0 0 ' + origW + ' ' + origH);
+                svg.removeAttribute('width');
+                svg.removeAttribute('height');
+
             } catch (e) {
                 document.getElementById('barcode').style.display = 'none';
             }

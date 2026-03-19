@@ -1414,93 +1414,67 @@ class tickera extends Controller
         }
 
         if($codigo_origen=="sancarlos"){
-            //if ($caja=="caja1"||$caja=="caja2") {
                 $nombre_equipo = "caja3";
                 $ipReal = gethostbyname($nombre_equipo);
-                $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
-            //}
+                $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo]);
         }
 
         if($codigo_origen=="cantaura"){
-            //if ($caja=="caja1"||$caja=="caja2") {
                 $nombre_equipo = "caja2";
                 $ipReal = gethostbyname($nombre_equipo);
-                $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
-            //}
+                $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo]);
         }
 
         if($codigo_origen=="pariaguan"){
-            //if ($caja=="caja1"||$caja=="caja2") {
                 $nombre_equipo = "caja3";
                 $ipReal = gethostbyname($nombre_equipo);
-                $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
-            //}
+                $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo]);
         }
 
         if($codigo_origen=="villadecura"){
-            //if ($caja=="caja1"||$caja=="caja2") {
                 $nombre_equipo = "caja2";
                 $ipReal = gethostbyname($nombre_equipo);
-                $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
-            //}
+                $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo]);
         }
 
         if($codigo_origen=="puntademata"){
-            //if ($caja=="caja1"||$caja=="caja2") {
                 $nombre_equipo = "caja3";
                 $ipReal = gethostbyname($nombre_equipo);
-                $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
-            //}
+                $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo]);
         }
 
         if($codigo_origen=="clarines"){
-            //if ($caja=="caja1"||$caja=="caja2") {
                 $nombre_equipo = "caja2";
                 $ipReal = gethostbyname($nombre_equipo);
-                $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
-            //}
+                $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo]);
         }
 
         if($codigo_origen=="araguadebarcelona"){
-            //if ($caja=="caja1"||$caja=="caja2") {
                 $nombre_equipo = "caja2";
                 $ipReal = gethostbyname($nombre_equipo);
-                $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
-            //}
+                $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo]);
         }
 
         if($codigo_origen=="carora"){
-            //if ($caja=="caja1"||$caja=="caja2") {
                 $nombre_equipo = "caja1";
                 $ipReal = gethostbyname($nombre_equipo);
-                $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
-            //}
+                $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo]);
         }
         if($codigo_origen=="altagraciadeorituco"){
-            //if ($caja=="caja1"||$caja=="caja2") {
                 $nombre_equipo = "caja2";
                 $ipReal = gethostbyname($nombre_equipo);
-                $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
-            //}
+                $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo]);
         }
         
         if($codigo_origen=="elsombrero"){
-            //if ($caja=="caja1"||$caja=="caja2") {
                 $nombre_equipo = "caja1";
                 $ipReal = gethostbyname($nombre_equipo);
-                $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
-            //}
+                $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo]);
         }
         if($codigo_origen=="sansebastian"){
-                //if ($caja=="caja1"||$caja=="caja2") {
                 $nombre_equipo = "caja2";
                 $ipReal = gethostbyname($nombre_equipo);
-                $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
-                \Log::info('Respuesta de Fiscal Terminal', [
-                    'response' => $response->body()
-                ]);
-                \Log::info('Respuesta de Fiscal Terminal', $parametros);
-            //}
+                $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo]);
         }
         if($codigo_origen=="turen"){
             if ($caja=="caja3"||$caja=="caja4") {
@@ -1511,7 +1485,7 @@ class tickera extends Controller
                 $nombre_equipo = "caja2";
                 $ipReal = gethostbyname($nombre_equipo);
             }
-            $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
+            $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo ?? null]);
         }
         if($codigo_origen=="anaco"){
             if ($caja=="caja3"||$caja=="caja4") {
@@ -1520,23 +1494,18 @@ class tickera extends Controller
             }
             if ($caja=="caja1"||$caja=="caja2") {
                 $nombre_equipo = "caja2";
-                //$nombre_equipo = "ospino";
                 $ipReal = gethostbyname($nombre_equipo);
             }
-            
-            $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
+            $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo ?? null]);
         }
 
 
         if($codigo_origen=="guacara"){
             if ($caja=="autopago1") {
                 $nombre_equipo = "GUACARA-AUTOPAGO1";
-                //$nombre_equipo = "ospino";
-               // $ipReal = gethostbyname($nombre_equipo);
                $ipReal = "192.168.0.210";
             }
-            
-            $response = Http::timeout(3)->post("http://$ipReal:3000/fiscal", $parametros);
+            $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo ?? null]);
         }
         
         //shell_exec("C:/IntTFHKA/IntTFHKA.exe ".$parametros);
@@ -1547,15 +1516,64 @@ class tickera extends Controller
 
         
 
-        if ($response!==null) {
+        if ($response!==null && $response instanceof \Illuminate\Http\Client\Response) {
             if ($response->successful()) {
                 return response()->json(['status' => 'ok '.$ipReal]);
             } else {
                 return response()->json(['status' => 'error', 'message' => 'No se pudo contactar al cliente'], 500);
             }
+        } elseif ($response === null && $ipReal !== null) {
+            return response()->json(['status' => 'error', 'message' => 'Fallo de conexión con terminal fiscal (ver fiscal.log)'], 500);
         }
 
 
+    }
+
+    private function makeFiscalRequest($ipReal, $parametros, $context = [])
+    {
+        $url = "http://$ipReal:3000/fiscal";
+        $log = \Illuminate\Support\Facades\Log::channel('fiscal');
+
+        $log->info('=== FISCAL REQUEST ===', array_merge($context, [
+            'url' => $url,
+            'parametros' => $parametros,
+            'timestamp' => now()->toDateTimeString(),
+        ]));
+
+        try {
+            $response = Http::timeout(3)->post($url, $parametros);
+
+            $log->info('=== FISCAL RESPONSE ===', [
+                'url' => $url,
+                'status' => $response->status(),
+                'body' => $response->body(),
+                'successful' => $response->successful(),
+                'origen' => $context['origen'] ?? null,
+                'caja' => $context['caja'] ?? null,
+            ]);
+
+            return $response;
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            $log->error('=== FISCAL CONNECTION ERROR ===', [
+                'url' => $url,
+                'error' => $e->getMessage(),
+                'origen' => $context['origen'] ?? null,
+                'caja' => $context['caja'] ?? null,
+                'nombre_equipo' => $context['nombre_equipo'] ?? null,
+                'ip_resolved' => $ipReal,
+            ]);
+            return null;
+        } catch (\Exception $e) {
+            $log->error('=== FISCAL EXCEPTION ===', [
+                'url' => $url,
+                'exception' => get_class($e),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'origen' => $context['origen'] ?? null,
+                'caja' => $context['caja'] ?? null,
+            ]);
+            return null;
+        }
     }
 
     function reportefiscal(Request $req) {
