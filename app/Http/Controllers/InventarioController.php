@@ -1091,10 +1091,12 @@ class InventarioController extends Controller
 
     public function getInventarioFun($req)
     {
+        $mon = (new PedidosController)->get_moneda();
+        $cop = $mon['cop'];
+        $bs = $mon['bs'];
+
+        return Response::json(['msj' => 'Éxito', 'estado' => true, 'cop' => $cop, 'bs' => $bs]);
         try {
-            $mon = (new PedidosController)->get_moneda();
-            $cop = $mon['cop'];
-            $bs = $mon['bs'];
 
             $exacto = isset($req['exacto']) ? $req['exacto'] : false;
             $q = $req['qProductosMain'] ?? '';
