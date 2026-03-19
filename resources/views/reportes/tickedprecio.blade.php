@@ -63,9 +63,9 @@
         line-height: 1.15;
         width: 100%;
         overflow: hidden;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
+        /* Firefox no respeta bien -webkit-line-clamp; forzamos recorte con altura máxima */
+        display: block;
+        max-height: 17.5pt; /* 2 lineas aprox: 7.5pt * 1.15 * 2 */
         padding: 0 1mm;
     }
 
