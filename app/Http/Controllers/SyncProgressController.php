@@ -1042,6 +1042,12 @@ class SyncProgressController extends Controller
                     Log::info("SYNCPROGRESS - monto_original en registro final: " . var_export($registro['monto_original'] ?? 'NO EXISTE', true));
                     Log::info("SYNCPROGRESS - monto en registro final: " . var_export($registro['monto'] ?? 'NO EXISTE', true));
                 }
+
+                $esItemsPedidos = ($nombreTabla === 'items_pedidos');
+                if ($esItemsPedidos && $index === 0) {
+                    Log::info('SYNCPROGRESS - items_pedidos (muestra): monto=' . var_export($registro['monto'] ?? 'NO EXISTE', true)
+                        . ', precio_unitario=' . var_export($registro['precio_unitario'] ?? 'NO EXISTE', true));
+                }
                 
                 // Para CIERRES: extraer lotes de métodos de pago y anclarlos al cierre
                 if ($esCierre) {

@@ -56,7 +56,7 @@ class sendCentral extends Controller
 {
 
     const SUCURSALES_PERMITIR_PASTE = [
-        "clarines"
+        //"clarines"
         // Códigos de sucursal que pueden pegar en el input de chequeo de ítems
     ];
 
@@ -3104,7 +3104,22 @@ class sendCentral extends Controller
 
         $i = items_pedidos::whereNotNull("id_producto")->whereIn("id_pedido",pedidos::whereIn("id",pago_pedidos::where("tipo","<>",4)->select("id_pedido"))->select("id"))
         ->orderBy("id","desc")
-        ->get(["id","id_pedido","cantidad","id_producto","created_at"]); 
+        ->get([
+            "id",
+            "id_pedido",
+            "cantidad",
+            "id_producto",
+            "created_at",
+            "lote",
+            "abono",
+            "monto",
+            "tasa",
+            "tasa_cop",
+            "precio_unitario",
+            "descuento",
+            "entregado",
+            "condicion",
+        ]);
 
         $pedidos = pedidos::whereIn("id",$i->pluck("id_pedido"))->get();
         $pagos = pago_pedidos::whereIn("id_pedido",$pedidos->pluck("id"))->get();
@@ -3209,11 +3224,22 @@ class sendCentral extends Controller
             \Log::info("    [Estadísticas] Procesando lote $batchNum/$totalBatches de items...");
             
             $itemsBatch = $itemsQuery->skip($offset)->take($batchSize)
-                ->get(["id","id_pedido","cantidad","id_producto","created_at",
-                "descuento",
-                "entregado",
-                "condicion"
-            ]);
+                ->get([
+                    "id",
+                    "id_pedido",
+                    "cantidad",
+                    "id_producto",
+                    "created_at",
+                    "lote",
+                    "abono",
+                    "monto",
+                    "tasa",
+                    "tasa_cop",
+                    "precio_unitario",
+                    "descuento",
+                    "entregado",
+                    "condicion",
+                ]);
             
             if ($itemsBatch->isEmpty()) {
                 break;
