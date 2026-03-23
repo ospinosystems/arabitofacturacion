@@ -6,7 +6,9 @@ use App\Http\Controllers\sendCentral;
 use App\Models\items_pedidos;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Retransmite monto, precio_unitario y tasa de items_pedidos hacia Arabito Central
@@ -22,6 +24,7 @@ class RetransmitirMontosEstadisticasCentral extends Command
         {--sin-limite-meses : Quitar el tope por meses (solo para uso excepcional)}
         {--batch=500 : Tamaño de cada lote hacia central}
         {--dry-run : Solo contar y mostrar muestra, sin enviar}
+        {--probar-conexion : Solo comprobar URL, código sucursal y API key contra GET /api/sync/status (no retransmite)}
         {--sin-filtro-pedido : Incluir todos los items con id_producto (por defecto se usa el mismo filtro que sendestadisticasVenta)}';
 
     protected $description = 'Actualiza en Central monto, precio_unitario y tasa de líneas de venta (inventario_sucursal_estadisticas), por defecto máx. 5 meses de venta';
@@ -36,7 +39,28 @@ class RetransmitirMontosEstadisticasCentral extends Command
         $sinLimiteMeses = (bool) $this->option('sin-limite-meses');
         $batch = max(1, (int) $this->option('batch'));
         $dryRun = (bool) $this->option('dry-run');
+        $probarConexion = (bool) $this->option('probar-conexion');
         $sinFiltroPedido = (bool) $this->option('sin-filtro-pedido');
+
+        $send = new sendCentral();
+
+        if ($probarConexion) {
+            return $this->runProbarConexion($send);
+        }
+
+        if ($dryRun) {
+            $this->warn('=== MODO DRY-RUN: no se envía nada a Central. Quita --dry-run para retransmitir. ===');
+        } else {
+            $this->info('=== MODO ENVÍO REAL: se llamará a /api/sync/batch por lotes ===');
+        }
+
+        $apiKey = $send->getCentralApiKey();
+        if ($apiKey === null || $apiKey === '') {
+            $this->error('No hay API key de Central (archivo storage/app/central_api_key.txt o CENTRAL_API_KEY en .env). Sin ella, Central responde 401 y no se actualiza nada.');
+            if (!$dryRun) {
+                return self::FAILURE;
+            }
+        }
 
         $query = $this->baseQuery($sinFiltroPedido);
 
@@ -93,60 +117,125 @@ class RetransmitirMontosEstadisticasCentral extends Command
             return self::SUCCESS;
         }
 
-        $send = new sendCentral();
         $urlBase = rtrim($send->path(), '/');
+        $this->info('Sucursal (codigo_origen): ' . $send->getOrigen());
         $this->info("Destino: {$urlBase}/api/sync/batch (tabla_destino inventario_sucursal_estadisticas_montos: monto, precio_unitario, tasa)");
 
         $enviados = 0;
         $actualizadosCentral = 0;
         $errores = 0;
+        $loteNum = 0;
 
-        $query->orderBy('id')->chunkById($batch, function ($rows) use ($send, &$enviados, &$actualizadosCentral, &$errores, $batch) {
-            $data = $rows->map(function ($r) {
-                return [
-                    'id' => $r->id,
-                    'monto' => $r->monto,
-                    'precio_unitario' => $r->precio_unitario,
-                    'tasa' => $r->tasa,
-                ];
-            })->values()->all();
+        try {
+            $query->orderBy('id')->chunkById($batch, function ($rows) use ($send, &$enviados, &$actualizadosCentral, &$errores, &$loteNum) {
+                $loteNum++;
+                $data = $rows->map(function ($r) {
+                    return [
+                        'id' => $r->id,
+                        'monto' => $r->monto,
+                        'precio_unitario' => $r->precio_unitario,
+                        'tasa' => $r->tasa,
+                    ];
+                })->values()->all();
 
-            $response = $send->requestToCentral('post', '/api/sync/batch', [
-                'tabla' => 'items_pedidos',
-                'tabla_destino' => 'inventario_sucursal_estadisticas_montos',
-                'data' => base64_encode(gzcompress(json_encode($data))),
-                'batch_size' => count($data),
-            ], ['timeout' => 180]);
+                try {
+                    $response = $send->requestToCentral('post', '/api/sync/batch', [
+                        'tabla' => 'items_pedidos',
+                        'tabla_destino' => 'inventario_sucursal_estadisticas_montos',
+                        'data' => base64_encode(gzcompress(json_encode($data))),
+                        'batch_size' => count($data),
+                    ], ['timeout' => 180]);
+                } catch (ConnectionException $e) {
+                    $errores++;
+                    $this->error("Lote {$loteNum}: error de red — {$e->getMessage()}");
+                    Log::error('retransmitir-montos-estadisticas: ConnectionException', ['e' => $e->getMessage()]);
 
-            $enviados += count($data);
+                    return false;
+                }
 
-            if (!$response->ok()) {
-                $errores++;
-                $this->error('HTTP ' . $response->status() . ' en lote (primer id ' . ($data[0]['id'] ?? '?') . ')');
-                Log::error('retransmitir-montos-estadisticas: error HTTP', [
-                    'status' => $response->status(),
-                    'body' => substr($response->body(), 0, 2000),
-                ]);
+                $enviados += count($data);
 
-                return;
-            }
+                if (!$response->ok()) {
+                    $errores++;
+                    $snippet = substr($response->body(), 0, 800);
+                    $this->error("Lote {$loteNum}: HTTP {$response->status()} (primer id " . ($data[0]['id'] ?? '?') . ')');
+                    $this->line($snippet);
+                    Log::error('retransmitir-montos-estadisticas: error HTTP', [
+                        'status' => $response->status(),
+                        'body' => substr($response->body(), 0, 2000),
+                    ]);
 
-            $json = $response->json();
-            if (!($json['estado'] ?? false)) {
-                $errores++;
-                $this->error('Central estado=false: ' . ($json['mensaje'] ?? json_encode($json)));
-                Log::error('retransmitir-montos-estadisticas: central estado false', ['resp' => $json]);
+                    return false;
+                }
 
-                return;
-            }
+                $json = $response->json();
+                if (!is_array($json)) {
+                    $errores++;
+                    $this->error("Lote {$loteNum}: respuesta no es JSON. Cuerpo (recorte): " . substr($response->body(), 0, 500));
 
-            $actualizadosCentral += (int) ($json['actualizados'] ?? 0);
-            $this->line("  Lote: enviados " . count($data) . ", actualizados en central " . ($json['actualizados'] ?? '?'));
-        }, 'id');
+                    return false;
+                }
+
+                if (!($json['estado'] ?? false)) {
+                    $errores++;
+                    $this->error('Lote ' . $loteNum . ': Central estado=false — ' . ($json['mensaje'] ?? $json['message'] ?? json_encode($json)));
+                    Log::error('retransmitir-montos-estadisticas: central estado false', ['resp' => $json]);
+
+                    return false;
+                }
+
+                $actualizadosCentral += (int) ($json['actualizados'] ?? 0);
+                $this->line("  Lote {$loteNum}: registros " . count($data) . ", actualizados en central " . ($json['actualizados'] ?? '?'));
+
+                return true;
+            }, 'id');
+        } catch (Throwable $e) {
+            $this->error('Error fatal: ' . $e->getMessage());
+            Log::error('retransmitir-montos-estadisticas: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+
+            return self::FAILURE;
+        }
 
         $this->info("Listo. Ítems enviados (payload): {$enviados}, lotes con error: {$errores}. Suma actualizados reportada por central: {$actualizadosCentral}");
 
         return $errores > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    private function runProbarConexion(sendCentral $send): int
+    {
+        $urlBase = rtrim($send->path(), '/');
+        $codigo = $send->getOrigen();
+        $key = $send->getCentralApiKey();
+
+        $this->info("URL Central: {$urlBase}");
+        $this->info("codigo_origen: {$codigo}");
+        $this->info('API key: ' . ($key !== null && $key !== '' ? '(configurada, longitud ' . strlen($key) . ')' : 'NO CONFIGURADA — obtendrás 401'));
+
+        try {
+            $response = $send->requestToCentral('get', '/api/sync/status', [], ['timeout' => 45]);
+        } catch (ConnectionException $e) {
+            $this->error('No hubo conexión: ' . $e->getMessage());
+
+            return self::FAILURE;
+        }
+
+        $this->line('HTTP ' . $response->status());
+        $body = $response->body();
+        $this->line(strlen($body) > 1200 ? substr($body, 0, 1200) . '...' : $body);
+
+        if ($response->ok()) {
+            $json = $response->json();
+            if (is_array($json) && ($json['estado'] ?? false)) {
+                $this->info('Conexión y autenticación OK. Puedes ejecutar el comando sin --dry-run.');
+
+                return self::SUCCESS;
+            }
+        }
+
+        $this->warn('Si ves 401 Unauthorized, configura la misma API key que en Central (storage/app/central_api_key.txt o CENTRAL_API_KEY).');
+        $this->warn('Si ves 404, revisa la URL en sendCentral::path() y que Central tenga desplegada la ruta /api/sync/status.');
+
+        return self::FAILURE;
     }
 
     /**

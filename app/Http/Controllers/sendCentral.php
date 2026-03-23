@@ -978,16 +978,18 @@ class sendCentral extends Controller
         $timeout = $options['timeout'] ?? 30;
         $headers = $options['headers'] ?? [];
         $apiKey = $this->getCentralApiKey();
-        if ($apiKey !== null) {
+        $methodUpper = strtoupper($method);
+        if ($apiKey !== null && $apiKey !== '') {
             $headers['X-Sucursal-Api-Key'] = $apiKey;
-            // GET: enviar también en query para que central reciba la key aunque algún proxy quite headers
-            if (strtoupper($method) === 'GET') {
+            // GET: query; POST/PUT: cuerpo form — misma lógica que SyncProgress para que funcione aunque un proxy quite el header
+            if ($methodUpper === 'GET') {
+                $params['central_api_key'] = $apiKey;
+            } elseif (in_array($methodUpper, ['POST', 'PUT'], true)) {
                 $params['central_api_key'] = $apiKey;
             }
         }
 
         $request = Http::timeout($timeout)->withHeaders($headers);
-        $methodUpper = strtoupper($method);
 
         if ($methodUpper === 'GET') {
             $response = $request->get($url, $params);
