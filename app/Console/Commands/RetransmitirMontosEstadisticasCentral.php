@@ -22,7 +22,7 @@ class RetransmitirMontosEstadisticasCentral extends Command
         {--desde-fecha= : Opcional: created_at >= YYYY-MM-DD (no puede ser anterior al límite de meses salvo --sin-limite-meses)}
         {--meses=5 : Ventana máxima hacia atrás: solo ventas con created_at dentro de los últimos N meses}
         {--sin-limite-meses : Quitar el tope por meses (solo para uso excepcional)}
-        {--batch=500 : Tamaño de cada lote hacia central}
+        {--batch=5000 : Registros por petición (baja si falla timeout o POST demasiado grande)}
         {--dry-run : Solo contar y mostrar muestra, sin enviar}
         {--probar-conexion : Solo comprobar URL, código sucursal y API key contra GET /api/sync/status (no retransmite)}
         {--sin-filtro-pedido : Incluir todos los items con id_producto (por defecto se usa el mismo filtro que sendestadisticasVenta)}';
@@ -112,7 +112,10 @@ class RetransmitirMontosEstadisticasCentral extends Command
                 $r->tasa,
                 $r->created_at,
             ])->toArray());
-            $this->warn('Dry-run: no se envió nada a central.');
+            $this->newLine();
+            $this->warn('Dry-run = solo simulación: NO se envía nada a Central (es intencional).');
+            $this->info('Para TRANSMITIR de verdad, ejecuta exactamente (sin --dry-run):');
+            $this->line('  php artisan central:retransmitir-montos-estadisticas');
 
             return self::SUCCESS;
         }
@@ -144,7 +147,7 @@ class RetransmitirMontosEstadisticasCentral extends Command
                         'tabla_destino' => 'inventario_sucursal_estadisticas_montos',
                         'data' => base64_encode(gzcompress(json_encode($data))),
                         'batch_size' => count($data),
-                    ], ['timeout' => 180]);
+                    ], ['timeout' => 300]);
                 } catch (ConnectionException $e) {
                     $errores++;
                     $this->error("Lote {$loteNum}: error de red — {$e->getMessage()}");
