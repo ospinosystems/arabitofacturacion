@@ -67,7 +67,7 @@ export default function InventarioForzado({
     cleanInventario,
 
     openBarcodeScan,
-    
+    cantidadesTransferidas,
 }){
     useHotkeys(
         "esc",
@@ -644,6 +644,12 @@ export default function InventarioForzado({
                                         <span onClick={() => setInvorderColumn("push")}>INVENTARIO</span>
                                     </div>
                                 </th>
+                                <th className="text-center bg-warning bg-opacity-25 text-dark" title="Cantidad reservada en premontaje (origen). En cero tras enviar a destino.">
+                                    <i className="fas fa-box me-1"></i>PREMONTADO
+                                </th>
+                                <th className="text-center" title="Garantías pendientes">
+                                    <i className="fas fa-shield-alt me-1"></i>GARANTÍAS
+                                </th>
                                 <th onClick={() => setInvorderColumn("precio_base")}>
                                     PRECIO BASE
                                 </th>
@@ -690,15 +696,6 @@ export default function InventarioForzado({
                                             <td>
                                                 <div className="gap-2 d-flex align-items-center">
                                                     <span>{e.cantidad}</span>
-                                                    {/* <span className="badge bg-sinapsis ms-2" title="Garantía">
-                                                        <i className="fas fa-shield-alt"></i> {e.garantia || 0}
-                                                    </span>
-                                                    <span className="badge bg-info ms-1" title="Pendiente por Retirar">
-                                                        <i className="fas fa-clock"></i> {e.ppr || 0}
-                                                    </span>
-                                                    <span className="badge bg-secondary ms-1" title="Pendiente por Enviar">
-                                                        <i className="fas fa-paper-plane"></i> {e.pendiente_enviar || 0}
-                                                    </span> */}
                                                     <button 
                                                         className="btn btn-sm btn-outline-primary"
                                                         onClick={() => openmodalhistoricoproducto(e.id)}
@@ -706,6 +703,24 @@ export default function InventarioForzado({
                                                         <i className="fas fa-history"></i>
                                                     </button>
                                                 </div>
+                                            </td>
+                                            <td className="text-center bg-warning bg-opacity-10 align-middle">
+                                                {cantidadesTransferidas && cantidadesTransferidas[e.id] ? (
+                                                    <span className="badge bg-warning text-dark fw-semibold" title="Premontado en origen (stock ya descontado)">
+                                                        {parseFloat(cantidadesTransferidas[e.id].total_transferido || 0)}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-muted">0</span>
+                                                )}
+                                            </td>
+                                            <td className="text-center">
+                                                {e.garantia ? (
+                                                    <span className="badge bg-sinapsis" title="Garantías">
+                                                        {e.garantia}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-muted">-</span>
+                                                )}
                                             </td>
                                             <td>{e.precio_base}</td>
                                             <td>
@@ -910,15 +925,16 @@ export default function InventarioForzado({
                                                     {e.cantidad}  
                                                 </div>
                                                 <div className="gap-2 d-flex">
-                                                    <span className="badge bg-sinapsis badge-sm" title="Garantía">
-                                                        <i className="fas fa-shield-alt fa-xs"></i> {e.garantia || 0}
-                                                    </span>
-                                                    <span className="badge bg-info badge-sm" title="Pendiente por Retirar">
-                                                        <i className="fas fa-clock fa-xs"></i> {e.ppr || 0}
-                                                    </span>
-                                                    <span className="badge bg-secondary badge-sm" title="Pendiente por Enviar">
-                                                        <i className="fas fa-paper-plane fa-xs"></i> {e.pendiente_enviar || 0}
-                                                    </span>
+                                                    {cantidadesTransferidas && cantidadesTransferidas[e.id] ? (
+                                                        <span className="badge bg-warning text-dark badge-sm fw-semibold" title="Premontado en origen">
+                                                            <i className="fas fa-box fa-xs"></i> {parseFloat(cantidadesTransferidas[e.id].total_transferido || 0)}
+                                                        </span>
+                                                    ) : null}
+                                                    {e.garantia ? (
+                                                        <span className="badge bg-sinapsis badge-sm" title="Garantía">
+                                                            <i className="fas fa-shield-alt fa-xs"></i> {e.garantia || 0}
+                                                        </span>
+                                                    ) : null}
                                                 </div>
                                             </div>
                                         </div>

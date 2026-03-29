@@ -27,6 +27,9 @@ Route::get('/get-cajas-disponibles', [App\Http\Controllers\tickera::class, 'getC
 // Ruta para imprimir tickets de garantía
 Route::post('/imprimir-ticket-garantia', [App\Http\Controllers\tickera::class, 'imprimirTicketGarantia']);
 
+// Ticket térmico: orden de transferencia (pedido Central, Enviar pedido)
+Route::post('/imprimir-ticket-orden-transferencia', [App\Http\Controllers\tickera::class, 'imprimirTicketOrdenTransferencia']);
+
 /*
 |--------------------------------------------------------------------------
 | Sistema de Garantías y Devoluciones - API Routes

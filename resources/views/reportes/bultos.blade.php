@@ -21,14 +21,24 @@
             </label>
             <br> --}}
         </div>
-        <div class="d-flex justify-content-between">
-            <label class="fecha">
-                ORIGEN: <b class="muted">{{$origen}}</b>
-            </label>
-            <label class="fecha">
-                <b class="muted">{{$fecha}}</b>
+        @if(isset($id_pedido_central) && $id_pedido_central !== null && $id_pedido_central !== '')
+        <div class="text-center w-100">
+            <label class="num-pedido-central d-block w-100">
+                <b class="muted">#{{ $id_pedido_central }}</b>
             </label>
         </div>
+        @endif
+        <label class="fecha d-block w-100">
+            ORIGEN: <b class="muted">{{ $origen }}</b>
+        </label>
+        @if(isset($codigo_destino) && $codigo_destino !== null && trim((string) $codigo_destino) !== '')
+        <label class="fecha d-block w-100">
+            DESTINO: <b class="muted">{{ strtoupper(trim((string) $codigo_destino)) }}</b>
+        </label>
+        @endif
+        <label class="fecha d-block w-100">
+            <b class="muted">{{ $fecha }}</b>
+        </label>
         
 
 
@@ -66,6 +76,14 @@
             font-size: 0.7rem;
             font-weight: bold;
             text-align: center
+        }
+        .num-pedido-central{
+            font-size: 0.78rem;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 2px;
+            margin-bottom: 2px;
+            line-height: 1.1;
         }
         
         @media print {

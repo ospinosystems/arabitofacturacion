@@ -12,8 +12,9 @@ import Garantias from '../components/garantias';
 import InventarioSuministrosSucursal from '../components/InventarioSuministrosSucursal';
 import FacturasItemsConsulta from '../components/FacturasItemsConsulta';
 
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useHotkeys } from "react-hotkeys-hook";
+import db from '../database/database';
 
 function Inventario({
   getFacturas,
@@ -357,13 +358,61 @@ function Inventario({
   sincInventario,
   buscarInventario,
 }) {
+  const [cantidadesTransferidas, setCantidadesTransferidas] = useState(null);
+
+  const refetchCantidadesPremontado = useCallback(() => {
+    db.getCantidadesTransferidas()
+      .then((res) => {
+        if (res.data?.estado) {
+          setCantidadesTransferidas(res.data.cantidades || {});
+        } else {
+          setCantidadesTransferidas({});
+        }
+      })
+      .catch((err) => {
+        console.error("Error fetching cantidades premontado:", err);
+      });
+  }, []);
+
   useEffect(() => {
     getUsuarios();
   }, []);
 
   useEffect(() => {
+    if (subViewInventario !== "inventario") {
+      return;
+    }
     buscarInventario();
-}, [Invnum, InvorderColumn, InvorderBy, qBuscarInventario]);
+    refetchCantidadesPremontado();
+  // buscarInventario viene de facturar.js y no es estable (nueva función cada render)
+  }, [Invnum, InvorderColumn, InvorderBy, qBuscarInventario, subViewInventario, modViewInventario, refetchCantidadesPremontado]);
+
+  useEffect(() => {
+    if (subViewInventario !== "inventario") {
+      return;
+    }
+    let t = null;
+    const onVisOrFocus = () => {
+      if (document.visibilityState && document.visibilityState !== "visible") {
+        return;
+      }
+      if (t) {
+        clearTimeout(t);
+      }
+      t = setTimeout(() => {
+        refetchCantidadesPremontado();
+      }, 400);
+    };
+    window.addEventListener("focus", onVisOrFocus);
+    document.addEventListener("visibilitychange", onVisOrFocus);
+    return () => {
+      if (t) {
+        clearTimeout(t);
+      }
+      window.removeEventListener("focus", onVisOrFocus);
+      document.removeEventListener("visibilitychange", onVisOrFocus);
+    };
+  }, [refetchCantidadesPremontado, subViewInventario]);
   const type = type => !type || type === "delete";
 
   useHotkeys(
@@ -791,6 +840,7 @@ function Inventario({
                       setInvorderColumn={setInvorderColumn}
                       InvorderBy={InvorderBy}
                       setInvorderBy={setInvorderBy}
+                      cantidadesTransferidas={cantidadesTransferidas}
                     />
                   )}
 

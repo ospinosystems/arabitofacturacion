@@ -3788,7 +3788,7 @@ export default function Facturar({
                         "?"
                 )
             ) {
-                // Pedido solo front: crear en arabitofacturacion con estado=0, sin pago, sin llamar a central
+                // Pedido solo front (tab azul): solo premontado en Central; sin pedido local ni descuento de inventario
                 if (pedidoData._frontOnly && pedidoData.id) {
                     const params = {
                         uuid: pedidoData.id,
@@ -3799,7 +3799,7 @@ export default function Facturar({
                     db.transferirPedidoFrontSucursal(params).then((res) => {
                         notificar(res);
                         if (res.data.estado) {
-                            const idEnBackend = res.data.id;
+                            const idCentral = res.data.id_central ?? res.data.id;
                             setPedidosFrontPendientes((prev) => {
                                 const next = { ...prev };
                                 delete next[pedidoData.id];
@@ -3809,7 +3809,12 @@ export default function Facturar({
                             setPedidoSelect(null);
                             getProductos();
                             setSelectItem(null);
-                            notificar({ data: { msj: `Pedido #${idEnBackend} creado en pendiente para sucursal ${sucursal[0].nombre}. Sin método de pago.`, estado: true } });
+                            notificar({
+                                data: {
+                                    msj: `Premontado en Central #${idCentral} hacia ${sucursal[0].nombre}. Completa la salida física en Pedidos Central → Enviar Pedidos.`,
+                                    estado: true,
+                                },
+                            });
                         }
                     });
                     return;
@@ -9110,6 +9115,7 @@ export default function Facturar({
                             buscarDatosFact={buscarDatosFact}
                             setbuscarDatosFact={setbuscarDatosFact}
                             getSucursales={getSucursales}
+                            sucursalActualId={sucursaldata?.id}
                             qpedidoscentralq={qpedidoscentralq}
                             setqpedidoscentralq={setqpedidoscentralq}
                             qpedidocentrallimit={qpedidocentrallimit}

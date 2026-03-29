@@ -105,88 +105,12 @@ class PedidosController extends Controller
         }
     }
     /**
-     * Crea un pedido pendiente (estado=0) desde un pedido front-only para transferirlo a sucursal.
-     * No llama a arabitocentral. Solo crea el pedido e items en arabitofacturacion.
-     * Retorna el ID generado para que el frontend pueda referenciarlo.
+     * Pedido front-only (tab azul en Pagar): solo crea premontado en Arabito Central.
+     * No crea pedido local ni descuenta inventario en Facturación.
      */
     public function transferirPedidoFrontSucursal(Request $req)
     {
-        \DB::beginTransaction();
-        try {
-            $uuid     = $req->uuid;
-            $items    = $req->items ?? [];
-            $id_cliente = (int) ($req->id_cliente ?? 1);
-            if ($id_cliente <= 0) $id_cliente = 1;
-
-            // Si ya existe un pedido con este UUID, devolver el ID existente sin duplicar
-            if ($uuid) {
-                $existing = pedidos::where('uuid', $uuid)->first();
-                if ($existing) {
-                    \DB::rollBack();
-                    return Response::json([
-                        'estado' => false,
-                        'msj'    => 'Este pedido ya fue registrado.',
-                        'id'     => $existing->id,
-                    ]);
-                }
-            }
-
-            $usuario = session('id_usuario');
-
-            // Crear pedido con estado=0 (pendiente, sin método de pago)
-            $nuevo = new pedidos;
-            $nuevo->estado       = 0;
-            $nuevo->id_cliente   = $id_cliente;
-            $nuevo->id_vendedor  = $usuario;
-            $nuevo->fecha_factura = now();
-            if ($uuid) {
-                $nuevo->uuid = $uuid;
-            }
-            $nuevo->save();
-            $id_pedido = $nuevo->id;
-
-            // Si se envió un cliente distinto al genérico, actualizar vínculo
-            if ($id_cliente > 1) {
-                $personaReq = Request::create('/internal', 'POST', [
-                    'numero_factura' => $id_pedido,
-                    'id_cliente'     => $id_cliente,
-                ]);
-                $personaReq->setLaravelSession($req->session());
-                $prevRequest = app('request');
-                app()->instance('request', $personaReq);
-                try {
-                    $this->setpersonacarrito($personaReq);
-                } finally {
-                    app()->instance('request', $prevRequest);
-                }
-            }
-
-            $invController = new InventarioController;
-            foreach ($items as $item) {
-                $producto    = $item['producto'] ?? [];
-                $id_producto = (int) ($producto['id'] ?? $item['id'] ?? 0);
-                if ($id_producto <= 0) continue;
-
-                $cantidad = (float) ($item['cantidad'] ?? 1);
-
-                $result = $invController->hacer_pedido($id_producto, $id_pedido, $cantidad, 'ins', null, $usuario);
-
-                if (is_array($result) && ($result['estado'] ?? '') !== 'ok') {
-                    throw new \Exception($result['msj'] ?? 'Error al agregar item al pedido', 1);
-                }
-            }
-
-            \DB::commit();
-            return Response::json([
-                'estado' => true,
-                'id'     => $id_pedido,
-                'uuid'   => $uuid,
-                'msj'    => 'Pedido creado en pendiente (#' . $id_pedido . '). Inventario descontado. Sin método de pago asignado.',
-            ]);
-        } catch (\Exception $e) {
-            \DB::rollBack();
-            return Response::json(['estado' => false, 'msj' => 'Error: ' . $e->getMessage()]);
-        }
+        return (new sendCentral)->transferirPedidoFrontToCentral($req);
     }
 
     public function getPedidosFast(Request $req)
@@ -306,12 +230,66 @@ class PedidosController extends Controller
         return view("reportes.bultos", [
             "bultos" => $porbulto,
             "id" => $id,
+            "id_pedido_central" => null,
+            "codigo_destino" => null,
             "total" => count($porbulto),
             "fecha" => $fecha,
             "origen" => $origen,
             "sucursal" => $sucursal
         ]);
     }
+
+    /**
+     * Misma vista y formato que printBultos (pagarmain), para pedidos de transferencia premontados en Central
+     * (no existe fila local en pedidos). La etiqueta grande usa la sucursal destino.
+     */
+    function printBultosTransferenciaPremontado(Request $req)
+    {
+        $bultos = (int) $req->get('bultos', 0);
+        $etiquetaRaw = trim((string) $req->get('etiqueta_destino', ''));
+
+        if ($bultos < 1) {
+            abort(400, 'Número de bultos inválido.');
+        }
+        if ($etiquetaRaw === '') {
+            abort(400, 'Falta etiqueta de destino para los bultos.');
+        }
+
+        $suc = preg_split('/SUC\s+/i', $etiquetaRaw, 2);
+        $sucursal = isset($suc[1]) ? strtoupper(trim($suc[1])) : strtoupper($etiquetaRaw);
+
+        $origenSucursal = sucursal::all()->first();
+        $origen = $origenSucursal ? $origenSucursal->codigo : 'N/A';
+
+        $fecha = now();
+        if ($req->filled('fecha')) {
+            try {
+                $fecha = \Carbon\Carbon::parse($req->get('fecha'));
+            } catch (\Exception $e) {
+                $fecha = now();
+            }
+        }
+
+        $porbulto = [];
+        for ($i = 1; $i <= $bultos; $i++) {
+            $porbulto[$i] = $i;
+        }
+
+        $idCentral = $req->get('id_central', $req->get('id', 0));
+        $codigoDestino = trim((string) $req->get('codigo_destino', ''));
+
+        return view("reportes.bultos", [
+            "bultos" => $porbulto,
+            "id" => $idCentral,
+            "id_pedido_central" => $idCentral,
+            "codigo_destino" => $codigoDestino !== '' ? $codigoDestino : null,
+            "total" => count($porbulto),
+            "fecha" => $fecha,
+            "origen" => $origen,
+            "sucursal" => $sucursal,
+        ]);
+    }
+
     public function sumpedidos(Request $req)
     {
         $cop = $this->get_moneda()["cop"];

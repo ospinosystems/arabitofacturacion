@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Modalmovil from "./modalmovil";
 import TransferenciasModule from "./TransferenciasModule";
 import TCRModule from "./TCRModule";
+import db from "../database/database";
 
 export default function PedidosCentralComponent({
 	socketUrl,
@@ -64,7 +65,8 @@ export default function PedidosCentralComponent({
 	qpedidocentralemisor,
 	setqpedidocentralemisor,
 	getSucursales,
-	
+	sucursalActualId,
+
 	openBarcodeScan,
 	buscarDatosFact,
 	setbuscarDatosFact,
@@ -77,8 +79,70 @@ export default function PedidosCentralComponent({
 	const [ismovil, setismovil] = useState(window.innerWidth <= 768)
 	const [filtrarSoloIndex, setfiltrarSoloIndex] = useState(null)
 	const [mensajeValidacion, setMensajeValidacion] = useState("")
+	const [resolviendoNovedadId, setResolviendoNovedadId] = useState(null)
 	const ctRealInputRef = useRef(null)
 	const searchInputRef = useRef(null)
+
+	const esSucursalOrigenPedidoSeleccionado = () => {
+		const p = pedidosCentral[indexPedidoCentral]
+		if (!p || sucursalActualId == null || p.id_origen == null) return false
+		return String(sucursalActualId) === String(p.id_origen)
+	}
+
+	const aprobarNovedadDesdeFacturacion = async (idNovedad) => {
+		const obs = window.prompt('Observación Central (opcional):', '')
+		if (obs === null) return
+		if (!window.confirm('¿Aprobar esta novedad en Central? El origen podrá aceptar o rechazar el ajuste.')) return
+		setResolviendoNovedadId(idNovedad)
+		try {
+			const res = await db.aprobarNovedadCentral({ id_novedad: idNovedad, observacion: obs })
+			if (res.data?.estado) {
+				window.alert(res.data.msj || 'Novedad aprobada.')
+				getPedidosCentral()
+			} else {
+				window.alert(res.data?.msj || 'No se pudo aprobar la novedad.')
+			}
+		} catch (e) {
+			console.error(e)
+			window.alert('Error al contactar el servidor.')
+		} finally {
+			setResolviendoNovedadId(null)
+		}
+	}
+
+	const resolverNovedadOrigenDesdeRecibir = async (idNovedad, accion) => {
+		const observacion = window.prompt(
+			accion === 'aceptar'
+				? 'Observación en origen (opcional):'
+				: 'Motivo de rechazo (opcional):'
+		)
+		if (observacion === null) return
+		const ok = window.confirm(
+			accion === 'aceptar'
+				? '¿Aceptar la novedad y aplicar el ajuste de inventario en esta sucursal (origen)?'
+				: '¿Rechazar esta novedad en origen?'
+		)
+		if (!ok) return
+		setResolviendoNovedadId(idNovedad)
+		try {
+			const res = await db.resolverNovedadOrigen({
+				id_novedad: idNovedad,
+				accion,
+				observacion,
+			})
+			if (res.data?.estado) {
+				window.alert(res.data.msj || 'Listo.')
+				getPedidosCentral()
+			} else {
+				window.alert(res.data?.msj || 'No se pudo resolver la novedad.')
+			}
+		} catch (e) {
+			console.error(e)
+			window.alert('Error al contactar el servidor.')
+		} finally {
+			setResolviendoNovedadId(null)
+		}
+	}
 
 	const confirmarCantidadYBuscarSiguiente = () => {
 		if (showCorregirDatos === null || !pedidosCentral[indexPedidoCentral]?.items) return
@@ -395,7 +459,8 @@ export default function PedidosCentralComponent({
 													title="Estado"
 												>
 													<option value="">Estado</option>
-													<option value="1">Pend.</option>
+													<option value="1">Enviado</option>
+													<option value="5">Recibido</option>
 													<option value="3">Revisión</option>
 													<option value="4">Revisado</option>
 												</select>
@@ -435,16 +500,20 @@ export default function PedidosCentralComponent({
 															<div onClick={() => { setIndexPedidoCentral(i); setshowdetailsPEdido(false); }} data-index={i} key={e.id} className={`card mb-2 pointer hover-shadow ${indexPedidoCentral === i ? 'border-primary' : ''}`}>
 																<div className="card-body p-2">
 																	<div className='row g-0 align-items-center'>
-																		<div className={
-																			(e.estado == 1 ? "bg-danger text-light" :
-																				e.estado == 3 ? "bg-warning text-dark" :
-																					e.estado == 4 ? "bg-info text-light" : "") + (" col-auto d-flex align-items-center justify-content-center p-3 rounded-start")
-																		} style={{ minHeight: '100%', fontSize: '1.2rem' }}>
-																			{/* Icono o texto de estado */}
-																			{e.estado == 1 ? <i className="fas fa-exclamation-circle"></i> :
-																			e.estado == 3 ? <i className="fas fa-search"></i> :
-																			e.estado == 4 ? <i className="fas fa-check-circle"></i> : <i className="fas fa-question-circle"></i>}
-																		</div>
+																	<div className={
+																		(e.estado == 1 ? "bg-danger text-light" :
+																			e.estado == 5 ? "bg-purple text-light" :
+																			e.estado == 3 ? "bg-warning text-dark" :
+																				e.estado == 4 ? "bg-info text-light" :
+																				e.estado == 2 ? "bg-success text-light" : "bg-secondary text-light") + (" col-auto d-flex align-items-center justify-content-center p-3 rounded-start")
+																	} style={{ minHeight: '100%', fontSize: '1.2rem' }}>
+																		{e.estado == 0 ? <i className="fas fa-box"></i> :
+																		e.estado == 1 ? <i className="fas fa-truck"></i> :
+																		e.estado == 5 ? <i className="fas fa-inbox"></i> :
+																		e.estado == 3 ? <i className="fas fa-search"></i> :
+																		e.estado == 4 ? <i className="fas fa-check-circle"></i> :
+																		e.estado == 2 ? <i className="fas fa-check-double"></i> : <i className="fas fa-question-circle"></i>}
+																	</div>
 																		<div className="col">
 																			<div className="ps-2">
 																				<div className={(indexPedidoCentral === i ? "fw-bold" : "text-secondary") + " d-flex flex-column flex-sm-row justify-content-between align-items-start w-100 mb-1"}>
@@ -452,7 +521,15 @@ export default function PedidosCentralComponent({
 																						<span className="badge bg-secondary me-2">#{e.id}</span>
 																						<span className="badge" style={{ backgroundColor: e.origen.background, color: e.origen.color || '#fff' }}>{e.origen.codigo}</span>
 																					</div>
-																					<span className="text-muted fst-italic small mt-1 mt-sm-0">ITEMS: <b>{e.items.length}</b></span>
+																					<span className="text-muted fst-italic small mt-1 mt-sm-0 d-flex flex-wrap align-items-center gap-1 justify-content-end">
+																						ITEMS: <b>{e.items.length}</b>
+																						{(e.novedades || []).length > 0 && (
+																							<span className="badge bg-warning text-dark" title="Hay novedades de transferencia en este pedido">
+																								<i className="fas fa-exclamation-triangle me-1"></i>
+																								{e.novedades.length} nov.
+																							</span>
+																						)}
+																					</span>
 																				</div>
 																				{e.cxp && (
 																					<div className="small fw-bold mb-1">
@@ -492,12 +569,39 @@ export default function PedidosCentralComponent({
 										</button>
 									</div>
 								)}
-								{!showaddpedidocentral ? (
-									<div className="card shadow-sm">
-										<div className="card-body">
-											{indexPedidoCentral !== null && pedidosCentral && pedidosCentral[indexPedidoCentral] ? (
-												<>
-													<div className="d-flex flex-column flex-sm-row justify-content-between align-items-start p-2 border rounded mb-3 bg-light">
+							{/* Botón grande de CONFIRMAR RECEPCIÓN cuando el pedido está en ENVIADO A DESTINO (estado 1) */}
+							{indexPedidoCentral !== null && pedidosCentral && pedidosCentral[indexPedidoCentral]?.estado === 1 && (
+								<div className="mb-3">
+									<button
+										className="btn btn-lg w-100 py-4 fw-bold text-white"
+										style={{ backgroundColor: '#7c3aed', fontSize: '1.3rem' }}
+										onClick={async () => {
+											if (!confirm('¿Confirmar que recibiste esta carga físicamente?')) return;
+											try {
+												const res = await db.confirmarRecepcionTransferencia({ id_pedido: pedidosCentral[indexPedidoCentral].id });
+												if (res.data.estado) {
+													alert('Recepción confirmada. Ahora puedes proceder con la verificación.');
+													getPedidosCentral();
+												} else {
+													alert(res.data.msj || 'Error al confirmar recepción');
+												}
+											} catch (err) {
+												alert('Error: ' + (err.response?.data?.msj || err.message));
+											}
+										}}
+									>
+										<i className="fas fa-inbox me-3"></i>
+										CONFIRMAR RECEPCIÓN DE CARGA
+									</button>
+								</div>
+							)}
+
+							{!showaddpedidocentral ? (
+								<div className="card shadow-sm">
+									<div className="card-body">
+										{indexPedidoCentral !== null && pedidosCentral && pedidosCentral[indexPedidoCentral] ? (
+											<>
+												<div className="d-flex flex-column flex-sm-row justify-content-between align-items-start p-2 border rounded mb-3 bg-light">
 														<div className="mb-2 mb-sm-0">
 															<small className="text-muted fst-italic d-block">{pedidosCentral[indexPedidoCentral].created_at}</small>
 															<div className="d-flex align-items-center">
@@ -553,13 +657,21 @@ export default function PedidosCentralComponent({
 														</div>
 													)} */}
 					
-													<div className="mb-4">
-														<label className="block text-sm font-semibold text-gray-500 mb-1">
-															Buscar producto, validar existencia y setear cantidad recibida
-														</label>
-														<p className="text-sm text-gray-500 mb-2">
-															Escribe o escanea código de barras o código proveedor (búsqueda exacta). Si existe en la transferencia se marca recibido y el foco pasa al campo cantidad real.
-														</p>
+												{pedidosCentral[indexPedidoCentral]?.estado === 1 && (
+													<div className="alert alert-warning text-center py-3 mb-4">
+														<i className="fas fa-exclamation-triangle me-2"></i>
+														Debes <b>confirmar la recepción física</b> de la carga antes de poder verificar los productos.
+													</div>
+												)}
+
+												{(pedidosCentral[indexPedidoCentral]?.estado !== 1) && <>
+												<div className="mb-4">
+													<label className="block text-sm font-semibold text-gray-500 mb-1">
+														Buscar producto, validar existencia y setear cantidad recibida
+													</label>
+													<p className="text-sm text-gray-500 mb-2">
+														Escribe o escanea código de barras o código proveedor (búsqueda exacta). Si existe en la transferencia se marca recibido y el foco pasa al campo cantidad real.
+													</p>
 														<div className="flex rounded-lg border border-gray-300 bg-white shadow-sm overflow-hidden focus-within:ring-2 focus-within:ring-sinapsis focus-within:border-sinapsis">
 															<span className="inline-flex items-center px-3 text-gray-400 border-r border-gray-200 bg-gray-50">
 																<i className="fas fa-search"></i>
@@ -831,24 +943,104 @@ export default function PedidosCentralComponent({
 																			})}
 																		</tbody>
 																	</table>
-																</div>
+														</div>
+													</div>
+												</div>
+											)}
+
+													{(pedidosCentral[indexPedidoCentral]?.novedades || []).length > 0 && (
+														<div className="card mt-4 border-warning">
+															<div className="card-header bg-warning bg-opacity-25 py-2">
+																<h6 className="mb-0">
+																	<i className="fas fa-exclamation-triangle text-warning me-2"></i>
+																	Novedades de transferencia ({pedidosCentral[indexPedidoCentral].novedades.length})
+																</h6>
+																<small className="text-muted">Se generan al guardar con diferencia entre cantidad enviada y cantidad recibida. Central aprueba; luego la sucursal <b>origen</b> acepta o rechaza el ajuste de inventario.</small>
+															</div>
+															<div className="card-body">
+																{pedidosCentral[indexPedidoCentral].novedades.map(nov => (
+																	<div key={nov.id} className="border border-warning rounded p-3 mb-3 bg-light">
+																		<div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+																			<span className={`badge ${
+																				nov.estado === 0 ? 'bg-warning text-dark' :
+																				nov.estado === 1 ? 'bg-primary' :
+																				nov.estado === 2 ? 'bg-success' : 'bg-secondary'
+																			}`}>
+																				{nov.estado === 0 ? 'Reportada — pendiente Central' :
+																					nov.estado === 1 ? 'Aprobada Central — pendiente origen' :
+																					nov.estado === 2 ? 'Aceptada en origen' : 'Rechazada en origen'}
+																			</span>
+																			{nov.reportada_at && <small className="text-muted">{nov.reportada_at}</small>}
+																		</div>
+																		{nov.observacion_destino && <p className="small mb-1"><b>Destino:</b> {nov.observacion_destino}</p>}
+																		{nov.observacion_central && <p className="small mb-1"><b>Central:</b> {nov.observacion_central}</p>}
+																		{nov.observacion_origen && <p className="small mb-1"><b>Origen:</b> {nov.observacion_origen}</p>}
+																		{(nov.items || []).map(ni => (
+																			<div key={ni.id} className="small mt-1 pt-1 border-top d-flex justify-content-between flex-wrap gap-1">
+																				<span>{ni.producto?.descripcion || `Producto #${ni.id_producto}`}</span>
+																				<span>
+																					Env: {ni.cantidad_enviada} | Rec: {ni.cantidad_recibida} | Dif: <b className={Number(ni.diferencia) < 0 ? 'text-danger' : 'text-success'}>{ni.diferencia}</b>
+																				</span>
+																			</div>
+																		))}
+																		{nov.estado === 0 && (
+																			<div className="mt-3 d-flex flex-wrap gap-2">
+																				<button
+																					type="button"
+																					className="btn btn-sm btn-primary"
+																					disabled={resolviendoNovedadId === nov.id}
+																					onClick={() => aprobarNovedadDesdeFacturacion(nov.id)}
+																				>
+																					{resolviendoNovedadId === nov.id ? <span className="spinner-border spinner-border-sm me-1" /> : <i className="fas fa-check me-1"></i>}
+																					Aprobar novedad (Central)
+																				</button>
+																			</div>
+																		)}
+																		{nov.estado === 1 && esSucursalOrigenPedidoSeleccionado() && (
+																			<div className="mt-3 d-flex flex-wrap gap-2">
+																				<button
+																					type="button"
+																					className="btn btn-sm btn-success"
+																					disabled={resolviendoNovedadId === nov.id}
+																					onClick={() => resolverNovedadOrigenDesdeRecibir(nov.id, 'aceptar')}
+																				>
+																					Aceptar ajuste (origen)
+																				</button>
+																				<button
+																					type="button"
+																					className="btn btn-sm btn-outline-secondary"
+																					disabled={resolviendoNovedadId === nov.id}
+																					onClick={() => resolverNovedadOrigenDesdeRecibir(nov.id, 'rechazar')}
+																				>
+																					Rechazar (origen)
+																				</button>
+																			</div>
+																		)}
+																		{nov.estado === 1 && !esSucursalOrigenPedidoSeleccionado() && (
+																			<p className="small text-muted mt-2 mb-0">
+																				Tras aprobación Central, quien gestione la sucursal <b>origen</b> ({pedidosCentral[indexPedidoCentral].origen?.codigo}) debe aceptar o rechazar el ajuste aquí o en Histórico → Enviar pedidos.
+																			</p>
+																		)}
+																	</div>
+																))}
 															</div>
 														</div>
 													)}
 
 													{pedidosCentral[indexPedidoCentral] && !pedidosCentral[indexPedidoCentral].items.filter(e => (typeof (e.aprobado) === "undefined")).length && (
-														<div className="d-grid mt-3">
-															<button type="button" className="btn btn-success btn-lg" onClick={checkPedidosCentral} disabled={savingPedidoVerificado}>
-																{savingPedidoVerificado ? (
-																	<><span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Guardando...</>
-																) : (
-																	<><i className="fa fa-save me-2"></i>Guardar Pedido Verificado</>
-																)}
-															</button>
-														</div>
-													)}
-												</>
-											) : (
+													<div className="d-grid mt-3">
+														<button type="button" className="btn btn-success btn-lg" onClick={checkPedidosCentral} disabled={savingPedidoVerificado}>
+															{savingPedidoVerificado ? (
+																<><span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Guardando...</>
+															) : (
+																<><i className="fa fa-save me-2"></i>Guardar Pedido Verificado</>
+															)}
+														</button>
+													</div>
+												)}
+												</>}
+											</>
+										) : (
 												<div className="text-center p-5 border rounded bg-light">
 													<i className="fas fa-hand-pointer fa-3x text-muted mb-3"></i>
 													<h5>Seleccione una transferencia</h5>
@@ -882,7 +1074,13 @@ export default function PedidosCentralComponent({
 					</div>
 					: null}
 				
-				{subviewcentral == "pedidos_send" ? (<TransferenciasModule/>) : null}
+				{subviewcentral == "pedidos_send" ? (
+					<TransferenciasModule
+						sucursalesCentral={sucursalesCentral}
+						getSucursales={getSucursales}
+						sucursalActualId={sucursalActualId}
+					/>
+				) : null}
 
 				{subviewcentral == "tcr" ? (
 					<TCRModule

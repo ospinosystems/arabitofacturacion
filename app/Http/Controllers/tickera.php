@@ -2710,6 +2710,211 @@ class tickera extends Controller
         
         return $text;
     }
+
+    /**
+     * Ticket térmico: orden de transferencia (pedido Central), sin pedido local en insucursal.
+     * POST /api/imprimir-ticket-orden-transferencia
+     *
+     * Body JSON: id_pedido (int Central), items[{ descripcion, cantidad, codigo_barras? }],
+     * sucursal_origen, sucursal_destino (texto), observaciones?, printer? (1-based)
+     */
+    public function imprimirTicketOrdenTransferencia(Request $request)
+    {
+        try {
+            $validator = \Validator::make($request->all(), [
+                'id_pedido' => 'required|integer|min:1',
+                'items' => 'required|array|min:1',
+                'items.*.descripcion' => 'required|string',
+                'items.*.cantidad' => 'required',
+                'items.*.codigo_barras' => 'nullable|string|max:120',
+                'sucursal_origen' => 'nullable|string|max:500',
+                'sucursal_destino' => 'nullable|string|max:500',
+                'observaciones' => 'nullable|string|max:1000',
+                'printer' => 'nullable|integer|min:1',
+            ]);
+
+            if ($validator->fails()) {
+                return Response::json([
+                    'success' => false,
+                    'message' => 'Datos inválidos: ' . $validator->errors()->first(),
+                ], 422);
+            }
+
+            $sucursal = sucursal::all()->first();
+            if (!$sucursal || empty($sucursal->tickera)) {
+                return Response::json([
+                    'success' => false,
+                    'message' => 'No hay configuración de impresoras (tickera) en la sucursal',
+                ], 404);
+            }
+
+            $arr_printers = explode(';', $sucursal->tickera);
+            $printerIndex = (int) ($request->input('printer', 1));
+            if ($printerIndex < 1) {
+                $printerIndex = 1;
+            }
+            if (count($arr_printers) === 1) {
+                $connector = new WindowsPrintConnector($arr_printers[0]);
+            } else {
+                $idx = min($printerIndex - 1, count($arr_printers) - 1);
+                $connector = new WindowsPrintConnector($arr_printers[$idx]);
+            }
+
+            $printer = new Printer($connector);
+            $this->imprimirOrdenTransferencia58mm(
+                $printer,
+                $sucursal,
+                (int) $request->id_pedido,
+                (string) ($request->sucursal_origen ?? ''),
+                (string) ($request->sucursal_destino ?? ''),
+                (string) ($request->observaciones ?? ''),
+                $request->items
+            );
+
+            $printer->cut();
+            $printer->close();
+
+            return Response::json([
+                'success' => true,
+                'message' => 'Orden de transferencia enviada a la impresora',
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('imprimirTicketOrdenTransferencia', [
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+            ]);
+
+            return Response::json([
+                'success' => false,
+                'message' => 'Error al imprimir: ' . $this->sanitizeUtf8ForJson($e->getMessage()),
+            ], 500);
+        }
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $items
+     */
+    private function imprimirOrdenTransferencia58mm(
+        Printer $printer,
+        $sucursal,
+        int $idPedidoCentral,
+        string $origen,
+        string $destino,
+        string $observaciones,
+        array $items
+    ): void {
+        $wrap = function (string $text, int $maxLen = 32): array {
+            $text = $this->cleanTextForPrinter($text);
+            if ($text === '') {
+                return [''];
+            }
+            $lines = [];
+            $len = mb_strlen($text, 'UTF-8');
+            $start = 0;
+            while ($start < $len) {
+                $chunk = mb_substr($text, $start, $maxLen, 'UTF-8');
+                $lines[] = $chunk;
+                $start += mb_strlen($chunk, 'UTF-8');
+            }
+
+            return $lines;
+        };
+
+        $printer->setTextSize(1, 1);
+        $printer->setJustification(Printer::JUSTIFY_CENTER);
+        $printer->text("\n");
+        $printer->text($this->cleanTextForPrinter($sucursal->nombre_registro ?? ''));
+        $printer->text("\n");
+        $printer->text($this->cleanTextForPrinter($sucursal->rif ?? ''));
+        $printer->text("\n");
+        $tel = trim(($sucursal->telefono1 ?? '') . ' | ' . ($sucursal->telefono2 ?? ''));
+        $printer->text($this->cleanTextForPrinter($tel));
+        $printer->text("\n");
+
+        $printer->feed(1);
+        $printer->setTextSize(2, 2);
+        $printer->setEmphasis(true);
+        $printer->text("ORDEN DE");
+        $printer->text("\n");
+        $printer->text("TRANSFERENCIA");
+        $printer->setEmphasis(false);
+        $printer->setTextSize(1, 1);
+        $printer->text("\n");
+
+        $printer->setEmphasis(true);
+        $printer->text('Pedido Central #' . $idPedidoCentral);
+        $printer->setEmphasis(false);
+        $printer->text("\n");
+        $printer->text(date('d/m/Y H:i'));
+        $printer->text("\n");
+        $printer->feed(1);
+
+        $printer->setJustification(Printer::JUSTIFY_LEFT);
+        $origLines = $wrap($origen !== '' ? $origen : '—');
+        $printer->setEmphasis(true);
+        $printer->text('Origen: ');
+        $printer->setEmphasis(false);
+        $printer->text($origLines[0] ?? '');
+        $printer->text("\n");
+        for ($oi = 1, $oc = count($origLines); $oi < $oc; $oi++) {
+            $printer->text($origLines[$oi]);
+            $printer->text("\n");
+        }
+        $destLines = $wrap($destino !== '' ? $destino : '—');
+        $printer->setEmphasis(true);
+        $printer->text('Destino: ');
+        $printer->setEmphasis(false);
+        $printer->text($destLines[0] ?? '');
+        $printer->text("\n");
+        for ($di = 1, $dc = count($destLines); $di < $dc; $di++) {
+            $printer->text($destLines[$di]);
+            $printer->text("\n");
+        }
+
+        if ($observaciones !== '') {
+            $printer->feed(1);
+            $printer->setEmphasis(true);
+            $printer->text('Obs.:');
+            $printer->setEmphasis(false);
+            $printer->text("\n");
+            foreach ($wrap($observaciones, 32) as $ln) {
+                $printer->text($ln);
+                $printer->text("\n");
+            }
+        }
+
+        $printer->text("\n");
+        $printer->text('-----------------------------');
+        $printer->text("\n");
+        $printer->setEmphasis(true);
+        $printer->text('Productos');
+        $printer->setEmphasis(false);
+        $printer->text("\n");
+        $printer->text('-----------------------------');
+        $printer->text("\n");
+
+        foreach ($items as $row) {
+            $desc = isset($row['descripcion']) ? (string) $row['descripcion'] : '';
+            foreach ($wrap($desc) as $ln) {
+                $printer->text($ln);
+                $printer->text("\n");
+            }
+            $cant = $this->formato_numero_dos_decimales($row['cantidad'] ?? 0);
+            $printer->text('Cant.: ' . $cant);
+            $printer->text("\n");
+            if (!empty($row['codigo_barras'])) {
+                $printer->text('Cod.barras: ' . $this->cleanTextForPrinter((string) $row['codigo_barras']));
+                $printer->text("\n");
+            }
+            $printer->feed(1);
+        }
+
+        $printer->setJustification(Printer::JUSTIFY_CENTER);
+        $printer->feed(1);
+        $this->imprimirBarcodePedidoId($printer, $idPedidoCentral);
+        $printer->setJustification(Printer::JUSTIFY_LEFT);
+        $printer->feed(2);
+    }
 }
 
 /**

@@ -617,6 +617,14 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('reqpedidos', [sendCentral::class,"reqpedidos"]);
 		Route::post('reqMipedidos', [sendCentral::class,"reqMipedidos"]);
 		Route::post('settransferenciaDici', [sendCentral::class,"settransferenciaDici"]);
+		Route::post('confirmarEnvioTransferencia', [sendCentral::class,"confirmarEnvioTransferencia"]);
+		Route::post('confirmarRecepcionTransferencia', [sendCentral::class,"confirmarRecepcionTransferencia"]);
+		Route::post('getCantidadesTransferidas', [sendCentral::class,"getCantidadesTransferidas"]);
+		Route::post('reportarNovedadTransferencia', [sendCentral::class,"reportarNovedadTransferencia"]);
+		Route::post('aprobarNovedadCentral', [sendCentral::class,"aprobarNovedadCentral"]);
+		Route::post('resolverNovedadOrigen', [sendCentral::class,"resolverNovedadOrigen"]);
+		Route::post('getNovedadesTransferencia', [sendCentral::class,"getNovedadesTransferencia"]);
+		Route::get('printBultosTransferenciaPremontado', [PedidosController::class, 'printBultosTransferenciaPremontado']);
 		
 		Route::post('setInventarioFromSucursal', [sendCentral::class,"setInventarioFromSucursal"]);
 		Route::post('getSucursales', [sendCentral::class,"getSucursales"]);

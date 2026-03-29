@@ -62,8 +62,8 @@ class sendCentral extends Controller
 
     public function path()
     {
-        //return "http://127.0.0.1:8001";
-        return "https://phplaravel-1009655-3565285.cloudwaysapps.com";
+        return "http://127.0.0.1:8001";
+        //return "https://phplaravel-1009655-3565285.cloudwaysapps.com";
     }
 
     public function sends()
@@ -989,7 +989,18 @@ class sendCentral extends Controller
             }
         }
 
-        $request = Http::timeout($timeout)->withHeaders($headers);
+        // Guzzle sigue por defecto máx. 5 redirecciones; algunas instalaciones de Central encadenan más (http/https, etc.)
+        // y fallan con TooManyRedirectsException en RedirectMiddleware sin llegar al endpoint.
+        $request = Http::timeout($timeout)
+            ->withHeaders($headers)
+            ->withOptions([
+                'allow_redirects' => [
+                    'max' => 20,
+                    'strict' => false,
+                    'referer' => true,
+                    'track_redirects' => false,
+                ],
+            ]);
 
         if ($methodUpper === 'GET') {
             $response = $request->get($url, $params);
@@ -2092,70 +2103,16 @@ class sendCentral extends Controller
         }
     }
     function settransferenciaDici(Request $req) {
-        /* DB::beginTransaction();
+        DB::beginTransaction();
         try {
             $type = $req->actualizando ? "update" : "add";
             $codigo_origen = $this->getOrigen();
 
-            if ($req->actualizando) {
-                // Actualizar transferencia existente
-                $transferencia = transferencias_inventario::where("id_transferencia_central",$req->id)->first();
-                if (!$transferencia) {
-                    throw new \Exception("Transferencia no encontrada");
-                }
-
-                // Actualizar campos de la transferencia
-                $transferencia->id_destino = $req->id_destino;
-                $transferencia->observacion = $req->observaciones;
-                $transferencia->save();
-
-                // Eliminar items existentes
-                transferencias_inventario_items::where('id_transferencia', $transferencia->id)->delete();
-
-                // Crear nuevos items
-                foreach($req->items as $item) {
-                    $producto = inventario::find($item['id_producto_insucursal']);
-                    // Verificar si hay suficiente cantidad disponible
-                    if($producto) {
-                        if ($producto->cantidad < $item['cantidad']) {
-                            throw new \Exception("No hay suficiente stock disponible para el producto '{$producto->descripcion}'. Stock actual: {$producto->cantidad}, Cantidad solicitada: {$item['cantidad']}");
-                        }
-                        transferencias_inventario_items::create([
-                            'id_transferencia' => $transferencia->id,
-                            'id_producto' => $producto->id,
-                            'cantidad' => $item['cantidad'],
-                            'cantidad_original_stock_inventario' => $producto->cantidad
-                        ]);
-                    }
-                }
-            } else {
-                // Crear nueva transferencia
-                $transferencia = transferencias_inventario::create([
-                    'id_transferencia_central' => null,
-                    'id_destino' => $req->id_destino,
-                    'id_usuario' => session('id_usuario') ?? 1,
-                    'estado' => 1, // PENDIENTE
-                    'observacion' => $req->observaciones
-                ]);
-
-                // Crear items
-                foreach($req->items as $item) {
-                    $producto = inventario::find($item['id_producto_insucursal']);
-                    if($producto) {
-                        if ($producto->cantidad < $item['cantidad']) {
-                            throw new \Exception("No hay suficiente stock disponible para el producto '{$producto->descripcion}'. Stock actual: {$producto->cantidad}, Cantidad solicitada: {$item['cantidad']}");
-                        }
-                        transferencias_inventario_items::create([
-                            'id_transferencia' => $transferencia->id,
-                            'id_producto' => $producto->id,
-                            'cantidad' => $item['cantidad'],
-                            'cantidad_original_stock_inventario' => $producto->cantidad
-                        ]);
-                    }
-                }
+            $mapaPremontadoAnterior = [];
+            if ($req->actualizando && $req->id) {
+                $mapaPremontadoAnterior = $this->obtenerMapaCantidadesPedidoCentral((int) $req->id);
             }
 
-            // Preparar items para enviar a central
             $items_clean = [];
             foreach($req->items as $item) {
                 $producto = inventario::find($item['id_producto_insucursal']);
@@ -2163,46 +2120,51 @@ class sendCentral extends Controller
                     $items_clean[] = [
                         "producto" => $producto,
                         "descuento" => 0,
-                        "monto" => $producto->precio_base * $item['cantidad'],
+                        "monto" => $producto->precio * floatval($item['cantidad']),
                         "cantidad" => $item['cantidad']
                     ];
                 }
             }
 
-            // Enviar a central
             $pedidos = [[
-                "id" => $transferencia->id,
+                "id" => 0,
                 "items" => $items_clean
             ]];
 
             $response = $this->requestToCentral('post', '/setPedidoInCentralFromMasters', [
                 "codigo_origen" => $codigo_origen,
                 'id_sucursal' => $req->id_destino,
-                "observaciones" => $req->observaciones,
+                "observaciones" => $req->observaciones ?? '',
                 'type' => $type,
                 'id_transferencia_central' => $req->id ?? null,
                 'pedidos' => $pedidos,
+                'es_pedido_front' => true,
             ]);
 
             $res = $response->json();
 
             if(isset($res['estado']) && $res['estado'] === true) {
-                if (!$req->actualizando) {
-                    $transferencia->id_transferencia_central = $res['id'];
-                    $transferencia->save();
+                try {
+                    $idCentral = (int) ($res['id'] ?? $req->id ?? 0);
+                    if ($req->actualizando && $req->id) {
+                        $this->sincronizarInventarioPremontadoActualizar((int) $req->id, $req, $mapaPremontadoAnterior);
+                    } elseif ($idCentral > 0) {
+                        $this->sincronizarInventarioPremontadoNuevo($idCentral, $req);
+                    }
+                } catch (\Exception $ex) {
+                    \Log::error('sincronizarInventarioPremontado settransferenciaDici', ['e' => $ex->getMessage()]);
                 }
-                
                 DB::commit();
                 return Response::json([
                     "estado" => true,
-                    "msj" => "Transferencia " . ($req->actualizando ? "actualizada" : "creada") . " exitosamente",
-                    "transferencia" => $transferencia
+                    "msj" => "Transferencia " . ($req->actualizando ? "actualizada" : "creada") . " exitosamente. ID Central: " . ($res['id'] ?? ''),
+                    "id_central" => $res['id'] ?? null,
                 ]);
             } else {
                 DB::rollBack();
                 return Response::json([
                     "estado" => false,
-                    "msj" => "Error al " . ($req->actualizando ? "actualizar" : "crear") . " transferencia en central",
+                    "msj" => "Error Central: " . ($res['msj'] ?? 'Error desconocido'),
                     "debug" => $res
                 ]);
             }
@@ -2213,8 +2175,122 @@ class sendCentral extends Controller
                 "estado" => false,
                 "msj" => "Error: " . $e->getMessage()." LINE ".$e->getLine(),
             ]);
-        } */
+        }
     }
+
+    /**
+     * Pedido "solo front" (tab azul en Pagar): envía a Central como PREMONTADO EN ORIGEN.
+     * No crea pedido local ni descuenta inventario en Facturación.
+     */
+    function transferirPedidoFrontToCentral(Request $req)
+    {
+        try {
+            $uuid = $req->uuid;
+            $id_destino = (int) ($req->id_sucursal_destino ?? 0);
+            if ($id_destino <= 0) {
+                return Response::json(['estado' => false, 'msj' => 'Debe indicar sucursal de destino.']);
+            }
+
+            if ($uuid && Cache::has('front_premontado_central_' . $uuid)) {
+                $idExistente = Cache::get('front_premontado_central_' . $uuid);
+                return Response::json([
+                    'estado' => false,
+                    'msj' => 'Este pedido ya fue enviado a Central como premontado.',
+                    'id_central' => $idExistente,
+                    'id' => $idExistente,
+                ]);
+            }
+
+            $items = $req->items ?? [];
+            $items_clean = [];
+            foreach ($items as $item) {
+                $idProducto = (int) ($item['producto']['id'] ?? $item['id'] ?? 0);
+                if ($idProducto <= 0) {
+                    continue;
+                }
+                $producto = inventario::find($idProducto);
+                if (!$producto) {
+                    continue;
+                }
+                $cantidad = (float) ($item['cantidad'] ?? 1);
+                if ($cantidad <= 0) {
+                    continue;
+                }
+                $descuento = (float) ($item['descuento'] ?? 0);
+                $monto = isset($item['monto']) ? (float) $item['monto'] : ((float) $producto->precio * $cantidad);
+                $items_clean[] = [
+                    'producto' => $producto,
+                    'descuento' => $descuento,
+                    'monto' => $monto,
+                    'cantidad' => $cantidad,
+                ];
+            }
+
+            if (count($items_clean) === 0) {
+                return Response::json([
+                    'estado' => false,
+                    'msj' => 'No hay productos válidos para enviar a Central.',
+                ]);
+            }
+
+            $codigo_origen = $this->getOrigen();
+            $observaciones = trim('Pedido front (Pagar) — UUID: ' . ($uuid ?: 'sin-uuid'));
+
+            $response = $this->requestToCentral('post', '/setPedidoInCentralFromMasters', [
+                'codigo_origen' => $codigo_origen,
+                'id_sucursal' => $id_destino,
+                'observaciones' => $observaciones,
+                'type' => 'add',
+                'id_transferencia_central' => null,
+                'pedidos' => [
+                    ['id' => 0, 'items' => $items_clean],
+                ],
+                'es_pedido_front' => true,
+            ]);
+
+            if (!$response->ok()) {
+                return Response::json([
+                    'estado' => false,
+                    'msj' => 'Error de conexión con Central: ' . $response->body(),
+                ]);
+            }
+
+            $res = $response->json();
+            if (isset($res['estado']) && $res['estado'] === true) {
+                $idCentral = $res['id'] ?? null;
+                if ($uuid && $idCentral) {
+                    Cache::put('front_premontado_central_' . $uuid, $idCentral, now()->addDays(90));
+                }
+                try {
+                    if ($idCentral) {
+                        $this->sincronizarInventarioPremontadoPedidoFront((int) $idCentral, $items_clean);
+                    }
+                } catch (\Exception $ex) {
+                    \Log::error('sincronizarInventarioPremontadoPedidoFront', ['e' => $ex->getMessage()]);
+                }
+                return Response::json([
+                    'estado' => true,
+                    'msj' => 'Premontado en Central #' . $idCentral . '. Completa la salida física en Pedidos Central → Enviar Pedidos.',
+                    'id_central' => $idCentral,
+                    'id' => $idCentral,
+                    'uuid' => $uuid,
+                ]);
+            }
+
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Central: ' . ($res['msj'] ?? 'Error desconocido'),
+                'debug' => $res,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('transferirPedidoFrontToCentral', ['e' => $e->getMessage()]);
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Error: ' . $e->getMessage(),
+            ]);
+        }
+    }
+
     function reqMipedidos(Request $req) {
         
         try {
@@ -2345,6 +2421,372 @@ class sendCentral extends Controller
         }
 
     }
+
+    // ==================== TRANSFERENCIAS FLUJO COMPLETO ====================
+
+    function confirmarEnvioTransferencia(Request $req) {
+        try {
+            $response = $this->requestToCentral('post', '/confirmarEnvioTransferencia', [
+                "id_pedido" => $req->id_pedido,
+                "items" => $req->items,
+            ]);
+
+            if ($response->ok()) {
+                $res = $response->json();
+                // Inventario local ya se descontó al premontar; aquí solo se confirma envío en Central.
+
+                return Response::json($res);
+            }
+
+            return Response::json(["estado" => false, "msj" => "Error de conexión con Central"]);
+        } catch (\Exception $e) {
+            return Response::json(["estado" => false, "msj" => "Error: " . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Etiqueta legible del destino para movimientos de salida por transferencia.
+     *
+     * @param  array|\stdClass|null  $pedidoCentral  Respuesta pedido de Central (con relación destino)
+     */
+    private function etiquetaDestinoTransferencia($pedidoCentral, $nombreReq = null, $codigoReq = null, $idDestinoReq = null): string
+    {
+        $dest = null;
+        if (is_array($pedidoCentral) && isset($pedidoCentral['destino'])) {
+            $dest = $pedidoCentral['destino'];
+        } elseif (is_object($pedidoCentral) && isset($pedidoCentral->destino)) {
+            $dest = $pedidoCentral->destino;
+        }
+
+        if (is_array($dest)) {
+            $n = trim((string) ($dest['nombre'] ?? $dest['nombre_sucursal'] ?? ''));
+            $c = trim((string) ($dest['codigo'] ?? ''));
+        } elseif (is_object($dest)) {
+            $n = trim((string) ($dest->nombre ?? $dest->nombre_sucursal ?? ''));
+            $c = trim((string) ($dest->codigo ?? ''));
+        } else {
+            $n = '';
+            $c = '';
+        }
+
+        if ($n === '' && $c === '') {
+            $n = trim((string) ($nombreReq ?? ''));
+            $c = trim((string) ($codigoReq ?? ''));
+        }
+
+        if ($n !== '') {
+            return $c !== '' ? "{$n} ({$c})" : $n;
+        }
+        if ($c !== '') {
+            return $c;
+        }
+        if ($idDestinoReq !== null && $idDestinoReq !== '') {
+            return 'sucursal destino ID ' . $idDestinoReq;
+        }
+
+        return '';
+    }
+
+    /** Mapa id inventario local => cantidad (request transferencia DICI). */
+    private function mapItemsTransferenciaReqPorLocalId(array $items): array
+    {
+        $map = [];
+        foreach ($items as $item) {
+            $id = (int) ($item['id_producto_insucursal'] ?? $item['id_producto'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $map[$id] = floatval($item['cantidad'] ?? 0);
+        }
+
+        return $map;
+    }
+
+    /** Cantidades por id_producto (mismo id que inventario local en origen) desde pedido Central. */
+    private function obtenerMapaCantidadesPedidoCentral(int $id_pedido_central): array
+    {
+        if ($id_pedido_central <= 0) {
+            return [];
+        }
+        $response = $this->requestToCentral('post', '/getPedido', ['id' => $id_pedido_central]);
+        if (!$response->ok()) {
+            return [];
+        }
+        $data = $response->json();
+        if (!is_array($data) || (isset($data['estado']) && $data['estado'] === false)) {
+            return [];
+        }
+        $items = $data['items'] ?? [];
+        $map = [];
+        foreach ($items as $it) {
+            $row = is_array($it) ? $it : (array) $it;
+            $pid = (int) ($row['id_producto'] ?? 0);
+            if ($pid <= 0) {
+                continue;
+            }
+            $map[$pid] = floatval($row['cantidad'] ?? 0);
+        }
+
+        return $map;
+    }
+
+    /** Descuenta stock al crear premontado (transferencias módulo DICI). */
+    private function sincronizarInventarioPremontadoNuevo(int $id_central, Request $req): void
+    {
+        if ($id_central <= 0) {
+            return;
+        }
+        $destinoTxt = $this->etiquetaDestinoTransferencia(null, $req->nombre_destino ?? null, $req->codigo_destino ?? null, $req->id_destino ?? null);
+        $base = 'PREMONTADO_TRANSFER #' . $id_central;
+        if ($destinoTxt !== '') {
+            $base .= ' → Destino: ' . $destinoTxt;
+        }
+        foreach ($req->items ?? [] as $item) {
+            $producto = inventario::find($item['id_producto_insucursal'] ?? null);
+            if (!$producto) {
+                continue;
+            }
+            $cantidad = floatval($item['cantidad'] ?? 0);
+            if ($cantidad <= 0) {
+                continue;
+            }
+            $producto->cantidad = $producto->cantidad - $cantidad;
+            $producto->save();
+            movimientosinventariounitario::create([
+                'id_producto' => $producto->id,
+                'id_usuario' => session('id_usuario') ?? 1,
+                'cantidad' => -$cantidad,
+                'cantidadafter' => $producto->cantidad,
+                'origen' => $base,
+            ]);
+        }
+    }
+
+    /** Ajusta stock al editar líneas del premontado (delta vs mapa capturado antes de actualizar Central). */
+    private function sincronizarInventarioPremontadoActualizar(int $id_central, Request $req, array $oldMap): void
+    {
+        if ($id_central <= 0) {
+            return;
+        }
+        $newMap = $this->mapItemsTransferenciaReqPorLocalId($req->items ?? []);
+        $ids = array_unique(array_merge(array_keys($oldMap), array_keys($newMap)));
+        foreach ($ids as $pid) {
+            $old = $oldMap[$pid] ?? 0.0;
+            $new = $newMap[$pid] ?? 0.0;
+            $delta = $new - $old;
+            if (abs($delta) < 0.0000001) {
+                continue;
+            }
+            $producto = inventario::find($pid);
+            if (!$producto) {
+                continue;
+            }
+            $producto->cantidad = $producto->cantidad - $delta;
+            $producto->save();
+            movimientosinventariounitario::create([
+                'id_producto' => $producto->id,
+                'id_usuario' => session('id_usuario') ?? 1,
+                'cantidad' => -$delta,
+                'cantidadafter' => $producto->cantidad,
+                'origen' => 'AJUSTE_PREMONTADO #' . $id_central,
+            ]);
+        }
+    }
+
+    /** Premontado desde pedido front (Pagar): descuenta al crear en Central. */
+    private function sincronizarInventarioPremontadoPedidoFront(int $id_central, array $items_clean): void
+    {
+        if ($id_central <= 0) {
+            return;
+        }
+        $base = 'PREMONTADO_TRANSFER #' . $id_central;
+        foreach ($items_clean as $entry) {
+            $producto = $entry['producto'] ?? null;
+            if (!$producto) {
+                continue;
+            }
+            $cantidad = floatval($entry['cantidad'] ?? 0);
+            if ($cantidad <= 0) {
+                continue;
+            }
+            $producto->cantidad = $producto->cantidad - $cantidad;
+            $producto->save();
+            movimientosinventariounitario::create([
+                'id_producto' => $producto->id,
+                'id_usuario' => session('id_usuario') ?? 1,
+                'cantidad' => -$cantidad,
+                'cantidadafter' => $producto->cantidad,
+                'origen' => $base,
+            ]);
+        }
+    }
+
+    private function descontarInventarioLocal($id_pedido, $items, $pedidoCentral = null, $nombreDestinoReq = null, $codigoDestinoReq = null, $idDestinoReq = null) {
+        try {
+            $destinoTxt = $this->etiquetaDestinoTransferencia($pedidoCentral, $nombreDestinoReq, $codigoDestinoReq, $idDestinoReq);
+            $origenMov = 'TRANSFERENCIA_SALIDA #' . $id_pedido;
+            if ($destinoTxt !== '') {
+                $origenMov .= ' → Destino: ' . $destinoTxt;
+            }
+
+            foreach ($items as $item) {
+                $producto = inventario::find($item['id_producto_insucursal'] ?? $item['id_producto'] ?? null);
+                if ($producto) {
+                    $cantidad = floatval($item['cantidad_confirmada'] ?? $item['cantidad'] ?? 0);
+                    $producto->cantidad = $producto->cantidad - $cantidad;
+                    $producto->save();
+
+                    movimientosinventariounitario::create([
+                        'id_producto' => $producto->id,
+                        'id_usuario' => session('id_usuario') ?? 1,
+                        'cantidad' => -$cantidad,
+                        'cantidadafter' => $producto->cantidad,
+                        'origen' => $origenMov,
+                    ]);
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::error("Error descontando inventario local: " . $e->getMessage());
+        }
+    }
+
+    function confirmarRecepcionTransferencia(Request $req) {
+        try {
+            $response = $this->requestToCentral('post', '/confirmarRecepcionTransferencia', [
+                "id_pedido" => $req->id_pedido,
+            ]);
+
+            if ($response->ok()) {
+                return Response::json($response->json());
+            }
+
+            return Response::json(["estado" => false, "msj" => "Error de conexión con Central"]);
+        } catch (\Exception $e) {
+            return Response::json(["estado" => false, "msj" => "Error: " . $e->getMessage()]);
+        }
+    }
+
+    function getCantidadesTransferidas(Request $req) {
+        try {
+            $codigo_origen = $this->getOrigen();
+            $response = $this->requestToCentral('post', '/getCantidadesTransferidas', [
+                "codigo_origen" => $codigo_origen,
+            ]);
+
+            if ($response->ok()) {
+                return Response::json($response->json());
+            }
+
+            return Response::json(["estado" => false, "msj" => "Error de conexión con Central"]);
+        } catch (\Exception $e) {
+            return Response::json(["estado" => false, "msj" => "Error: " . $e->getMessage()]);
+        }
+    }
+
+    function reportarNovedadTransferencia(Request $req) {
+        try {
+            $response = $this->requestToCentral('post', '/reportarNovedadTransferencia', [
+                "id_pedido" => $req->id_pedido,
+                "items" => $req->items,
+                "observacion" => $req->observacion,
+                "id_usuario" => session('id_usuario'),
+            ]);
+
+            if ($response->ok()) {
+                return Response::json($response->json());
+            }
+
+            return Response::json(["estado" => false, "msj" => "Error de conexión con Central"]);
+        } catch (\Exception $e) {
+            return Response::json(["estado" => false, "msj" => "Error: " . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Central aprueba novedad de transferencia (estado REPORTADA → APROBADA_CENTRAL).
+     */
+    function aprobarNovedadCentral(Request $req)
+    {
+        try {
+            $response = $this->requestToCentral('post', '/aprobarNovedadCentral', [
+                'id_novedad' => $req->id_novedad,
+                'observacion' => $req->observacion,
+                'id_usuario' => session('id_usuario'),
+            ]);
+
+            if ($response->ok()) {
+                return Response::json($response->json());
+            }
+
+            return Response::json(['estado' => false, 'msj' => 'Error de conexión con Central']);
+        } catch (\Exception $e) {
+            return Response::json(['estado' => false, 'msj' => 'Error: ' . $e->getMessage()]);
+        }
+    }
+
+    function resolverNovedadOrigen(Request $req) {
+        try {
+            $response = $this->requestToCentral('post', '/resolverNovedadOrigen', [
+                "id_novedad" => $req->id_novedad,
+                "accion" => $req->accion,
+                "observacion" => $req->observacion,
+                "id_usuario" => session('id_usuario'),
+            ]);
+
+            if ($response->ok()) {
+                $res = $response->json();
+
+                if (isset($res['estado']) && $res['estado'] === true && $req->accion === 'aceptar') {
+                    if (isset($res['ajustes'])) {
+                        foreach ($res['ajustes'] as $ajuste) {
+                            $producto = inventario::find($ajuste['id_producto']);
+                            if ($producto) {
+                                $diferencia = floatval($ajuste['diferencia']);
+                                $producto->cantidad = $producto->cantidad + $diferencia;
+                                $producto->save();
+
+                                movimientosinventariounitario::create([
+                                    'id_producto' => $producto->id,
+                                    'id_usuario' => session('id_usuario') ?? 1,
+                                    'cantidad' => $diferencia,
+                                    'cantidadafter' => $producto->cantidad,
+                                    'origen' => "AJUSTE_NOVEDAD #" . $req->id_novedad,
+                                ]);
+                            }
+                        }
+                    }
+                }
+
+                return Response::json($res);
+            }
+
+            return Response::json(["estado" => false, "msj" => "Error de conexión con Central"]);
+        } catch (\Exception $e) {
+            return Response::json(["estado" => false, "msj" => "Error: " . $e->getMessage()]);
+        }
+    }
+
+    function getNovedadesTransferencia(Request $req) {
+        try {
+            $codigo_origen = $this->getOrigen();
+            $response = $this->requestToCentral('post', '/getNovedadesTransferencia', [
+                "codigo_origen" => $codigo_origen,
+                "id_pedido" => $req->id_pedido,
+                "estado" => $req->estado,
+                "limit" => $req->limit,
+            ]);
+
+            if ($response->ok()) {
+                return Response::json($response->json());
+            }
+
+            return Response::json(["estado" => false, "msj" => "Error de conexión con Central"]);
+        } catch (\Exception $e) {
+            return Response::json(["estado" => false, "msj" => "Error: " . $e->getMessage()]);
+        }
+    }
+
+    // ==================== FIN TRANSFERENCIAS ====================
 
     /////////////////////////////////
 

@@ -36,6 +36,14 @@ class AuthenticateUser
         'reqpedidos',
         'reqMipedidos',
         'settransferenciaDici',
+        'confirmarEnvioTransferencia',
+        'confirmarRecepcionTransferencia',
+        'getCantidadesTransferidas',
+        'reportarNovedadTransferencia',
+        'aprobarNovedadCentral',
+        'resolverNovedadOrigen',
+        'getNovedadesTransferencia',
+        'printBultosTransferenciaPremontado',
         
         // Sucursales
         'getSucursales',

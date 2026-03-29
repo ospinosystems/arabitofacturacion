@@ -238,6 +238,13 @@ const db = {
   reqpedidos: data => axios.post(host + "reqpedidos", data),
   reqMipedidos: data => axios.post(host + "reqMipedidos", data),
   settransferenciaDici: data => axios.post(host + "settransferenciaDici", data),
+  confirmarEnvioTransferencia: data => axios.post(host + "confirmarEnvioTransferencia", data),
+  confirmarRecepcionTransferencia: data => axios.post(host + "confirmarRecepcionTransferencia", data),
+  getCantidadesTransferidas: data => axios.post(host + "getCantidadesTransferidas", data),
+  reportarNovedadTransferencia: data => axios.post(host + "reportarNovedadTransferencia", data),
+  aprobarNovedadCentral: data => axios.post(host + "aprobarNovedadCentral", data),
+  resolverNovedadOrigen: data => axios.post(host + "resolverNovedadOrigen", data),
+  getNovedadesTransferencia: data => axios.post(host + "getNovedadesTransferencia", data),
   resetPrintingState: data => axios.get(host + "resetPrintingState", { params: data }),
   changeIdVinculacionCentral: data => axios.post(host + "changeIdVinculacionCentral", data),
   
