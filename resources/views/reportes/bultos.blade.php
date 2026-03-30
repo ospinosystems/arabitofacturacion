@@ -11,6 +11,11 @@
                     <b class="fs-1">{{$sucursal}}</b>
                 </label>
             </div>
+            @if (!empty($id_pedido_etiqueta))
+            <div class="text-center">
+                <label class="id-pedido">Pedido #{{ $id_pedido_etiqueta }}</label>
+            </div>
+            @endif
             <label class="numbultos fs-1">
                <b> {{$num_bulto}} / {{$total}}</b>
             </label>
@@ -66,6 +71,12 @@
             font-size: 0.7rem;
             font-weight: bold;
             text-align: center
+        }
+        .id-pedido{
+            font-size: 0.65rem;
+            font-weight: bold;
+            text-align: center;
+            display: block;
         }
         
         @media print {
