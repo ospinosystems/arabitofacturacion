@@ -303,8 +303,8 @@ class PedidosController extends Controller
         $suc = explode("SUC ", $clienteNombre);
         $sucursal = isset($suc[1]) ? strtoupper(trim($suc[1])) : strtoupper($clienteNombre);
 
-        // Pedido "naranja" (front con uuid): el id numérico en sucursal es el que se puede cruzar con central
-        $idPedidoEtiqueta = !empty($ped->uuid) ? (int) $ped->id : null;
+        // Etiqueta: siempre el id numérico local del pedido (nunca UUID)
+        $idPedidoEtiqueta = (int) $ped->id;
 
         return view("reportes.bultos", [
             "bultos" => $porbulto,
