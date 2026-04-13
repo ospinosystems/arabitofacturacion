@@ -5198,8 +5198,9 @@ export default function PagarMain({
                 const fmt = (n) => Number(n).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 return (
                 <div className="fixed inset-0 z-[100] flex flex-col bg-white">
-                    {/* Header: Cliente (Razón Social, RIF, Dirección) + Origen (sucursal) */}
+                    {/* Header: Guía de Despacho + Cliente (Razón Social, RIF, Dirección) + Origen (sucursal) */}
                     <div ref={refContenidoImpresionExportar} className="flex-shrink-0 px-4 py-3 bg-gray-100 border-b border-gray-300 shadow-sm print:bg-transparent print:border-b print:shadow-none">
+                        <div className="mb-2 text-sm font-bold text-gray-900">Guía de Despacho N°: {String(id).padStart(8, '0')}</div>
                         <div className="flex flex-wrap items-start justify-between gap-4">
                             <div>
                                 <span className="text-xs font-semibold text-gray-500 uppercase">Cliente</span>
@@ -5212,9 +5213,6 @@ export default function PagarMain({
                             <div>
                                 <span className="text-xs font-semibold text-gray-500 uppercase">Origen</span>
                                 <div className="mt-0.5 text-base font-medium text-gray-900">{nombreOrigen}</div>
-                            </div>
-                            <div className="text-sm text-gray-500">
-                                Pedido #{id} {created_at ? ` · ${created_at}` : ""}
                             </div>
                         </div>
                     </div>
@@ -5296,16 +5294,16 @@ export default function PagarMain({
                                         const fmtP = (n) => Number(n).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                         ventana.document.write(`
                                             <!DOCTYPE html><html><head><title>Lista de productos - Pedido ${id}</title>
-                                            <style>body{font-family:sans-serif;padding:1rem;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;} .titulo-guia{text-align:center;font-weight:bold;margin-bottom:1rem;}</style>
+                                            <style>body{font-family:sans-serif;padding:1rem;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;} .titulo-guia{text-align:left;font-weight:bold;margin-bottom:1rem;}</style>
                                             </head><body>
-                                            <div class="titulo-guia">GUIA DE DESPACHO</div>
+                                            <div class="titulo-guia">Guía de Despacho N°: ${String(id).padStart(8, '0')}</div>
                                             <div class="header">
                                                 <div><strong>Cliente</strong></div>
                                                 <div>Razón Social: ${clienteRazon}</div>
                                                 <div>RIF: ${clienteRif}</div>
                                                 <div>Dirección: ${clienteDir}</div>
                                                 <div style="margin-top:0.5rem;"><strong>Origen:</strong> ${origenNombre}</div>
-                                                <div style="margin-top:0.25rem;font-size:12px;color:#666;">Pedido #${id} ${created_at ? " · " + created_at : ""}</div>
+
                                             </div>
                                             <table style="width:100%;"><thead><tr><th>#</th><th>Código</th><th>Cód. proveedor</th><th>Descripción</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Precio</th></tr></thead><tbody>
                                             ${(items || []).map((e, i) => {
