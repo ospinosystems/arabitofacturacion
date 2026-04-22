@@ -34,7 +34,6 @@ class CreateItemsPedidosTable extends Migration
             $table->boolean("entregado")->default(false)->nullable(true);
             $table->boolean("condicion")->default(0); //0=normal  2=cambio 1=garantia
             $table->timestamps();
-            $table->unique(["id_producto","id_pedido"]);
         });
     }
 
