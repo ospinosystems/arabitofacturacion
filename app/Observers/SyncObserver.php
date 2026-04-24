@@ -27,8 +27,8 @@ class SyncObserver
      */
     public function updating(Model $model)
     {
-        // Excluir el modelo inventario de este comportamiento
-        if (get_class($model) === 'App\Models\inventario') {
+        // Inventario: flujo propio. Usuarios: snapshot completo a central sin columna push.
+        if (get_class($model) === 'App\Models\inventario' || get_class($model) === 'App\Models\usuarios') {
             return;
         }
         
@@ -62,6 +62,10 @@ class SyncObserver
      */
     public function created(Model $model)
     {
+        if (get_class($model) === 'App\Models\usuarios') {
+            return;
+        }
+
         // Asegurar que registros nuevos tengan push=0
         if ($this->tieneCampoPush($model) && $model->push === null) {
             $model->push = 0;

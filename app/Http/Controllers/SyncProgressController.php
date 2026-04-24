@@ -22,6 +22,7 @@ use App\Models\pagos_referencias;
 use App\Models\cajas;
 use App\Models\movimientosinventariounitario;
 use App\Models\sucursal;
+use App\Models\usuarios;
 use App\Http\Controllers\PagoPedidosController;
 use App\Http\Controllers\PedidosController;
 
@@ -141,15 +142,19 @@ class SyncProgressController extends Controller
                     continue;
                 }
                 
-                // Para CIERRES: solo contar cierres de tipo administrador (tipo_cierre = 1)
-                if ($key === 'cierres') {
+                if ($key === 'usuarios_pos') {
+                    $total = $model::count();
+                    $pendientes = 0;
+                    $sincronizados = $total;
+                } elseif ($key === 'cierres') {
                     $total = $model::where('tipo_cierre', 1)->count();
                     $pendientes = $model::where('tipo_cierre', 1)->where($campoSync, 0)->count();
+                    $sincronizados = $total - $pendientes;
                 } else {
                     $total = $model::count();
                     $pendientes = $model::where($campoSync, 0)->count();
+                    $sincronizados = $total - $pendientes;
                 }
-                $sincronizados = $total - $pendientes;
                 
                 $status[$key] = [
                     'nombre' => $config['nombre'],
@@ -158,7 +163,9 @@ class SyncProgressController extends Controller
                     'sincronizados' => $sincronizados,
                     'pendientes' => $pendientes,
                     'porcentaje' => $total > 0 ? round(($sincronizados / $total) * 100, 1) : 100,
-                    'ultimo_sync' => $this->getUltimoSync($model, $campoSync),
+                    'ultimo_sync' => ($key === 'usuarios_pos' || ($config['campo_sync'] ?? null) === null)
+                        ? null
+                        : $this->getUltimoSync($model, $campoSync),
                     'orden' => $config['orden'],
                     'grupo' => $config['grupo'],
                 ];
@@ -207,6 +214,10 @@ class SyncProgressController extends Controller
                 continue;
             }
             
+            if ($key === 'usuarios_pos') {
+                continue;
+            }
+
             // Para CIERRES: solo contar cierres de tipo administrador (tipo_cierre = 1)
             if ($key === 'cierres') {
                 $pendientes = $model::where('tipo_cierre', 1)->where($campoSync, 0)->count();
@@ -271,6 +282,10 @@ class SyncProgressController extends Controller
                 continue;
             }
             
+            if ($key === 'usuarios_pos') {
+                continue;
+            }
+
             // Para CIERRES: solo contar cierres de tipo administrador (tipo_cierre = 1)
             if ($key === 'cierres') {
                 $sincronizados = $model::where('tipo_cierre', 1)->where($campoSync, 1)->count();
@@ -325,6 +340,14 @@ class SyncProgressController extends Controller
         Log::info("=== MARCANDO REGISTROS ANTIGUOS (antes de {$fechaCorte}) ===");
         
         foreach ($tables as $key => $config) {
+            if ($key === 'usuarios_pos') {
+                $resultados[$key] = [
+                    'tabla' => $config['nombre'],
+                    'marcados' => 0,
+                ];
+                continue;
+            }
+
             $model = $config['model'];
             $campoSync = $config['campo_sync'] ?? 'sincronizado';
             $campoFecha = $config['campo_fecha'] ?? 'created_at';
@@ -430,6 +453,9 @@ class SyncProgressController extends Controller
             }
             
             try {
+                if ($key === 'usuarios_pos') {
+                    continue;
+                }
                 // Para CIERRES: solo contar cierres de tipo administrador (tipo_cierre = 1)
                 $queryPendientes = $model::where($campoSync, 0)->where($campoFecha, '<', $fechaCorte);
                 if ($key === 'cierres') {
@@ -624,6 +650,17 @@ class SyncProgressController extends Controller
             // ],
             // NOTA: La tabla 'cajas' fue eliminada en arabitofacturacion.
             // Los movimientos de caja ahora se crean en arabitocentral desde el efectivo_guardado del cierre.
+            'usuarios_pos' => [
+                'nombre' => 'Usuarios POS',
+                'model' => usuarios::class,
+                'tabla_destino' => 'sucursal_usuarios',
+                'orden' => 8,
+                'grupo' => 'tercero',
+                // Sin columna push: en cada sync se envía snapshot de todos los usuarios (sin clave).
+                'campo_sync' => null,
+                'campo_fecha' => 'updated_at',
+                'campos' => [],
+            ],
             'movimientos_inventariounitarios' => [
                 'nombre' => 'Movimientos Inventario',
                 'model' => movimientosinventariounitario::class,
@@ -661,6 +698,10 @@ class SyncProgressController extends Controller
     
     private function getUltimoSync($model, $campoSync = 'sincronizado')
     {
+        if ($campoSync === null) {
+            return null;
+        }
+
         $campoAt = $campoSync === 'push' ? 'updated_at' : 'sincronizado_at';
         
         $ultimo = $model::where($campoSync, 1)
@@ -821,6 +862,11 @@ class SyncProgressController extends Controller
                     // Para INVENTARIOS: contar TODO sin ningún filtro
                     if ($tabla === 'inventarios') {
                         Log::info(">>> INVENTARIOS: NO aplicando filtros. Total en BD: " . $model::count());
+                    } elseif ($tabla === 'usuarios_pos') {
+                        $count = $model::count();
+                        Log::info(">>> USUARIOS_POS: count = {$count} (snapshot completo, sin push)");
+                        $totalRegistros += $count;
+                        continue;
                     } else {
                         // Para otras tablas: aplicar filtros normales
                         if ($soloNuevos) {
@@ -947,6 +993,11 @@ class SyncProgressController extends Controller
         if ($nombreTabla === 'inventarios') {
             Log::info(">>> INVENTARIOS DETECTADO - NO aplicando ningún filtro");
             Log::info(">>> Total inventario en BD: " . $model::count());
+        } elseif ($nombreTabla === 'usuarios_pos') {
+            $excludeCols = ['clave', 'password'];
+            $cols = Schema::getColumnListing($tableName);
+            $config['campos'] = array_values(array_diff($cols, $excludeCols));
+            Log::info('>>> USUARIOS_POS: enviando todos los registros; columnas: ' . implode(',', $config['campos']));
         } else {
             // Para otras tablas: aplicar filtros normales
             if ($soloNuevos) {
@@ -1156,7 +1207,7 @@ class SyncProgressController extends Controller
                         if ($resultado && ($resultado['estado'] ?? false)) {
                             // Marcar como sincronizados usando el campo correcto
                             // EXCEPTO para inventarios - no actualizar el campo push
-                            if ($nombreTabla !== 'inventarios') {
+                            if ($nombreTabla !== 'inventarios' && $nombreTabla !== 'usuarios_pos' && $campoSync !== null) {
                                 $ids = $registros->pluck('id')->toArray();
                                 $updateData = [$campoSync => 1];
                                 
@@ -1472,6 +1523,13 @@ class SyncProgressController extends Controller
         $config = $this->getTablesConfig();
         
         if ($tabla && isset($config[$tabla])) {
+            if ($tabla === 'usuarios_pos') {
+                return Response::json([
+                    'estado' => true,
+                    'mensaje' => 'usuarios_pos no usa bandera de sincronización; no hay nada que resetear.',
+                ]);
+            }
+
             $tablaConfig = $config[$tabla];
             $campoSync = $tablaConfig['campo_sync'] ?? 'sincronizado';
             
@@ -1490,6 +1548,10 @@ class SyncProgressController extends Controller
         
         // Resetear todas
         foreach ($config as $key => $tablaConfig) {
+            if ($key === 'usuarios_pos') {
+                continue;
+            }
+
             $campoSync = $tablaConfig['campo_sync'] ?? 'sincronizado';
             
             $updateData = [$campoSync => 0];
@@ -1519,6 +1581,13 @@ class SyncProgressController extends Controller
         
         if (!isset($config[$tabla])) {
             return Response::json(['estado' => false, 'mensaje' => 'Tabla no válida'], 400);
+        }
+
+        if ($tabla === 'usuarios_pos') {
+            return Response::json([
+                'estado' => false,
+                'mensaje' => 'usuarios_pos no mantiene estado de sincronización por registro.',
+            ], 400);
         }
         
         $tablaConfig = $config[$tabla];
@@ -1577,6 +1646,10 @@ class SyncProgressController extends Controller
         $tablasAProcesar = $tabla ? [$tabla => $config[$tabla]] : $config;
         
         foreach ($tablasAProcesar as $key => $tablaConfig) {
+            if ($key === 'usuarios_pos') {
+                continue;
+            }
+
             // Validar que el modelo existe y es válido
             if (is_null($tablaConfig['model']) || 
                 (!is_string($tablaConfig['model']) && !is_object($tablaConfig['model'])) || 
