@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\cierres;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Exporta para un rango de fechas el mapping
@@ -65,6 +66,9 @@ class ExportarPuntosIdUsuarioRealCommand extends Command
         $this->info("Rango: {$desde} → {$hasta}");
         $this->info("Cierres admin encontrados: ".$cierresAdmin->count());
 
+        // FIX 2026-05-24 — mapa id→nombre del catálogo usuarios para denormalizar al exportar.
+        $nombrePorId = DB::table('usuarios')->pluck('nombre', 'id')->all();
+
         $items = [];
         $contadores = ['puntos' => 0, 'pinpad' => 0, 'sin_data' => 0];
 
@@ -98,14 +102,16 @@ class ExportarPuntosIdUsuarioRealCommand extends Command
                     $lotes = $meta['lotes'] ?? [];
                     foreach ($lotes as $lote) {
                         if (is_object($lote)) $lote = json_decode(json_encode($lote), true);
+                        $idUsr = (int) ($lote['id_usuario'] ?? $idUsuarioCajero);
                         $items[] = [
-                            'idinsucursal' => 'PINPAD-'.$admin->id.'-'.$idxPinpad,
-                            'id_usuario'   => (int) ($lote['id_usuario'] ?? $idUsuarioCajero),
-                            'fecha'        => (string) $admin->fecha,
-                            'monto'        => (float) ($lote['monto_bs'] ?? $lote['monto'] ?? 0),
-                            'loteserial'   => (string) ($lote['terminal'] ?? $lote['lote'] ?? ''),
-                            'banco'        => (string) ($lote['banco_nombre'] ?? $lote['banco'] ?? ''),
-                            'tipo'         => 'PINPAD',
+                            'idinsucursal'   => 'PINPAD-'.$admin->id.'-'.$idxPinpad,
+                            'id_usuario'     => $idUsr,
+                            'nombre_usuario' => $nombrePorId[$idUsr] ?? null,
+                            'fecha'          => (string) $admin->fecha,
+                            'monto'          => (float) ($lote['monto_bs'] ?? $lote['monto'] ?? 0),
+                            'loteserial'     => (string) ($lote['terminal'] ?? $lote['lote'] ?? ''),
+                            'banco'          => (string) ($lote['banco_nombre'] ?? $lote['banco'] ?? ''),
+                            'tipo'           => 'PINPAD',
                         ];
                         $idxPinpad++;
                         $contadores['pinpad']++;
@@ -120,14 +126,16 @@ class ExportarPuntosIdUsuarioRealCommand extends Command
                     $puntos = $meta['puntos'] ?? [];
                     foreach ($puntos as $p) {
                         if (is_object($p)) $p = json_decode(json_encode($p), true);
+                        $idUsr = (int) ($p['id_usuario'] ?? $idUsuarioCajero);
                         $items[] = [
-                            'idinsucursal' => 'PUNTO-'.$admin->id.'-'.$idxOtros,
-                            'id_usuario'   => (int) ($p['id_usuario'] ?? $idUsuarioCajero),
-                            'fecha'        => (string) $admin->fecha,
-                            'monto'        => (float) ($p['monto_real'] ?? $p['monto'] ?? 0),
-                            'loteserial'   => (string) ($p['descripcion'] ?? $p['lote'] ?? ''),
-                            'banco'        => (string) ($p['banco'] ?? ''),
-                            'tipo'         => 'PUNTO X',
+                            'idinsucursal'   => 'PUNTO-'.$admin->id.'-'.$idxOtros,
+                            'id_usuario'     => $idUsr,
+                            'nombre_usuario' => $nombrePorId[$idUsr] ?? null,
+                            'fecha'          => (string) $admin->fecha,
+                            'monto'          => (float) ($p['monto_real'] ?? $p['monto'] ?? 0),
+                            'loteserial'     => (string) ($p['descripcion'] ?? $p['lote'] ?? ''),
+                            'banco'          => (string) ($p['banco'] ?? ''),
+                            'tipo'           => 'PUNTO X',
                         ];
                         $idxOtros++;
                         $contadores['puntos']++;

@@ -1103,13 +1103,22 @@ class SyncProgressController extends Controller
                 // Para CIERRES: extraer lotes de métodos de pago y anclarlos al cierre
                 if ($esCierre) {
                     $lotes = [];
-                    
+
                     // Cargar métodos de pago del cierre
                     $r->load('metodosPago');
                     $today = $r->fecha;
-                    
+
                     Log::info("SYNCPROGRESS - Cierre ID: {$r->id}, Total métodos de pago: " . count($r->metodosPago));
-                    
+
+                    // FIX 2026-05-24 — resolver nombre del cajero por id_usuario una vez por cierre.
+                    // Lo enviamos denormalizado a central porque la tabla `usuarios` no existe
+                    // en central (es por-sucursal); central no puede hacer JOIN para mostrar nombre.
+                    $nombrePorIdUsuario = \DB::table('usuarios')->pluck('nombre', 'id')->all();
+                    $nombreUsuarioFn = function ($idu) use ($nombrePorIdUsuario) {
+                        if (! $idu) return null;
+                        return $nombrePorIdUsuario[(int) $idu] ?? null;
+                    };
+
                     // Extraer lotes desde CierresMetodosPago con subtipo 'otros_puntos' y 'pinpad'
                     foreach ($r->metodosPago as $metodo_pago) {
                         $metadatos = is_string($metodo_pago->metadatos) 
@@ -1123,6 +1132,7 @@ class SyncProgressController extends Controller
                             $lotes_pinpad = $metadatos['lotes'] ?? [];
                             Log::info("SYNCPROGRESS - Lotes PINPAD encontrados: " . count($lotes_pinpad));
                             foreach ($lotes_pinpad as $loteIndex => $lote) {
+                                $idUsuarioLote = $lote['id_usuario'] ?? $r->id_usuario;
                                 $loteData = [
                                     "idinsucursal" => "PINPAD-".$r->id."-".$loteIndex,
                                     "monto" => floatval($lote['monto_bs'] ?? $lote['monto'] ?? 0),
@@ -1133,7 +1143,9 @@ class SyncProgressController extends Controller
                                     // (inyectado en metadatos por PedidosController al guardar el cierre).
                                     // Fallback al id_usuario del cierre (= admin si fue consolidado) sólo
                                     // si el lote es legacy y no trae id_usuario.
-                                    "id_usuario" => $lote['id_usuario'] ?? $r->id_usuario,
+                                    "id_usuario" => $idUsuarioLote,
+                                    // FIX 2026-05-24 — nombre denormalizado para central.
+                                    "nombre_usuario" => $nombreUsuarioFn($idUsuarioLote),
                                     "categoria" => 1,
                                     "tipo" => "PINPAD",
                                     "debito_credito" => null,
@@ -1147,13 +1159,16 @@ class SyncProgressController extends Controller
                             $puntos = $metadatos['puntos'] ?? [];
                             Log::info("SYNCPROGRESS - Puntos encontrados: " . count($puntos));
                             foreach ($puntos as $puntoIndex => $punto) {
+                                $idUsuarioPunto = $punto['id_usuario'] ?? $r->id_usuario;
                                 $puntoData = [
                                     "idinsucursal" => "PUNTO-".$r->id."-".$puntoIndex,
                                     "monto" => floatval($punto['monto_real'] ?? $punto['monto'] ?? 0),
                                     "banco" => $punto['banco'] ?? '',
                                     "loteserial" => $punto['descripcion'] ?? $punto['lote'] ?? '',
                                     "fecha" => $punto['fecha'] ?? $today,
-                                    "id_usuario" => $punto['id_usuario'] ?? $r->id_usuario,
+                                    "id_usuario" => $idUsuarioPunto,
+                                    // FIX 2026-05-24 — nombre denormalizado para central.
+                                    "nombre_usuario" => $nombreUsuarioFn($idUsuarioPunto),
                                     "categoria" => 1,
                                     "tipo" => "PUNTO X",
                                     "debito_credito" => null,
