@@ -3490,7 +3490,36 @@ class PedidosController extends Controller
                 // (2 registros: 1 para Pinpad con su cuadre, 1 para Otros Puntos con su cuadre)
                 // Los lotes individuales van en metadatos JSON
                 if ($tipo_cierre == 0 && isset($lotes_para_guardar)) {
-                    
+
+                    // FIX 2026-05-24 — id_usuario por cada punto/lote
+                    // Antes: los puntos guardados en metadatos['puntos'] / metadatos['lotes']
+                    // NO traían `id_usuario`. Esto provocaba que en arabitocentral
+                    // (SyncProgressController línea ~1152: `$punto['id_usuario'] ?? $r->id_usuario`)
+                    // todos los pyb terminaran con el id del cierre admin (consolidado),
+                    // perdiendo la trazabilidad de qué cajero hizo cada PUNTO X.
+                    //
+                    // Ahora: en el cierre del cajero (tipo_cierre==0) inyectamos
+                    // `id_usuario = session('id_usuario')` (= el cajero que está cerrando)
+                    // en cada punto/lote. Así, cuando luego el admin consolide
+                    // (tipo_cierre==1) y se sincronice a arabitocentral, cada pyb
+                    // llevará el id del cajero real.
+                    $normalizarConIdUsuario = function ($lista) use ($id_usuario) {
+                        if (!is_array($lista)) return $lista;
+                        return array_map(function ($item) use ($id_usuario) {
+                            if (is_object($item)) {
+                                $item = json_decode(json_encode($item), true);
+                            }
+                            if (is_array($item)) {
+                                if (empty($item['id_usuario'])) {
+                                    $item['id_usuario'] = $id_usuario;
+                                }
+                            }
+                            return $item;
+                        }, $lista);
+                    };
+                    $lotes_para_guardar['lotes_pinpad'] = $normalizarConIdUsuario($lotes_para_guardar['lotes_pinpad'] ?? []);
+                    $lotes_para_guardar['otros_puntos'] = $normalizarConIdUsuario($lotes_para_guardar['otros_puntos'] ?? []);
+
                     // === REGISTRO 1: PINPAD (Total con cuadre) ===
                     if (!empty($lotes_para_guardar['lotes_pinpad'])) {
                         // OPTIMIZACIÓN: Usar valores directamente del cuadre_detallado (ya calculados por cerrarFun)
@@ -3564,30 +3593,56 @@ class PedidosController extends Controller
                     $lotes_pinpad_consolidados = [];
                     $lotes_otros_consolidados = [];
                     
+                    // FIX 2026-05-24 — al consolidar, garantizar que cada punto/lote
+                    // lleve el id_usuario del cajero que lo produjo (su `cierres.id_usuario`).
+                    // Para registros NUEVOS ya viene seteado por el bloque tipo_cierre==0 de arriba;
+                    // para registros LEGACY (anteriores al fix) inyectamos el id del cierre del cajero
+                    // como fallback. Sin esto, los puntos legacy seguirían cayendo en el sync con
+                    // el id del cierre admin.
+                    $injectIdUsuarioLegacy = function ($lista, $idUsuarioCajero) {
+                        if (!is_array($lista)) return $lista;
+                        return array_map(function ($item) use ($idUsuarioCajero) {
+                            if (is_object($item)) {
+                                $item = json_decode(json_encode($item), true);
+                            }
+                            if (is_array($item) && empty($item['id_usuario'])) {
+                                $item['id_usuario'] = $idUsuarioCajero;
+                            }
+                            return $item;
+                        }, $lista);
+                    };
+
                     foreach ($cierres_cajeros_para_consolidar as $cierre_cajero) {
                         $metodos_pago = $cierre_cajero->metodosPago;
-                        
+                        $idUsuarioCajero = $cierre_cajero->id_usuario;
+
                         // Buscar pinpad en los metodosPago
                         $registro_pinpad = $metodos_pago->where('subtipo', 'pinpad')->first();
                         if ($registro_pinpad) {
-                            $metadatos = is_string($registro_pinpad->metadatos) 
-                                ? json_decode($registro_pinpad->metadatos, true) 
+                            $metadatos = is_string($registro_pinpad->metadatos)
+                                ? json_decode($registro_pinpad->metadatos, true)
                                 : $registro_pinpad->metadatos;
-                            
+
                             if (isset($metadatos['lotes'])) {
-                                $lotes_pinpad_consolidados = array_merge($lotes_pinpad_consolidados, $metadatos['lotes']);
+                                $lotes_pinpad_consolidados = array_merge(
+                                    $lotes_pinpad_consolidados,
+                                    $injectIdUsuarioLegacy($metadatos['lotes'], $idUsuarioCajero)
+                                );
                             }
                         }
-                        
+
                         // Buscar otros_puntos en los metodosPago
                         $registro_otros = $metodos_pago->where('subtipo', 'otros_puntos')->first();
                         if ($registro_otros) {
-                            $metadatos = is_string($registro_otros->metadatos) 
-                                ? json_decode($registro_otros->metadatos, true) 
+                            $metadatos = is_string($registro_otros->metadatos)
+                                ? json_decode($registro_otros->metadatos, true)
                                 : $registro_otros->metadatos;
-                            
+
                             if (isset($metadatos['puntos'])) {
-                                $lotes_otros_consolidados = array_merge($lotes_otros_consolidados, $metadatos['puntos']);
+                                $lotes_otros_consolidados = array_merge(
+                                    $lotes_otros_consolidados,
+                                    $injectIdUsuarioLegacy($metadatos['puntos'], $idUsuarioCajero)
+                                );
                             }
                         }
                     }

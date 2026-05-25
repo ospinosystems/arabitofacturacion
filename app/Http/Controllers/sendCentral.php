@@ -2498,7 +2498,9 @@ class sendCentral extends Controller
                                 "banco" => $lote['banco_nombre'] ?? $lote['banco'] ?? '',
                                 "loteserial" => $lote['terminal'] ?? $lote['lote'] ?? '',
                                 "fecha" => $today,
-                                "id_usuario" => $cierre->id_usuario,
+                                // FIX 2026-05-24 — preferir id del cajero (inyectado en metadatos);
+                                // fallback al id_usuario del cierre para lotes legacy.
+                                "id_usuario" => $lote['id_usuario'] ?? $cierre->id_usuario,
                                 "categoria" => 1, // Categoría 1 para puntosybiopagos
                                 "tipo" => "PINPAD",
                                 "debito_credito" => null,

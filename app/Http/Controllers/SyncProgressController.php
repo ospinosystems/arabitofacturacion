@@ -1129,7 +1129,11 @@ class SyncProgressController extends Controller
                                     "banco" => $lote['banco_nombre'] ?? $lote['banco'] ?? '',
                                     "loteserial" => $lote['terminal'] ?? $lote['lote'] ?? '',
                                     "fecha" => $today,
-                                    "id_usuario" => $r->id_usuario,
+                                    // FIX 2026-05-24 — preferir el id del cajero que generó el lote
+                                    // (inyectado en metadatos por PedidosController al guardar el cierre).
+                                    // Fallback al id_usuario del cierre (= admin si fue consolidado) sólo
+                                    // si el lote es legacy y no trae id_usuario.
+                                    "id_usuario" => $lote['id_usuario'] ?? $r->id_usuario,
                                     "categoria" => 1,
                                     "tipo" => "PINPAD",
                                     "debito_credito" => null,
