@@ -2473,14 +2473,21 @@ class sendCentral extends Controller
         $data = [];
         if ($cierres) {
 
+            // FIX 2026-05-24 — mapa id_usuario→nombre cargado una sola vez (denormalización para central).
+            $nombrePorIdUsuario = \DB::table('usuarios')->pluck('nombre', 'id')->all();
+            $nombreUsuarioFn = function ($idu) use ($nombrePorIdUsuario) {
+                if (! $idu) return null;
+                return $nombrePorIdUsuario[(int) $idu] ?? null;
+            };
+
             foreach ($cierres as $key => $cierre) {
                 $today = $cierre->fecha;
-                
+
                 // Cargar métodos de pago del cierre administrador
                 $cierre->load('metodosPago');
-                
+
                 $lotes = [];
-                
+
                 // Extraer lotes desde CierresMetodosPago con subtipo 'otros_puntos' y 'pinpad'
                 foreach ($cierre->metodosPago as $metodo_pago) {
                     $metadatos = is_string($metodo_pago->metadatos) 
@@ -2492,6 +2499,7 @@ class sendCentral extends Controller
                         $lotes_pinpad = $metadatos['lotes'] ?? [];
                         \Log::info("SENDCIERRES - Lotes PINPAD encontrados: " . count($lotes_pinpad));
                         foreach ($lotes_pinpad as $index => $lote) {
+                            $idUsuarioLote = $lote['id_usuario'] ?? $cierre->id_usuario;
                             $loteData = [
                                 "idinsucursal" => "PINPAD-".$cierre->id."-".$index,
                                 "monto" => floatval($lote['monto_bs'] ?? $lote['monto'] ?? 0),
@@ -2500,7 +2508,9 @@ class sendCentral extends Controller
                                 "fecha" => $today,
                                 // FIX 2026-05-24 — preferir id del cajero (inyectado en metadatos);
                                 // fallback al id_usuario del cierre para lotes legacy.
-                                "id_usuario" => $lote['id_usuario'] ?? $cierre->id_usuario,
+                                "id_usuario" => $idUsuarioLote,
+                                // FIX 2026-05-24 — nombre denormalizado para central.
+                                "nombre_usuario" => $nombreUsuarioFn($idUsuarioLote),
                                 "categoria" => 1, // Categoría 1 para puntosybiopagos
                                 "tipo" => "PINPAD",
                                 "debito_credito" => null,
@@ -2513,13 +2523,16 @@ class sendCentral extends Controller
                         $puntos = $metadatos['puntos'] ?? [];
                         \Log::info("SENDCIERRES - Puntos encontrados: " . count($puntos));
                         foreach ($puntos as $index => $punto) {
+                            $idUsuarioPunto = $punto['id_usuario'] ?? $cierre->id_usuario;
                             $puntoData = [
                                 "idinsucursal" => "PUNTO-".$cierre->id."-".$index,
                                 "monto" => floatval($punto['monto_real'] ?? $punto['monto'] ?? 0),
                                 "banco" => $punto['banco'] ?? '',
                                 "loteserial" => $punto['descripcion'] ?? $punto['lote'] ?? '',
                                 "fecha" => $punto['fecha'] ?? $today,
-                                "id_usuario" => $punto['id_usuario'] ?? $cierre->id_usuario,
+                                "id_usuario" => $idUsuarioPunto,
+                                // FIX 2026-05-24 — nombre denormalizado para central.
+                                "nombre_usuario" => $nombreUsuarioFn($idUsuarioPunto),
                                 "categoria" => 1, // Categoría 1 para puntosybiopagos
                                 "tipo" => "PUNTO X",
                                 "debito_credito" => null,
