@@ -144,7 +144,7 @@ class ReenviarPybIdUsuarioCommand extends Command
         }
 
         $sc = new sendCentral();
-        $url = rtrim($sc->path(), '/').'/sync/actualizar-pyb-usuarios';
+        $url = rtrim($sc->path(), '/').'/api/sync/actualizar-pyb-usuarios';
         $codigo = sucursal::first()->codigo;
         $apiKey = $sc->getCentralApiKey();
         $headers = $apiKey ? ['X-Sucursal-Api-Key' => $apiKey] : [];
