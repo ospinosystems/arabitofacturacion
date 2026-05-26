@@ -26,6 +26,10 @@ export default function ModalRefPago({
     dolar,
     number,
     bancos,
+    bancosCentral,
+    bancosCentralLoading,
+    bancosCentralError,
+    recargarBancosCentral,
     montoTraido,
     tipoTraido,
     pedidoData,
@@ -580,10 +584,29 @@ export default function ModalRefPago({
                     {/* Módulo Central - Campos de banco y referencia siempre visibles */}
                     {moduloSeleccionado === 'Central' && (
                         <>
-                            {/* Banco */}
+                            {/* Banco — lista viene de central, filtrada por empresa+caja+signo del monto */}
                             <div>
-                                <label className="block mb-1 text-xs font-medium text-gray-700">
-                                    Banco <span className="text-red-500">*</span>
+                                <label className="block mb-1 text-xs font-medium text-gray-700 flex items-center justify-between">
+                                    <span>
+                                        Banco <span className="text-red-500">*</span>
+                                        <span className="ml-2 text-gray-400 font-normal">
+                                            {(() => {
+                                                const m = parseFloat(monto_referenciapago);
+                                                if (isNaN(m) || m === 0) return "(ingreso)";
+                                                return m < 0 ? "(devolución)" : "(ingreso)";
+                                            })()}
+                                        </span>
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => recargarBancosCentral && recargarBancosCentral()}
+                                        disabled={bancosCentralLoading}
+                                        title="Recargar bancos desde central"
+                                        className="ml-2 text-xs text-orange-600 hover:text-orange-700 disabled:opacity-50"
+                                    >
+                                        <i className={`fa fa-sync-alt ${bancosCentralLoading ? 'fa-spin' : ''}`}></i>
+                                        {bancosCentralLoading ? ' Cargando…' : ' Recargar'}
+                                    </button>
                                 </label>
                                 <select
                                     value={banco_referenciapago}
@@ -596,18 +619,35 @@ export default function ModalRefPago({
                                         errors.banco ? 'border-red-300' : 'border-gray-200'
                                     }`}
                                 >
-                                    {bancos
-                                        .filter(e => e.value != "0134 BANESCO ARABITO PUNTOS 9935")
-                                        .filter(e => e.value != "0134 BANESCO TITANIO")
-                                        .map((e, i) => (
-                                            <option key={i} value={e.value}>
-                                                {e.text}
-                                            </option>
-                                        ))
-                                    }
+                                    <option value="">--Seleccione Banco--</option>
+                                    {(() => {
+                                        const lista = Array.isArray(bancosCentral) ? bancosCentral : [];
+                                        const m = parseFloat(monto_referenciapago);
+                                        const esDevolucion = !isNaN(m) && m < 0;
+                                        const flag = esDevolucion
+                                            ? 'disponible_transferencia_devolucion'
+                                            : 'disponible_transferencia_ingreso';
+                                        return lista
+                                            .filter(b => !!b[flag])
+                                            .map(b => (
+                                                <option key={b.id} value={b.codigo}>
+                                                    {b.descripcion}
+                                                </option>
+                                            ));
+                                    })()}
                                 </select>
                                 {errors.banco && (
                                     <p className="mt-1 text-xs text-red-600">{errors.banco}</p>
+                                )}
+                                {bancosCentralError && (
+                                    <p className="mt-1 text-xs text-red-600">
+                                        Error al cargar bancos: {bancosCentralError}
+                                    </p>
+                                )}
+                                {!bancosCentralError && !bancosCentralLoading && Array.isArray(bancosCentral) && bancosCentral.length === 0 && (
+                                    <p className="mt-1 text-xs text-amber-600">
+                                        No hay bancos asignados a esta caja. Solicita asignación en central.
+                                    </p>
                                 )}
                             </div>
 

@@ -666,6 +666,37 @@ export default function Facturar({
     });
     const [transferirpedidoa, settransferirpedidoa] = useState("");
 
+    // Bancos provenientes de central: se filtran por empresa de la sucursal + pivote
+    // por caja (bancos_list_sucursal). Cada banco trae 4 flags
+    // (disponible_transferencia_ingreso|devolucion, disponible_pos_ingreso|devolucion)
+    // y el frontend elige la lista según escenario + signo del monto.
+    const [bancosCentral, setBancosCentral] = useState([]);
+    const [bancosCentralLoading, setBancosCentralLoading] = useState(false);
+    const [bancosCentralError, setBancosCentralError] = useState(null);
+
+    const fetchBancosCentral = async (force = false) => {
+        setBancosCentralLoading(true);
+        setBancosCentralError(null);
+        try {
+            const r = await axios.get("/bancos-central", { params: force ? { refresh: 1 } : {} });
+            if (r.data?.estado === false) {
+                setBancosCentralError(r.data?.msj || "No se pudo obtener bancos.");
+                setBancosCentral([]);
+            } else {
+                setBancosCentral(Array.isArray(r.data?.bancos) ? r.data.bancos : []);
+            }
+        } catch (err) {
+            setBancosCentralError(err?.response?.data?.msj || err.message || "Error de red.");
+            setBancosCentral([]);
+        } finally {
+            setBancosCentralLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchBancosCentral(false);
+    }, []);
+
     const bancos = [
         { value: "", text: "--Seleccione Banco--" },
 
@@ -9279,6 +9310,10 @@ export default function Facturar({
                     ) : view == "cierres" ? (
                         <Cierres
                             bancos={bancos}
+                            bancosCentral={bancosCentral}
+                            bancosCentralLoading={bancosCentralLoading}
+                            bancosCentralError={bancosCentralError}
+                            recargarBancosCentral={() => fetchBancosCentral(true)}
                             dataPuntosAdicionales={dataPuntosAdicionales}
                             setdataPuntosAdicionales={setdataPuntosAdicionales}
                             addTuplasPuntosAdicionales={
@@ -10651,6 +10686,10 @@ export default function Facturar({
                                 settelefono_referenciapago
                             }
                             bancos={bancos}
+                            bancosCentral={bancosCentral}
+                            bancosCentralLoading={bancosCentralLoading}
+                            bancosCentralError={bancosCentralError}
+                            recargarBancosCentral={() => fetchBancosCentral(true)}
                             addRefPago={addRefPago}
                             onAutovalidarReferenciaSuccess={onAutovalidarReferenciaSuccess}
                             descripcion_referenciapago={

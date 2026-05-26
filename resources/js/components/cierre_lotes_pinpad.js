@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-function LotesPinpad({ lotesPinpad, bancos, onChangeBanco, totalizarcierre, bloqueado }) {
+function LotesPinpad({ lotesPinpad, bancos, bancosCentral, bancosCentralLoading, bancosCentralError, recargarBancosCentral, onChangeBanco, totalizarcierre, bloqueado }) {
     const [modalDetalle, setModalDetalle] = useState(null);
 
     const abrirDetalle = (lote) => {
@@ -18,7 +18,21 @@ function LotesPinpad({ lotesPinpad, bancos, onChangeBanco, totalizarcierre, bloq
     return (
         <>
             <div className="row mb-2">
-                <div className="col-2 text-success text-right">Lotes Pinpad</div>
+                <div className="col-2 text-success text-right">
+                    Lotes Pinpad
+                    <button
+                        type="button"
+                        onClick={() => recargarBancosCentral && recargarBancosCentral()}
+                        disabled={bancosCentralLoading}
+                        title="Recargar bancos desde central"
+                        className="btn btn-link btn-sm p-0 ml-1 align-baseline"
+                    >
+                        <i className={`fa fa-sync-alt ${bancosCentralLoading ? 'fa-spin' : ''}`}></i>
+                    </button>
+                    {bancosCentralError && (
+                        <div className="text-danger small">{bancosCentralError}</div>
+                    )}
+                </div>
                 <div className="col align-middle text-center">
                     <table className="table">
                         <thead>
@@ -73,9 +87,16 @@ function LotesPinpad({ lotesPinpad, bancos, onChangeBanco, totalizarcierre, bloq
                                             onChange={(e) => onChangeBanco(i, e.target.value)}
                                             disabled={totalizarcierre || bloqueado}
                                         >
-                                            {bancos && bancos.filter(b => b.value !== "0134").map((banco, idx) => (
-                                                <option key={idx} value={banco.value}>{banco.text}</option>
-                                            ))}
+                                            <option value="">-</option>
+                                            {(() => {
+                                                const lista = Array.isArray(bancosCentral) ? bancosCentral : [];
+                                                const m = parseFloat(lote.monto_bs);
+                                                const esDevolucion = !isNaN(m) && m < 0;
+                                                const flag = esDevolucion ? 'disponible_pos_devolucion' : 'disponible_pos_ingreso';
+                                                return lista.filter(b => !!b[flag]).map(b => (
+                                                    <option key={b.id} value={b.codigo}>{b.descripcion}</option>
+                                                ));
+                                            })()}
                                         </select>
                                     </td>
                                     <td>

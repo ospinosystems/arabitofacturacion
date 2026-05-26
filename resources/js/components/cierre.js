@@ -148,6 +148,10 @@ function Cierre({
 
 	reversarCierre,
 	bancos,
+	bancosCentral,
+	bancosCentralLoading,
+	bancosCentralError,
+	recargarBancosCentral,
 
 }) {
 
@@ -648,12 +652,30 @@ function Cierre({
 														lotesPinpad={lotesPinpad} 
 														bancos={bancos}
 														onChangeBanco={onChangeBancoPinpad}
+															bancosCentral={bancosCentral}
+															bancosCentralLoading={bancosCentralLoading}
+															bancosCentralError={bancosCentralError}
+															recargarBancosCentral={recargarBancosCentral}
 														totalizarcierre={totalizarcierre}
 														bloqueado={bloqueado}
 													/>
 
 													<div className="row mb-2">
-														<div className="col-2 text-success text-right">Lotes Otros Puntos de Venta</div>
+														<div className="col-2 text-success text-right">
+																Lotes Otros Puntos de Venta
+																<button
+																	type="button"
+																	onClick={() => recargarBancosCentral && recargarBancosCentral()}
+																	disabled={bancosCentralLoading}
+																	title="Recargar bancos desde central"
+																	className="btn btn-link btn-sm p-0 ml-1 align-baseline"
+																>
+																	<i className={`fa fa-sync-alt ${bancosCentralLoading ? 'fa-spin' : ''}`}></i>
+																</button>
+																{bancosCentralError && (
+																	<div className="text-danger small">{bancosCentralError}</div>
+																)}
+															</div>
 
 														<div className="col align-middle text-center" >
 															<table className="table table-bordered" style={{ tableLayout: 'fixed' }}>
@@ -688,9 +710,16 @@ function Cierre({
 																			</td>
 																			<td>
 																				<select className='form-control form-control-sm' disabled={totalizarcierre || bloqueado} value={e.banco} onChange={event=>onchangetuplapuntosnew("banco",i,event.target.value)}>
-																					{bancos.filter(e=>e.value!="0134").map((e,i)=>
-																						<option key={i} value={e.value}>{e.text}</option>
-																					)}
+																					<option value="">-</option>
+																					{(() => {
+																						const lista = Array.isArray(bancosCentral) ? bancosCentral : [];
+																						const m = parseFloat(e.monto);
+																						const esDevolucion = !isNaN(m) && m < 0;
+																						const flag = esDevolucion ? 'disponible_pos_devolucion' : 'disponible_pos_ingreso';
+																						return lista.filter(b => !!b[flag]).map(b => (
+																							<option key={b.id} value={b.codigo}>{b.descripcion}</option>
+																						));
+																					})()}
 																				</select>
 																			</td>
 																			<td className="text-center">

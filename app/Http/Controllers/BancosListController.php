@@ -33,6 +33,7 @@ class BancosListController extends Controller
                 'estado' => false,
                 'msj' => 'No se pudo obtener la lista de bancos desde central.',
                 'bancos' => [],
+                'sucursal_id' => null,
                 'empresa_id' => null,
                 'cached' => false,
             ], 200);
@@ -55,13 +56,12 @@ class BancosListController extends Controller
             }
 
             $payload = $response->json();
-            $bancos = $payload['bancos'] ?? [];
-            $empresaId = $payload['empresa_id'] ?? null;
 
             return [
                 'estado' => true,
-                'empresa_id' => $empresaId,
-                'bancos' => $bancos,
+                'sucursal_id' => $payload['sucursal_id'] ?? null,
+                'empresa_id' => $payload['empresa_id'] ?? null,
+                'bancos' => $payload['bancos'] ?? [],
             ];
         } catch (\Throwable $e) {
             Log::error('getBancosBySucursal: excepción al consultar central', [

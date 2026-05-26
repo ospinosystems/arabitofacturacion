@@ -97,6 +97,10 @@ class ReenviarPybIdUsuarioCommand extends Command
                             'idinsucursal'   => 'PINPAD-'.$admin->id.'-'.$idxPinpad,
                             'id_usuario'     => $idu,
                             'nombre_usuario' => $nombrePorId[$idu] ?? null,
+                            // Para fallback por fragmentos del split-aplicar (PINPAD splittado en central).
+                            'loteserial'     => (string) ($lote['terminal'] ?? $lote['lote'] ?? ''),
+                            'fecha'          => (string) $admin->fecha,
+                            'tipo'           => 'PINPAD',
                         ];
                         $idxPinpad++;
                     }
@@ -114,6 +118,10 @@ class ReenviarPybIdUsuarioCommand extends Command
                             'idinsucursal'   => 'PUNTO-'.$admin->id.'-'.$idxOtros,
                             'id_usuario'     => $idu,
                             'nombre_usuario' => $nombrePorId[$idu] ?? null,
+                            // Para PUNTO X el match es por idinsucursal directo; estos campos son opcionales.
+                            'loteserial'     => (string) ($p['descripcion'] ?? $p['lote'] ?? ''),
+                            'fecha'          => (string) ($p['fecha'] ?? $admin->fecha),
+                            'tipo'           => 'PUNTO X',
                         ];
                         $idxOtros++;
                     }
