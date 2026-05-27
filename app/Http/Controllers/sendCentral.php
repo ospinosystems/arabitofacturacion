@@ -63,7 +63,7 @@ class sendCentral extends Controller
     public function path()
     {
         //return "http://127.0.0.1:8001";
-        return "https://phplaravel-1009655-3565285.cloudwaysapps.com";
+        return "https://titanio-central.com";
     }
 
     public function sends()
@@ -987,6 +987,17 @@ class sendCentral extends Controller
             }
         }
 
+        // FIX 2026-05-26 — enviar la versión del código (SHA del HEAD git) en cada
+        // request para que central pueda saber qué tan actualizada está la tienda.
+        // Header + param para que funcione aunque un proxy filtre headers custom.
+        $versionSucursal = \App\Support\AppVersion::current();
+        $headers['X-Sucursal-Version'] = $versionSucursal;
+        if ($methodUpper === 'GET') {
+            $params['sucursal_version'] = $versionSucursal;
+        } elseif (in_array($methodUpper, ['POST', 'PUT'], true)) {
+            $params['sucursal_version'] = $versionSucursal;
+        }
+
         $request = Http::timeout($timeout)->withHeaders($headers);
 
         if ($methodUpper === 'GET') {
@@ -1297,11 +1308,18 @@ class sendCentral extends Controller
                 ]);
                 $approved = $response->ok() && $responseJson ? (bool) ($responseJson['approved'] ?? false) : false;
                 $data = $responseJson && isset($responseJson['data']) ? $responseJson['data'] : null;
+                // instapago_reachable: ¿central pudo llegar a Instapago y obtener una respuesta
+                // explícita "no existe"? Si no, NO podemos afirmar nada y la sucursal debe
+                // bloquear la caja para reintentar manualmente.
+                $instapagoReachable = $response->ok() && $responseJson
+                    ? (bool) ($responseJson['instapago_reachable'] ?? false)
+                    : false;
                 return [
                     'http_status' => $httpStatus,
                     'body' => $body,
                     'json' => $responseJson,
                     'approved' => $approved,
+                    'instapago_reachable' => $instapagoReachable,
                     'data' => $data,
                 ];
             } catch (\Exception $e) {
@@ -1321,6 +1339,7 @@ class sendCentral extends Controller
                         'body' => $e->getMessage(),
                         'json' => null,
                         'approved' => false,
+                        'instapago_reachable' => false,
                         'data' => null,
                     ];
                 }
@@ -1332,6 +1351,7 @@ class sendCentral extends Controller
             'body' => 'Se agotaron los reintentos',
             'json' => null,
             'approved' => false,
+            'instapago_reachable' => false,
             'data' => null,
         ];
     }
@@ -2495,23 +2515,32 @@ class sendCentral extends Controller
                         : $metodo_pago->metadatos;
                     
                     if ($metodo_pago->subtipo == 'pinpad') {
-                        // Procesar lotes pinpad
-                        $lotes_pinpad = $metadatos['lotes'] ?? [];
-                        \Log::info("SENDCIERRES - Lotes PINPAD encontrados: " . count($lotes_pinpad));
+                        // Procesar lotes pinpad — 1 transacción = 1 lote (FIX 2026-05-26).
+                        // El banco se transmite tal cual viene del POS (string crudo del
+                        // campo `bank`); central lo mapea a banco_id vía
+                        // `BancosCodigoResolver::resolverPinpad` (config bancos.pinpad_bancos_map).
+                        // Expandir agrupados legacy al vuelo por si algún cierre guardado
+                        // antes del fix tiene la estructura vieja.
+                        $pedidosController = new \App\Http\Controllers\PedidosController();
+                        $lotes_pinpad = $pedidosController->expandirLotesPinpad($metadatos['lotes'] ?? []);
+                        \Log::info("SENDCIERRES - Lotes PINPAD encontrados (después de expandir): " . count($lotes_pinpad));
                         foreach ($lotes_pinpad as $index => $lote) {
                             $idUsuarioLote = $lote['id_usuario'] ?? $cierre->id_usuario;
+                            // idinsucursal único por pago (no por terminal) — necesario porque
+                            // ahora cada transacción es un registro independiente.
+                            $pagoId = $lote['pago_id'] ?? $index;
+                            // El banco viene como string del PINPAD ('Bancaribe', 'Banesco', etc.).
+                            // Compat con lotes viejos que guardaban banco_nombre o ya el codigo.
+                            $bancoStr = $lote['banco'] ?? $lote['banco_nombre'] ?? '';
                             $loteData = [
-                                "idinsucursal" => "PINPAD-".$cierre->id."-".$index,
+                                "idinsucursal" => "PINPAD-".$cierre->id."-".$pagoId,
                                 "monto" => floatval($lote['monto_bs'] ?? $lote['monto'] ?? 0),
-                                "banco" => $lote['banco_nombre'] ?? $lote['banco'] ?? '',
+                                "banco" => $bancoStr,
                                 "loteserial" => $lote['terminal'] ?? $lote['lote'] ?? '',
                                 "fecha" => $today,
-                                // FIX 2026-05-24 — preferir id del cajero (inyectado en metadatos);
-                                // fallback al id_usuario del cierre para lotes legacy.
                                 "id_usuario" => $idUsuarioLote,
-                                // FIX 2026-05-24 — nombre denormalizado para central.
                                 "nombre_usuario" => $nombreUsuarioFn($idUsuarioLote),
-                                "categoria" => 1, // Categoría 1 para puntosybiopagos
+                                "categoria" => 1,
                                 "tipo" => "PINPAD",
                                 "debito_credito" => null,
                                 "origen" => 1,
@@ -5385,6 +5414,56 @@ class sendCentral extends Controller
      * Enviar transacción al POS físico de débito.
      * Si config('pos.simular_transaccion') es true, devuelve aprobación simulada (para pruebas).
      */
+    /**
+     * Revalida el estado de una transacción POS débito que quedó en estado
+     * "no_confirmable" (Instapago caída en el primer intento). El frontend
+     * llama esto desde el botón "Validar" del modal POS débito.
+     *
+     * Input: numeroOrden (string), monto (cents int).
+     * Output:
+     *   - success=true + data → la transacción está aprobada (frontend la consume igual que el flujo normal).
+     *   - success=false + status_validacion='rechazado_definitivo' → seguro decir "no existe".
+     *   - success=false + status_validacion='no_confirmable' → Instapago sigue caída, reintentar después.
+     */
+    public function revalidarPosDebito(Request $request)
+    {
+        $request->validate([
+            'numeroOrden' => 'required|string',
+            'monto' => 'required|numeric|min:1',
+        ]);
+
+        $numeroOrden = (string) $request->input('numeroOrden');
+        $montoCents = (int) $request->input('monto');
+        $amountDecimal = $montoCents / 100.0;
+
+        $result = $this->queryTransaccionPosCentral($numeroOrden, $amountDecimal);
+        $approved = $result['approved'] ?? false;
+        $reachable = $result['instapago_reachable'] ?? false;
+        $data = $result['data'] ?? null;
+
+        if ($approved && !empty($data)) {
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+                'instapago_reachable' => true,
+                'status_validacion' => 'aprobado',
+            ]);
+        }
+
+        $statusValidacion = $reachable ? 'rechazado_definitivo' : 'no_confirmable';
+
+        return response()->json([
+            'success' => false,
+            'instapago_reachable' => $reachable,
+            'status_validacion' => $statusValidacion,
+            'central_body' => $result['body'] ?? null,
+            'central_status' => $result['http_status'] ?? 0,
+            'message' => $reachable
+                ? 'Instapago confirmó que la transacción NO existe.'
+                : 'No se pudo confirmar con Instapago (API caída o sin respuesta). Reintenta en unos segundos.',
+        ]);
+    }
+
     public function enviarTransaccionPOS(Request $request)
     {
         $payload = [
@@ -5497,10 +5576,12 @@ class sendCentral extends Controller
                 $centralResult = $this->queryTransaccionPosCentral($numeroOrden, $amountDecimal, $posErrorBody);
                 $centralApproved = $centralResult !== null ? ($centralResult['approved'] ?? null) : null;
                 $centralData = $centralResult !== null ? ($centralResult['data'] ?? null) : null;
+                $centralReachable = $centralResult !== null ? ($centralResult['instapago_reachable'] ?? false) : false;
                 $centralHasData = !empty($centralData);
                 $logPos('enviarTransaccionPOS resultado central', [
                     'central_approved' => $centralApproved,
                     'central_has_data' => $centralHasData,
+                    'central_reachable' => $centralReachable,
                     'central_result' => $centralResult,
                 ]);
                 $vaRetornarExito = $centralResult && $centralApproved && $centralHasData;
@@ -5515,11 +5596,32 @@ class sendCentral extends Controller
                         'data' => $centralResult['data'],
                     ]);
                 }
+
+                // Distinguimos rechazo definitivo vs no-confirmable:
+                //   - reachable=true + approved=false → Instapago dijo "no existe" → rechazo seguro.
+                //   - reachable=false (timeout, error API, etc.) → NO se puede afirmar nada → frontend
+                //     debe bloquear la caja y reintentar manualmente.
+                $statusValidacion = $centralReachable ? 'rechazado_definitivo' : 'no_confirmable';
                 $logPos('enviarTransaccionPOS NO retorna éxito central', [
                     'motivo' => !$centralResult ? 'centralResult es null' : (!$centralApproved ? 'approved es false/vacío' : 'data está vacío'),
                     'centralResult_null' => $centralResult === null,
                     'approved' => $centralApproved,
                     'has_data' => $centralHasData,
+                    'reachable' => $centralReachable,
+                    'status_validacion' => $statusValidacion,
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'status' => $response->status(),
+                    'data' => $data,
+                    'pos_error_body' => $posErrorBody,
+                    'instapago_reachable' => $centralReachable,
+                    'status_validacion' => $statusValidacion,
+                    'query_context' => [
+                        'numeroOrden' => $numeroOrden,
+                        'monto' => $amountDecimal,
+                    ],
                 ]);
             }
 

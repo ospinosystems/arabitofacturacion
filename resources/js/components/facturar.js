@@ -5735,6 +5735,57 @@ export default function Facturar({
             alert("Debe ingresar un monto válido");
             return;
         }
+
+        // PRE-VALIDACIÓN AUTOMÁTICA: si la instancia tiene un intento previo
+        // con error (rechazo definitivo, indeterminado o cualquier estado de
+        // validacion), consultar PRIMERO a central antes de re-enviar al POS.
+        // Esto evita que el cajero re-cobre al cliente cuando la transacción
+        // anterior ya había sido aprobada pero quedó sin confirmar localmente.
+        if (inst.validacion?.queryContext?.numeroOrden && inst.validacion?.queryContext?.monto) {
+            posProcesandoRef.current[instanceId] = true;
+            actualizarInstanciaPos(instanceId, {
+                loading: true,
+                respuesta: { mensaje: '🔄 Validando transacción anterior antes de volver a pasar la tarjeta…', exito: null, indeterminado: true },
+            });
+            try {
+                const { numeroOrden, monto } = inst.validacion.queryContext;
+                const r = await db.revalidarPosDebito({ numeroOrden, monto });
+                const data = r?.data || {};
+                if (data.success && data.data) {
+                    // La anterior SÍ había sido aprobada → aplicar y NO re-enviar al POS.
+                    posProcesandoRef.current[instanceId] = false;
+                    return aplicarTransaccionPosAprobada(instanceId, inst, data.data, monto);
+                }
+                if (data.status_validacion === 'no_confirmable') {
+                    // Sigue indeterminada → no podemos garantizar nada. Bloquear el envío.
+                    actualizarInstanciaPos(instanceId, {
+                        respuesta: {
+                            mensaje: '⚠ La transacción anterior sigue SIN CONFIRMAR (Instapago no responde). Espera y usa "Validar" antes de volver a pasar la tarjeta.',
+                            exito: null,
+                            indeterminado: true,
+                        },
+                        loading: false,
+                    });
+                    posProcesandoRef.current[instanceId] = false;
+                    return;
+                }
+                // rechazado_definitivo → la anterior NO fue cobrada. Limpiar validacion previa y proceder.
+                actualizarInstanciaPos(instanceId, { validacion: null });
+            } catch (e) {
+                // Falla la pre-validación → bloquear para que el cajero no re-cobre por error.
+                actualizarInstanciaPos(instanceId, {
+                    respuesta: {
+                        mensaje: '⚠ No se pudo pre-validar la transacción anterior (' + (e?.message || 'error de red') + '). Usa "Validar" antes de re-pasar la tarjeta.',
+                        exito: null,
+                        indeterminado: true,
+                    },
+                    loading: false,
+                });
+                posProcesandoRef.current[instanceId] = false;
+                return;
+            }
+        }
+
         posProcesandoRef.current[instanceId] = true;
         actualizarInstanciaPos(instanceId, { loading: true });
 
@@ -5884,18 +5935,193 @@ export default function Facturar({
                 }
                 posProcesandoRef.current[instanceId] = false;
             } else {
+                // Distinguimos 3 estados según el backend:
+                //   - status_validacion='no_confirmable' → Instapago caída, NO sabemos si pagó.
+                //     Bloquea el modal y muestra botón "Validar".
+                //   - status_validacion='rechazado_definitivo' → Instapago confirmó "no existe".
+                //   - sin status_validacion (compat antigua) → tratar como rechazado.
+                const statusValidacion = response.data.status_validacion || 'rechazado_definitivo';
+                const instapagoReachable = response.data.instapago_reachable === true;
+                const queryContext = response.data.query_context || {
+                    numeroOrden: numeroOrdenCompleto,
+                    monto: montoEntero,
+                };
                 const errorMsg = posData.message || response.data.error || "Error en transacción POS";
-                actualizarInstanciaPos(instanceId, { respuesta: { mensaje: `✗ ${errorMsg}`, exito: false }, loading: false });
-                if (posData && Object.keys(posData).length > 0) {
-                    db.registrarPosRechazado({ ...posData, json_response: JSON.stringify(posData), id_pedido: inst.pedidoId || null }).catch(err => console.error("Error al registrar POS rechazado:", err));
+
+                // FIX 2026-05-26 — Registro del rechazo POS es ORTOGONAL a si Instapago
+                // lo confirma. Si el POS dijo "rechazado" (FONDO INSUFICIENTE, CLAVE INVÁLIDA,
+                // etc.), eso es un evento real del dispositivo que hay que dejar registrado
+                // en `pos_operaciones_rechazadas`, sin importar que después Instapago esté
+                // caída o no. Antes esto solo se hacía en rechazado_definitivo y se perdían
+                // los rechazos cuando Instapago no respondía.
+                //
+                // `pos_error_body` viene del backend y es el body normalizado del POS error
+                // (siempre un array, aun cuando `data` venga como string raw).
+                const errorBody = response.data.pos_error_body
+                    || (posData && Object.keys(posData).length > 0 ? posData : null);
+                if (errorBody && Object.keys(errorBody).length > 0) {
+                    db.registrarPosRechazado({
+                        ...errorBody,
+                        json_response: JSON.stringify(errorBody),
+                        id_pedido: inst.pedidoId || null,
+                    }).catch(err => console.error("Error al registrar POS rechazado:", err));
+                }
+
+                if (statusValidacion === 'no_confirmable') {
+                    actualizarInstanciaPos(instanceId, {
+                        respuesta: {
+                            mensaje: '⚠ No se pudo confirmar con Instapago (API caída). Usa "Validar" para reintentar.',
+                            exito: null,
+                            indeterminado: true,
+                        },
+                        validacion: { queryContext, statusValidacion, instapagoReachable },
+                        loading: false,
+                    });
+                    notificar({ data: { msj: 'POS sin confirmar: Instapago no respondió. Bloqueado hasta validar.', estado: false } });
+                } else {
+                    actualizarInstanciaPos(instanceId, {
+                        respuesta: { mensaje: `✗ ${errorMsg}`, exito: false, indeterminado: false },
+                        validacion: { queryContext, statusValidacion, instapagoReachable },
+                        loading: false,
+                    });
                 }
             }
         } catch (error) {
             console.error("Error POS:", error);
             const errorMsg = error.response?.data?.error || error.message || "Error de conexión";
-            actualizarInstanciaPos(instanceId, { respuesta: { mensaje: `✗ ${errorMsg}`, exito: false }, loading: false });
+            // Error de red: tampoco sabemos si pagó. Bloqueamos el modal con botón Validar.
+            actualizarInstanciaPos(instanceId, {
+                respuesta: {
+                    mensaje: `⚠ Error de conexión: ${errorMsg}. Usa "Validar" para confirmar con central.`,
+                    exito: null,
+                    indeterminado: true,
+                },
+                validacion: {
+                    queryContext: { numeroOrden: numeroOrdenCompleto, monto: montoEntero },
+                    statusValidacion: 'no_confirmable',
+                    instapagoReachable: false,
+                },
+                loading: false,
+            });
         } finally {
             posProcesandoRef.current[instanceId] = false;
+        }
+    };
+
+    /**
+     * Aplica una respuesta APROBADA de central como si el POS hubiera respondido
+     * directamente. Extraído para reusar entre `revalidarPosDebito` y la
+     * pre-validación automática de `enviarSolicitudPosDebito`.
+     */
+    const aplicarTransaccionPosAprobada = (instanceId, inst, posData, montoFallbackCents) => {
+        const posReference = String(posData.reference || posData.approval || "").trim();
+        const refUltimos4 = posReference.replace(/\D/g, '').slice(-4).padStart(4, '0');
+        const montoAprobado = (posData.amount != null && posData.amount !== '')
+            ? (Number(posData.amount) / 100)
+            : (Number(montoFallbackCents) / 100);
+        const nuevaTransaccion = {
+            monto: montoAprobado,
+            cedula: inst.cedulaTitular || '',
+            referencia: posReference,
+            refCorta: refUltimos4,
+            tipoCuenta: inst.tipoCuenta || 'CORRIENTE',
+            posData: {
+                message: posData.message,
+                lote: posData.lote,
+                responsecode: posData.responsecode,
+                amount: posData.amount,
+                terminal: posData.terminal,
+                json_response: JSON.stringify(posData),
+            },
+        };
+        const nuevasTransacciones = [...(inst.transaccionesAprobadas || []), nuevaTransaccion];
+        guardarTransaccionPorPedido(inst.pedidoId, nuevasTransacciones);
+        actualizarInstanciaPos(instanceId, {
+            transaccionesAprobadas: nuevasTransacciones,
+            respuesta: { mensaje: `✓ APROBADO (validado contra central) - Ref: ${posReference}`, exito: true, indeterminado: false },
+            validacion: null,
+            loading: false,
+        });
+        notificar({ data: { msj: `POS APROBADO al validar - Ref: ${posReference}. Bs ${montoAprobado.toFixed(2)}`, estado: true } });
+    };
+
+    /**
+     * Construye el queryContext (numeroOrden + monto en centavos) usando los
+     * inputs ACTUALES del modal. Útil cuando el cajero quiere validar sin
+     * haber intentado todavía: sospecha que la tarjeta ya pudo haber sido
+     * cobrada en una sesión anterior u otro intento.
+     *
+     * Mismo formato que en `enviarSolicitudPosDebito`:
+     *   {codigoSucursal}-{nombreUsuario}-{pedidoId}-{montoEntero}-{indiceDebito}
+     */
+    const construirQueryContextActual = (inst) => {
+        const montoActual = parseFloat(inst.montoDebito) || 0;
+        if (montoActual <= 0 || !inst.pedidoId) return null;
+        const montoEntero = Math.round(montoActual * 100);
+        const codigoSucursal = sucursaldata?.codigo || "SUC";
+        const nombreUsuario = user?.usuario || user?.nombre || "user";
+        const indiceDebito = typeof inst.debitoIndex === 'number'
+            ? inst.debitoIndex
+            : (inst.transaccionesAprobadas?.length || 0);
+        const numeroOrden = `${codigoSucursal}-${nombreUsuario}-${inst.pedidoId}-${montoEntero}-${indiceDebito}`;
+        return { numeroOrden, monto: montoEntero };
+    };
+
+    /**
+     * Botón "Validar" del modal POS: consulta central para confirmar el estado
+     * real de una transacción. Funciona ante CUALQUIER error e incluso al
+     * inicio del modal (sin intento previo) si el cajero llenó monto + cédula:
+     * útil para chequear si la tarjeta ya fue cobrada antes de re-pasarla.
+     *
+     * Fuente del queryContext:
+     *   1. `inst.validacion.queryContext` (intento previo fallido)
+     *   2. Si no existe, se construye con los inputs actuales del modal.
+     */
+    const revalidarPosDebito = async (instanceId, inst) => {
+        if (!inst) return;
+        const queryContext = inst.validacion?.queryContext || construirQueryContextActual(inst);
+        if (!queryContext) {
+            alert('Ingresa el monto a cobrar antes de validar (es el monto exacto con el que la tarjeta pudo haber sido cobrada).');
+            return;
+        }
+        const { numeroOrden, monto } = queryContext;
+        if (!numeroOrden || !monto) return;
+
+        const habiaIntento = !!inst.validacion?.queryContext;
+        actualizarInstanciaPos(instanceId, { loading: true, respuesta: { mensaje: '🔄 Validando con central…', exito: null, indeterminado: true } });
+        try {
+            const r = await db.revalidarPosDebito({ numeroOrden, monto });
+            const data = r?.data || {};
+            if (data.success && data.data) {
+                return aplicarTransaccionPosAprobada(instanceId, inst, data.data, monto);
+            }
+            if (data.status_validacion === 'rechazado_definitivo') {
+                if (habiaIntento) {
+                    actualizarInstanciaPos(instanceId, {
+                        respuesta: { mensaje: '✗ Rechazado definitivo (Instapago confirmó que NO se cobró). Puedes re-pasar la tarjeta o cerrar.', exito: false, indeterminado: false },
+                        validacion: null, // Liberar: la transacción no existe → no hay nada que pre-validar.
+                        loading: false,
+                    });
+                } else {
+                    // Validación pre-emptiva: el cajero quería ver si ya había sido cobrada antes.
+                    // Instapago dice que NO existe ese numeroOrden+monto → puede pasar la tarjeta tranquilo.
+                    actualizarInstanciaPos(instanceId, {
+                        respuesta: { mensaje: '✓ No hay transacción previa con ese monto. Puedes pasar la tarjeta.', exito: null, indeterminado: false },
+                        loading: false,
+                    });
+                }
+            } else {
+                // Sigue indeterminado, dejar botón "Validar" disponible
+                actualizarInstanciaPos(instanceId, {
+                    respuesta: { mensaje: '⚠ Instapago no responde. Reintenta en unos segundos antes de pasar la tarjeta.', exito: null, indeterminado: true },
+                    loading: false,
+                });
+            }
+        } catch (err) {
+            actualizarInstanciaPos(instanceId, {
+                respuesta: { mensaje: '⚠ Error al validar: ' + (err?.message || 'red caída') + '. Reintenta.', exito: null, indeterminado: true },
+                loading: false,
+            });
         }
     };
     
@@ -6406,25 +6632,10 @@ export default function Facturar({
             }
         }
 
-        // Validar que todos los lotes Pinpad tengan banco seleccionado
-        if (lotesPinpad && lotesPinpad.length > 0) {
-            const lotesSinBanco = lotesPinpad.filter(lote => {
-                // Verificar si el lote tiene banco seleccionado (puede venir como 'banco' o 'bancoSeleccionado')
-                const banco = lote.banco || lote.bancoSeleccionado;
-                return !banco || banco === '' || banco === null || banco === undefined;
-            });
-            
-            if (lotesSinBanco.length > 0) {
-                const numerosLotes = lotesSinBanco.map((_, index) => {
-                    // Encontrar el índice real del lote en el array original
-                    const indiceReal = lotesPinpad.indexOf(lotesSinBanco[index]);
-                    return indiceReal + 1; // +1 para mostrar número de lote (1-indexed)
-                });
-                
-                alert(`Error: Debe seleccionar un banco para todos los lotes Pinpad antes de guardar el cierre.\n\nLotes sin banco: ${numerosLotes.join(", ")}`);
-                return;
-            }
-        }
+        // FIX 2026-05-26 — eliminada validación de "banco por lote Pinpad" porque
+        // ahora el banco viene autodetectado del POS y central hace el mapping.
+        // Si algún lote llega sin banco detectado, se transmite igual; central
+        // lo dejará sin banco y queda visible en el reporte para ajustar.
 
         
         setLoading(true);
@@ -10100,6 +10311,7 @@ export default function Facturar({
                                 />
                             ) : (
                                 <PagarMain
+                                    bancosCentral={bancosCentral}
                                     qProductosMain={qProductosMain}
                                     setLastDbRequest={setLastDbRequest}
                                     lastDbRequest={lastDbRequest}
@@ -10860,16 +11072,36 @@ export default function Facturar({
                                         </div>
                                     )}
                                     {inst.respuesta && (
-                                        <div className={`p-4 rounded-lg text-center font-semibold ${inst.respuesta.exito ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'}`}>
+                                        <div className={`p-4 rounded-lg text-center font-semibold ${
+                                            inst.respuesta.exito === true ? 'bg-green-100 text-green-800 border border-green-300'
+                                            : inst.respuesta.indeterminado ? 'bg-amber-100 text-amber-800 border border-amber-400'
+                                            : 'bg-red-100 text-red-800 border border-red-300'
+                                        }`}>
                                             <p className="text-lg">{inst.respuesta.mensaje}</p>
-                                            {!inst.respuesta.exito && <p className="text-sm mt-2 font-normal">Puede reintentar o usar referencia manual</p>}
+                                            {inst.respuesta.indeterminado && (
+                                                <p className="text-sm mt-2 font-normal">
+                                                    No cierres esta ventana sin validar. Si el cliente vio APROBADO en el POS, presiona <b>Validar</b> para confirmar con central.
+                                                </p>
+                                            )}
+                                            {inst.respuesta.exito === false && !inst.respuesta.indeterminado && inst.validacion?.queryContext && (
+                                                <p className="text-sm mt-2 font-normal">
+                                                    Antes de re-pasar la tarjeta, presiona <b>Validar</b> para asegurar que esta transacción no se haya cobrado.
+                                                    Si vuelves a pasar la tarjeta sin validar, el sistema validará automáticamente primero.
+                                                </p>
+                                            )}
+                                            {inst.respuesta.exito === false && !inst.respuesta.indeterminado && !inst.validacion?.queryContext && (
+                                                <p className="text-sm mt-2 font-normal">Puede reintentar o usar referencia manual</p>
+                                            )}
                                         </div>
                                     )}
                                 </div>
-                                <div className="flex gap-3 px-6 py-4 bg-gray-50 rounded-b-lg flex-shrink-0">
+                                <div className="flex gap-3 px-6 py-4 bg-gray-50 rounded-b-lg flex-shrink-0 flex-wrap">
                                     <button
                                         type="button"
                                         onClick={() => {
+                                            if (inst.respuesta?.indeterminado) {
+                                                if (!confirm('La transacción quedó SIN CONFIRMAR. Si cierras sin validar, podría haber sido cobrada al cliente. ¿Cerrar igual?')) return;
+                                            }
                                             setModalesPosAbiertos(prev => { const n = { ...prev }; delete n[instanceId]; return n; });
                                             if (posTimeoutRef.current[instanceId]) { clearTimeout(posTimeoutRef.current[instanceId]); posTimeoutRef.current[instanceId] = null; }
                                             posProcesandoRef.current[instanceId] = false;
@@ -10879,6 +11111,28 @@ export default function Facturar({
                                     >
                                         Cancelar
                                     </button>
+                                    {(() => {
+                                        const montoListo = parseFloat(inst.montoDebito) > 0;
+                                        const hayIntento = !!inst.validacion?.queryContext;
+                                        const habilitado = !inst.loading && (hayIntento || montoListo);
+                                        const tooltip = hayIntento
+                                            ? 'Verificar con central si la transacción anterior realmente fue cobrada. SIEMPRE valida antes de re-pasar la tarjeta.'
+                                            : montoListo
+                                                ? 'Verificar con central si esta tarjeta ya fue cobrada (con el monto actual) antes de pasarla.'
+                                                : 'Ingresa el monto primero para poder validar';
+                                        return (
+                                            <button
+                                                type="button"
+                                                onClick={() => revalidarPosDebito(instanceId, inst)}
+                                                disabled={!habilitado}
+                                                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-semibold"
+                                                title={tooltip}
+                                            >
+                                                <i className={`fa fa-sync-alt ${inst.loading ? 'fa-spin' : ''}`}></i>
+                                                Validar
+                                            </button>
+                                        );
+                                    })()}
                                     <button
                                         type="button"
                                         onClick={() => {

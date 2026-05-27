@@ -1129,22 +1129,24 @@ class SyncProgressController extends Controller
                         
                         if ($metodo_pago->subtipo == 'pinpad') {
                             // Procesar lotes pinpad
-                            $lotes_pinpad = $metadatos['lotes'] ?? [];
-                            Log::info("SYNCPROGRESS - Lotes PINPAD encontrados: " . count($lotes_pinpad));
+                            // FIX 2026-05-26 — expandir lotes agrupados legacy al vuelo
+                            // antes de transmitir a central, así llega 1 trans = 1 lote.
+                            $pedidosController = new \App\Http\Controllers\PedidosController();
+                            $lotes_pinpad_raw = $metadatos['lotes'] ?? [];
+                            $lotes_pinpad = $pedidosController->expandirLotesPinpad($lotes_pinpad_raw);
+                            Log::info("SYNCPROGRESS - Lotes PINPAD encontrados (después de expandir): " . count($lotes_pinpad));
                             foreach ($lotes_pinpad as $loteIndex => $lote) {
                                 $idUsuarioLote = $lote['id_usuario'] ?? $r->id_usuario;
+                                // idinsucursal único por pago — usar pago_id si existe para no colisionar
+                                // cuando varias transacciones comparten terminal.
+                                $pagoId = $lote['pago_id'] ?? $loteIndex;
                                 $loteData = [
-                                    "idinsucursal" => "PINPAD-".$r->id."-".$loteIndex,
+                                    "idinsucursal" => "PINPAD-".$r->id."-".$pagoId,
                                     "monto" => floatval($lote['monto_bs'] ?? $lote['monto'] ?? 0),
                                     "banco" => $lote['banco_nombre'] ?? $lote['banco'] ?? '',
                                     "loteserial" => $lote['terminal'] ?? $lote['lote'] ?? '',
                                     "fecha" => $today,
-                                    // FIX 2026-05-24 — preferir el id del cajero que generó el lote
-                                    // (inyectado en metadatos por PedidosController al guardar el cierre).
-                                    // Fallback al id_usuario del cierre (= admin si fue consolidado) sólo
-                                    // si el lote es legacy y no trae id_usuario.
                                     "id_usuario" => $idUsuarioLote,
-                                    // FIX 2026-05-24 — nombre denormalizado para central.
                                     "nombre_usuario" => $nombreUsuarioFn($idUsuarioLote),
                                     "categoria" => 1,
                                     "tipo" => "PINPAD",

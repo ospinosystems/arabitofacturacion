@@ -3,8 +3,10 @@ import { useHotkeys } from "react-hotkeys-hook";
 import ListProductosInterno from "./listProductosInterno";
 
 import db from "../database/database";
+import { descripcionBanco } from "./bancoCentralUtils";
 
 export default function PagarMain({
+    bancosCentral,
     qProductosMain,
     setQProductosMain,
     setLastDbRequest,
@@ -4020,9 +4022,7 @@ export default function PagarMain({
                                                                         {e.banco ? (
                                                                             <span>
                                                                                 <b>
-                                                                                    {
-                                                                                        e.banco
-                                                                                    }
+                                                                                    {descripcionBanco(e.banco, bancosCentral)}
                                                                                 </b>
                                                                             </span>
                                                                         ) : null}

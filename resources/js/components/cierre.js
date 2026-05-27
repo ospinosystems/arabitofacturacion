@@ -4,6 +4,7 @@ import LotesPinpad from '../components/cierre_lotes_pinpad';
 import TotalizarCierre from '../components/totalizar_cierre';
 import { cloneDeep } from "lodash";
 import db from "../database/database";
+import { normalizarValueBanco } from "./bancoCentralUtils";
 
 // Función para formatear números con separadores de miles
 const formatNumber = (num) => {
@@ -709,7 +710,8 @@ function Cierre({
 																				<input type="text" className='form-control form-control-sm' disabled={totalizarcierre || bloqueado} value={e.descripcion} placeholder='numlote' onChange={event=>onchangetuplapuntosnew("descripcion",i,event.target.value)} />
 																			</td>
 																			<td>
-																				<select className='form-control form-control-sm' disabled={totalizarcierre || bloqueado} value={e.banco} onChange={event=>onchangetuplapuntosnew("banco",i,event.target.value)}>
+																				<div className="input-group input-group-sm">
+																					<select className='form-control form-control-sm' disabled={totalizarcierre || bloqueado} value={normalizarValueBanco(e.banco, bancosCentral)} onChange={event=>onchangetuplapuntosnew("banco",i,event.target.value)}>
 																					<option value="">-</option>
 																					{(() => {
 																						const lista = Array.isArray(bancosCentral) ? bancosCentral : [];
@@ -717,10 +719,21 @@ function Cierre({
 																						const esDevolucion = !isNaN(m) && m < 0;
 																						const flag = esDevolucion ? 'disponible_pos_devolucion' : 'disponible_pos_ingreso';
 																						return lista.filter(b => !!b[flag]).map(b => (
-																							<option key={b.id} value={b.codigo}>{b.descripcion}</option>
+																							<option key={b.id} value={`bid:${b.id}`}>{b.descripcion}</option>
 																						));
 																					})()}
 																				</select>
+																				<button
+																					type="button"
+																					onClick={() => recargarBancosCentral && recargarBancosCentral()}
+																					disabled={bancosCentralLoading}
+																					title="Recargar bancos desde central"
+																					className="btn btn-outline-secondary btn-sm"
+																					style={{ padding: '0 .4rem' }}
+																				>
+																					<i className={`fa fa-sync-alt ${bancosCentralLoading ? 'fa-spin' : ''}`}></i>
+																				</button>
+																				</div>
 																			</td>
 																			<td className="text-center">
 																				{!(totalizarcierre || bloqueado) && (

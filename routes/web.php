@@ -207,6 +207,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('setPagoPedido', [PagoPedidosController::class,"setPagoPedido"]);
 		Route::post('verificarUuidsPedidos', [PagoPedidosController::class,"verificarUuidsPedidos"]);
 		Route::post('enviarTransaccionPOS', [sendCentral::class,"enviarTransaccionPOS"]);
+		Route::post('revalidarPosDebito', [sendCentral::class,"revalidarPosDebito"]);
 		
 		Route::post('registrarPosRechazado', [sendCentral::class,"registrarPosRechazado"]);
 		Route::post('ejecutarPostSync', [sendCentral::class,"ejecutarPostSync"]);

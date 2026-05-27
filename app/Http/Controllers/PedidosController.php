@@ -1420,15 +1420,71 @@ class PedidosController extends Controller
      */
     private function extraerLotesPinpadRequest($request) {
         if (empty($request)) return null;
-        
+
         if (is_array($request) && isset($request['lotes_pinpad'])) {
             return $request['lotes_pinpad'];
         }
         if (is_object($request) && isset($request->lotes_pinpad)) {
             return $request->lotes_pinpad;
         }
-        
+
         return null;
+    }
+
+    /**
+     * Expande lotes pinpad legacy (agrupados por terminal con N transacciones)
+     * al formato nuevo (1 lote por transacción).
+     *
+     * Detección: si un lote tiene `cantidad_transacciones > 1` o `transacciones`
+     * con más de 1 ítem, se considera agrupado y se descompone usando los datos
+     * que ya están dentro de `transacciones[]`.
+     *
+     * Idempotente: lotes ya en formato nuevo (1 trans) pasan sin cambios.
+     * Se respeta el banco asignado al lote agrupado y se propaga a cada hijo
+     * (cuando los hijos no traen su propio `bank`).
+     */
+    public function expandirLotesPinpad($lotes): array {
+        if (!is_array($lotes)) return [];
+        $out = [];
+        foreach ($lotes as $lote) {
+            if (is_object($lote)) {
+                $lote = json_decode(json_encode($lote), true);
+            }
+            if (!is_array($lote)) continue;
+
+            $transacciones = $lote['transacciones'] ?? [];
+            $cantidad = (int) ($lote['cantidad_transacciones'] ?? count($transacciones));
+            $bancoLote = $lote['banco'] ?? $lote['banco_nombre'] ?? null;
+            $idUsuario = $lote['id_usuario'] ?? null;
+
+            if ($cantidad <= 1 || count($transacciones) <= 1) {
+                // Ya está desagrupado (1 trans = 1 lote). Pasa tal cual.
+                $out[] = $lote;
+                continue;
+            }
+
+            // Lote agrupado legacy → descomponer.
+            foreach ($transacciones as $t) {
+                if (is_object($t)) $t = json_decode(json_encode($t), true);
+                if (!is_array($t)) continue;
+                $bankTrans = $t['bank'] ?? $bancoLote;
+                $monto_bs = floatval($t['pos_amount'] ?? 0) / 100;
+                if ($monto_bs == 0 && isset($t['monto_original'])) {
+                    $monto_bs = floatval($t['monto_original']);
+                }
+                $out[] = [
+                    'pago_id' => $t['id'] ?? null,
+                    'terminal' => $t['terminal'] ?? ($lote['terminal'] ?? ''),
+                    'monto_bs' => $monto_bs,
+                    'monto_usd' => floatval($t['monto'] ?? 0),
+                    'cantidad_transacciones' => 1,
+                    'banco' => $bankTrans,
+                    'id_usuario' => $idUsuario,
+                    'transacciones' => [$t + ['bank' => $bankTrans]],
+                ];
+            }
+        }
+        return $out;
     }
 
     /**
@@ -2198,125 +2254,71 @@ class PedidosController extends Controller
         $arr_pagos["pagos_por_moneda"] = $pagos_por_moneda_final;
 
         // ========== PROCESAMIENTO DE PAGOS PINPAD ==========
-        // Los pagos de pinpad son débitos (tipo 2) procesados a través del dispositivo POS
-        // Se identifican por tener pos_terminal o pos_amount (monto en Bs * 100)
-        // Se agrupan por terminal para generar lotes de cierre
-        
+        // Los pagos de pinpad son débitos (tipo 2) procesados a través del dispositivo POS.
+        // FIX 2026-05-26 — antes se agrupaban por terminal y el cajero elegía banco a mano.
+        // Ahora cada transacción es 1 lote individual y el banco se extrae automáticamente
+        // del campo `bank` que retornó el POS en `pos_json_response`. Central hace el
+        // mapeo final (config bancos.pinpad_bancos_map) — la sucursal solo transmite.
+
         $lotes_pinpad = [];
-        
-        // Filtrar pagos de pinpad de la colección de todos los pagos
+
         $pagos_pinpad = $todos_pagos->filter(function($pago) {
-            return $pago->tipo == 2 && ( // Débito
-                (!empty($pago->pos_terminal)) || 
+            return $pago->tipo == 2 && (
+                (!empty($pago->pos_terminal)) ||
                 (!empty($pago->pos_amount) && $pago->pos_amount != 0)
             );
         });
 
-        // Agrupar por terminal (los pagos ya vienen únicos de la BD)
-        $agrupados_por_terminal = [];
-        
+        // Decodificar pos_json_response una sola vez por pago y extraer el campo bank.
+        $extraerBank = function ($pago) {
+            $raw = $pago->pos_json_response ?? null;
+            if (!$raw) return null;
+            $decoded = is_array($raw) ? $raw : json_decode($raw, true);
+            if (!is_array($decoded)) return null;
+            $bank = $decoded['bank'] ?? null;
+            return $bank !== null && $bank !== '' ? trim((string) $bank) : null;
+        };
+
         foreach ($pagos_pinpad as $pago) {
-            // Determinar terminal (manejar caso sin terminal)
-            // Normalizar terminal: trim + convertir a string para evitar problemas de tipo
             $terminal = trim(strval($pago->pos_terminal ?? ''));
-            
             if (empty($terminal) && !empty($pago->pos_amount)) {
                 $terminal = 'SIN_TERMINAL_' . $pago->id;
             }
-            if (empty($terminal)) continue; // Saltar si no hay terminal
-            
-            // Inicializar lote si no existe
-            if (!isset($agrupados_por_terminal[$terminal])) {
-                $agrupados_por_terminal[$terminal] = [
-                    'terminal' => $terminal,
-                    'monto_bs' => 0,
-                    'monto_usd' => 0,
-                    'cantidad_transacciones' => 0,
-                    'transacciones' => [],
-                    'banco' => null
-                ];
-            }
-            
-            // Calcular monto en Bs (viene multiplicado por 100)
+            if (empty($terminal)) continue;
+
             $monto_bs = floatval($pago->pos_amount ?? 0) / 100;
-            
-            // Acumular montos
-            $agrupados_por_terminal[$terminal]['monto_bs'] += $monto_bs;
-            $agrupados_por_terminal[$terminal]['monto_usd'] += floatval($pago->monto);
-            $agrupados_por_terminal[$terminal]['cantidad_transacciones']++;
-            
-            // Agregar transacción
-            $agrupados_por_terminal[$terminal]['transacciones'][] = [
-                'id' => $pago->id,
-                'id_pedido' => $pago->id_pedido,
-                'monto_original' => floatval($pago->monto_original ?? 0),
-                'monto' => floatval($pago->monto),
-                'referencia' => $pago->referencia,
-                'terminal' => $pago->pos_terminal,
-                'estado' => $pago->pos_message,
-                'responsecode' => $pago->pos_responsecode,
-                'lote' => $pago->pos_lote,
-                'pos_amount' => floatval($pago->pos_amount ?? 0),
-                'created_at' => $pago->created_at,
-                'updated_at' => $pago->updated_at
+            $bank = $extraerBank($pago);
+
+            // 1 lote = 1 transacción. Mantenemos `transacciones=[…]` con 1 ítem para
+            // compatibilidad con consumidores que esperan esa estructura.
+            $lotes_pinpad[] = [
+                'pago_id' => $pago->id,
+                'terminal' => $terminal,
+                'monto_bs' => $monto_bs,
+                'monto_usd' => floatval($pago->monto),
+                'cantidad_transacciones' => 1,
+                'banco' => $bank,  // string del PINPAD (ej. "Bancaribe", "Banesco", "Provincial"). Central mapea a banco_id.
+                'transacciones' => [[
+                    'id' => $pago->id,
+                    'id_pedido' => $pago->id_pedido,
+                    'monto_original' => floatval($pago->monto_original ?? 0),
+                    'monto' => floatval($pago->monto),
+                    'referencia' => $pago->referencia,
+                    'terminal' => $pago->pos_terminal,
+                    'estado' => $pago->pos_message,
+                    'responsecode' => $pago->pos_responsecode,
+                    'lote' => $pago->pos_lote,
+                    'pos_amount' => floatval($pago->pos_amount ?? 0),
+                    'bank' => $bank,
+                    'created_at' => $pago->created_at,
+                    'updated_at' => $pago->updated_at,
+                ]],
             ];
         }
-        
-        
 
-        // Consolidar bancos de 2 fuentes: request (prioridad) y BD guardada
-        $bancos_por_terminal = [];
-        
-        // 1. Cargar bancos desde BD (cierres guardados - desde CierresMetodosPago)
-        // Ahora los lotes pinpad están consolidados en un solo registro con subtipo 'pinpad'
-        $registro_pinpad = $cierres_del_dia->pluck('metodosPago')
-            ->flatten()
-            ->where('subtipo', 'pinpad')
-            ->first();
-        
-        if ($registro_pinpad) {
-            $metadatos = is_string($registro_pinpad->metadatos) ? json_decode($registro_pinpad->metadatos, true) : $registro_pinpad->metadatos;
-            $lotes_pinpad_bd = $metadatos['lotes'] ?? [];
-            
-            // Extraer banco por terminal de cada lote
-            foreach ($lotes_pinpad_bd as $lote) {
-                $terminal = $lote['terminal'] ?? null;
-                $banco_nombre = $lote['banco_nombre'] ?? ($lote['banco'] ?? null);
-                
-                if ($terminal && $banco_nombre) {
-                    // Normalizar terminal: trim + convertir a string
-                    $terminal_normalizado = trim(strval($terminal));
-                    $bancos_por_terminal[$terminal_normalizado] = $banco_nombre;
-                }
-            }
-        }
-        
-        // 2. Sobrescribir con bancos del request (tienen prioridad)
-        $lotes_pinpad_request = $this->extraerLotesPinpadRequest($puntos_adicionales_request);
-        
-        if ($lotes_pinpad_request) {
-            foreach ($lotes_pinpad_request as $lote_request) {
-                $terminal = is_array($lote_request) ? ($lote_request['terminal'] ?? null) : ($lote_request->terminal ?? null);
-                $banco = is_array($lote_request) ? ($lote_request['banco'] ?? null) : ($lote_request->banco ?? null);
-                
-                if ($terminal && $banco) {
-                    // Normalizar terminal: trim + convertir a string
-                    $terminal_normalizado = trim(strval($terminal));
-                    $bancos_por_terminal[$terminal_normalizado] = $banco;
-                }
-            }
-        }
-        
-        // 3. Asignar bancos a lotes agrupados
-        foreach ($agrupados_por_terminal as $terminal => &$lote) {
-            $lote['banco'] = $bancos_por_terminal[$terminal] ?? null;
-        }
-        unset($lote); // Limpiar referencia del foreach
-
-        // Convertir a array indexado para JSON
-        $lotes_pinpad = array_values($agrupados_por_terminal);
-        
-        $arr_pagos["lotes_pinpad"] = $lotes_pinpad;
+        // FIX 2026-05-26 — defensa: si por alguna razón quedan lotes agrupados (caches,
+        // request del frontend viejo, etc.), los expandimos al formato 1 trans = 1 lote.
+        $arr_pagos["lotes_pinpad"] = $this->expandirLotesPinpad($lotes_pinpad);
 
         // Calcular cuadre de efectivo por moneda (Bolívares y Pesos)
         $caja_bs_entregado = isset($caja_efectivo["caja_bs"]) ? floatval($caja_efectivo["caja_bs"]) : 0;
@@ -2937,9 +2939,18 @@ class PedidosController extends Controller
                 
                 // Preparar datos de lotes para guardar después del cierre
                 // (se guardarán en CierresMetodosPago después de tener id_cierre)
+                //
+                // FIX 2026-05-26 — preferimos los lotes RECALCULADOS por cerrarFun
+                // (1 trans = 1 lote, banco autodetectado del POS) sobre los que envió
+                // el frontend. Si el frontend manda formato viejo agrupado, se ignora.
+                // Como defensa adicional pasamos por `expandirLotesPinpad`.
+                $lotesPinpadCalculados = $calculos['lotes_pinpad'] ?? null;
+                $fuenteLotes = is_array($lotesPinpadCalculados) && !empty($lotesPinpadCalculados)
+                    ? $lotesPinpadCalculados
+                    : $lotesPinpadArray;
                 $lotes_para_guardar = [
                     'otros_puntos' => $puntosAdicionales,
-                    'lotes_pinpad' => $lotesPinpadArray
+                    'lotes_pinpad' => $this->expandirLotesPinpad($fuenteLotes),
                 ];
             }
 
@@ -3624,9 +3635,12 @@ class PedidosController extends Controller
                                 : $registro_pinpad->metadatos;
 
                             if (isset($metadatos['lotes'])) {
+                                // FIX 2026-05-26 — expandir lotes agrupados legacy al vuelo
+                                // antes de consolidar, así el cierre admin queda 1 trans = 1 lote.
+                                $lotesExpandidos = $this->expandirLotesPinpad($metadatos['lotes']);
                                 $lotes_pinpad_consolidados = array_merge(
                                     $lotes_pinpad_consolidados,
-                                    $injectIdUsuarioLegacy($metadatos['lotes'], $idUsuarioCajero)
+                                    $injectIdUsuarioLegacy($lotesExpandidos, $idUsuarioCajero)
                                 );
                             }
                         }
@@ -3875,15 +3889,19 @@ class PedidosController extends Controller
                 // Buscar pinpad en los metodosPago ya cargados
                 $registro_pinpad = $metodos_pago->where('subtipo', 'pinpad')->first();
                 if ($registro_pinpad) {
-                    $metadatos = is_string($registro_pinpad->metadatos) 
-                        ? json_decode($registro_pinpad->metadatos, true) 
+                    $metadatos = is_string($registro_pinpad->metadatos)
+                        ? json_decode($registro_pinpad->metadatos, true)
                         : $registro_pinpad->metadatos;
-                    
+
                     if (isset($metadatos['lotes'])) {
-                        $lotes_pinpad_consolidados = array_merge($lotes_pinpad_consolidados, $metadatos['lotes']);
+                        // FIX 2026-05-26 — expandir lotes agrupados legacy al vuelo.
+                        $lotes_pinpad_consolidados = array_merge(
+                            $lotes_pinpad_consolidados,
+                            $this->expandirLotesPinpad($metadatos['lotes'])
+                        );
                     }
                 }
-                
+
                 // Buscar otros_puntos en los metodosPago ya cargados
                 $registro_otros = $metodos_pago->where('subtipo', 'otros_puntos')->first();
                 if ($registro_otros) {
@@ -3941,10 +3959,11 @@ class PedidosController extends Controller
                 $lotes_pinpad_usuario = [];
                 $registro_pinpad = $metodos_pago->where('subtipo', 'pinpad')->first();
                 if ($registro_pinpad) {
-                    $metadatos = is_string($registro_pinpad->metadatos) 
-                        ? json_decode($registro_pinpad->metadatos, true) 
+                    $metadatos = is_string($registro_pinpad->metadatos)
+                        ? json_decode($registro_pinpad->metadatos, true)
                         : $registro_pinpad->metadatos;
-                    $lotes_pinpad_usuario = $metadatos['lotes'] ?? [];
+                    // FIX 2026-05-26 — expandir lotes agrupados legacy al vuelo.
+                    $lotes_pinpad_usuario = $this->expandirLotesPinpad($metadatos['lotes'] ?? []);
                 }
                 
                 $lotes_otros_usuario = [];
@@ -4382,7 +4401,8 @@ class PedidosController extends Controller
                     : $metodo_pago->metadatos;
                 
                 if ($metodo_pago->subtipo == 'pinpad') {
-                    $lotes = $metadatos['lotes'] ?? [];
+                    // FIX 2026-05-26 — expandir lotes agrupados legacy al vuelo.
+                    $lotes = $this->expandirLotesPinpad($metadatos['lotes'] ?? []);
                     foreach ($lotes as $lote) {
                         $banco = $lote['banco_nombre'] ?? $lote['banco'] ?? '';
                         $monto_raw = floatval($lote['monto_bs'] ?? $lote['monto'] ?? 0);

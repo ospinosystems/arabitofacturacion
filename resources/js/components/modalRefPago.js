@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import axios from "axios";
+import { resolverBancoPorValue, bancoSeleccionadoEsDivisa } from "./bancoCentralUtils";
 
 const MODULOS = [
     { id: 'AutoValidar', label: 'Auto-Validar', icon: 'fa-check-circle' },
@@ -387,11 +388,9 @@ export default function ModalRefPago({
             let monto = truncarDosDecimales(transferencia * dolar);
             setmonto_referenciapago(monto);
             setisrefbanbs(true);
-        } else if (
-            banco_referenciapago == "ZELLE" ||
-            banco_referenciapago == "BINANCE" ||
-            banco_referenciapago == "AirTM"
-        ) {
+        } else if (bancoSeleccionadoEsDivisa(banco_referenciapago, bancosCentral)) {
+            // FIX 2026-05-26 — antes era hardcoded ['ZELLE','BINANCE','AirTM'].
+            // Ahora se infiere del catálogo (moneda='dolar') porque el value es bid:<id>.
             setisrefbanbs(false);
             setmonto_referenciapago(truncarDosDecimales(transferencia));
         } else {
@@ -630,7 +629,10 @@ export default function ModalRefPago({
                                         return lista
                                             .filter(b => !!b[flag])
                                             .map(b => (
-                                                <option key={b.id} value={b.codigo}>
+                                                // FIX 2026-05-26 — value = "bid:<id>" en vez del codigo string.
+                                                // Inmune a renombres de codigo en central. El resolver de
+                                                // central detecta el prefijo y hace find(id) directo.
+                                                <option key={b.id} value={`bid:${b.id}`}>
                                                     {b.descripcion}
                                                 </option>
                                             ));
@@ -661,7 +663,7 @@ export default function ModalRefPago({
                                     placeholder="Referencia completa de la transacción..."
                                     value={descripcion_referenciapago}
                                     onChange={e => setdescripcion_referenciapago(
-                                        ["ZELLE", "BINANCE", "AirTM"].includes(banco_referenciapago) ? e.target.value : number(e.target.value)
+                                        bancoSeleccionadoEsDivisa(banco_referenciapago, bancosCentral) ? e.target.value : number(e.target.value)
                                     )}
                                     onKeyPress={handleKeyPress}
                                     data-ref-input="true"

@@ -1,154 +1,125 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
-function LotesPinpad({ lotesPinpad, bancos, bancosCentral, bancosCentralLoading, bancosCentralError, recargarBancosCentral, onChangeBanco, totalizarcierre, bloqueado }) {
-    const [modalDetalle, setModalDetalle] = useState(null);
-
-    const abrirDetalle = (lote) => {
-        setModalDetalle(lote);
-    };
-
-    const cerrarDetalle = () => {
-        setModalDetalle(null);
-    };
+/**
+ * Lotes Pinpad (POS débito) en el cierre.
+ *
+ * FIX 2026-05-26 — Cada transacción es un lote independiente (antes se agrupaban
+ * por terminal). El banco viene autodetectado del campo `bank` que retornó el
+ * dispositivo POS; central hace el mapeo final a banco_id. El cajero ya no elige
+ * banco a mano.
+ *
+ * Por la cantidad de transacciones (cientos por día), la vista vive COLAPSADA por
+ * defecto y solo muestra un resumen: total trans, monto total y desglose por banco
+ * detectado. Click en "Ver detalle" expande la lista completa.
+ */
+function LotesPinpad({ lotesPinpad, totalizarcierre, bloqueado }) {
+    const [expandido, setExpandido] = useState(false);
 
     if (!lotesPinpad || lotesPinpad.length === 0) {
         return null;
     }
+
+    // Resumen agregado: totales + desglose por banco detectado del PINPAD.
+    const resumen = useMemo(() => {
+        const totalBs = lotesPinpad.reduce((s, l) => s + parseFloat(l.monto_bs || 0), 0);
+        const totalUsd = lotesPinpad.reduce((s, l) => s + parseFloat(l.monto_usd || 0), 0);
+        const porBanco = new Map();
+        lotesPinpad.forEach(l => {
+            const banco = (l.banco && String(l.banco).trim()) || 'sin banco';
+            if (!porBanco.has(banco)) porBanco.set(banco, { cantidad: 0, monto_bs: 0 });
+            const acc = porBanco.get(banco);
+            acc.cantidad += 1;
+            acc.monto_bs += parseFloat(l.monto_bs || 0);
+        });
+        const sinBanco = lotesPinpad.filter(l => !l.banco || !String(l.banco).trim()).length;
+        return {
+            cantidad: lotesPinpad.length,
+            totalBs,
+            totalUsd,
+            porBanco: Array.from(porBanco.entries()).map(([banco, info]) => ({ banco, ...info })),
+            sinBanco,
+        };
+    }, [lotesPinpad]);
 
     return (
         <>
             <div className="row mb-2">
                 <div className="col-2 text-success text-right">
                     Lotes Pinpad
-                    <button
-                        type="button"
-                        onClick={() => recargarBancosCentral && recargarBancosCentral()}
-                        disabled={bancosCentralLoading}
-                        title="Recargar bancos desde central"
-                        className="btn btn-link btn-sm p-0 ml-1 align-baseline"
-                    >
-                        <i className={`fa fa-sync-alt ${bancosCentralLoading ? 'fa-spin' : ''}`}></i>
-                    </button>
-                    {bancosCentralError && (
-                        <div className="text-danger small">{bancosCentralError}</div>
-                    )}
                 </div>
-                <div className="col align-middle text-center">
-                    <table className="table">
-                        <thead>
-                            <tr>
-                                <th>TERMINAL</th>
-                                <th>MONTO BS</th>
-                                <th>MONTO USD</th>
-                                <th>CANT.</th>
-                                <th>BANCO</th>
-                                <th>DETALLE</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {lotesPinpad.map((lote, i) => (
-                                <tr key={i} className={!lote.banco ? "table-warning" : ""}>
-                                    <td>
-                                        <input 
-                                            type="text" 
-                                            className="form-control" 
-                                            value={lote.terminal} 
-                                            disabled 
-                                        />
-                                    </td>
-                                    <td>
-                                        <input 
-                                            type="text" 
-                                            className="form-control" 
-                                            value={lote.monto_bs.toFixed(2)} 
-                                            disabled 
-                                        />
-                                    </td>
-                                    <td>
-                                        <input 
-                                            type="text" 
-                                            className="form-control" 
-                                            value={lote.monto_usd.toFixed(2)} 
-                                            disabled 
-                                        />
-                                    </td>
-                                    <td>
-                                        <input 
-                                            type="text" 
-                                            className="form-control" 
-                                            value={lote.cantidad_transacciones} 
-                                            disabled 
-                                        />
-                                    </td>
-                                    <td>
-                                        <select 
-                                            className={`form-control ${!lote.banco ? 'border-danger' : ''}`}
-                                            value={lote.banco || ''}
-                                            onChange={(e) => onChangeBanco(i, e.target.value)}
-                                            disabled={totalizarcierre || bloqueado}
-                                        >
-                                            <option value="">-</option>
-                                            {(() => {
-                                                const lista = Array.isArray(bancosCentral) ? bancosCentral : [];
-                                                const m = parseFloat(lote.monto_bs);
-                                                const esDevolucion = !isNaN(m) && m < 0;
-                                                const flag = esDevolucion ? 'disponible_pos_devolucion' : 'disponible_pos_ingreso';
-                                                return lista.filter(b => !!b[flag]).map(b => (
-                                                    <option key={b.id} value={b.codigo}>{b.descripcion}</option>
-                                                ));
-                                            })()}
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <button 
-                                            type="button"
-                                            className="btn btn-sm btn-info"
-                                            onClick={() => abrirDetalle(lote)}
-                                        >
-                                            <i className="fa fa-eye"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {lotesPinpad.some(lote => !lote.banco) && (
-                        <div className="alert alert-warning mt-2" role="alert">
-                            <i className="fa fa-exclamation-triangle"></i> Debe seleccionar un banco para todos los lotes Pinpad antes de guardar el cierre.
-                        </div>
-                    )}
-                </div>
-            </div>
+                <div className="col align-middle">
+                    <div className="card">
+                        <div className="card-body p-2">
+                            <div className="d-flex justify-content-between align-items-center flex-wrap">
+                                <div className="d-flex gap-3 align-items-center flex-wrap">
+                                    <span className="badge bg-primary" style={{ fontSize: '0.9rem' }}>
+                                        {resumen.cantidad} {resumen.cantidad === 1 ? 'transacción' : 'transacciones'}
+                                    </span>
+                                    <span><b>Total Bs:</b> {resumen.totalBs.toFixed(2)}</span>
+                                    <span><b>Total USD:</b> {resumen.totalUsd.toFixed(2)}</span>
+                                    {resumen.porBanco.map(b => (
+                                        <span key={b.banco} className={`badge ${b.banco === 'sin banco' ? 'bg-warning text-dark' : 'bg-info'}`} style={{ fontSize: '0.85rem' }}>
+                                            {b.banco}: {b.cantidad} · Bs {b.monto_bs.toFixed(2)}
+                                        </span>
+                                    ))}
+                                </div>
+                                <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-secondary"
+                                    onClick={() => setExpandido(v => !v)}
+                                    title={expandido ? 'Colapsar' : 'Ver todas las transacciones'}
+                                >
+                                    <i className={`fa fa-chevron-${expandido ? 'up' : 'down'} mr-1`}></i>
+                                    {expandido ? 'Colapsar' : 'Ver detalle'}
+                                </button>
+                            </div>
 
-            {/* Modal de detalle */}
-            {modalDetalle && (
-                <div className="modal fade show" style={{ display: 'block', background: 'rgba(0,0,0,0.5)' }}>
-                    <div className="modal-dialog modal-lg">
-                        <div className="modal-content">
-                            <div className="modal-header">
-                                <h5 className="modal-title">Detalle de Transacciones - Terminal {modalDetalle.terminal}</h5>
-                                <button type="button" className="btn-close" onClick={cerrarDetalle}></button>
-                            </div>
-                            <div className="modal-body" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                                {modalDetalle.transacciones.map((t, idx) => (
-                                    <div key={idx} className="mb-2 p-2 border-bottom">
-                                        <strong>Transacción {idx + 1}</strong><br/>
-                                        <small>Pedido: #{t.id_pedido}</small><br/>
-                                        Monto Bs: <strong>{t.monto_original.toFixed(2)}</strong><br/>
-                                        Monto USD: <strong>${t.monto.toFixed(2)}</strong><br/>
-                                        Referencia: <strong>{t.referencia}</strong><br/>
-                                        Estado: <span className="badge bg-success">{t.estado}</span><br/>
-                                        Lote POS: {t.lote || 'N/A'}
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="modal-footer">
-                                <button type="button" className="btn btn-secondary" onClick={cerrarDetalle}>Cerrar</button>
-                            </div>
+                            {resumen.sinBanco > 0 && (
+                                <div className="alert alert-warning mt-2 mb-0 py-1 small" role="alert">
+                                    <i className="fa fa-exclamation-triangle"></i>
+                                    {' '}Hay {resumen.sinBanco} transacción(es) sin banco detectado por el POS. Central las recibirá igual pero pueden quedar sin mapear.
+                                </div>
+                            )}
+
+                            {expandido && (
+                                <div className="mt-3" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                                    <table className="table table-sm table-hover mb-0">
+                                        <thead className="sticky-top bg-light">
+                                            <tr>
+                                                <th>#Pago</th>
+                                                <th>Terminal</th>
+                                                <th>Pedido</th>
+                                                <th>Referencia</th>
+                                                <th className="text-right">Monto Bs</th>
+                                                <th className="text-right">Monto USD</th>
+                                                <th>Banco POS</th>
+                                                <th>Estado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {lotesPinpad.map((lote, i) => {
+                                                const t = (lote.transacciones && lote.transacciones[0]) || {};
+                                                return (
+                                                    <tr key={i} className={!lote.banco ? 'table-warning' : ''}>
+                                                        <td>{t.id || lote.pago_id || '—'}</td>
+                                                        <td className="font-monospace">{lote.terminal}</td>
+                                                        <td>{t.id_pedido || '—'}</td>
+                                                        <td className="font-monospace">{t.referencia || '—'}</td>
+                                                        <td className="text-right">{parseFloat(lote.monto_bs || 0).toFixed(2)}</td>
+                                                        <td className="text-right">{parseFloat(lote.monto_usd || 0).toFixed(2)}</td>
+                                                        <td>{lote.banco || <span className="text-muted">—</span>}</td>
+                                                        <td>{t.estado || '—'}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
-            )}
+            </div>
         </>
     );
 }
