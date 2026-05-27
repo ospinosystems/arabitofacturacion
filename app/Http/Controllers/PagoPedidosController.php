@@ -512,15 +512,15 @@ class PagoPedidosController extends Controller
                             throw new \Exception("Error: Para procesar una transferencia debe cargar al menos una referencia de pago.", 1);
                         }
                         
-                        // Calcular el monto total en dólares de las referencias
+                        // Calcular el monto total en dólares de las referencias.
+                        // FIX 2026-05-26 — antes se comparaba contra hardcoded
+                        // ['ZELLE','BINANCE','AirTM']; rompía cuando se empezó a guardar
+                        // `bid:<id>`. Ahora la moneda se resuelve desde el catálogo
+                        // central vía `App\Support\BancoMoneda::esDivisa($valor)`.
                         foreach ($referencias as $referencia) {
                             $monto_ref = floatval($referencia->monto);
-                            
-                            if (
-                                $referencia->banco == "ZELLE" ||
-                                $referencia->banco == "BINANCE" ||
-                                $referencia->banco == "AirTM"
-                            ) {
+
+                            if (\App\Support\BancoMoneda::esDivisa($referencia->banco)) {
                                 // Bancos en dólares - usar monto directo
                                 $montodolares += $monto_ref;
                             } else {

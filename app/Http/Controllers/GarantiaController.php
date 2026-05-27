@@ -771,19 +771,15 @@ class GarantiaController extends Controller
     }
 
     /**
-     * Determinar si un banco maneja USD (como ZELLE, BINANCE, AirTM)
+     * Determinar si un banco maneja USD.
+     * FIX 2026-05-26 — antes era hardcoded ['ZELLE','BINANCE','AIRTM'].
+     * Ahora la moneda viene del catálogo central vía `App\Support\BancoMoneda`,
+     * funciona con cualquier banco que central tenga marcado como `moneda='dolar'`
+     * y con el formato `bid:<id>` que los selects nuevos persisten.
      */
     private function esBancoUSD($banco)
     {
-        $bancos_usd = ['ZELLE', 'BINANCE', 'AIRTM'];
-        
-        foreach ($bancos_usd as $banco_usd) {
-            if (stripos($banco, $banco_usd) !== false) {
-                return true;
-            }
-        }
-        
-        return false;
+        return \App\Support\BancoMoneda::esDivisa($banco);
     }
 
     /**
