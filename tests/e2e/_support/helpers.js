@@ -1,5 +1,6 @@
 // @ts-check
 const config = require('./config');
+const { attachConsoleWatcher } = require('./console-watcher');
 
 /**
  * Helpers reutilizables para los tests de arabitofacturacion (cajero).
@@ -9,7 +10,10 @@ const config = require('./config');
  * Setup que debe correrse en CADA test al inicio. Hace:
  *  1) Intercepta /enviarTransaccionPOS y le inyecta ip_pinpad=127.0.0.1:{mock_port}
  *     así no tocamos la columna ip_pinpad del cajero en la BD real.
- *  2) Devuelve helpers ya conectados a `page`.
+ *  2) Engancha console-watcher para capturar console.error y pageerror.
+ *     El test debe llamar `await watcher.assertClean()` al final para validar.
+ *
+ * Retorna el watcher para que el test pueda hacer assertClean() o getErrors().
  */
 async function setupCajero(page) {
     const pinpadPort = config.mocks?.pinpad_port || 9001;
@@ -26,6 +30,8 @@ async function setupCajero(page) {
             headers,
         });
     });
+
+    return attachConsoleWatcher(page);
 }
 
 async function login(page) {

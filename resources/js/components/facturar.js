@@ -5596,11 +5596,14 @@ export default function Facturar({
 
             // Referencia de transferencia cargada pero método de pago no es transferencia → bloquear
             // SALVO que las refs netean a 0 (refund balanceado entrante/saliente).
-            if (tieneRefTransferencia && !usaMetodoTransferencia && !refsNetCero) {
+            // DEVOL-SIN-FACTURA 2026-05-27 — también skipear el bloqueo cuando el cajero activó
+            // conscientemente el toggle "Devol s/fact": el flujo es ref saliente sola, sin monto
+            // explícito en el campo Transferencia. El backend lo procesa vía is_devolucion_pura=true.
+            if (tieneRefTransferencia && !usaMetodoTransferencia && !refsNetCero && !devolucionSinFactura) {
                 console.log("[setPagoPedido] BLOQUEADO: referencia de transferencia cargada pero método de pago no es transferencia", { refPago, transferencia: transferenciaActualCheck, sumaRefsBs });
                 notificar({
                     data: {
-                        msj: "Tiene una referencia de transferencia cargada pero no está usando el método de pago Transferencia. Indique el monto en Transferencia o elimine la referencia para continuar.",
+                        msj: "Tiene una referencia de transferencia cargada pero no está usando el método de pago Transferencia. Indique el monto en Transferencia o elimine la referencia para continuar. (Si es devolución sin factura, activá el toggle 'Devol s/fact' en el panel de pago.)",
                         estado: false,
                     },
                 });

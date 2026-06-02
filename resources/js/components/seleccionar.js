@@ -77,7 +77,6 @@ export default function Seleccionar({
                     setView("pagar");
                 });
             }
-            
         },
         {
             enableOnTags: ["INPUT", "SELECT"],

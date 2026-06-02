@@ -218,6 +218,18 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('addRefPago', [PagosReferenciasController::class,"addRefPago"]);
 		// BUSCAR-REF-MI-PEDIDO 2026-05-27 — recuperar ref ya existente en central que se perdió local
 		Route::post('importarRefDeCentral', [PagosReferenciasController::class,"importarRefDeCentral"]);
+
+		// TESTING-ASSERTIONS 2026-05-27 — endpoints SOLO LECTURA usados por Playwright para
+		// validar post-state DB. Controller bloquea en production via abort(403).
+		if (!app()->environment('production')) {
+			Route::post('testing/pedido-full',          [\App\Http\Controllers\TestingAssertionsController::class, "getPedidoFull"]);
+			Route::post('testing/pagos',                [\App\Http\Controllers\TestingAssertionsController::class, "getPagos"]);
+			Route::post('testing/refs',                 [\App\Http\Controllers\TestingAssertionsController::class, "getRefs"]);
+			Route::post('testing/pos-rechazadas',       [\App\Http\Controllers\TestingAssertionsController::class, "getPosRechazadas"]);
+			Route::post('testing/solicitudes-descuento',[\App\Http\Controllers\TestingAssertionsController::class, "getSolicitudesDescuento"]);
+			Route::post('testing/fixture-ref-central',  [\App\Http\Controllers\TestingAssertionsController::class, "fixtureRefEnCentral"]);
+			Route::post('testing/cleanup-refs',         [\App\Http\Controllers\TestingAssertionsController::class, "cleanupRefs"]);
+		}
 		Route::post('sendRefToMerchant', [PagosReferenciasController::class,"sendRefToMerchant"]);
 		Route::post('procesarRespuestaMegasoft', [PagosReferenciasController::class,"procesarRespuestaMegasoft"]);
 		Route::post('validarCodigoAprobacion', [PagosReferenciasController::class,"validarCodigoAprobacion"]);
