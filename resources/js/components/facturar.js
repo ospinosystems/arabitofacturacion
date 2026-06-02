@@ -498,6 +498,12 @@ export default function Facturar({
     // que los métodos (Débito/Transferencia) excedan clean_total para luego netear
     // con una transferencia negativa de refund. Caso A (factura abierta + sobrante).
     const [permiteSobrante, setpermiteSobrante] = useState(false);
+    // DEVOL-SIN-FACTURA 2026-05-27 — toggle consciente para cuando se devuelve por
+    // transferencia un dinero que entró fuera de facturación (típicamente sobrante POS
+    // débito no notificado en su día). NO hay items, NO hay ingreso compensatorio.
+    // Reusa is_devolucion_pura del backend; agrega el prefix "DEVOL S/FACT:" a la
+    // descripción de la ref para que sea identificable en reportes/cuadre.
+    const [devolucionSinFactura, setdevolucionSinFactura] = useState(false);
 
     const [pedidosCentral, setpedidoCentral] = useState([]);
     const [indexPedidoCentral, setIndexPedidoCentral] = useState(null);
@@ -1649,16 +1655,19 @@ export default function Facturar({
         if (tipo == "enviar") {
             if (!pedidoData?.id || !monto_referenciapago) return;
             const uuid = pedidoData._frontOnly ? pedidoData.id : null;
+            // DEVOL-SIN-FACTURA 2026-05-27 — si el toggle está ON, prepende prefix identificable
+            // a la descripción de la ref para que se vea en reportes/cuadre.
+            const prefijoDescDevol = devolucionSinFactura ? "DEVOL S/FACT: " : "";
+            const descripcionFinal = prefijoDescDevol + (descripcion_referenciapago || "");
             if (uuid) {
                 // Pedido solo front: guardar referencia en estado por uuid (se enviará en setPagoPedido)
                 // La ref agregada desde la tab "Central" queda "pendiente" hasta que central la apruebe.
                 // Solo las refs validadas vía AutoValidar (que ya pasaron por central) van como "aprobada".
                 const estatusRef = (categoria === "autovalidar") ? "aprobada" : "pendiente";
-                let ref = descripcion_referenciapago;
                 const nuevaRef = {
                     _localId: `front_${Date.now()}_${Math.random().toString(36).slice(2)}`,
                     tipo: tipo_referenciapago,
-                    descripcion: ref,
+                    descripcion: descripcionFinal,
                     monto: monto_referenciapago,
                     banco: banco_referenciapago,
                     cedula: cedula_referenciapago,
@@ -1699,17 +1708,17 @@ export default function Facturar({
                 return;
             }
             // Pedido con id de backend: enviar al servidor
-            let ref = descripcion_referenciapago;
+            // descripcionFinal ya incluye el prefijo "DEVOL S/FACT:" si el toggle está ON
             // Capturar valores actuales en closure por si el usuario tipea de nuevo mientras importa
             const refSnapshot = {
-                descripcion: ref,
+                descripcion: descripcionFinal,
                 banco: banco_referenciapago,
                 monto: monto_referenciapago,
                 id_pedido: pedidoData.id,
             };
             db.addRefPago({
                 tipo: tipo_referenciapago,
-                descripcion: ref,
+                descripcion: descripcionFinal,
                 monto: monto_referenciapago,
                 banco: banco_referenciapago,
                 cedula: cedula_referenciapago,
@@ -5822,7 +5831,9 @@ export default function Facturar({
         const itemsPedidoLen = (pedidoActual?.items || []).length;
         const hayRefsCargadas = Array.isArray(refPago) && refPago.length > 0;
         const hayAlgunMetodoCargado = Math.abs(netoMetodosUSD) > 0.001 || hayRefsCargadas || debitosValidos.length > 0;
-        const esDevolucionPuraAuto = itemsPedidoLen === 0 && hayAlgunMetodoCargado;
+        // DEVOL-SIN-FACTURA 2026-05-27 — el toggle manual fuerza el modo aunque la auto-detección no lo dispare
+        // (ej: el cajero quiere ser explícito y dejar trazo en logs/cuadre).
+        const esDevolucionPuraAuto = (itemsPedidoLen === 0 && hayAlgunMetodoCargado) || devolucionSinFactura === true;
         const totalPedidoUsdParam = esDevolucionPuraAuto
             ? parseFloat(netoMetodosUSD.toFixed(2))
             : ((isFrontOnly && pedidoActual && pedidoActual.clean_total != null) ? parseFloat(pedidoActual.clean_total) : undefined);
@@ -5915,7 +5926,11 @@ export default function Facturar({
                     if (res.data.imprimir_ticket_msj) {
                         notificar(res.data.imprimir_ticket_msj);
                     }
-                } else if (callback) {
+                } else if (typeof callback === 'function') {
+                    // BUG-FIX 2026-05-27 — antes era `else if (callback)` que disparaba
+                    // "e is not a function" cuando facturar_pedido recibía un SyntheticEvent
+                    // de React desde onClick={facturar_pedido} en pagarMain.js. El event es
+                    // truthy pero NO función. Guarda type-check defensivo.
                     callback();
                 }
             }
@@ -10924,6 +10939,8 @@ export default function Facturar({
                                     setautoCorrector={setautoCorrector}
                                     permiteSobrante={permiteSobrante}
                                     setpermiteSobrante={setpermiteSobrante}
+                                    devolucionSinFactura={devolucionSinFactura}
+                                    setdevolucionSinFactura={setdevolucionSinFactura}
                                     getDebito={getDebito}
                                     getCredito={getCredito}
                                     getTransferencia={getTransferencia}

@@ -164,6 +164,8 @@ export default function PagarMain({
     // y habilita refunds por transferencia negativa para netear sobrante.
     permiteSobrante = false,
     setpermiteSobrante = () => {},
+    devolucionSinFactura = false,
+    setdevolucionSinFactura = () => {},
     getDebito,
     getCredito,
     getTransferencia,
@@ -4629,6 +4631,25 @@ export default function PagarMain({
                                         <span className="text-[10px] text-gray-500">Sobrante</span>
                                         <span className={`text-[10px] px-1.5 py-0.5 rounded ${permiteSobrante ? "bg-orange-100 text-orange-700 font-semibold" : "bg-gray-200 text-gray-400"}`}>
                                             {permiteSobrante ? "ON" : "OFF"}
+                                        </span>
+                                    </div>
+
+                                    {/* DEVOL-SIN-FACTURA 2026-05-27 — toggle CONSCIENTE para devoluciones por transferencia
+                                        donde el ingreso original ocurrió fuera de facturación (sobrante POS no notificado,
+                                        adicional no reportado, etc.) y no hay factura para anclar. Activarlo:
+                                        - No agregar items
+                                        - Cargar solo una transferencia negativa con la ref saliente
+                                        - El backend ya acepta items=0 vía is_devolucion_pura=true (auto-detección),
+                                          este toggle solo formaliza la decisión y prepende "DEVOL S/FACT:" en la descripción
+                                          de la ref para que sea identificable en cuadre y reportes. */}
+                                    <div
+                                        className="flex items-center gap-1 cursor-pointer hover:opacity-80"
+                                        onClick={() => setdevolucionSinFactura(!devolucionSinFactura)}
+                                        title="Devolución sin factura ni ingreso compensatorio. Usar cuando el dinero a devolver entró fuera de facturación (sobrante POS, adicional no reportado, etc.). No agregar items, solo cargar transferencia negativa con su ref."
+                                    >
+                                        <span className="text-[10px] text-gray-500">Devol s/fact</span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${devolucionSinFactura ? "bg-red-100 text-red-700 font-bold border border-red-300" : "bg-gray-200 text-gray-400"}`}>
+                                            {devolucionSinFactura ? "ON" : "OFF"}
                                         </span>
                                     </div>
 
