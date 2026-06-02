@@ -303,12 +303,17 @@ function Pedidos({
 								<i className="mr-1 fa fa-shopping-cart"></i>
 								{pedidos["fact"] ? pedidos["fact"].length : 0}
 							</button>
+							{/* Grupo Mis/Todos — F1-BACKEND 2026-05-27: se eliminó el botón "+" verde que disparaba
+							    addNewPedidoFront (creaba pedido azul UUID). El alta de pedidos se hace por F1 o por el
+							    botón "+ Nuevo" en la barra de tabs, que sí crean pedido backend (numérico). */}
 							<div className="flex rounded shadow-sm">
-								<button 
-									onClick={() => setshowMisPedido(true)} 
+								<button
+									onClick={() => setshowMisPedido(true)}
 									className={`px-2 py-1 text-xs font-medium rounded-l border transition-colors ${
-										showMisPedido 
-											? "bg-green-500 text-white border-green-500" 
+										!auth(1) ? "rounded-r" : ""
+									} ${
+										showMisPedido
+											? "bg-green-500 text-white border-green-500"
 											: "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
 									}`}
 								>
@@ -316,11 +321,11 @@ function Pedidos({
 									Mis
 								</button>
 								{auth(1) && (
-									<button 
-										onClick={() => setshowMisPedido(false)} 
-										className={`px-2 py-1 text-xs font-medium border-t border-b transition-colors ${
-											!showMisPedido 
-												? "bg-green-500 text-white border-green-500" 
+									<button
+										onClick={() => setshowMisPedido(false)}
+										className={`px-2 py-1 text-xs font-medium border rounded-r transition-colors ${
+											!showMisPedido
+												? "bg-green-500 text-white border-green-500"
 												: "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
 										}`}
 									>
@@ -328,12 +333,6 @@ function Pedidos({
 										Todos
 									</button>
 								)}
-								<button 
-									className="px-2 py-1 text-xs text-white transition-colors bg-green-500 rounded-r hover:bg-green-600" 
-									onClick={addNewPedidoFront}
-								>
-									<i className="fa fa-plus"></i>
-								</button>
 							</div>
 						</div>
 					</div>
