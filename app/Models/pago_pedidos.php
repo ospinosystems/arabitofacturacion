@@ -30,7 +30,8 @@ class pago_pedidos extends Model
         "pos_responsecode",
         "pos_amount",
         "pos_terminal",
-        "pos_json_response"
+        "pos_json_response",
+        "imborrable",
     ];
 
     /**

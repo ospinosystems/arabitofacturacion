@@ -8,6 +8,24 @@ use DateTimeInterface;
 
 class pedidos extends Model
 {
+    // PERF 2026-05-27 — bump del version-stamp en cada cambio de pedidos.
+    // getPedidosFast usa este número en su cache key, así un INSERT/UPDATE/DELETE
+    // invalida instantáneamente el cache de la lista sin que tengamos que conocer
+    // todos los keys derivados (por vendedor, por fecha).
+    protected static function booted()
+    {
+        $bump = function () {
+            try {
+                $current = (int) (\Cache::get('pedidos_fast_version', 0));
+                \Cache::forever('pedidos_fast_version', $current + 1);
+            } catch (\Throwable $e) {
+                // si falla cache, seguimos — solo perdemos micro-cache
+            }
+        };
+        static::saved($bump);
+        static::deleted($bump);
+    }
+
     protected $fillable= [
         "id",
         "uuid",

@@ -199,6 +199,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('setDescuentoTotal', [ItemsPedidosController::class,"setDescuentoTotal"]);
 		Route::post('solicitudDescuentoFrontCrear', [App\Http\Controllers\SolicitudDescuentoFrontController::class, 'crear']);
 		Route::post('solicitudDescuentoFrontVerificar', [App\Http\Controllers\SolicitudDescuentoFrontController::class, 'verificar']);
+		Route::post('solicitudDescuentoBackendVerificar', [App\Http\Controllers\SolicitudDescuentoFrontController::class, 'verificarBackend']);
 		Route::post('solicitudDescuentoFrontCancelar', [App\Http\Controllers\SolicitudDescuentoFrontController::class, 'cancelar']);
 		Route::post('solicitudCreditoFrontCrear', [App\Http\Controllers\SolicitudCreditoFrontController::class, 'crear']);
 	
@@ -209,7 +210,6 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('enviarTransaccionPOS', [sendCentral::class,"enviarTransaccionPOS"]);
 		Route::post('revalidarPosDebito', [sendCentral::class,"revalidarPosDebito"]);
 		
-		Route::post('registrarPosRechazado', [sendCentral::class,"registrarPosRechazado"]);
 		Route::post('ejecutarPostSync', [sendCentral::class,"ejecutarPostSync"]);
 		Route::get('printBultos', [PedidosController::class,"printBultos"]);
 		

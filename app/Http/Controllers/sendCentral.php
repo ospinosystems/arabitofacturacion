@@ -62,8 +62,8 @@ class sendCentral extends Controller
 
     public function path()
     {
-        //return "http://127.0.0.1:8001";
-        return "https://titanio-central.com";
+        return "http://127.0.0.1:8001";
+        //return "https://titanio-central.com";
     }
 
     public function sends()
@@ -1857,6 +1857,29 @@ class sendCentral extends Controller
     {
         return Response::json($this->runTareaCentralFun());
     }
+    /**
+     * Decodifica el JSON de una respuesta de central tolerando basura previa
+     * (warnings/notices de PHP en HTML que algunos entornos anteponen al cuerpo,
+     * p.ej. "<br /> ... {json}"). Devuelve el array decodificado o null.
+     */
+    protected function jsonFromCentral($response): ?array
+    {
+        $data = $response->json();
+        if (is_array($data)) {
+            return $data;
+        }
+        $body = (string) $response->body();
+        $start = strpos($body, '{');
+        $end = strrpos($body, '}');
+        if ($start !== false && $end !== false && $end > $start) {
+            $decoded = json_decode(substr($body, $start, $end - $start + 1), true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+        return null;
+    }
+
     public function setPedidoInCentralFromMaster($id, $id_sucursal, $type = "add")
     {
         try {
@@ -1870,9 +1893,12 @@ class sendCentral extends Controller
             );
 
             if ($response->ok()) {
-                $resretur = $response->json();
-                
-                if ($resretur["estado"]) {
+                $resretur = $this->jsonFromCentral($response);
+                if ($resretur === null) {
+                    return Response::json(["estado" => false, "msj" => "Respuesta no válida de central (cuerpo no JSON)."]);
+                }
+
+                if (!empty($resretur["estado"])) {
                     pago_pedidos::where("id_pedido",$id)->delete();
                     pago_pedidos::updateOrCreate(["id_pedido"=>$id,"tipo"=>4],["cuenta"=>1,"monto"=>0.00001]);
 
@@ -5442,11 +5468,16 @@ class sendCentral extends Controller
         $data = $result['data'] ?? null;
 
         if ($approved && !empty($data)) {
+            // POS PINPAD 2026-05-27 — central confirmó que la transacción existe y está
+            // aprobada. Persistimos como imborrable apenas la sabemos (puede que el
+            // cajero recién esté validando una transacción de la sesión anterior).
+            $persistencia = $this->persistirPosImborrableDesdeNumeroOrden($numeroOrden, $data, $montoCents);
             return response()->json([
                 'success' => true,
                 'data' => $data,
                 'instapago_reachable' => true,
                 'status_validacion' => 'aprobado',
+                'pago_imborrable' => $persistencia,
             ]);
         }
 
@@ -5567,6 +5598,14 @@ class sendCentral extends Controller
                 $montoCents = (int) $request->input('monto', 0);
                 $amountDecimal = $montoCents / 100.0;
                 $posErrorBody = is_array($data) ? $data : ['raw' => $data];
+
+                // POS RECHAZO 2026-05-27 — registrar el rechazo en pos_operaciones_rechazadas
+                // INSIDE este endpoint. Antes el front llamaba un /registrarPosRechazado aparte
+                // (round-trip extra + lógica duplicada). Es ortogonal al resultado de Instapago:
+                // si POS dijo "rechazado", queda registrado siempre, incluso si después central
+                // confirma que sí se cobró.
+                $this->registrarPosRechazadoInterno($posErrorBody, $numeroOrden);
+
                 $logPos('enviarTransaccionPOS consulta central (POS falló)', [
                     'numero_orden' => $numeroOrden,
                     'monto_cents' => $montoCents,
@@ -5591,9 +5630,17 @@ class sendCentral extends Controller
                         'amount_decimal' => $amountDecimal,
                         'central_data_amount' => $centralData['amount'] ?? null,
                     ]);
+                    // POS PINPAD 2026-05-27 — el POS no respondió pero central confirmó que el cobro
+                    // existe. Igual lo persistimos: la tarjeta del cliente YA fue cobrada.
+                    $persistencia = $this->persistirPosImborrableDesdeNumeroOrden(
+                        $numeroOrden,
+                        is_array($centralResult['data']) ? $centralResult['data'] : [],
+                        $montoCents
+                    );
                     return response()->json([
                         'success' => true,
                         'data' => $centralResult['data'],
+                        'pago_imborrable' => $persistencia,
                     ]);
                 }
 
@@ -5632,10 +5679,20 @@ class sendCentral extends Controller
                 'numero_orden' => $request->input('numeroOrden'),
             ]);
 
+            // POS PINPAD 2026-05-27 — persistir el cobro como pago_pedidos imborrable=1
+            // ANTES de devolverle al cajero. Si el navegador se cae al recibir el response,
+            // el cobro real ya quedó anclado al pedido en BD.
+            $persistencia = $this->persistirPosImborrableDesdeNumeroOrden(
+                $request->input('numeroOrden'),
+                is_array($data) ? $data : [],
+                (int) $request->input('monto', 0)
+            );
+
             return response()->json([
                 'success' => $posSuccess,
                 'status' => $response->status(),
                 'data' => $data,
+                'pago_imborrable' => $persistencia,
             ]);
         } catch (\Exception $e) {
             $logPos('enviarTransaccionPOS EXCEPCIÓN', [
@@ -5655,51 +5712,123 @@ class sendCentral extends Controller
     }
 
     /**
-     * Registrar operación POS rechazada
+     * POS PINPAD 2026-05-27 — parsea el `numeroOrden` (formato canónico
+     * `{codigoSucursal}-{nombreUsuario}-{pedidoId}-{montoCents}-{indiceDebito}`)
+     * y delega a `PagoPedidosController::persistirPosImborrable` para grabar el
+     * pago_pedidos imborrable=1.
+     *
+     * Best-effort: nunca tira excepción. Si no logra parsear o persistir, loguea
+     * un warning y devuelve un array con `estado=false`. El response al cajero
+     * sigue saliendo OK porque el cobro REAL en la tarjeta ya pasó.
      */
-    public function registrarPosRechazado(Request $request)
+    private function persistirPosImborrableDesdeNumeroOrden(?string $numeroOrden, array $posData, int $montoCentsFallback): array
     {
         try {
-            \App\Models\PosOperacionRechazada::create([
-                'message' => $request->input('message'),
-                'reference' => $request->input('reference'),
-                'ordernumber' => $request->input('ordernumber'),
-                'sequence' => $request->input('sequence'),
-                'approval' => $request->input('approval'),
-                'lote' => $request->input('lote'),
-                'responsecode' => $request->input('responsecode'),
-                'datetime' => $request->input('datetime'),
-                'amount' => $request->input('amount'),
-                'commerce' => $request->input('commerce'),
-                'cardtype' => $request->input('cardtype'),
-                'authid' => $request->input('authid'),
-                'cardNumber' => $request->input('cardNumber'),
-                'cardholderid' => $request->input('cardholderid'),
-                'idmerchant' => $request->input('idmerchant'),
-                'terminal' => $request->input('terminal'),
-                'bank' => $request->input('bank'),
-                'bankmessage' => $request->input('bankmessage'),
-                'tvr' => $request->input('tvr'),
-                'arqc' => $request->input('arqc'),
-                'tsi' => $request->input('tsi'),
-                'na' => $request->input('na'),
-                'aid' => $request->input('aid'),
-                'json_response' => $request->input('json_response'),
-                'id_pedido' => $request->input('id_pedido'),
-                'id_usuario' => session('id_usuario'),
-                'id_sucursal' => session('sucursal')
-            ]);
+            if (!$numeroOrden) {
+                return ['estado' => false, 'msj' => 'numeroOrden vacío'];
+            }
+            // numeroOrden = "{codigoSucursal}-{nombreUsuario}-{pedidoId}-{montoCents}-{indiceDebito}"
+            // Tomamos el tercero desde el final para ser robustos a usuarios con `-` en el nombre.
+            $partes = explode('-', $numeroOrden);
+            $n = count($partes);
+            $idPedido = null;
+            if ($n >= 5 && ctype_digit((string) $partes[$n - 3])) {
+                $idPedido = (int) $partes[$n - 3];
+            } elseif (isset($partes[2]) && ctype_digit((string) $partes[2])) {
+                // Fallback al layout canónico
+                $idPedido = (int) $partes[2];
+            }
+            if (!$idPedido) {
+                \Log::warning('[POS] No se pudo extraer id_pedido del numeroOrden', ['numeroOrden' => $numeroOrden]);
+                return ['estado' => false, 'msj' => 'id_pedido no extraíble'];
+            }
 
-            return response()->json([
-                'estado' => true,
-                'msj' => 'Operación rechazada registrada correctamente'
+            // Referencia: últimos 4 dígitos del `reference` o `approval`. Es el contrato del resto del sistema.
+            $posReferenceRaw = (string) ($posData['reference'] ?? $posData['approval'] ?? '');
+            $soloDigitos = preg_replace('/\D/', '', $posReferenceRaw);
+            $ult4 = substr($soloDigitos, -4);
+            $referencia = str_pad($ult4, 4, '0', STR_PAD_LEFT);
+            if (strlen($referencia) !== 4) {
+                \Log::warning('[POS] Referencia POS inválida', ['numeroOrden' => $numeroOrden, 'reference' => $posReferenceRaw]);
+                return ['estado' => false, 'msj' => 'referencia inválida'];
+            }
+
+            // Monto en Bs: el POS reporta el amount en centavos (1100 = Bs 11.00). Usa fallback si no vino.
+            $amountField = $posData['amount'] ?? null;
+            $montoCents = is_numeric($amountField) ? (int) $amountField : $montoCentsFallback;
+            if ($montoCents <= 0) {
+                \Log::warning('[POS] monto inválido para persistir imborrable', ['numeroOrden' => $numeroOrden, 'amount' => $amountField]);
+                return ['estado' => false, 'msj' => 'monto inválido'];
+            }
+            $montoBs = $montoCents / 100.0;
+
+            return \App\Http\Controllers\PagoPedidosController::persistirPosImborrable($idPedido, $montoBs, $referencia, $posData);
+        } catch (\Throwable $e) {
+            \Log::warning('[POS] Excepción al persistir imborrable desde numeroOrden', [
+                'numeroOrden' => $numeroOrden,
+                'error' => $e->getMessage(),
             ]);
-        } catch (\Exception $e) {
-            \Log::error('Error al registrar POS rechazado: ' . $e->getMessage());
-            return response()->json([
-                'estado' => false,
-                'msj' => 'Error al registrar operación rechazada'
-            ], 500);
+            return ['estado' => false, 'msj' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * POS RECHAZO 2026-05-27 — Persistir un rechazo del POS en `pos_operaciones_rechazadas`.
+     * Helper privado: se llama desde `enviarTransaccionPOS` cuando el POS físico responde
+     * `success=false`. Antes había un endpoint público `/registrarPosRechazado` que el front
+     * llamaba en un segundo round-trip; lo unificamos para reducir latencia y duplicación.
+     *
+     * Never-throw: si la inserción falla, loguea y sigue. El flujo principal del POS no
+     * puede tumbarse porque el log de rechazo no se pudo escribir.
+     */
+    private function registrarPosRechazadoInterno(array $posErrorBody, ?string $numeroOrden): void
+    {
+        try {
+            // Extraer id_pedido del numeroOrden (mismo parser que usamos en imborrable)
+            $idPedido = null;
+            if ($numeroOrden) {
+                $partes = explode('-', $numeroOrden);
+                $n = count($partes);
+                if ($n >= 5 && ctype_digit((string) $partes[$n - 3])) {
+                    $idPedido = (int) $partes[$n - 3];
+                } elseif (isset($partes[2]) && ctype_digit((string) $partes[2])) {
+                    $idPedido = (int) $partes[2];
+                }
+            }
+
+            \App\Models\PosOperacionRechazada::create([
+                'message'       => $posErrorBody['message']      ?? null,
+                'reference'     => $posErrorBody['reference']    ?? null,
+                'ordernumber'   => $posErrorBody['ordernumber']  ?? $numeroOrden,
+                'sequence'      => $posErrorBody['sequence']     ?? null,
+                'approval'      => $posErrorBody['approval']     ?? null,
+                'lote'          => $posErrorBody['lote']         ?? null,
+                'responsecode'  => $posErrorBody['responsecode'] ?? null,
+                'datetime'      => $posErrorBody['datetime']     ?? null,
+                'amount'        => $posErrorBody['amount']       ?? null,
+                'commerce'      => $posErrorBody['commerce']     ?? null,
+                'cardtype'      => $posErrorBody['cardtype']     ?? null,
+                'authid'        => $posErrorBody['authid']       ?? null,
+                'cardNumber'    => $posErrorBody['cardNumber']   ?? null,
+                'cardholderid'  => $posErrorBody['cardholderid'] ?? null,
+                'idmerchant'    => $posErrorBody['idmerchant']   ?? null,
+                'terminal'      => $posErrorBody['terminal']     ?? null,
+                'bank'          => $posErrorBody['bank']         ?? null,
+                'bankmessage'   => $posErrorBody['bankmessage']  ?? null,
+                'tvr'           => $posErrorBody['tvr']          ?? null,
+                'arqc'          => $posErrorBody['arqc']         ?? null,
+                'tsi'           => $posErrorBody['tsi']          ?? null,
+                'na'            => $posErrorBody['na']           ?? null,
+                'aid'           => $posErrorBody['aid']          ?? null,
+                'json_response' => json_encode($posErrorBody),
+                'id_pedido'     => $idPedido,
+                'id_usuario'    => session('id_usuario'),
+                'id_sucursal'   => session('sucursal'),
+            ]);
+        } catch (\Throwable $e) {
+            \Log::warning('[POS] registrarPosRechazadoInterno fallo: ' . $e->getMessage(), [
+                'numeroOrden' => $numeroOrden,
+            ]);
         }
     }
 

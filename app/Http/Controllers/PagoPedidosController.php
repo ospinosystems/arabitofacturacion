@@ -20,7 +20,105 @@ use App\Http\Controllers\sendCentral;
 use Response;
 
 class PagoPedidosController extends Controller
-{   
+{
+    /**
+     * POS PINPAD 2026-05-27 — Persistir una transacción POS aprobada como pago_pedido
+     * con `imborrable=1`. Helper estático: se llama desde `sendCentral::enviarTransaccionPOS`
+     * en las dos rutas que devuelven success=true (POS directo + confirmación por central).
+     *
+     * Motivación: hasta ahora la transacción quedaba sólo en el state del front
+     * (debitos[].posData + transaccionesAprobadas). Si el cajero cerraba el navegador o
+     * se le caía la sesión, el cobro a la tarjeta del cliente ya estaba hecho pero no
+     * quedaba registro en backend → cuadre roto y reclamo del cliente.
+     *
+     * Idempotente por `referencia` + `id_pedido`: si la misma terminación de 4
+     * vuelve a llegar (doble respuesta del POS, retry, etc.), devuelve el id existente
+     * en vez de duplicar.
+     *
+     * Never-throw: si algo falla, loguea y devuelve `['estado' => false, 'msj' => ...]`.
+     * NUNCA tira excepción — su llamada está dentro del flujo crítico del cobro y no
+     * puede tumbar el response al cajero.
+     */
+    public static function persistirPosImborrable(int $idPedido, float $montoBs, string $referencia, array $posData): array
+    {
+        try {
+            if ($idPedido <= 0 || $montoBs <= 0 || $referencia === '') {
+                return ['estado' => false, 'msj' => 'Parámetros inválidos'];
+            }
+
+            $pedido = pedidos::find($idPedido);
+            if (!$pedido) {
+                return ['estado' => false, 'msj' => 'Pedido no encontrado'];
+            }
+            // No bloqueamos si el pedido ya fue facturado: el cobro POS sigue siendo real;
+            // solo no aplica imborrable porque setPagoPedido ya cerró. Lo loguea como warning.
+            if ((int) $pedido->estado === 1) {
+                \Log::warning('[POS] persistirPosImborrable: pedido ya facturado', [
+                    'id_pedido' => $idPedido,
+                    'referencia' => $referencia,
+                ]);
+                return ['estado' => false, 'msj' => 'Pedido ya facturado'];
+            }
+
+            // Idempotencia: si ya existe esta referencia en este pedido, devolverla.
+            $existente = pago_pedidos::where('id_pedido', $idPedido)
+                ->where('tipo', 2)
+                ->where('referencia', $referencia)
+                ->where('imborrable', 1)
+                ->first();
+            if ($existente) {
+                return [
+                    'estado' => true,
+                    'id_pago_pedido' => $existente->id,
+                    'duplicado' => true,
+                ];
+            }
+
+            // Tasa del pedido (histórica del primer item; consistente con setPagoPedido)
+            $primerItem = items_pedidos::where('id_pedido', $idPedido)->first();
+            $tasaDolar = $primerItem ? floatval($primerItem->tasa) : 1;
+            if ($tasaDolar <= 0) $tasaDolar = 1;
+            $montoUsd = $montoBs / $tasaDolar;
+
+            $amountRaw = isset($posData['amount']) ? trim((string) $posData['amount']) : '';
+            $amountClean = $amountRaw !== '' ? str_replace(',', '', $amountRaw) : '';
+            $posAmount = $amountClean !== '' && is_numeric($amountClean) ? (float) $amountClean : null;
+
+            $jsonRaw = $posData['json_response'] ?? null;
+            $posJsonResponse = is_array($jsonRaw) ? json_encode($jsonRaw) : ($jsonRaw ?? json_encode($posData));
+
+            $pago = pago_pedidos::create([
+                'id_pedido'        => $idPedido,
+                'tipo'             => 2, // débito
+                'cuenta'           => 1, // factura
+                'monto'            => $montoUsd,
+                'monto_original'   => $montoBs,
+                'moneda'           => 'bs',
+                'referencia'       => $referencia,
+                'pos_message'      => $posData['message'] ?? null,
+                'pos_lote'         => $posData['lote'] ?? null,
+                'pos_responsecode' => $posData['responsecode'] ?? null,
+                'pos_amount'       => $posAmount,
+                'pos_terminal'     => $posData['terminal'] ?? null,
+                'pos_json_response'=> $posJsonResponse,
+                'imborrable'       => 1,
+            ]);
+
+            return [
+                'estado' => true,
+                'id_pago_pedido' => $pago->id,
+                'duplicado' => false,
+            ];
+        } catch (\Throwable $e) {
+            \Log::error('[POS] persistirPosImborrable fallo', [
+                'id_pedido' => $idPedido,
+                'referencia' => $referencia,
+                'error' => $e->getMessage(),
+            ]);
+            return ['estado' => false, 'msj' => $e->getMessage()];
+        }
+    }
+
     public function setconfigcredito(Request $req)
     {
         try {
@@ -141,7 +239,13 @@ class PagoPedidosController extends Controller
             }
 
             // Pedido solo en front: crear pedido en BD, cargar items en lote (setCarrito por ítem) y continuar con el pago (salvo si ya venimos de id_tarea_aprobado)
-            if ($req->front_only && $req->items && is_array($req->items) && count($req->items) > 0 && !$req->id_tarea_aprobado) {
+            // SOBRANTE/REFUND 2026-05-27 — También se acepta crear pedido sin items cuando viene `is_devolucion_pura=true`
+            // (caso B/D: devolución de sobrante viejo donde solo se carga la transferencia negativa de refund).
+            $esDevolucionPura = $req->front_only && (
+                $req->is_devolucion_pura === true || $req->is_devolucion_pura === '1' || $req->is_devolucion_pura === 1
+            );
+            $hayItemsFrontOnly = $req->items && is_array($req->items) && count($req->items) > 0;
+            if ($req->front_only && ($hayItemsFrontOnly || $esDevolucionPura) && !$req->id_tarea_aprobado) {
                 // Bloquear duplicados: si ya existe un pedido con este UUID, reutilizarlo sin recrearlo
                 $pedido_ya_existia = false;
                 if ($req->uuid) {
@@ -210,7 +314,8 @@ class PagoPedidosController extends Controller
                         return $personaResp;
                     }
                     $invCtrl = new InventarioController();
-                    foreach ($req->items as $item) {
+                    // SOBRANTE/REFUND 2026-05-27 — items puede venir vacío en devolución pura; el foreach queda no-op
+                    foreach (($req->items ?: []) as $item) {
                         $id_producto = (int) ($item['id'] ?? 0);
                         $cantidad = (float) ($item['cantidad'] ?? 1);
                         if ($id_producto <= 0) {
@@ -241,7 +346,8 @@ class PagoPedidosController extends Controller
                         }
                     }
                     // Aplicar descuentos por ítem antes de validar montos (por id_producto por si hay updateOrCreate que une líneas)
-                    foreach ($req->items as $item) {
+                    // SOBRANTE/REFUND 2026-05-27 — items puede venir vacío en devolución pura; el foreach queda no-op
+                    foreach (($req->items ?: []) as $item) {
                         $id_producto = (int) ($item['id'] ?? 0);
                         if ($id_producto <= 0) {
                             continue;
@@ -305,18 +411,26 @@ class PagoPedidosController extends Controller
             } DESABILITADO PARA PERMITIR DEVOLUCIONES CUYO BALANCE SEA CERO*/ 
 
             // VALIDACION "Error: No se pueden mezclar métodos de pago positivos y negativos en la misma transacción"
+            // SOBRANTE/REFUND 2026-05-27 — Se permite mezcla SOLO si los métodos negativos son únicamente Transferencia
+            // (refunds/devoluciones siempre por transferencia negativa). Habilita caso A: débito +X + transfer -Y.
             if (count($metodos_pago) > 1) {
                 $montos = array_column($metodos_pago, 'monto');
                 $tienePositivos = count(array_filter($montos, function($monto) { return $monto > 0; })) > 0;
                 $tieneNegativos = count(array_filter($montos, function($monto) { return $monto < 0; })) > 0;
 
-                
+
                 if ($tienePositivos && $tieneNegativos) {
-                    \DB::rollback();
-                    return Response::json([
-                        "msj" => "Error: No se pueden mezclar métodos de pago positivos y negativos en la misma transacción",
-                        "estado" => false
-                    ]);
+                    // Permitido si los negativos son SOLO Transferencia (devolución/refund por transferencia)
+                    $negativosNoTransfer = array_filter($metodos_pago, function($m) {
+                        return floatval($m['monto']) < 0 && $m['tipo'] !== 'transferencia';
+                    });
+                    if (!empty($negativosNoTransfer)) {
+                        \DB::rollback();
+                        return Response::json([
+                            "msj" => "Error: Solo Transferencia puede tener monto negativo (devolución/refund). Los demás métodos son siempre positivos.",
+                            "estado" => false
+                        ]);
+                    }
                 }
             }
 
@@ -333,7 +447,16 @@ class PagoPedidosController extends Controller
             $ped = (new PedidosController)->getPedido($req);
 
             // VALIDACION "Error: El pedido no tiene items, no se puede procesar el pago"
-            if (!isset($ped->items) || $ped->items->count()==0) {
+            // SOBRANTE/REFUND 2026-05-27 — Excepción: pedidos marcados como devolución pura (caso B/D: refund de
+            // sobrante viejo sin venta asociada hoy). Llevan clean_total negativo y la justificación va en la
+            // descripción de la ref bancaria saliente, no en items.
+            $noTieneItems = !isset($ped->items) || $ped->items->count() == 0;
+            $esDevolucionPuraReq = (
+                $req->is_devolucion_pura === true ||
+                $req->is_devolucion_pura === '1' ||
+                $req->is_devolucion_pura === 1
+            );
+            if ($noTieneItems && !$esDevolucionPuraReq) {
                 \DB::rollback();
                 return Response::json([
                     "msj" => "Error: El pedido no tiene items, no se puede procesar el pago",
@@ -375,12 +498,18 @@ class PagoPedidosController extends Controller
             } 
 
 
-            // Pedidos front_only: usar total que envía el front para validar (evita diferencias por precio/tasa/retención)
-            $total_real = ($req->front_only && $req->has('total_pedido_usd') && $req->total_pedido_usd !== '' && $req->total_pedido_usd !== null)
+            // Pedidos front_only: usar total que envía el front para validar (evita diferencias por precio/tasa/retención).
+            // SOBRANTE/REFUND 2026-05-27 — también para devolución pura en pedidos BACKEND sin items:
+            // ahí no hay clean_total derivado de items, el front envía el neto de métodos como total.
+            $usarTotalDelFront = ($req->has('total_pedido_usd') && $req->total_pedido_usd !== '' && $req->total_pedido_usd !== null)
+                && ($req->front_only || $esDevolucionPuraReq);
+            $total_real = $usarTotalDelFront
                 ? (float) $req->total_pedido_usd
                 : $ped->clean_total;
             
-            // Obtener tasas del primer ítem del pedido (tasa histórica al momento de facturar)
+            // Obtener tasas del primer ítem del pedido (tasa histórica al momento de facturar).
+            // PERF 2026-05-27 — esta consulta se hacía dos veces (acá y en línea ~684). Guardamos
+            // el resultado para reusarlo más abajo.
             $primerItem = items_pedidos::where("id_pedido", $req->id)->first();
             $tasaDolar = $primerItem ? floatval($primerItem->tasa) : 1;
             $tasaPeso = $primerItem ? floatval($primerItem->tasa_cop) : 1;
@@ -466,10 +595,25 @@ class PagoPedidosController extends Controller
                 || (abs(round($total_real, 2) - round($total_ins, 2)) <= $toleranciaMontosUsd);
         
             if ($montosCoinciden) {
+                // DESCUENTO 2026-05-27 — UNA solicitud única a central que cubre lo numérico Y el
+                // método de pago, INDEPENDIENTEMENTE del método (efectivo, transfer, débito, biopago).
+                // Antes había 2 solicitudes (1 monto_porcentaje al pedir descuento + 1 metodo_pago al
+                // facturar para transfer/débito/biopago; efectivo evitaba la 2da). Ahora se unifica.
+                $resultadoSolicitudDescuento = $this->verificarOCrearSolicitudDescuentoUnificada(
+                    $req->id,
+                    $metodos_pago,
+                    $req->front_only ? ($req->uuid ?? null) : null,
+                    $ped
+                );
+                if ($resultadoSolicitudDescuento !== true) {
+                    \DB::rollback();
+                    return $resultadoSolicitudDescuento;
+                }
+
                 // 1 Transferencia
-                // 2 Debito 
-                // 3 Efectivo 
-                // 4 Credito  
+                // 2 Debito
+                // 3 Efectivo
+                // 4 Credito
                 // 5 Biopago
                 // 6 vuelto
                 try {
@@ -479,7 +623,13 @@ class PagoPedidosController extends Controller
                         return $checkPedidoPago;
                     }
                     // Validación de transferencias
-                    if ($req->transferencia) {
+                    // SOBRANTE/REFUND 2026-05-27 — también entrar al bloque cuando hay refs (en payload o ya
+                    // persistidas en BD) aunque `transferencia` sea 0. Caso "entrante = egreso" (refund puro
+                    // con +X y -X que netean a 0). En pedidos backend las refs ya están en BD desde el modal;
+                    // en front-only viajan en el payload.
+                    $tieneRefsEnPayload = $req->referencias && is_array($req->referencias) && count($req->referencias) > 0;
+                    $tieneRefsEnDB = pagos_referencias::where("id_pedido", $req->id)->exists();
+                    if ($req->transferencia || $tieneRefsEnPayload || $tieneRefsEnDB) {
                         // Pedido front_only: crear referencias en BD desde el request (el front las guardó por uuid y las envía aquí)
                         if ($req->front_only && $req->referencias && is_array($req->referencias) && count($req->referencias) > 0) {
                             foreach ($req->referencias as $refData) {
@@ -536,26 +686,19 @@ class PagoPedidosController extends Controller
                         // Calcular diferencia con precisión de 6 decimales para mayor precisión
                         $diff = round($monto_tra - $montodolares, 6);
                         $tolerancia = 0.05; // Tolerancia de 5 centavos para casos de redondeo
-                        
-                        // Log para debugging
-                        \Log::info("Validación transferencia - Pedido: {$req->id}", [
-                            'monto_transferencia' => $monto_tra,
-                            'monto_referencias_dolares' => $montodolares,
-                            'diferencia' => $diff,
-                            'tolerancia' => $tolerancia,
-                            'referencias_count' => $referencias->count(),
-                            'diferencia_absoluta' => abs($diff)
-                        ]);
-                        
-                        // Validar que la diferencia esté dentro de la tolerancia
+
+                        // PERF 2026-05-27 — antes Log::info corría para CADA pedido exitoso (incluyendo
+                        // el "Transferencia validada correctamente" al final). En sucursales con miles
+                        // de transacciones/día eso es escritura de archivo en serie. Solo logueamos
+                        // cuando falla la validación; el path feliz queda silencioso.
                         if (abs($diff) > $tolerancia) {
-                            // Log adicional para casos que fallan
                             \Log::warning("Validación transferencia falló - Pedido: {$req->id}", [
                                 'monto_transferencia' => $monto_tra,
                                 'monto_referencias_dolares' => $montodolares,
                                 'diferencia' => $diff,
                                 'diferencia_absoluta' => abs($diff),
-                                'tolerancia' => $tolerancia
+                                'tolerancia' => $tolerancia,
+                                'referencias_count' => $referencias->count(),
                             ]);
                             $monto_tra = moneda($monto_tra);
                             $montodolares = moneda($montodolares);
@@ -567,12 +710,11 @@ class PagoPedidosController extends Controller
                                 1
                             );
                         }
-                        
-                        \Log::info("Transferencia validada correctamente - Pedido: {$req->id}");
-                        
+
                     } else {
-                        // Si no es transferencia, verificar que no haya referencias cargadas
-                        $check_ref = pagos_referencias::where("id_pedido", $req->id)->first();
+                        // Si no es transferencia, verificar que no haya referencias cargadas.
+                        // PERF — exists() en vez de first() (no hidrata el modelo, solo SELECT 1).
+                        $check_ref = pagos_referencias::where("id_pedido", $req->id)->exists();
                         if ($check_ref) {
                             throw new \Exception("Error: Tiene referencias de pago cargadas pero no está procesando una transferencia. " .
                                             "Debe seleccionar 'Transferencia' como método de pago.", 1);
@@ -581,14 +723,21 @@ class PagoPedidosController extends Controller
 
 
                     $cuenta = 1;
-                    $checkIfAbono = items_pedidos::where("id_producto",NULL)->where("id_pedido",$req->id)->get()->count();
+                    // PERF — count() directo en vez de get()->count() (no carga colección)
+                    $checkIfAbono = items_pedidos::where("id_producto", null)->where("id_pedido", $req->id)->count();
                     if ($checkIfAbono && !$req->credito) {
                         //Es Abono
                         $cuenta = 0;
                     }else{
                         //No es abono
                     }
-                    pago_pedidos::where("id_pedido",$req->id)->delete();
+                    // POS PINPAD 2026-05-27 — NO borrar filas imborrable=1: son transacciones POS ya
+                    // cobradas a la tarjeta del cliente (registradas vía /registrarPagoPosPinpad apenas
+                    // Megasoft aprobó). Si las borramos, el cobro real queda huérfano. Solo limpiamos
+                    // las filas regulares que setPagoPedido va a re-insertar a partir del payload.
+                    pago_pedidos::where("id_pedido", $req->id)
+                        ->where("imborrable", 0)
+                        ->delete();
                     if($req->transferencia) {
                         // Validar descuentos antes de procesar transferencia
                         
@@ -645,24 +794,40 @@ class PagoPedidosController extends Controller
                         } */
 
                     }
-                    // Obtener tasas del pedido (del primer item)
-                    $itemPedido = \App\Models\items_pedidos::where('id_pedido', $req->id)->first();
-                    $tasaDolar = $itemPedido ? floatval($itemPedido->tasa) : 1;
-                    $tasaPeso = $itemPedido ? floatval($itemPedido->tasa_cop) : 1;
+                    // PERF 2026-05-27 — antes acá había otro `items_pedidos::where(...)->first()`
+                    // idéntico al de la línea ~413. Reusamos `$primerItem` que ya está en scope
+                    // (vale tanto para front-only como para pedidos normales porque no cambia
+                    // entre la creación de items y este punto).
+                    // $tasaDolar y $tasaPeso ya están seteados desde el bloque inicial.
                     
-                    // Asegurar tasas válidas
-                    if ($tasaDolar <= 0) $tasaDolar = 1;
-                    if ($tasaPeso <= 0) $tasaPeso = 1;
-                    
-                    // Procesar débitos (array)
-                    if($req->debitos && is_array($req->debitos)) {
+                    // Procesar débitos (array).
+                    // PERF 2026-05-27 — antes era N inserts (uno por débito). Ahora validamos
+                    // primero todo y, si está OK, hacemos un solo `insert(...)` en bulk.
+                    // Costo: 1 round-trip a MySQL en vez de N.
+                    //
+                    // POS PINPAD 2026-05-27 — si una tarjeta ya tiene su pago_pedido imborrable=1
+                    // (fue persistido por /registrarPagoPosPinpad apenas Megasoft aprobó), NO la
+                    // re-insertamos. Sumamos su monto al total para validar contra `total_real`
+                    // pero la fila ya existe en BD y es la versión autoritativa.
+                    if ($req->debitos && is_array($req->debitos)) {
                         $totalDebitoUSD = 0;
-                        
-                        foreach($req->debitos as $index => $debitoItem) {
+                        $debitosBulk = [];
+                        $ahora = now();
+
+                        // Cargar referencias ya persistidas imborrable=1 para este pedido
+                        $refsImborrables = pago_pedidos::where('id_pedido', $req->id)
+                            ->where('tipo', 2)
+                            ->where('imborrable', 1)
+                            ->pluck('referencia')
+                            ->map(fn ($r) => (string) $r)
+                            ->all();
+                        $refsImborrablesSet = array_flip($refsImborrables);
+
+                        foreach ($req->debitos as $index => $debitoItem) {
                             $montoOriginalBs = floatval($debitoItem['monto']);
                             $montoDebito = $montoOriginalBs / $tasaDolar;
                             $referencia = $debitoItem['referencia'] ?? null;
-                            
+
                             if ($montoOriginalBs > 0 && !$referencia) {
                                 \DB::rollback();
                                 return Response::json([
@@ -670,7 +835,7 @@ class PagoPedidosController extends Controller
                                     "estado" => false
                                 ]);
                             }
-                            
+
                             if ($montoOriginalBs > 0 && strlen($referencia) !== 4) {
                                 \DB::rollback();
                                 return Response::json([
@@ -678,34 +843,45 @@ class PagoPedidosController extends Controller
                                     "estado" => false
                                 ]);
                             }
-                            
+
                             $totalDebitoUSD += $montoDebito;
-                            
-                            $datosPagoDebito = [
-                                "id_pedido" => $req->id,
-                                "tipo" => 2,
-                                "cuenta" => $cuenta,
-                                "monto" => $montoDebito,
+
+                            // Skip si ya existe la fila imborrable (POS la persistió al aprobar)
+                            if (isset($refsImborrablesSet[(string) $referencia])) {
+                                continue;
+                            }
+
+                            $fila = [
+                                "id_pedido"      => $req->id,
+                                "tipo"           => 2,
+                                "cuenta"         => $cuenta,
+                                "monto"          => $montoDebito,
                                 "monto_original" => $montoOriginalBs,
-                                "moneda" => "bs",
-                                "referencia" => $referencia
+                                "moneda"         => "bs",
+                                "referencia"     => $referencia,
+                                "created_at"     => $ahora,
+                                "updated_at"     => $ahora,
                             ];
-                            
+
                             if (isset($debitoItem['posData']) && is_array($debitoItem['posData'])) {
                                 $posData = $debitoItem['posData'];
-                                $datosPagoDebito["pos_message"] = $posData['message'] ?? null;
-                                $datosPagoDebito["pos_lote"] = $posData['lote'] ?? null;
-                                $datosPagoDebito["pos_responsecode"] = $posData['responsecode'] ?? null;
-                                $amountRaw = isset($posData['amount']) ? trim((string) $posData['amount']) : '';
+                                $fila["pos_message"]      = $posData['message'] ?? null;
+                                $fila["pos_lote"]         = $posData['lote'] ?? null;
+                                $fila["pos_responsecode"] = $posData['responsecode'] ?? null;
+                                $amountRaw   = isset($posData['amount']) ? trim((string) $posData['amount']) : '';
                                 $amountClean = $amountRaw !== '' ? str_replace(',', '', $amountRaw) : '';
-                                $datosPagoDebito["pos_amount"] = $amountClean !== '' && is_numeric($amountClean) ? (float) $amountClean : null;
-                                $datosPagoDebito["pos_terminal"] = $posData['terminal'] ?? null;
-                                $datosPagoDebito["pos_json_response"] = $posData['json_response'] ?? null;
+                                $fila["pos_amount"]        = $amountClean !== '' && is_numeric($amountClean) ? (float) $amountClean : null;
+                                $fila["pos_terminal"]      = $posData['terminal'] ?? null;
+                                $fila["pos_json_response"] = $posData['json_response'] ?? null;
                             }
-                            
-                            pago_pedidos::create($datosPagoDebito);
+
+                            $debitosBulk[] = $fila;
                         }
-                        
+
+                        if (count($debitosBulk) > 0) {
+                            pago_pedidos::insert($debitosBulk);
+                        }
+
                         if ($totalDebitoUSD > 0) {
                             $resultadoValidacion = $this->validarDescuentosPorMetodoPago($req->id, $totalDebitoUSD, $metodos_pago, $cuenta, 2, $req->front_only ? ($req->uuid ?? null) : null);
                             if ($resultadoValidacion !== true) {
@@ -830,11 +1006,23 @@ class PagoPedidosController extends Controller
                         $soloDebito = $tieneDebito && !floatval($req->efectivo ?? 0) && !floatval($req->transferencia ?? 0);
 
                         if ($isFullFiscal || $soloDebito) {
-                            try {
-                                (new tickera)->sendReciboFiscalFun($idPedidoProcesado);
-                            } catch (\Exception $e) {
-                                \Log::error('Error al enviar recibo fiscal: ' . $e->getMessage());
-                            }
+                            // PERF 2026-05-27 — sendReciboFiscalFun habla con la impresora fiscal vía COM
+                            // y tarda fácil 1-3 s. La envoltura ya era best-effort (try/catch + log), así que
+                            // la diferimos a `register_shutdown_function`: la respuesta JSON sale al cajero
+                            // y el recibo se dispara cuando PHP-FPM (o el SAPI equivalente) hace shutdown.
+                            register_shutdown_function(function () use ($idPedidoProcesado) {
+                                if (function_exists('fastcgi_finish_request')) {
+                                    @fastcgi_finish_request();
+                                } else {
+                                    @ob_end_flush();
+                                    @flush();
+                                }
+                                try {
+                                    (new tickera)->sendReciboFiscalFun($idPedidoProcesado);
+                                } catch (\Throwable $e) {
+                                    \Log::error('Error al enviar recibo fiscal (deferred): ' . $e->getMessage());
+                                }
+                            });
                         }
                     }
 
@@ -1523,6 +1711,149 @@ class PagoPedidosController extends Controller
      * @param string|null $uuid_pedido_front UUID del pedido front (solo cuando front_only); si se pasa, se verifica por UUID y no se crea solicitud
      * @return mixed true si la validación es exitosa, Response::json si hay error
      */
+    /**
+     * DESCUENTO 2026-05-27 — Verifica/crea UNA solicitud única de descuento en central que cubre
+     * lo numérico Y el método de pago, INDEPENDIENTEMENTE del método (efectivo, transfer, débito,
+     * biopago, etc.). Se llama UNA sola vez al inicio de setPagoPedido. Reemplaza el flujo viejo
+     * de 2 solicitudes (monto_porcentaje + metodo_pago) por una única `metodo_pago`.
+     *
+     * Retorna:
+     *   true               → no hay descuento, o ya está aprobado, o no hay items con descuento
+     *   Response (JSON)    → cliente faltante, solicitud pendiente/rechazada, o nueva enviada
+     */
+    private function verificarOCrearSolicitudDescuentoUnificada($id_pedido, $metodos_pago, $uuid_pedido_front = null, $ped = null)
+    {
+        $items_pedido = items_pedidos::with('producto')->where('id_pedido', $id_pedido)->get();
+        $items_con_descuento = $items_pedido->where('descuento', '>', 0);
+
+        if ($items_con_descuento->count() === 0) {
+            return true;
+        }
+
+        $pedido = $ped ?: pedidos::with('cliente')->find($id_pedido);
+        if (!$pedido || $pedido->id_cliente == 1) {
+            return Response::json([
+                "msj" => "Error: Debe registrar un cliente para aplicar descuentos",
+                "estado" => false,
+            ]);
+        }
+
+        // Pedido front-only: la solicitud ya se creó desde la vista al guardar (flujo viejo);
+        // acá sólo verificamos el estado.
+        if ($uuid_pedido_front !== null && $uuid_pedido_front !== '') {
+            $solicitudExistente = (new sendCentral)->verificarSolicitudDescuentoFront([
+                'id_sucursal'       => (new sendCentral)->getOrigen(),
+                'uuid_pedido_front' => $uuid_pedido_front,
+                'tipo_descuento'    => 'metodo_pago',
+            ]);
+            if (!$solicitudExistente || !isset($solicitudExistente['existe']) || !$solicitudExistente['existe']) {
+                return Response::json([
+                    "msj"    => "Debe solicitar el descuento por método de pago desde la vista antes de pagar",
+                    "estado" => false,
+                ]);
+            }
+            $estado = $solicitudExistente['data']['estado'] ?? null;
+            if ($estado === 'aprobado') return true;
+            if ($estado === 'enviado') {
+                return Response::json([
+                    "msj"    => "La solicitud de descuento está en espera de aprobación",
+                    "estado" => false,
+                    "solicitud_descuento_pendiente" => true,
+                ]);
+            }
+            if ($estado === 'rechazado') {
+                return Response::json([
+                    "msj"    => "La solicitud de descuento fue rechazada",
+                    "estado" => false,
+                ]);
+            }
+            return Response::json([
+                "msj"    => "Estado de solicitud no reconocido",
+                "estado" => false,
+            ]);
+        }
+
+        // Pedido backend: verificar solicitud existente
+        $solicitudExistente = (new sendCentral)->verificarSolicitudDescuento([
+            'id_sucursal'    => (new sendCentral)->getOrigen(),
+            'id_pedido'      => $id_pedido,
+            'tipo_descuento' => 'metodo_pago',
+        ]);
+
+        if ($solicitudExistente && isset($solicitudExistente['existe']) && $solicitudExistente['existe']) {
+            $estado = $solicitudExistente['data']['estado'] ?? null;
+            if ($estado === 'aprobado') return true;
+            if ($estado === 'enviado') {
+                return Response::json([
+                    "msj"    => "La solicitud de descuento está en espera de aprobación",
+                    "estado" => false,
+                    "solicitud_descuento_pendiente" => true,
+                ]);
+            }
+            if ($estado === 'rechazado') {
+                return Response::json([
+                    "msj"    => "La solicitud de descuento fue rechazada",
+                    "estado" => false,
+                ]);
+            }
+        }
+
+        // No existe → crear nueva solicitud unificada
+        $monto_bruto = 0;
+        $monto_descuento_real = 0;
+        $ids_productos = $items_pedido->map(function ($item) use (&$monto_bruto, &$monto_descuento_real) {
+            $precio   = $item->producto ? $item->producto->precio : 0;
+            $subtotal = $item->cantidad * $precio;
+            $desc     = $subtotal * (($item->descuento ?? 0) / 100);
+            $monto_bruto          += $subtotal;
+            $monto_descuento_real += $desc;
+            return [
+                'id_producto'             => $item->id_producto,
+                'cantidad'                => $item->cantidad,
+                'precio'                  => $precio,
+                'precio_base'             => $item->producto ? $item->producto->precio_base : 0,
+                'subtotal'                => $subtotal,
+                'subtotal_con_descuento'  => $subtotal - $desc,
+                'porcentaje_descuento'    => $item->descuento ?? 0,
+            ];
+        })->toArray();
+
+        $porcentaje_descuento = $monto_bruto > 0 ? ($monto_descuento_real / $monto_bruto) * 100 : 0;
+
+        $resultado = (new sendCentral)->crearSolicitudDescuento([
+            'id_sucursal'         => (new sendCentral)->getOrigen(),
+            'id_pedido'           => $id_pedido,
+            'fecha'               => now(),
+            'monto_bruto'         => $monto_bruto,
+            'monto_con_descuento' => $monto_bruto - $monto_descuento_real,
+            'monto_descuento'     => $monto_descuento_real,
+            'porcentaje_descuento'=> $porcentaje_descuento,
+            'id_cliente'          => $pedido->id_cliente,
+            'usuario_ensucursal'  => session('usuario'),
+            'metodos_pago'        => $metodos_pago,
+            'ids_productos'       => $ids_productos,
+            'tipo_descuento'      => 'metodo_pago',
+            'observaciones'       => "Solicitud unificada de descuento ({$porcentaje_descuento}%) con método de pago",
+        ]);
+
+        if ($resultado && isset($resultado['estado']) && $resultado['estado']) {
+            return Response::json([
+                "msj"    => "Solicitud de descuento enviada a central para aprobación",
+                "estado" => false,
+                "solicitud_descuento_pendiente" => true,
+            ]);
+        }
+
+        \Log::warning('[verificarOCrearSolicitudDescuentoUnificada] crearSolicitudDescuento sin estado true', [
+            'id_pedido' => $id_pedido,
+            'resultado' => $resultado,
+        ]);
+        return Response::json([
+            "msj"    => "Error al enviar solicitud de descuento a central",
+            "estado" => false,
+        ]);
+    }
+
     private function validarDescuentosPorMetodoPago($id_pedido, $monto_pago, $metodos_pago, $cuenta, $tipo_pago = 3, $uuid_pedido_front = null)
     {
         // Si es una devolución (monto negativo), no aplicar validación de descuentos

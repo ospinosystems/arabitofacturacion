@@ -191,39 +191,69 @@ class PedidosController extends Controller
 
     public function getPedidosFast(Request $req)
     {
+        // PERF 2026-05-27 — endpoint super-caliente. Tres optimizaciones:
+        //  1) comovamos:send (cada 30 min) se difiere a register_shutdown_function +
+        //     fastcgi_finish_request: la respuesta sale a la red antes del trabajo pesado.
+        //  2) Response cache 2 segundos, invalidado por version-stamp que el modelo
+        //     pedidos bumpea en saved/deleted (booted en App\Models\pedidos).
+        //  3) Cache-Control para que el browser reuse la última respuesta dentro del
+        //     mismo ciclo si dispara dos calls casi simultáneos.
 
+        $this->scheduleComovamosCheck();
+
+        $fecha    = $req->fecha1pedido ?? $this->today();
+        $vendedor = is_array($req->vendedor) ? $req->vendedor : [];
+
+        $version   = \Cache::get('pedidos_fast_version', 0);
+        $vendorKey = count($vendedor) ? implode(',', array_map('intval', $vendedor)) : 'all';
+        $cacheKey  = "pedidos_fast:v{$version}:{$fecha}:{$vendorKey}";
+
+        $payload = \Cache::remember($cacheKey, 2, function () use ($fecha, $vendedor) {
+            $q = pedidos::query()
+                ->whereBetween("fecha_factura", ["$fecha 00:00:00", "$fecha 23:59:59"]);
+            if (count($vendedor)) {
+                $q->whereIn("id_vendedor", $vendedor);
+            }
+            return $q->orderBy("estado", "asc")
+                ->orderBy("id", "desc")
+                ->limit(6)
+                ->get(["id", "estado"]);
+        });
+
+        return response()->json($payload)
+            ->header('Cache-Control', 'private, max-age=2')
+            ->header('X-Cache-Key', $cacheKey);
+    }
+
+    /**
+     * Programa `comovamos:send` para que corra DESPUÉS de enviar la respuesta al cliente.
+     * Mantiene el throttle de 30 minutos vía cache. Si fastcgi_finish_request está disponible
+     * (PHP-FPM), libera el socket TCP al cajero antes del trabajo pesado; en otros SAPI
+     * (Apache mod_php, dev-server) corre en shutdown — el cajero igual ve la respuesta
+     * un instante antes porque output buffering ya fue flusheado.
+     */
+    private function scheduleComovamosCheck()
+    {
         $lastComovamos = cache('last_send_comovamos');
         $now = now();
-        if (!$lastComovamos || $now->diffInMinutes(\Carbon\Carbon::parse($lastComovamos)) >= 30) {
+        if ($lastComovamos && $now->diffInMinutes(\Carbon\Carbon::parse($lastComovamos)) < 30) {
+            return;
+        }
+        cache(['last_send_comovamos' => $now], 31 * 60);
+
+        register_shutdown_function(function () {
+            if (function_exists('fastcgi_finish_request')) {
+                @fastcgi_finish_request();
+            } else {
+                @ob_end_flush();
+                @flush();
+            }
             try {
                 \Artisan::call('comovamos:send');
-            } catch (\Exception $e) {
-                \Log::error("Error ejecutando sendComovamos: " . $e->getMessage());
+            } catch (\Throwable $e) {
+                \Log::error("Error ejecutando sendComovamos (deferred): " . $e->getMessage());
             }
-            cache(['last_send_comovamos' => $now], 31 * 60); // cache por 31 minutos
-        }
-
-        
-        $fecha = $req->fecha1pedido??$this->today();
-
-        if (isset($req->vendedor)) {
-            // code...
-            $vendedor = $req->vendedor;
-        } else {
-
-            $vendedor = [];
-        }
-
-        $ret = pedidos::whereBetween("fecha_factura", ["$fecha 00:00:00", "$fecha 23:59:59"]);
-
-        if (count($vendedor)) {
-            $ret->whereIn("id_vendedor", $vendedor);
-        }
-
-        return $ret->limit(6)
-            ->orderBy("estado", "asc")
-            ->orderBy("id", "desc")
-            ->get(["id", "estado"]);
+        });
     }
     public function get_moneda()
     {
@@ -1070,10 +1100,28 @@ class PedidosController extends Controller
     public function getPedidoFun($id_pedido, $filterMetodoPagoToggle = "todos", $cop = 1, $bs = 1, $factor = 1, $clean = false)
     {
         $id_pedido = (int) $id_pedido;
-        $cacheKey = 'pedido_procesado_' . $id_pedido . '_' . $cop . '_' . $bs . '_' . $factor . '_' . ($clean ? '1' : '0');
 
         // Solo cachear pedidos procesados (estado != 0) y recientes: consulta ligera
-        $row = pedidos::where('id', $id_pedido)->select('estado', 'created_at')->first();
+        $row = pedidos::where('id', $id_pedido)->select('estado', 'created_at', 'updated_at')->first();
+
+        // Firma de contenido de los ítems + pedido para que el caché se invalide solo
+        // al editar/agregar/eliminar ítems o cambiar el pedido. Sin esto, tras
+        // desexportar -> editar -> re-exportar se devolvían las cantidades viejas
+        // cacheadas (estado vuelve a != 0 y reutilizaba la misma clave).
+        // Se usa hash del contenido (no del timestamp) para detectar incluso ediciones
+        // hechas en el mismo segundo (p.ej. intercambiar cantidades entre dos ítems).
+        $firmaItems = items_pedidos::where('id_pedido', $id_pedido)
+            ->orderBy('id')
+            ->get(['id', 'cantidad', 'monto', 'descuento', 'precio_unitario', 'id_producto']);
+        $firma = md5(
+            $firmaItems->map(function ($i) {
+                return $i->id . ':' . $i->id_producto . ':' . $i->cantidad . ':' . $i->monto . ':' . $i->descuento . ':' . $i->precio_unitario;
+            })->implode('|')
+            . '#' . ($row->estado ?? '') . '#' . ($row && $row->updated_at ? $row->updated_at->timestamp : '0')
+        );
+
+        $cacheKey = 'pedido_procesado_' . $id_pedido . '_' . $cop . '_' . $bs . '_' . $factor . '_' . ($clean ? '1' : '0') . '_' . $firma;
+
         if ($row && (int) $row->estado !== 0) {
             $limiteReciente = now()->subDays(self::CACHE_PEDIDO_PROCESADO_DIAS_RECIENTES);
             if ($row->created_at && $row->created_at >= $limiteReciente) {
@@ -1091,7 +1139,10 @@ class PedidosController extends Controller
             'vendedor:id,usuario,tipo_usuario,nombre',
             'cliente:id,identificacion,nombre,direccion,telefono',
             'pagos' => function ($q) {
-                $q->select('id', 'tipo', 'monto', 'monto_original', 'moneda', 'referencia', 'cuenta', 'id_pedido')
+                // POS PINPAD 2026-05-27 — incluir imborrable + datos POS (pos_message/lote/terminal/responsecode)
+                // para que el frontend marque débitos POS-aprobados como bloqueado/verde tras refresh
+                // y reconstruya posData con la misma forma que el flujo live.
+                $q->select('id', 'tipo', 'monto', 'monto_original', 'moneda', 'referencia', 'cuenta', 'id_pedido', 'imborrable', 'pos_message', 'pos_lote', 'pos_terminal', 'pos_responsecode')
                   ->orderBy('tipo', 'desc');
             },
             'items' => function ($q) {

@@ -108,99 +108,32 @@ class ItemsPedidosController extends Controller
         try {
 
             $item = items_pedidos::find($req->index);
+            if (!$item) {
+                return Response::json(["msj"=>"Error: Ítem no encontrado","estado"=>false]);
+            }
 
             $descuento = floatval($req->descuento);
             if ($descuento > 0) {
-                // Verificar si existe cliente en el pedido (siempre que haya descuento)
+                // Verificar cliente (sigue siendo un requisito real; central exigirá id_cliente en la solicitud)
                 $pedido = pedidos::with('cliente')->find($item->id_pedido);
                 if (!$pedido || $pedido->id_cliente == 1) {
-                    return Response::json(["msj"=>"Error: Debe registrar un cliente para solicitar descuentos","estado"=>false]);
+                    return Response::json(["msj"=>"Error: Debe registrar un cliente para aplicar descuentos","estado"=>false]);
                 }
 
-                // Verificar si ya existe una solicitud para este pedido
-                $solicitudExistente = (new sendCentral)->verificarSolicitudDescuento([
-                    'id_sucursal' => (new sendCentral)->getOrigen(),
-                    'id_pedido' => $item->id_pedido,
-                    'tipo_descuento' => 'monto_porcentaje'
+                // UNIFICACIÓN 2026-05-27 — Antes acá se hacía un round-trip a central para crear o
+                // verificar una solicitud `monto_porcentaje`, y la aprobada por el admin era OTRA
+                // distinta de la que se enviaba al facturar (`metodo_pago`). Resultado: 2 solicitudes
+                // por pedido, 2 aprobaciones del admin.
+                //
+                // Ahora el descuento se guarda LOCALMENTE igual que en pedidos front-only. La única
+                // solicitud sale en `setPagoPedido` (tipo `metodo_pago`) ya con descuento + métodos
+                // de pago juntos. UNA solicitud por pedido, una aprobación.
+                $item->descuento = $descuento;
+                $item->save();
+                return Response::json([
+                    "msj" => "Descuento aplicado al ítem. Al guardar el pedido se enviará la solicitud a central junto con el método de pago.",
+                    "estado" => true
                 ]);
-
-                if ($solicitudExistente && isset($solicitudExistente['existe']) && $solicitudExistente['existe']) {
-                    if ($solicitudExistente['data']['estado'] === 'enviado') {
-                        return Response::json(["msj"=>"Ya existe una solicitud de descuento en espera de aprobación","estado"=>false]);
-                    } elseif ($solicitudExistente['data']['estado'] === 'aprobado') {
-                        // Validar que el porcentaje de descuento sea exactamente igual al aprobado
-                        $porcentaje_aprobado = floatval($solicitudExistente['data']['porcentaje_descuento']);
-                        if (abs($descuento - $porcentaje_aprobado) > 0.01) {
-                            return Response::json([
-                                "msj"=>"Error: El porcentaje de descuento ({$descuento}%) debe ser exactamente igual al aprobado ({$porcentaje_aprobado}%)",
-                                "estado"=>false
-                            ]);
-                        }
-                        // Continuar con el descuento aprobado
-                        $item->descuento = $descuento;
-                        $item->save();
-                        return Response::json(["msj"=>"¡Éxito! Descuento aplicado con aprobación previa","estado"=>true]);
-                    } elseif ($solicitudExistente['data']['estado'] === 'rechazado') {
-                        return Response::json(["msj"=>"La solicitud de descuento fue rechazada","estado"=>false]);
-                    }
-                }
-
-                // Crear nueva solicitud de descuento
-                $items_pedido = items_pedidos::with('producto')->where('id_pedido', $item->id_pedido)->get();
-                
-                // Calcular montos respetando descuentos individuales de cada producto
-                $monto_bruto = 0;
-                $monto_con_descuento = 0;
-                $monto_descuento_real = 0;
-
-                $ids_productos = $items_pedido->map(function($item_pedido) use ($item, $descuento, &$monto_bruto, &$monto_con_descuento, &$monto_descuento_real) {
-                    $subtotal_item = $item_pedido->cantidad * ($item_pedido->producto ? $item_pedido->producto->precio : 0);
-                    
-                    // Determinar el porcentaje a aplicar:
-                    // - Si es el producto que se está editando, usar el nuevo descuento
-                    // - Si no es el producto que se está editando, usar su descuento actual (puede ser 0)
-                    $porcentaje_a_aplicar = ($item_pedido->id === $item->id) ? $descuento : $item_pedido->descuento;
-                    $subtotal_con_descuento = $subtotal_item * (1 - ($porcentaje_a_aplicar / 100));
-                    
-                    // Acumular totales
-                    $monto_bruto += $subtotal_item;
-                    $monto_con_descuento += $subtotal_con_descuento;
-                    $monto_descuento_real += ($subtotal_item - $subtotal_con_descuento);
-                    
-                    return [
-                        'id_producto' => $item_pedido->id_producto,
-                        'cantidad' => $item_pedido->cantidad,
-                        'precio' => $item_pedido->producto ? $item_pedido->producto->precio : 0,
-                        'precio_base' => $item_pedido->producto ? $item_pedido->producto->precio_base : 0,
-                        'subtotal' => $subtotal_item,
-                        'subtotal_con_descuento' => $subtotal_con_descuento,
-                        'porcentaje_descuento' => $porcentaje_a_aplicar
-                    ];
-                })->toArray();
-
-                $resultado = (new sendCentral)->crearSolicitudDescuento([
-                    'id_sucursal' => (new sendCentral)->getOrigen(),
-                    'id_pedido' => $item->id_pedido,
-                    'fecha' => now(),
-                    'monto_bruto' => $monto_bruto,
-                    'monto_con_descuento' => $monto_con_descuento,
-                    'monto_descuento' => $monto_descuento_real,
-                    'porcentaje_descuento' => $descuento,
-                    'id_cliente' => $pedido->id_cliente,
-                    'usuario_ensucursal' => session('usuario'),
-                    'metodos_pago' => [],
-                    'ids_productos' => $ids_productos,
-                    'tipo_descuento' => 'monto_porcentaje',
-                    'observaciones' => "Solicitud de descuento unitario: {$descuento}%"
-                ]);
-
-                if ($resultado && isset($resultado['estado']) && $resultado['estado']) {
-                    return Response::json(["msj"=>"Solicitud de descuento enviada a central para aprobación","estado"=>false]);
-                } else {
-                    \Log::info("Error al enviar solicitud de descuento. setDescuentoUnitario",["resultado"=>$resultado]);
-                    return $resultado;
-                    return Response::json(["msj"=>"Error al enviar solicitud de descuento","estado"=>false]);
-                }
             }
             if ($descuento<0) {
                 return Response::json(["msj"=>"Error: No puede ser Negativo","estado"=>false]);
@@ -286,90 +219,20 @@ class ItemsPedidosController extends Controller
 
             $descuento = floatval($req->descuento);
             if ($descuento > 0) {
-                // Verificar si existe cliente en el pedido (siempre que haya descuento)
+                // Verificar cliente (sigue siendo un requisito real; central exigirá id_cliente en la solicitud)
                 $pedido = pedidos::with('cliente')->find($req->index);
                 if (!$pedido || $pedido->id_cliente == 1) {
-                    return Response::json(["msj"=>"Error: Debe registrar un cliente para solicitar descuentos","estado"=>false]);
+                    return Response::json(["msj"=>"Error: Debe registrar un cliente para aplicar descuentos","estado"=>false]);
                 }
 
-                // Verificar si ya existe una solicitud para este pedido
-                $solicitudExistente = (new sendCentral)->verificarSolicitudDescuento([
-                    'id_sucursal' => (new sendCentral)->getOrigen(),
-                    'id_pedido' => $req->index,
-                    'tipo_descuento' => 'monto_porcentaje'
+                // UNIFICACIÓN 2026-05-27 — Ver explicación completa en setDescuentoUnitario.
+                // Resumen: el descuento se guarda LOCALMENTE; la única solicitud sale en
+                // setPagoPedido (tipo `metodo_pago`) con descuento + métodos de pago juntos.
+                items_pedidos::where("id_pedido", $req->index)->update(["descuento" => $descuento]);
+                return Response::json([
+                    "msj" => "Descuento total aplicado. Al guardar el pedido se enviará la solicitud a central junto con el método de pago.",
+                    "estado" => true
                 ]);
-
-                if ($solicitudExistente && isset($solicitudExistente['existe']) && $solicitudExistente['existe']) {
-                    if ($solicitudExistente['data']['estado'] === 'enviado') {
-                        return Response::json(["msj"=>"Ya existe una solicitud de descuento en espera de aprobación","estado"=>false]);
-                    } elseif ($solicitudExistente['data']['estado'] === 'aprobado') {
-                        // Validar que el porcentaje de descuento sea exactamente igual al aprobado
-                        $porcentaje_aprobado = floatval($solicitudExistente['data']['porcentaje_descuento']);
-                        if (abs($descuento - $porcentaje_aprobado) > 0.01) {
-                            return Response::json([
-                                "msj"=>"Error: El porcentaje de descuento ({$descuento}%) debe ser exactamente igual al aprobado ({$porcentaje_aprobado}%)",
-                                "estado"=>false
-                            ]);
-                        }
-                        // Continuar con el descuento aprobado
-                        items_pedidos::where("id_pedido",$req->index)->update(["descuento"=>$descuento]);
-                        return Response::json(["msj"=>"¡Éxito! Descuento aplicado con aprobación previa","estado"=>true]);
-                    } elseif ($solicitudExistente['data']['estado'] === 'rechazado') {
-                        return Response::json(["msj"=>"La solicitud de descuento fue rechazada","estado"=>false]);
-                    }
-                }
-
-                // Crear nueva solicitud de descuento
-                $items_pedido = items_pedidos::with('producto')->where('id_pedido', $req->index)->get();
-                $monto_bruto = $items_pedido->sum('monto');
-                
-                // Calcular el descuento real item por item
-                $monto_descuento_real = 0;
-                foreach ($items_pedido as $item_pedido) {
-                    $subtotal_item = $item_pedido->cantidad * ($item_pedido->producto ? $item_pedido->producto->precio : 0);
-                    $descuento_item = $subtotal_item * ($descuento / 100);
-                    $monto_descuento_real += $descuento_item;
-                }
-                
-                $monto_con_descuento = $monto_bruto - $monto_descuento_real;
-
-                $ids_productos = $items_pedido->map(function($item_pedido) use ($descuento) {
-                    $subtotal_item = $item_pedido->cantidad * ($item_pedido->producto ? $item_pedido->producto->precio : 0);
-                    $subtotal_con_descuento = $subtotal_item * (1 - ($descuento / 100));
-                    
-                    return [
-                        'id_producto' => $item_pedido->id_producto,
-                        'cantidad' => $item_pedido->cantidad,
-                        'precio' => $item_pedido->producto ? $item_pedido->producto->precio : 0,
-                        'precio_base' => $item_pedido->producto ? $item_pedido->producto->precio_base : 0,
-                        'subtotal' => $subtotal_item,
-                        'subtotal_con_descuento' => $subtotal_con_descuento,
-                        'porcentaje_descuento' => $descuento
-                    ];
-                })->toArray();
-
-                $resultado = (new sendCentral)->crearSolicitudDescuento([
-                    'id_sucursal' => (new sendCentral)->getOrigen(),
-                    'id_pedido' => $req->index,
-                    'fecha' => now(),
-                    'monto_bruto' => $monto_bruto,
-                    'monto_con_descuento' => $monto_con_descuento,
-                    'monto_descuento' => $monto_descuento_real,
-                    'porcentaje_descuento' => $descuento,
-                    'id_cliente' => $pedido->id_cliente,
-                    'usuario_ensucursal' => session('usuario'),
-                    'metodos_pago' => [],
-                    'ids_productos' => $ids_productos,
-                    'tipo_descuento' => 'monto_porcentaje',
-                    'observaciones' => "Solicitud de descuento total: {$descuento}%"
-                ]);
-
-                if ($resultado && isset($resultado['estado']) && $resultado['estado']) {
-                    return Response::json(["msj"=>"Solicitud de descuento enviada a central para aprobación","estado"=>false]);
-                } else {
-                    return $resultado;
-                    return Response::json(["msj"=>"Error al enviar solicitud de descuento","estado"=>false]);
-                }
             }
             if ($descuento<0) {
                 return Response::json(["msj"=>"Error: No puede ser Negativo","estado"=>false]);
