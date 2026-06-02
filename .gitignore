@@ -14,3 +14,9 @@ npm-debug.log
 yarn-error.log
 /.idea
 /.vscode
+
+# Playwright (E2E)
+/playwright-report
+/test-results
+/tests/e2e/.auth
+/tests/e2e/.report

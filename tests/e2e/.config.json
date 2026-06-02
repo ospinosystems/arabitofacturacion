@@ -1,0 +1,30 @@
+{
+    "arabitofacturacion": {
+        "baseUrl": "http://localhost:8000",
+        "cajero": {
+            "usuario": "caja1",
+            "password": "1234"
+        }
+    },
+    "arabitocentral": {
+        "baseUrl": "http://localhost:8001",
+        "admin": {
+            "usuario": "Ao",
+            "password": "fug8RiiOAO53jta6n9HMao7v"
+        }
+    },
+    "datos_prueba": {
+        "producto_codigo_barras": "2000000460208",
+        "producto_descripcion_parcial": "",
+        "cliente_identificacion": "20812670",
+        "banco_bs_nombre": "Bancaribe",
+        "banco_divisa_nombre": "ZELLE"
+    },
+    "tasas_esperadas": {
+        "bs_por_usd": 535.3853,
+        "cop_por_usd": 5000.0
+    },
+    "mocks": {
+        "pinpad_port": 9001
+    }
+}

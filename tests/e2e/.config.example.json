@@ -1,0 +1,38 @@
+{
+    "_README": "Copiá este archivo a tests/e2e/.config.json y llená los datos reales de tu DB. NO commitear .config.json.",
+
+    "arabitofacturacion": {
+        "baseUrl": "http://localhost:8000",
+        "cajero": {
+            "usuario": "CAMBIAR",
+            "password": "CAMBIAR"
+        }
+    },
+
+    "arabitocentral": {
+        "baseUrl": "http://localhost:8001",
+        "admin": {
+            "usuario": "CAMBIAR",
+            "password": "CAMBIAR"
+        }
+    },
+
+    "datos_prueba": {
+        "_": "Datos que ya existen en tu DB local de arabitofacturacion. Si tu producto/cliente/banco usa otros nombres, ajustalos acá.",
+        "producto_codigo_barras": "CAMBIAR",
+        "producto_descripcion_parcial": "CAMBIAR (texto que el carrito muestra)",
+        "cliente_identificacion": "V-CAMBIAR",
+        "banco_bs_nombre": "Bancaribe",
+        "banco_divisa_nombre": "ZELLE"
+    },
+
+    "tasas_esperadas": {
+        "_": "Las tasas vigentes en tu DB; los tests las usan para validar los montos en USD vs Bs.",
+        "bs_por_usd": 50.0,
+        "cop_por_usd": 4000.0
+    },
+
+    "mocks": {
+        "pinpad_port": 9001
+    }
+}
