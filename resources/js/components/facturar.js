@@ -251,7 +251,18 @@ export default function Facturar({
             });
         }
     }, [pedidoData?.id, pedidoData?.items, pedidoData?.clean_total]);
-    
+
+    // DESCUENTO BACKEND 2026-05-27 — persistencia en localStorage del tracker de
+    // solicitudes de descuento pendientes para pedidos backend. Antes intentamos
+    // consultar central al abrir cada pedido, pero descartamos esa vía: queda
+    // todo del lado del cliente (cero round-trips) y se reseteará solo cuando
+    // el cajero haga click en "Verificar aprobación" y aplique.
+    useEffect(() => {
+        try {
+            localStorage.setItem('pendientesDescuentoBackend', JSON.stringify(pendientesDescuentoBackend));
+        } catch (e) { /* silenciar quota / privacy mode */ }
+    }, [pendientesDescuentoBackend]);
+
     // Función para guardar débitos del pedido actual
     const guardarDebitosPorPedido = (pedidoId, debitosActuales) => {
         setDebitosPorPedido(prev => {
@@ -483,6 +494,10 @@ export default function Facturar({
     const [fallas, setfallas] = useState([]);
 
     const [autoCorrector, setautoCorrector] = useState(true);
+    // SOBRANTE/REFUND 2026-05-27 — toggle por pedido: cuando true, pagarMain permite
+    // que los métodos (Débito/Transferencia) excedan clean_total para luego netear
+    // con una transferencia negativa de refund. Caso A (factura abierta + sobrante).
+    const [permiteSobrante, setpermiteSobrante] = useState(false);
 
     const [pedidosCentral, setpedidoCentral] = useState([]);
     const [indexPedidoCentral, setIndexPedidoCentral] = useState(null);
@@ -520,6 +535,21 @@ export default function Facturar({
     const [descuentoTotalEditingId, setDescuentoTotalEditingId] = useState(null);
     const [descuentoTotalInputValue, setDescuentoTotalInputValue] = useState("");
     const [descuentoTotalVerificando, setDescuentoTotalVerificando] = useState(false);
+    // DESCUENTO BACKEND 2026-05-27 — espejo del flujo front: tracker de solicitudes de
+    // descuento pendientes en central para pedidos backend (id_pedido). Key = id_pedido.
+    // Value: { tipo: 'total'|'unitario' }. Se setea al recibir `solicitud_descuento_pendiente`
+    // en respuesta de setDescuentoTotal/Unitario, se limpia al verificar y aplicar.
+    // Hidratado desde localStorage para sobrevivir refresh / cierre de browser.
+    const [pendientesDescuentoBackend, setPendientesDescuentoBackend] = useState(() => {
+        try {
+            const raw = localStorage.getItem('pendientesDescuentoBackend');
+            const parsed = raw ? JSON.parse(raw) : {};
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (e) {
+            return {};
+        }
+    });
+    const [verificandoDescuentoBackend, setVerificandoDescuentoBackend] = useState(false);
     const [cancelandoDescuentoTotal, setCancelandoDescuentoTotal] = useState(false);
     const [pendienteDescuentoMetodoPago, setPendienteDescuentoMetodoPago] = useState({});
     const [descuentoMetodoPagoVerificando, setDescuentoMetodoPagoVerificando] = useState(false);
@@ -1385,13 +1415,15 @@ export default function Facturar({
                 .then((res) => {
                     // Liberar el flag de procesamiento
                     addNewPedidoProcessingRef.current = false;
-                    
+
                     // Si la respuesta tiene estado false (hay cierre guardado)
                     if (res.data && res.data.estado === false) {
                         notificar(res);
                         return;
                     }
-                    // Si es exitoso, abrir el pedido
+                    // FIX 2026-05-27 — no llamamos getPedidosFast acá: onClickEditPedido
+                    // dispara getPedido(id) y ese ya refresca la lista al final (línea 3633).
+                    // Si llamamos también acá, salen 2 GET a /getPedidosFast por cada "Nuevo".
                     onClickEditPedido(null, res.data);
                 })
                 .catch((error) => {
@@ -1431,6 +1463,7 @@ export default function Facturar({
         setView("pagar");
     };
 
+
     // Limpiar timeouts al desmontar el componente
     useEffect(() => {
         return () => {
@@ -1443,6 +1476,13 @@ export default function Facturar({
                 setPagoPedidoTimeoutRef.current = null;
             }
         };
+    }, []);
+
+    // INIT 2026-05-27 — al montar el componente, traer los pedidos en backend (tabs naranja).
+    // Antes la lista solo se cargaba después de acciones (crear/facturar/eliminar pedido).
+    // Ahora se ven las órdenes encargadas inmediatamente al entrar a caja.
+    useEffect(() => {
+        getPedidosFast();
     }, []);
 
     // Cargar pedidos front pendientes y solicitudes descuento por método de pago desde IndexedDB al montar
@@ -3634,14 +3674,30 @@ export default function Facturar({
                     }
                     
                     // Débito (tipo 2) - Usar monto_original (Bs) si existe
+                    // POS PINPAD 2026-05-27 — respetar imborrable=1 para marcar bloqueado/verde.
+                    // Reconstruir posData con los mismos field names que el flujo "live"
+                    // (message, lote, terminal, responsecode) para que checks downstream
+                    // como `d.posData.message === "APROBADO"` / `responsecode === "00"` sigan
+                    // funcionando tras refresh.
                     const pagosDebito = d.filter((e) => e.tipo == 2);
                     if (pagosDebito && pagosDebito.length > 0) {
-                        const debitosFromPagos = pagosDebito.map((p) => ({
-                            monto: p.monto_original || p.monto,
-                            referencia: p.referencia || "",
-                            bloqueado: false,
-                            posData: null
-                        }));
+                        const debitosFromPagos = pagosDebito.map((p) => {
+                            const esImborrable = p.imborrable == 1 || p.imborrable === true || p.imborrable === "1";
+                            return {
+                                monto: p.monto_original || p.monto,
+                                referencia: p.referencia || "",
+                                bloqueado: esImborrable,
+                                posData: esImborrable ? {
+                                    persistidoEnBackend: true,
+                                    message: p.pos_responsecode === "00" ? "APROBADO" : (p.pos_message || null),
+                                    lote: p.pos_lote || null,
+                                    terminal: p.pos_terminal || null,
+                                    responsecode: p.pos_responsecode || null,
+                                    cuenta: p.cuenta || null,
+                                    pago_pedido_id: p.id
+                                } : null
+                            };
+                        });
                         setDebitos(debitosFromPagos);
                     }
                     
@@ -3998,69 +4054,72 @@ export default function Facturar({
             .catch(() => {});
     };
 
-    const setDescuentoTotal = (e) => {
-        if (pedidoData._frontOnly && pedidoData.id) {
-            if (pendienteDescuentoMetodoPago[pedidoData.id]) {
-                notificar({ data: { msj: "Solicitud de descuento en espera. Verifique aprobación o cancele la solicitud para editar descuentos.", estado: false } });
-                return;
-            }
-            setDescuentoTotalEditingId(String(pedidoData.id));
-            setDescuentoTotalInputValue("");
+    const setDescuentoTotal = () => {
+        // INLINE EDITOR 2026-05-27 — antes front-only abría inline y backend abría window.prompt.
+        // Ahora ambos usan el mismo input integrado; la persistencia se decide en aplicarDescuentoTotalDesdeModal.
+        if (!pedidoData?.id) return;
+        if (pedidoData._frontOnly && pendienteDescuentoMetodoPago[pedidoData.id]) {
+            notificar({ data: { msj: "Solicitud de descuento en espera. Verifique aprobación o cancele la solicitud para editar descuentos.", estado: false } });
             return;
         }
-
-        let descuento = window.prompt("Descuento Total *0 para eliminar*");
-        let index = e.currentTarget.attributes["data-index"].value;
-
-        if (descuento) {
-            if (descuento == "0") {
-                let params = { index, descuento: 0 };
-                db.setDescuentoTotal(params).then((res) => {
-                    getPedido();
-                    setLoading(false);
-                    notificar(res);
-                    if (res.data.estado === false) {
-                        setLastDbRequest({
-                            dbFunction: db.setDescuentoTotal,
-                            params,
-                        });
-                        openValidationTarea(res.data.id_tarea);
-                    }
-                });
-            } else {
-                if (
-                    typeof parseFloat(descuento) == "number" &&
-                    pedidoData.clean_subtotal
-                ) {
-                    let total = parseFloat(pedidoData.clean_subtotal);
-
-                    descuento =
-                        100 -
-                        ((parseFloat(descuento) * 100) / total).toFixed(3);
-
-                    let params = { index, descuento };
-                    db.setDescuentoTotal(params).then((res) => {
-                        getPedido();
-                        setLoading(false);
-                        notificar(res);
-                        if (res.data.estado === false) {
-                            setLastDbRequest({
-                                dbFunction: db.setDescuentoTotal,
-                                params,
-                            });
-                            openValidationTarea(res.data.id_tarea);
-                        }
-                    });
-                }
-            }
-        }
+        setDescuentoTotalEditingId(String(pedidoData.id));
+        setDescuentoTotalInputValue("");
     };
     const aplicarDescuentoTotalDesdeModal = (montoFinal) => {
         if (montoFinal === null || montoFinal === "") return;
         setDescuentoTotalEditingId(null);
         setDescuentoTotalInputValue("");
 
-        if (!pedidoData._frontOnly || !pedidoData.id) return;
+        if (!pedidoData?.id) return;
+
+        // INLINE EDITOR 2026-05-27 — backend (pedido naranja): persistir vía API directamente
+        // con el mismo input. Misma fórmula de descuento que usaba el window.prompt antiguo.
+        if (!pedidoData._frontOnly) {
+            const index = pedidoData.id;
+            setLoading(true);
+            if (montoFinal === "0" || montoFinal === 0) {
+                const params = { index, descuento: 0 };
+                db.setDescuentoTotal(params).then((res) => {
+                    getPedido();
+                    setLoading(false);
+                    notificar(res);
+                    if (res.data.estado === false) {
+                        setLastDbRequest({ dbFunction: db.setDescuentoTotal, params });
+                        openValidationTarea(res.data.id_tarea);
+                    }
+                });
+                return;
+            }
+            const montoFinalNum = parseFloat(montoFinal);
+            const totalSubtotalBackend = parseFloat(pedidoData.clean_subtotal) || 0;
+            if (isNaN(montoFinalNum) || montoFinalNum < 0) {
+                notificar({ data: { msj: "Monto inválido", estado: false } });
+                setLoading(false);
+                return;
+            }
+            if (totalSubtotalBackend <= 0) {
+                notificar({ data: { msj: "El pedido no tiene subtotal válido", estado: false } });
+                setLoading(false);
+                return;
+            }
+            const descuento = 100 - ((montoFinalNum * 100) / totalSubtotalBackend).toFixed(3);
+            const params = { index, descuento };
+            db.setDescuentoTotal(params).then((res) => {
+                getPedido();
+                setLoading(false);
+                notificar(res);
+                // DESCUENTO BACKEND 2026-05-27 — si central marcó solicitud_descuento_pendiente,
+                // guardamos el contexto para mostrar el botón "Verificar aprobación".
+                if (res.data?.solicitud_descuento_pendiente) {
+                    setPendientesDescuentoBackend((prev) => ({ ...prev, [index]: { tipo: 'total' } }));
+                } else if (res.data?.estado === false && res.data?.id_tarea) {
+                    setLastDbRequest({ dbFunction: db.setDescuentoTotal, params });
+                    openValidationTarea(res.data.id_tarea);
+                }
+            });
+            return;
+        }
+
         if (pendienteDescuentoMetodoPago[pedidoData.id]) {
             notificar({ data: { msj: "Solicitud de descuento en espera. Verifique aprobación o cancele la solicitud para editar descuentos.", estado: false } });
             return;
@@ -4120,6 +4179,53 @@ export default function Facturar({
         setPedidosFrontPendientes((prev) => ({ ...prev, [pedidoData.id]: updated }));
         setLoading(false);
         notificar({ data: { msj: "Descuento total aplicado. Al guardar el pedido se enviará la solicitud a central.", estado: true } });
+    };
+
+    // DESCUENTO BACKEND 2026-05-27 — botón "Verificar aprobación" para pedidos backend.
+    // Llama al endpoint solicitudDescuentoBackendVerificar que consulta central, y si
+    // está aprobada, aplica los descuentos a items_pedidos en BD. Después refresca
+    // el pedido con getPedido() para que el cajero vea los items con descuento.
+    const verificarDescuentoBackend = () => {
+        if (pedidoData._frontOnly || !pedidoData?.id) return;
+        const ctx = pendientesDescuentoBackend[pedidoData.id];
+        if (!ctx) return;
+        setVerificandoDescuentoBackend(true);
+        db.solicitudDescuentoBackendVerificar({
+            id_pedido: pedidoData.id,
+            tipo_descuento: 'monto_porcentaje',
+        })
+            .then((res) => {
+                setVerificandoDescuentoBackend(false);
+                const data = res?.data || {};
+                const aprobado = data?.existe && data?.data?.estado === 'aprobado';
+                if (aprobado) {
+                    // Limpiar pendiente y traer items actualizados desde BD
+                    setPendientesDescuentoBackend((prev) => {
+                        const next = { ...prev };
+                        delete next[pedidoData.id];
+                        return next;
+                    });
+                    if (data.aplicado) {
+                        notificar({ data: { msj: `Descuento aprobado y aplicado a ${data.items_actualizados ?? 0} ítem(s).`, estado: true } });
+                    } else {
+                        notificar({ data: { msj: 'Descuento aprobado en central.', estado: true } });
+                    }
+                    getPedido();
+                } else if (data?.data?.estado === 'rechazado') {
+                    setPendientesDescuentoBackend((prev) => {
+                        const next = { ...prev };
+                        delete next[pedidoData.id];
+                        return next;
+                    });
+                    notificar({ data: { msj: 'La solicitud de descuento fue rechazada.', estado: false } });
+                } else {
+                    notificar({ data: { msj: 'La solicitud aún no ha sido aprobada.', estado: false } });
+                }
+            })
+            .catch((err) => {
+                setVerificandoDescuentoBackend(false);
+                notificar({ data: { msj: 'Error al verificar: ' + (err?.response?.data?.msj || err?.message || 'desconocido'), estado: false } });
+            });
     };
 
     const verificarDescuentoTotalFront = () => {
@@ -4298,7 +4404,10 @@ export default function Facturar({
                 getPedido();
                 setLoading(false);
                 notificar(res);
-                if (res.data.estado === false) {
+                // DESCUENTO BACKEND 2026-05-27 — marcar pendiente de aprobación si central lo indicó
+                if (res.data?.solicitud_descuento_pendiente && pedidoData?.id) {
+                    setPendientesDescuentoBackend((prev) => ({ ...prev, [pedidoData.id]: { tipo: 'unitario' } }));
+                } else if (res.data?.estado === false && res.data?.id_tarea) {
                     setLastDbRequest({ dbFunction: db.setDescuentoUnitario, params });
                     openValidationTarea(res.data.id_tarea);
                 }
@@ -4764,6 +4873,40 @@ export default function Facturar({
                 limpiarLocal();
                 notificar({ data: { msj: "Validación eliminada localmente. Puede volver a solicitar el descuento.", estado: true } });
             });
+    };
+
+    // INLINE EDITOR 2026-05-27 — equivalente a setCantidadCarrito sin window.prompt.
+    // Acepta el valor directamente desde el input inline del carrito (pagarMain) y enruta
+    // a front-only (mutación local) o backend (db.setCantidad) según el pedido.
+    const setCantidadCarritoInline = (itemId, value) => {
+        if (value == null || value === "") return;
+        const qty = parseFloat(value);
+        if (isNaN(qty) || qty < 0) {
+            notificar({ msj: "Cantidad inválida", estado: false });
+            return;
+        }
+        if (pedidoData?._frontOnly && pedidoData.id) {
+            // En front-only ya existe setCantidadCarritoFront para la mutación local.
+            setCantidadCarritoFront(itemId, value);
+            return;
+        }
+        if (!pedidoData?.id) return;
+        const itemBackend = (pedidoData.items || []).find((it) => String(it.id) === String(itemId));
+        if (itemBackend && itemBackend.descuento != null && parseFloat(itemBackend.descuento) > 0) {
+            notificar({ msj: "No se puede editar la cantidad: el ítem tiene descuento aprobado", estado: false });
+            return;
+        }
+        setLoading(true);
+        const params = { index: itemId, cantidad: value };
+        db.setCantidad(params).then((res) => {
+            getPedido();
+            setLoading(false);
+            notificar(res);
+            if (res.data.estado === false) {
+                setLastDbRequest({ dbFunction: db.setCantidad, params });
+                openValidationTarea(res.data.id_tarea);
+            }
+        });
     };
 
     const setCantidadCarrito = (e) => {
@@ -5379,12 +5522,20 @@ export default function Facturar({
             }
 
             const transferenciaActualCheck = transferenciaRef.current;
-            const tieneRefTransferencia = refPago.some((e) => e.tipo == 1 || e.tipo == 2);
+            const refsTransfer = refPago.filter((e) => e.tipo == 1 || e.tipo == 2);
+            const tieneRefTransferencia = refsTransfer.length > 0;
             const usaMetodoTransferencia = parseFloat(transferenciaActualCheck || 0) !== 0;
 
-            // Referencia de transferencia cargada pero método de pago no es transferencia → no permitir ejecutar
-            if (tieneRefTransferencia && !usaMetodoTransferencia) {
-                console.log("[setPagoPedido] BLOQUEADO: referencia de transferencia cargada pero método de pago no es transferencia", { refPago, transferencia: transferenciaActualCheck });
+            // SOBRANTE/REFUND 2026-05-27 — escenario "entrante = egreso" (devolución pura,
+            // cliente transfirió por error y le devolvemos lo mismo): las refs netean a 0 y
+            // por eso el campo Transferencia también queda en 0. No es un error, es válido.
+            const sumaRefsBs = refsTransfer.reduce((sum, r) => sum + (parseFloat(r.monto) || 0), 0);
+            const refsNetCero = Math.abs(sumaRefsBs) < 0.01;
+
+            // Referencia de transferencia cargada pero método de pago no es transferencia → bloquear
+            // SALVO que las refs netean a 0 (refund balanceado entrante/saliente).
+            if (tieneRefTransferencia && !usaMetodoTransferencia && !refsNetCero) {
+                console.log("[setPagoPedido] BLOQUEADO: referencia de transferencia cargada pero método de pago no es transferencia", { refPago, transferencia: transferenciaActualCheck, sumaRefsBs });
                 notificar({
                     data: {
                         msj: "Tiene una referencia de transferencia cargada pero no está usando el método de pago Transferencia. Indique el monto en Transferencia o elimine la referencia para continuar.",
@@ -5585,6 +5736,44 @@ export default function Facturar({
               })).filter((it) => it.id && it.cantidad !== 0)
             : null;
 
+        // SOBRANTE/REFUND 2026-05-27 — auto-detección de "devolución pura":
+        // Si el pedido front no tiene items reales pero el cajero cargó métodos de pago
+        // (típicamente una transferencia negativa con su ref bancaria saliente), tratarlo
+        // como pedido sin items. El backend acepta este modo con is_devolucion_pura=true.
+        // El total del pedido se computa como neto de los métodos (USD), porque sin items
+        // no hay otro origen para clean_total.
+        const itemsFrontLen = (frontItems || []).length;
+        const transferUSDcalc = parseFloat(transferenciaActual || 0) || 0;
+        const creditoUSDcalc = parseFloat(creditoActual || 0) || 0;
+        const biopagoUSDcalc = parseFloat(biopagoActual || 0) || 0;
+        const tasaPedidoBs = parseFloat(pedidoActual?.tasa) || parseFloat(dolar) || 1;
+        const tasaPedidoCop = parseFloat(pedidoActual?.tasa_cop) || parseFloat(peso) || 1;
+        let debitoUSDcalc = 0;
+        for (const d of debitosValidos) {
+            const m = parseFloat(d.monto) || 0;
+            debitoUSDcalc += tasaPedidoBs > 0 ? m / tasaPedidoBs : 0;
+        }
+        let adicionalesUSDcalc = 0;
+        for (const pa of pagosAdicionales) {
+            const m = parseFloat(pa.monto_original) || 0;
+            if (pa.moneda === 'bs')      adicionalesUSDcalc += tasaPedidoBs > 0 ? m / tasaPedidoBs : 0;
+            else if (pa.moneda === 'peso') adicionalesUSDcalc += tasaPedidoCop > 0 ? m / tasaPedidoCop : 0;
+            else adicionalesUSDcalc += m;
+        }
+        const netoMetodosUSD = efectivoDolarVal + debitoUSDcalc + transferUSDcalc + creditoUSDcalc + biopagoUSDcalc + adicionalesUSDcalc;
+
+        // SOBRANTE/REFUND 2026-05-27 — devolución pura "neto 0" o refund puro:
+        // ahora también aplica a pedidos BACKEND (el botón "Nuevo" los crea ahí, no en front).
+        // Disparamos is_devolucion_pura cuando hay items=0 y CUALQUIER cosa cargada
+        // (métodos con monto, refs o débitos), aunque neteen a 0.
+        const itemsPedidoLen = (pedidoActual?.items || []).length;
+        const hayRefsCargadas = Array.isArray(refPago) && refPago.length > 0;
+        const hayAlgunMetodoCargado = Math.abs(netoMetodosUSD) > 0.001 || hayRefsCargadas || debitosValidos.length > 0;
+        const esDevolucionPuraAuto = itemsPedidoLen === 0 && hayAlgunMetodoCargado;
+        const totalPedidoUsdParam = esDevolucionPuraAuto
+            ? parseFloat(netoMetodosUSD.toFixed(2))
+            : ((isFrontOnly && pedidoActual && pedidoActual.clean_total != null) ? parseFloat(pedidoActual.clean_total) : undefined);
+
         // Referencias de pago para pedido front: enviar en la misma petición (backend las creará al crear el pedido).
         // Se respeta el estatus real de cada ref: las "autovalidar" ya están "aprobada" y las "central"
         // pueden estar "pendiente" (serán aprobadas a posteriori en central); el backend acepta ambas.
@@ -5610,13 +5799,16 @@ export default function Facturar({
             id: isFrontOnly ? null : (pedidoActual && pedidoActual.id),
             front_only: isFrontOnly || undefined,
             uuid: frontUuid || undefined,
-            total_pedido_usd: (isFrontOnly && pedidoActual && pedidoActual.clean_total != null) ? parseFloat(pedidoActual.clean_total) : undefined,
+            total_pedido_usd: totalPedidoUsdParam,
             id_cliente: isFrontOnly ? (pedidoActual && pedidoActual.id_cliente != null ? pedidoActual.id_cliente : 1) : undefined,
             data_cliente: (isFrontOnly && pedidoActual && pedidoActual.cliente && typeof pedidoActual.cliente === "object") ? pedidoActual.cliente : undefined,
             fecha_inicio: (isFrontOnly && pedidoActual && pedidoActual.fecha_inicio) ? pedidoActual.fecha_inicio : undefined,
             fecha_vence: (isFrontOnly && pedidoActual && pedidoActual.fecha_vence) ? pedidoActual.fecha_vence : undefined,
             formato_pago: (isFrontOnly && pedidoActual && pedidoActual.formato_pago != null) ? pedidoActual.formato_pago : undefined,
             isdevolucionOriginalid: (pedidoActual && pedidoActual.isdevolucionOriginalid) ? pedidoActual.isdevolucionOriginalid : undefined,
+            // SOBRANTE/REFUND 2026-05-27 — pedido sin items: refund puro (caso B/D) o pago directo sin venta.
+            // Auto-detectado por items vacíos + métodos cargados; el backend acepta items vacíos con esta flag.
+            is_devolucion_pura: esDevolucionPuraAuto ? true : undefined,
             items: frontItems || undefined,
             // Solo se envía debitos (array). Los campos debito y debitoRef están descontinuados y no se envían.
             debitos: debitosParam,
@@ -5868,6 +6060,16 @@ export default function Facturar({
                     if (esPedidoActual) {
                         flushSync(() => setDebitos(nuevosDebitos));
                     }
+                    // POS PINPAD 2026-05-27 — la persistencia como pago_pedidos imborrable ya
+                    // ocurrió dentro de `enviarTransaccionPOS` (sendCentral). El cobro está
+                    // anclado al pedido en BD; sobrevive a refresh / cierre del browser.
+                    //
+                    // Refrescamos `pedidoData.pagos` para que la UI muestre la fila imborrable
+                    // recién creada — útil para pedidos backend donde el pago no estaba en state
+                    // local antes (sólo en `debitos[]` para el modal).
+                    if (esPedidoActual && typeof inst.pedidoId === 'number') {
+                        getPedido(inst.pedidoId, null, false);
+                    }
                     const totalFacturaBs = parseFloat(pedidoDataRef.current?.bs_clean || pedidoDataRef.current?.bs || 0);
                     const totalAprobadoDebitos = nuevosDebitos.filter(d => d.bloqueado).reduce((s, d) => s + parseFloat(d.monto || 0), 0);
                     const debeFacturarImprimir = esPedidoActual && Math.abs(totalAprobadoDebitos - totalFacturaBs) < 0.01;
@@ -5904,6 +6106,14 @@ export default function Facturar({
                     loading: false,
                 });
                 notificar({ data: { msj: `POS APROBADO - Ref: ${posReference} - Bs ${montoAprobado.toFixed(2)}`, estado: true } });
+                // POS PINPAD 2026-05-27 — la persistencia como pago_pedidos imborrable ya
+                // ocurrió dentro de `enviarTransaccionPOS` (sendCentral).
+                //
+                // Refrescar `pedidoData.pagos` para que el panel de pagos muestre el cobro recién
+                // persistido (modo multi-transacción, todavía no se cierra el modal).
+                if (inst.pedidoId === pedidoDataRef.current?.id && typeof inst.pedidoId === 'number') {
+                    getPedido(inst.pedidoId, null, false);
+                }
 
                 if (restante <= 0) {
                     const ultimaTrans = nuevasTransacciones[nuevasTransacciones.length - 1];
@@ -5948,24 +6158,10 @@ export default function Facturar({
                 };
                 const errorMsg = posData.message || response.data.error || "Error en transacción POS";
 
-                // FIX 2026-05-26 — Registro del rechazo POS es ORTOGONAL a si Instapago
-                // lo confirma. Si el POS dijo "rechazado" (FONDO INSUFICIENTE, CLAVE INVÁLIDA,
-                // etc.), eso es un evento real del dispositivo que hay que dejar registrado
-                // en `pos_operaciones_rechazadas`, sin importar que después Instapago esté
-                // caída o no. Antes esto solo se hacía en rechazado_definitivo y se perdían
-                // los rechazos cuando Instapago no respondía.
-                //
-                // `pos_error_body` viene del backend y es el body normalizado del POS error
-                // (siempre un array, aun cuando `data` venga como string raw).
-                const errorBody = response.data.pos_error_body
-                    || (posData && Object.keys(posData).length > 0 ? posData : null);
-                if (errorBody && Object.keys(errorBody).length > 0) {
-                    db.registrarPosRechazado({
-                        ...errorBody,
-                        json_response: JSON.stringify(errorBody),
-                        id_pedido: inst.pedidoId || null,
-                    }).catch(err => console.error("Error al registrar POS rechazado:", err));
-                }
+                // FIX 2026-05-27 — el registro en `pos_operaciones_rechazadas` ahora lo hace
+                // `enviarTransaccionPOS` (sendCentral) en el mismo round-trip. Antes el front
+                // hacía un POST aparte a `/registrarPosRechazado` con el body normalizado;
+                // ahora viaja todo en una sola petición y no hay duplicación de lógica.
 
                 if (statusValidacion === 'no_confirmable') {
                     actualizarInstanciaPos(instanceId, {
@@ -6043,6 +6239,12 @@ export default function Facturar({
             loading: false,
         });
         notificar({ data: { msj: `POS APROBADO al validar - Ref: ${posReference}. Bs ${montoAprobado.toFixed(2)}`, estado: true } });
+        // POS PINPAD 2026-05-27 — la persistencia como pago_pedidos imborrable ya la hizo
+        // el backend dentro de `revalidarPosDebito` (sendCentral). Refrescamos `pedidoData.pagos`
+        // para que la UI muestre la fila imborrable recién persistida.
+        if (inst.pedidoId === pedidoDataRef.current?.id && typeof inst.pedidoId === 'number') {
+            getPedido(inst.pedidoId, null, false);
+        }
     };
 
     /**
@@ -7192,13 +7394,46 @@ export default function Facturar({
             }
         });
     };
+    // PERF 2026-05-27 — getPedidosFast es uno de los endpoints más calientes (mount,
+    // post-create, post-facturar, post-delete, post-getPedido). Las optimizaciones del
+    // backend (cache 2s + comovamos diferido + índice compuesto) son la mitad; la otra
+    // mitad es no disparar peticiones redundantes desde el front:
+    //   1) Cache en memoria 800ms por (vendedor, fecha): clicks consecutivos no van a red.
+    //   2) De-dup de peticiones en vuelo: si llega un segundo call con el mismo key,
+    //      reusa la promesa existente en lugar de abrir otra HTTP.
+    const getPedidosFastCacheRef = useRef({ ts: 0, key: null, data: null });
+    const getPedidosFastInflightRef = useRef(null);
     const getPedidosFast = () => {
-        db.getPedidosFast({
+        const key = `${showMisPedido ? (user?.id_usuario ?? 'me') : 'all'}|${fecha1pedido || ''}`;
+        const now = Date.now();
+        const cached = getPedidosFastCacheRef.current;
+
+        // Micro-cache 800ms
+        if (cached.key === key && cached.data && (now - cached.ts) < 800) {
+            setpedidosFast(cached.data);
+            return Promise.resolve({ data: cached.data, _cached: true });
+        }
+
+        // De-dup en vuelo
+        if (getPedidosFastInflightRef.current && getPedidosFastInflightRef.current.key === key) {
+            return getPedidosFastInflightRef.current.promise;
+        }
+
+        const promise = db.getPedidosFast({
             vendedor: showMisPedido ? [user.id_usuario] : [],
             fecha1pedido,
         }).then((res) => {
             setpedidosFast(res.data);
+            getPedidosFastCacheRef.current = { ts: Date.now(), key, data: res.data };
+            getPedidosFastInflightRef.current = null;
+            return res;
+        }).catch((err) => {
+            getPedidosFastInflightRef.current = null;
+            throw err;
         });
+
+        getPedidosFastInflightRef.current = { key, promise };
+        return promise;
     };
     const [modalchangepedido, setmodalchangepedido] = useState(false);
 
@@ -7762,6 +7997,70 @@ export default function Facturar({
         setpresupuestocarrito([]);
         setView("pagar");
         notificar({ data: { msj: "Presupuesto convertido a pedido (tipo front). Puede proceder al pago.", estado: true } });
+    };
+
+    /**
+     * PRESUPUESTO-BACKEND 2026-05-27 — Convierte el presupuesto actual en un pedido tipo
+     * backend (persistido en BD). Pasos:
+     *   1) db.addNewPedido({}) → crea pedido vacío en backend, devuelve la fila completa.
+     *   2) Por cada item del presupuestocarrito: db.setCarrito({numero_factura: id_nuevo, ...})
+     *      en secuencia (para evitar race conditions de stock/locks).
+     *   3) Al terminar: limpia carrito, abre el pedido con onClickEditPedido y va a pagar.
+     * Si la creación del pedido falla, notifica y NO crea fallback front. El usuario puede
+     * usar el botón gris (front) si quiere flujo offline.
+     */
+    const setpresupuestoAPedidoBackend = () => {
+        if (!presupuestocarrito || presupuestocarrito.length === 0) {
+            notificar({ data: { msj: "El presupuesto está vacío. Agregue productos para convertir a pedido.", estado: false } });
+            return;
+        }
+        const items = cloneDeep(presupuestocarrito);
+        db.addNewPedido({})
+            .then((res) => {
+                if (!res.data) {
+                    notificar({ data: { msj: "Backend no devolvió pedido.", estado: false } });
+                    return;
+                }
+                if (res.data.estado === false) {
+                    notificar(res);
+                    return;
+                }
+                const nuevoPedido = res.data;
+                const nuevoId = nuevoPedido.id;
+                if (!nuevoId) {
+                    notificar({ data: { msj: "Pedido creado sin id (backend).", estado: false } });
+                    return;
+                }
+                // Agregar items en serie
+                const addNext = (i) => {
+                    if (i >= items.length) {
+                        setpresupuestocarrito([]);
+                        onClickEditPedido(null, nuevoPedido);
+                        setTimeout(() => setView("pagar"), 50);
+                        notificar({ data: { msj: "Presupuesto convertido a pedido #" + nuevoId + " (backend). Puede proceder al pago.", estado: true } });
+                        return;
+                    }
+                    const it = items[i];
+                    db.setCarrito({
+                        id: it.id,
+                        cantidad: it.cantidad,
+                        type: "agregar",
+                        numero_factura: nuevoId,
+                        loteIdCarrito,
+                    })
+                        .then(() => addNext(i + 1))
+                        .catch(() => {
+                            notificar({ data: { msj: "Error agregando item " + (it.descripcion || it.id) + " al pedido #" + nuevoId, estado: false } });
+                            // Continuar con el resto en vez de abortar todo el pedido
+                            addNext(i + 1);
+                        });
+                };
+                addNext(0);
+            })
+            .catch((error) => {
+                const errorMsg = error?.response?.data?.msj || error?.message || "Error al crear el pedido backend";
+                notificar({ data: { msj: errorMsg, estado: false } });
+            });
     };
     const setPresupuesto = (e) => {
         let id_producto = e.currentTarget.attributes["data-id"].value;
@@ -10527,8 +10826,12 @@ export default function Facturar({
                                     verificarDescuentoTotalFront={verificarDescuentoTotalFront}
                                     cancelarSolicitudDescuentoTotalFront={cancelarSolicitudDescuentoTotalFront}
                                     cancelandoDescuentoTotal={cancelandoDescuentoTotal}
+                                    pendientesDescuentoBackend={pendientesDescuentoBackend}
+                                    verificarDescuentoBackend={verificarDescuentoBackend}
+                                    verificandoDescuentoBackend={verificandoDescuentoBackend}
                                     setCantidadCarrito={setCantidadCarrito}
                                     setCantidadCarritoFront={setCantidadCarritoFront}
+                                    setCantidadCarritoInline={setCantidadCarritoInline}
                                     toggleAddPersona={toggleAddPersona}
                                     setToggleAddPersona={setToggleAddPersona}
                                     getPersona={getPersona}
@@ -10566,6 +10869,8 @@ export default function Facturar({
                                     viewReportPedido={viewReportPedido}
                                     autoCorrector={autoCorrector}
                                     setautoCorrector={setautoCorrector}
+                                    permiteSobrante={permiteSobrante}
+                                    setpermiteSobrante={setpermiteSobrante}
                                     getDebito={getDebito}
                                     getCredito={getCredito}
                                     getTransferencia={getTransferencia}
@@ -10881,6 +11186,9 @@ export default function Facturar({
                             }
                             setpresupuestoAPedidoFront={
                                 setpresupuestoAPedidoFront
+                            }
+                            setpresupuestoAPedidoBackend={
+                                setpresupuestoAPedidoBackend
                             }
                             openBarcodeScan={openBarcodeScan}
                             number={number}

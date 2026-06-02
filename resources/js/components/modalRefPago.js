@@ -66,6 +66,10 @@ export default function ModalRefPago({
     const validandoRef = useRef(false);
     // Ref del contenedor del modal para navegación con flechas y foco inicial
     const modalContainerRef = useRef(null);
+    // SOBRANTE/REFUND 2026-05-27 — el useEffect de auto-cálculo pisaba el monto cuando
+    // el cajero lo modificaba a mano (típicamente con signo negativo para refunds).
+    // Esta ref se enciende al primer cambio manual y desactiva la sobrescritura.
+    const montoEditadoManualRef = useRef(false);
 
     // Monto total del pedido en Bs
     const montoTotalPedido = parseFloat(pedidoData?.bs || 0);
@@ -381,22 +385,24 @@ export default function ModalRefPago({
         }
     };
 
-    // Efecto para calcular monto según banco o módulo
+    // Efecto para calcular monto según banco o módulo.
+    // SOBRANTE/REFUND 2026-05-27 — si el cajero editó el monto a mano (ej. lo dejó negativo
+    // para un refund), no sobrescribir; solo actualizar isrefbanbs para que la UI siga
+    // sabiendo si el banco es divisa o bolívares.
     useEffect(() => {
-        // Para módulos automáticos, siempre es en Bs
+        const esDivisa = moduloSeleccionado === 'Central' && bancoSeleccionadoEsDivisa(banco_referenciapago, bancosCentral);
+        setisrefbanbs(!esDivisa);
+        if (montoEditadoManualRef.current) {
+            return;
+        }
         if (moduloSeleccionado !== 'Central') {
-            let monto = truncarDosDecimales(transferencia * dolar);
-            setmonto_referenciapago(monto);
-            setisrefbanbs(true);
-        } else if (bancoSeleccionadoEsDivisa(banco_referenciapago, bancosCentral)) {
+            setmonto_referenciapago(truncarDosDecimales(transferencia * dolar));
+        } else if (esDivisa) {
             // FIX 2026-05-26 — antes era hardcoded ['ZELLE','BINANCE','AirTM'].
             // Ahora se infiere del catálogo (moneda='dolar') porque el value es bid:<id>.
-            setisrefbanbs(false);
             setmonto_referenciapago(truncarDosDecimales(transferencia));
         } else {
-            let monto = truncarDosDecimales(transferencia * dolar);
-            setmonto_referenciapago(monto);
-            setisrefbanbs(true);
+            setmonto_referenciapago(truncarDosDecimales(transferencia * dolar));
         }
     }, [banco_referenciapago, transferencia, dolar, moduloSeleccionado]);
 
@@ -408,7 +414,8 @@ export default function ModalRefPago({
         if (errors.banco && banco_referenciapago) {
             setErrors(prev => ({ ...prev, banco: null }));
         }
-        if (errors.monto && monto_referenciapago > 0) {
+        // SOBRANTE/REFUND — limpiar error si hay un monto distinto de cero (positivo o negativo).
+        if (errors.monto && parseFloat(monto_referenciapago) !== 0 && monto_referenciapago !== "" && monto_referenciapago != null) {
             setErrors(prev => ({ ...prev, monto: null }));
         }
         if (errors.fechaPago && fechaPago) {
@@ -828,7 +835,7 @@ export default function ModalRefPago({
                                     <div className="flex gap-1">
                                         <button
                                             type="button"
-                                            onClick={() => setmonto_referenciapago(montoTotalPedido.toFixed(2))}
+                                            onClick={() => { montoEditadoManualRef.current = true; setmonto_referenciapago(montoTotalPedido.toFixed(2)); }}
                                             className="px-2 py-0.5 text-[10px] font-medium text-green-700 bg-green-100 rounded hover:bg-green-200 transition-colors"
                                             title="Usar monto total del pedido"
                                         >
@@ -837,7 +844,7 @@ export default function ModalRefPago({
                                         {sumaReferencias > 0 && (
                                             <button
                                                 type="button"
-                                                onClick={() => setmonto_referenciapago(montoRestante.toFixed(2))}
+                                                onClick={() => { montoEditadoManualRef.current = true; setmonto_referenciapago(montoRestante.toFixed(2)); }}
                                                 className="px-2 py-0.5 text-[10px] font-medium text-orange-700 bg-orange-100 rounded hover:bg-orange-200 transition-colors"
                                                 title="Usar monto restante (descontando transferencias previas)"
                                             >
@@ -852,6 +859,7 @@ export default function ModalRefPago({
                                     onChange={(e) => {
                                         const value = e.target.value;
                                         const filtered = value.replace(/[^0-9.-]/g, '').replace(/(?!^)-/g, '').replace(/(\..*)\./g, '$1');
+                                        montoEditadoManualRef.current = true;
                                         setmonto_referenciapago(filtered);
                                     }}
                                     onKeyPress={handleKeyPress}
@@ -868,7 +876,7 @@ export default function ModalRefPago({
                                 )}
                                 <p className="mt-1 text-xs text-gray-500">
                                     <i className="mr-1 fa fa-info-circle"></i>
-                                    Máx: Bs {montoMaximoPedido.toFixed(2)} | Ya cargado: Bs {sumaReferencias.toFixed(2)}
+                                    Máx: Bs {montoMaximoPedido.toFixed(2)} | Ya cargado: Bs {sumaReferencias.toFixed(2)} {/* SOBRANTE/REFUND — el signo negativo se acepta; se respeta lo que tipea el cajero. */}
                                 </p>
                             </div>
 
@@ -915,7 +923,7 @@ export default function ModalRefPago({
                             <div className="flex gap-1">
                                 <button
                                     type="button"
-                                    onClick={() => setmonto_referenciapago(montoTotalPedido.toFixed(2))}
+                                    onClick={() => { montoEditadoManualRef.current = true; setmonto_referenciapago(montoTotalPedido.toFixed(2)); }}
                                     className="px-2 py-0.5 text-[10px] font-medium text-green-700 bg-green-100 rounded hover:bg-green-200 transition-colors"
                                     title="Usar monto total del pedido"
                                 >
@@ -924,7 +932,7 @@ export default function ModalRefPago({
                                 {sumaReferencias > 0 && (
                                     <button
                                         type="button"
-                                        onClick={() => setmonto_referenciapago(montoRestante.toFixed(2))}
+                                        onClick={() => { montoEditadoManualRef.current = true; setmonto_referenciapago(montoRestante.toFixed(2)); }}
                                         className="px-2 py-0.5 text-[10px] font-medium text-orange-700 bg-orange-100 rounded hover:bg-orange-200 transition-colors"
                                         title="Usar monto restante (descontando transferencias previas)"
                                     >
@@ -939,6 +947,7 @@ export default function ModalRefPago({
                             onChange={(e) => {
                                 const value = e.target.value;
                                 const filtered = value.replace(/[^0-9.-]/g, '').replace(/(?!^)-/g, '').replace(/(\..*)\./g, '$1');
+                                montoEditadoManualRef.current = true;
                                 setmonto_referenciapago(filtered);
                             }}
                             onKeyPress={handleKeyPress}

@@ -49,6 +49,7 @@ const db = {
   setDescuentoTotal: data=>axios.post(host+"setDescuentoTotal",data),
   solicitudDescuentoFrontCrear: data=>axios.post(host+"solicitudDescuentoFrontCrear",data),
   solicitudDescuentoFrontVerificar: data=>axios.post(host+"solicitudDescuentoFrontVerificar",data),
+  solicitudDescuentoBackendVerificar: data=>axios.post(host+"solicitudDescuentoBackendVerificar",data),
   solicitudDescuentoFrontCancelar: data=>axios.post(host+"solicitudDescuentoFrontCancelar",data),
   solicitudCreditoFrontCrear: data=>axios.post(host+"solicitudCreditoFrontCrear",data),
 
@@ -67,7 +68,6 @@ const db = {
   enviarTransaccionPOS: data=>axios.post(host+"enviarTransaccionPOS",data),
   revalidarPosDebito: data=>axios.post(host+"revalidarPosDebito",data),
   queryTransaccionPosYActualizarPago: data=>axios.post(host+"queryTransaccionPosYActualizarPago",data),
-  registrarPosRechazado: data=>axios.post(host+"registrarPosRechazado",data),
   ejecutarPostSync: data=>axios.post(host+"ejecutarPostSync",data),
   
   createDevolucion: data=>axios.post(host+"createDevolucion",data),

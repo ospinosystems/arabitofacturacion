@@ -157,14 +157,16 @@ export default function ListProductosInterno({
     }
     return orderBy === 'asc' ? <span className="text-orange-600">↑</span> : <span className="text-orange-600">↓</span>;
   };
-  //f1 - Crear nuevo pedido (solo front)
+  //f1 - Crear nuevo pedido
+  // F1-BACKEND 2026-05-27 — preferir backend (addNewPedido). Fallback a front-only
+  // si por algún motivo no está disponible (offline, prop no inyectada).
   useHotkeys(
     "f1",
     () => {
-      if (typeof addNewPedidoFront === 'function') {
-        addNewPedidoFront();
-      } else if (typeof addNewPedido === 'function') {
+      if (typeof addNewPedido === 'function') {
         addNewPedido();
+      } else if (typeof addNewPedidoFront === 'function') {
+        addNewPedidoFront();
       }
     },
     {

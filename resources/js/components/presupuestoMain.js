@@ -31,6 +31,7 @@ export default function PresupuestoMain({
     selectProductoFast,
     setpresupuestocarritotopedido,
     setpresupuestoAPedidoFront,
+    setpresupuestoAPedidoBackend,
     openBarcodeScan,
     number,
     dolar
@@ -442,14 +443,16 @@ export default function PresupuestoMain({
                                         <i className="mr-2 fa fa-print"></i>
                                         Imprimir Presupuesto
                                     </button>
-                                    {setpresupuestoAPedidoFront && (
+                                    {/* PRESUPUESTO-BACKEND 2026-05-27 — el botón principal ahora crea pedido backend.
+                                        Si el handler backend no está disponible (offline o no inyectado), cae al front. */}
+                                    {(setpresupuestoAPedidoBackend || setpresupuestoAPedidoFront) && (
                                         <button
                                             className="flex-1 px-4 py-2 text-sm font-medium text-white transition-colors bg-blue-500 rounded hover:bg-blue-600 min-w-[140px]"
-                                            onClick={setpresupuestoAPedidoFront}
-                                            title="Crea un pedido solo en pantalla (tipo front) sin guardar en backend hasta el pago"
+                                            onClick={setpresupuestoAPedidoBackend || setpresupuestoAPedidoFront}
+                                            title={setpresupuestoAPedidoBackend ? "Crea un pedido real en backend y abre el panel de pago" : "Crea un pedido solo en pantalla (tipo front) sin guardar en backend hasta el pago"}
                                         >
                                             <i className="mr-2 fa fa-file-text-o"></i>
-                                            Convertir a Pedido (Front)
+                                            Convertir a Pedido
                                         </button>
                                     )}
                                 </div>
@@ -484,11 +487,11 @@ export default function PresupuestoMain({
                                             >
                                                 <i className="text-xs fa fa-print"></i>
                                             </button>
-                                            {setpresupuestoAPedidoFront && (
+                                            {(setpresupuestoAPedidoBackend || setpresupuestoAPedidoFront) && (
                                                 <button
                                                     className="flex items-center justify-center w-8 h-8 text-white transition-colors bg-blue-500 rounded-full hover:bg-blue-600"
-                                                    onClick={setpresupuestoAPedidoFront}
-                                                    title="Convertir a Pedido (Front)"
+                                                    onClick={setpresupuestoAPedidoBackend || setpresupuestoAPedidoFront}
+                                                    title={setpresupuestoAPedidoBackend ? "Convertir a Pedido (Backend)" : "Convertir a Pedido (Front)"}
                                                 >
                                                     <i className="text-xs fa fa-file-text-o"></i>
                                                 </button>

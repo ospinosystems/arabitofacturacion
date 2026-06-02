@@ -137,8 +137,14 @@ export default function PagarMain({
     verificarDescuentoTotalFront,
     cancelarSolicitudDescuentoTotalFront,
     cancelandoDescuentoTotal = false,
+    // DESCUENTO BACKEND 2026-05-27 — espejo del flujo front para pedidos backend
+    pendientesDescuentoBackend = {},
+    verificarDescuentoBackend = () => {},
+    verificandoDescuentoBackend = false,
     setCantidadCarrito,
     setCantidadCarritoFront,
+    // INLINE EDITOR 2026-05-27 — handler unificado (front + backend) sin window.prompt.
+    setCantidadCarritoInline = null,
     toggleAddPersona,
     setToggleAddPersona,
     toggleImprimirTicket,
@@ -154,6 +160,10 @@ export default function PagarMain({
     viewReportPedido,
     autoCorrector,
     setautoCorrector,
+    // SOBRANTE/REFUND 2026-05-27 — cuando true, salta excedeTotal en transfer/débito
+    // y habilita refunds por transferencia negativa para netear sobrante.
+    permiteSobrante = false,
+    setpermiteSobrante = () => {},
     getDebito,
     getCredito,
     getTransferencia,
@@ -1620,6 +1630,10 @@ export default function PagarMain({
 
         const totalPedido = pedidoData.clean_total;
         const esDevolucion = totalPedido < 0;
+        // SOBRANTE/REFUND 2026-05-27 — pedido sin items: el cajero usa el mismo flujo de "Nuevo pedido"
+        // y solo carga el método de refund (transferencia negativa) o el ingreso directo. No hay items
+        // contra los que validar; el total del pedido se infiere del neto de métodos al facturar.
+        const pedidoSinItems = !pedidoData?.items || pedidoData.items.length === 0;
 
         // Calcular total de débitos NO bloqueados (excluir aprobados)
         // IMPORTANTE: Siempre revisar el array debitos, incluso si usarMultiplesDebitos es false
@@ -1692,19 +1706,34 @@ export default function PagarMain({
         const totalPagadoConNuevoValorBs = totalPagadoConNuevoValorUSD * tasaBsPedido;
         
         // Si el total pagado supera el total del pedido, verificar qué hacer
-        const excedeTotal = esDevolucion 
+        const excedeTotal = esDevolucion
             ? totalPagadoConNuevoValorBs < totalPedidoAjustadoBs - 0.01
             : totalPagadoConNuevoValorBs > totalPedidoAjustadoBs + 0.01;
 
+        // SOBRANTE/REFUND 2026-05-27 — si permiteSobrante está ON, Débito y Transferencia
+        // pueden exceder el total (el cajero balanceará con una transfer negativa de refund).
+        // Otros métodos siguen con la regla original (no se permite cobrar de más en efectivo/crédito/biopago).
+        const sobranteAplica = permiteSobrante && (type === "Debito" || type === "Transferencia");
+        // Cuando el pedido no tiene items, el total no aplica como tope: el cajero está
+        // cargando un movimiento independiente (refund o pago directo) y el sistema lo
+        // armará como devolución pura al facturar. Solo Débito/Transferencia siguen siendo
+        // los métodos válidos para este flujo (política: irreversibles).
+        const flujoLibreSinItems = pedidoSinItems && (type === "Debito" || type === "Transferencia");
+
         // Si excedeTotal Y autoCorrector está INACTIVO: limpiar el campo (comportamiento anterior)
         // Si excedeTotal Y autoCorrector está ACTIVO: no limpiar, dejar que la redistribución lo maneje
-        if (excedeTotal && !autoCorrector && type !== "Debito") {
+        if (excedeTotal && !autoCorrector && type !== "Debito" && !sobranteAplica && !flujoLibreSinItems) {
             if (type === "EfectivoUSD") setEfectivo_dolar("");
             else if (type === "EfectivoBs") setEfectivo_bs("");
             else if (type === "EfectivoCOP") setEfectivo_peso("");
             else if (type === "Transferencia") setTransferencia("");
             else if (type === "Credito") setCredito("");
             else if (type === "Biopago") setBiopago("");
+            return;
+        }
+
+        // SOBRANTE/REFUND — si aplica sobrante o pedido sin items, no recortar ni redistribuir.
+        if (sobranteAplica || flujoLibreSinItems) {
             return;
         }
 
@@ -2549,15 +2578,19 @@ export default function PagarMain({
         },
         [showModalPosDebito, togglereferenciapago]
     );
-    //f1 - Crear nuevo pedido (solo front)
+    //f1 - Crear nuevo pedido
+    // NUEVO 2026-05-27 — preferir backend (addNewPedido) sobre front-only.
+    // Fallback a addNewPedidoFront si por algún motivo no está disponible (offline).
     useHotkeys(
         "f1",
         () => {
             if (showModalPosDebito || togglereferenciapago) return; // Bloquear si modal POS o referencia está abierto
-            if (typeof addNewPedidoFront === "function") {
+            if (typeof addNewPedido === "function") {
+                addNewPedido();
+            } else if (typeof addNewPedidoFront === "function") {
                 addNewPedidoFront();
             } else {
-                console.warn("addNewPedidoFront function not available");
+                console.warn("addNewPedido / addNewPedidoFront function not available");
             }
         },
         {
@@ -2784,8 +2817,10 @@ export default function PagarMain({
                                             </div>
                                         </div>
 
-                                        {/* Descuento */}
-                                        {pedidoData._frontOnly && descuentoTotalEditingId != null && String(id) === String(descuentoTotalEditingId) ? (
+                                        {/* Descuento
+                                            INLINE EDITOR 2026-05-27 — disponible para frontOnly y backend.
+                                            Antes solo se mostraba inline para front; backend abría window.prompt. */}
+                                        {descuentoTotalEditingId != null && String(id) === String(descuentoTotalEditingId) ? (
                                             <div className="relative flex items-center gap-1">
                                                 <input
                                                     ref={descuentoTotalInputRef}
@@ -2891,6 +2926,34 @@ export default function PagarMain({
                                         </div>
                                         );
                                     })()}
+
+                                    {/* DESCUENTO BACKEND 2026-05-27 — botón "Verificar aprobación" para pedidos backend
+                                        con solicitud de descuento pendiente. Espejo del flujo front-only de arriba.
+                                        Cuando central aprueba, los items se actualizan con sus descuentos visualmente. */}
+                                    {!pedidoData._frontOnly && pedidoData?.id && pendientesDescuentoBackend?.[pedidoData.id] && (
+                                        <div className="mt-2 pt-2 border-t border-gray-200 flex flex-col gap-2">
+                                            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                                                Se envió la solicitud de descuento {pendientesDescuentoBackend[pedidoData.id].tipo === 'total' ? 'total' : 'unitario'} a central. Esperando aprobación.
+                                            </p>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    disabled={verificandoDescuentoBackend}
+                                                    onClick={() => verificarDescuentoBackend && verificarDescuentoBackend()}
+                                                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-orange-800 bg-orange-200 border border-orange-400 rounded-lg hover:bg-orange-300 disabled:opacity-60"
+                                                >
+                                                    {verificandoDescuentoBackend ? (
+                                                        <>
+                                                            <span className="inline-block w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                                                            Verificando…
+                                                        </>
+                                                    ) : (
+                                                        <>Verificar aprobación</>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Descuento por método de pago ya aprobado: opción para eliminar validación si fue error */}
                                     {pedidoData._frontOnly && pedidoData.id && !pendienteDescuentoMetodoPago[pedidoData.id] && (pedidoData.items || []).some((it) => it.descuento != null && parseFloat(it.descuento) > 0) && descuentoMetodoPagoAprobadoPorUuid[pedidoData.id] && (
@@ -3151,93 +3214,86 @@ export default function PagarMain({
                                                                     ) : null} */}
                                                                 </div>
                                                             </td>
+                                                            {/* INLINE EDITOR 2026-05-27 — celda de cantidad unificada front + backend.
+                                                                Antes: front mostraba input inline, backend usaba window.prompt.
+                                                                Ahora: ambos abren el mismo input al hacer click; el handler decide la persistencia. */}
                                                             <td
                                                                 className={`px-2 py-1 text-center ${e.descuento != null && parseFloat(e.descuento) > 0 ? "text-gray-500" : ""}`}
-                                                                onClick={
-                                                                    (pendienteDescuentoMetodoPago[pedidoData.id] || (e.descuento != null && parseFloat(e.descuento) > 0 && descuentoMetodoPagoAprobadoPorUuid[pedidoData.id]))
-                                                                        ? undefined
-                                                                        : !pedidoData._frontOnly && e.condicion != 1
-                                                                        ? setCantidadCarrito
-                                                                        : undefined
-                                                                }
-                                                                data-index={pedidoData._frontOnly ? undefined : e.id}
+                                                                data-index={e.id}
                                                                 title={pendienteDescuentoMetodoPago[pedidoData.id] ? "Solicitud de descuento en espera. Verifique aprobación o cancele para editar." : (e.descuento != null && parseFloat(e.descuento) > 0 && descuentoMetodoPagoAprobadoPorUuid[pedidoData.id] ? "No se puede editar cantidad: el ítem tiene descuento aprobado por central" : undefined)}
                                                             >
-                                                                {pedidoData._frontOnly ? (
-                                                                    (pendienteDescuentoMetodoPago[pedidoData.id] || (e.descuento != null && parseFloat(e.descuento) > 0 && descuentoMetodoPagoAprobadoPorUuid[pedidoData.id])) ? (
+                                                                {(pendienteDescuentoMetodoPago[pedidoData.id] || (e.descuento != null && parseFloat(e.descuento) > 0 && descuentoMetodoPagoAprobadoPorUuid[pedidoData.id]) || e.condicion == 1) ? (
+                                                                    <div className="flex items-center justify-center space-x-1">
+                                                                        {ifnegative ? (
+                                                                            e.cantidad < 0 ? (
+                                                                                <span className="px-1 py-0.5 bg-green-100 text-green-800 rounded text-xs">
+                                                                                    <i className="fa fa-arrow-down"></i>
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="px-1 py-0.5 bg-red-100 text-red-800 rounded text-xs">
+                                                                                    <i className="fa fa-arrow-up"></i>
+                                                                                </span>
+                                                                            )
+                                                                        ) : null}
                                                                         <span className="text-xs">
                                                                             {Number(e.cantidad) % 1 === 0
                                                                                 ? Number(e.cantidad)
                                                                                 : Number(e.cantidad).toFixed(2)}
                                                                         </span>
-                                                                    ) : editingCantidadFrontItemId === e.id ? (
-                                                                        <input
-                                                                            ref={quantityFrontInputRef}
-                                                                            type="number"
-                                                                            className="w-14 px-1 py-0.5 text-xs text-center border border-gray-300 rounded focus:ring-1 focus:ring-orange-400 focus:border-orange-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                                            value={editingCantidadFront[e.id] !== undefined ? editingCantidadFront[e.id] : e.cantidad}
-                                                                            min="0"
-                                                                            onClick={(ev) => ev.stopPropagation()}
-                                                                            onChange={(ev) => {
-                                                                                const v = ev.target.value;
-                                                                                if (v === "" || /^\d*\.?\d*$/.test(v)) setEditingCantidadFront((prev) => ({ ...prev, [e.id]: v }));
-                                                                            }}
-                                                                            onBlur={(ev) => {
-                                                                                const v = ev.target.value === "" ? "0" : ev.target.value;
+                                                                    </div>
+                                                                ) : editingCantidadFrontItemId === e.id ? (
+                                                                    <input
+                                                                        ref={quantityFrontInputRef}
+                                                                        type="number"
+                                                                        className="w-14 px-1 py-0.5 text-xs text-center border border-gray-300 rounded focus:ring-1 focus:ring-orange-400 focus:border-orange-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                        value={editingCantidadFront[e.id] !== undefined ? editingCantidadFront[e.id] : e.cantidad}
+                                                                        min="0"
+                                                                        onClick={(ev) => ev.stopPropagation()}
+                                                                        onChange={(ev) => {
+                                                                            const v = ev.target.value;
+                                                                            if (v === "" || /^\d*\.?\d*$/.test(v)) setEditingCantidadFront((prev) => ({ ...prev, [e.id]: v }));
+                                                                        }}
+                                                                        onBlur={(ev) => {
+                                                                            const v = ev.target.value === "" ? "0" : ev.target.value;
+                                                                            // Routing: inline handler unificado si está disponible; sino fallback al de front.
+                                                                            if (typeof setCantidadCarritoInline === "function") {
+                                                                                setCantidadCarritoInline(e.id, v);
+                                                                            } else if (pedidoData._frontOnly && typeof setCantidadCarritoFront === "function") {
                                                                                 setCantidadCarritoFront(e.id, v);
+                                                                            }
+                                                                            setEditingCantidadFrontItemId(null);
+                                                                            setEditingCantidadFront((prev) => {
+                                                                                const next = { ...prev };
+                                                                                delete next[e.id];
+                                                                                return next;
+                                                                            });
+                                                                        }}
+                                                                        onKeyDown={(ev) => {
+                                                                            if (ev.key === "Enter") {
+                                                                                ev.target.blur();
+                                                                                ev.preventDefault();
+                                                                            }
+                                                                            if (ev.key === "Escape") {
                                                                                 setEditingCantidadFrontItemId(null);
                                                                                 setEditingCantidadFront((prev) => {
                                                                                     const next = { ...prev };
                                                                                     delete next[e.id];
                                                                                     return next;
                                                                                 });
-                                                                            }}
-                                                                            onKeyDown={(ev) => {
-                                                                                if (ev.key === "Enter") {
-                                                                                    ev.target.blur();
-                                                                                    ev.preventDefault();
-                                                                                }
-                                                                                if (ev.key === "Escape") {
-                                                                                    setEditingCantidadFrontItemId(null);
-                                                                                    setEditingCantidadFront((prev) => {
-                                                                                        const next = { ...prev };
-                                                                                        delete next[e.id];
-                                                                                        return next;
-                                                                                    });
-                                                                                    ev.target.blur();
-                                                                                    ev.preventDefault();
-                                                                                }
-                                                                            }}
-                                                                        />
-                                                                    ) : (
-                                                                        <div
-                                                                            className="flex items-center justify-center space-x-1 cursor-pointer hover:bg-amber-50 rounded px-1 py-0.5 min-h-[1.5rem]"
-                                                                            onClick={(ev) => {
-                                                                                ev.stopPropagation();
-                                                                                setEditingCantidadFrontItemId(e.id);
-                                                                            }}
-                                                                            title="Click para editar cantidad"
-                                                                        >
-                                                                            {ifnegative ? (
-                                                                                e.cantidad < 0 ? (
-                                                                                    <span className="px-1 py-0.5 bg-green-100 text-green-800 rounded text-xs">
-                                                                                        <i className="fa fa-arrow-down"></i>
-                                                                                    </span>
-                                                                                ) : (
-                                                                                    <span className="px-1 py-0.5 bg-red-100 text-red-800 rounded text-xs">
-                                                                                        <i className="fa fa-arrow-up"></i>
-                                                                                    </span>
-                                                                                )
-                                                                            ) : null}
-                                                                            <span className="text-xs">
-                                                                                {Number(e.cantidad) % 1 === 0
-                                                                                    ? Number(e.cantidad)
-                                                                                    : Number(e.cantidad).toFixed(2)}
-                                                                            </span>
-                                                                        </div>
-                                                                    )
+                                                                                ev.target.blur();
+                                                                                ev.preventDefault();
+                                                                            }
+                                                                        }}
+                                                                    />
                                                                 ) : (
-                                                                    <div className="flex items-center justify-center space-x-1 cursor-pointer">
+                                                                    <div
+                                                                        className="flex items-center justify-center space-x-1 cursor-pointer hover:bg-amber-50 rounded px-1 py-0.5 min-h-[1.5rem]"
+                                                                        onClick={(ev) => {
+                                                                            ev.stopPropagation();
+                                                                            setEditingCantidadFrontItemId(e.id);
+                                                                        }}
+                                                                        title="Click para editar cantidad"
+                                                                    >
                                                                         {ifnegative ? (
                                                                             e.cantidad < 0 ? (
                                                                                 <span className="px-1 py-0.5 bg-green-100 text-green-800 rounded text-xs">
@@ -3437,22 +3493,76 @@ export default function PagarMain({
                                             </tbody>
                                         </table>
                                     </div>
-                                ) : (
-                                    <div className="mb-1 overflow-hidden bg-white border border-gray-200 rounded">
-                                        <div className="flex flex-col items-center justify-center px-4 py-12">
-                                            <div className="flex items-center justify-center w-16 h-16 mb-3 bg-gray-100 rounded-full">
-                                                <i className="text-2xl text-gray-400 fa fa-box-open"></i>
+                                ) : (() => {
+                                    // SOBRANTE/REFUND 2026-05-27 — pedido sin items: el sistema lo procesará como devolución pura
+                                    // (ver auto-detección en facturar.js > procesarPagoInterno). Mostramos un indicador
+                                    // visual claro en lugar del genérico "Sin productos" cuando ya hay refs cargadas.
+                                    const refs = Array.isArray(refPago) ? refPago : [];
+                                    const refsNeg = refs.filter(r => parseFloat(r.monto) < 0);
+                                    const refsPos = refs.filter(r => parseFloat(r.monto) > 0);
+                                    const hayRefs = refs.length > 0;
+                                    const sumaRefs = refs.reduce((acc, r) => acc + (parseFloat(r.monto) || 0), 0);
+                                    const esCompensacion = refsNeg.length > 0 && refsPos.length > 0 && Math.abs(sumaRefs) < 0.01;
+                                    const esRefundPuro = refsNeg.length > 0 && refsPos.length === 0;
+                                    const esIngresoSinVenta = refsPos.length > 0 && refsNeg.length === 0;
+
+                                    if (!hayRefs) {
+                                        return (
+                                            <div className="mb-1 overflow-hidden bg-white border border-gray-200 rounded">
+                                                <div className="flex flex-col items-center justify-center px-4 py-12">
+                                                    <div className="flex items-center justify-center w-16 h-16 mb-3 bg-gray-100 rounded-full">
+                                                        <i className="text-2xl text-gray-400 fa fa-box-open"></i>
+                                                    </div>
+                                                    <p className="mb-1 text-sm font-semibold text-gray-700">
+                                                        Sin productos aún
+                                                    </p>
+                                                    <p className="text-xs text-center text-gray-500">
+                                                        Comienza agregando productos al pedido,
+                                                        o cargá una referencia de transferencia para registrar
+                                                        un pago / devolución sin venta.
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <p className="mb-1 text-sm font-semibold text-gray-700">
-                                                Sin productos aún
-                                            </p>
-                                            <p className="text-xs text-center text-gray-500">
-                                                Comienza agregando productos al
-                                                pedido
-                                            </p>
+                                        );
+                                    }
+
+                                    // Estilos por tipo de operación
+                                    const cfg = esCompensacion
+                                        ? { borde: "border-orange-300", bg: "bg-orange-50", iconBg: "bg-orange-100", iconColor: "text-orange-600", icon: "fa-exchange-alt", titulo: "Compensación: entrante = egreso", subtitulo: "Cliente transfirió por error y se le devuelve el mismo monto. Saldo neto cero.", chip: "DEVOLUCIÓN", chipColor: "text-orange-700 bg-orange-100 border-orange-300" }
+                                        : esRefundPuro
+                                        ? { borde: "border-red-300", bg: "bg-red-50", iconBg: "bg-red-100", iconColor: "text-red-600", icon: "fa-undo", titulo: "Devolución al cliente", subtitulo: "Refund por sobrante o transferencia recibida sin venta asociada.", chip: "DEVOLUCIÓN", chipColor: "text-red-700 bg-red-100 border-red-300" }
+                                        : esIngresoSinVenta
+                                        ? { borde: "border-blue-300", bg: "bg-blue-50", iconBg: "bg-blue-100", iconColor: "text-blue-600", icon: "fa-arrow-down", titulo: "Ingreso sin venta", subtitulo: "Cobro registrado sin productos asociados.", chip: "INGRESO", chipColor: "text-blue-700 bg-blue-100 border-blue-300" }
+                                        : { borde: "border-gray-300", bg: "bg-gray-50", iconBg: "bg-gray-100", iconColor: "text-gray-600", icon: "fa-exchange-alt", titulo: "Pedido sin productos", subtitulo: "Movimiento bancario sin venta de productos.", chip: "MOVIMIENTO", chipColor: "text-gray-700 bg-gray-100 border-gray-300" };
+
+                                    return (
+                                        <div className={`mb-1 overflow-hidden bg-white border ${cfg.borde} rounded`}>
+                                            <div className={`flex flex-col items-center justify-center px-4 py-8 ${cfg.bg}`}>
+                                                <div className={`flex items-center justify-center w-14 h-14 mb-3 ${cfg.iconBg} rounded-full`}>
+                                                    <i className={`text-xl ${cfg.iconColor} fa ${cfg.icon}`}></i>
+                                                </div>
+                                                <span className={`inline-flex items-center px-2 py-0.5 mb-2 text-[10px] font-bold border rounded uppercase tracking-wide ${cfg.chipColor}`}>
+                                                    {cfg.chip}
+                                                </span>
+                                                <p className="mb-1 text-sm font-semibold text-gray-800">
+                                                    {cfg.titulo}
+                                                </p>
+                                                <p className="max-w-xs text-xs text-center text-gray-600">
+                                                    {cfg.subtitulo}
+                                                </p>
+                                                <div className="mt-3 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded">
+                                                    {refsPos.length > 0 && (
+                                                        <span className="text-green-700">+{refsPos.length} entrante{refsPos.length === 1 ? "" : "s"}</span>
+                                                    )}
+                                                    {refsPos.length > 0 && refsNeg.length > 0 && <span className="mx-1.5 text-gray-400">·</span>}
+                                                    {refsNeg.length > 0 && (
+                                                        <span className="text-red-700">{refsNeg.length} saliente{refsNeg.length === 1 ? "" : "s"}</span>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    );
+                                })()}
 
                                 {/* ══════════ VISTA DE PAGOS PROCESADOS ══════════ */}
                                 {pedidoData?.estado === 1 && pedidoData?.pagos && pedidoData.pagos.length > 0 ? (
@@ -4099,31 +4209,28 @@ export default function PagarMain({
                                                                     })()}
                                                                 </div>
 
-                                                                {/* Monto como badge a la derecha */}
-                                                                {(e.tipo == 1 &&
-                                                                    e.monto !=
-                                                                        0) ||
-                                                                (e.tipo == 2 &&
-                                                                    e.monto !=
-                                                                        0) ||
-                                                                (e.tipo == 5 &&
-                                                                    e.monto !=
-                                                                        0) ? (
-                                                                    <div className="ml-3">
-                                                                        <span className="px-2 py-1 text-xs font-medium text-green-700 border !border-green-300 bg-green-100 rounded">
-                                                                            {e.tipo ==
-                                                                                1 &&
-                                                                                "T. "}
-                                                                            {e.tipo ==
-                                                                                2 &&
-                                                                                "D. "}
-                                                                            {e.tipo ==
-                                                                                5 &&
-                                                                                "B. "}
-                                                                            {moneda(
-                                                                                e.monto
-                                                                            )}
+                                                                {/* Monto como badge a la derecha.
+                                                                    SOBRANTE/REFUND 2026-05-27 — refs con monto < 0 son devoluciones
+                                                                    (refund saliente). Se muestran en rojo con etiqueta "Devolución"
+                                                                    para distinguir visualmente del ingreso (verde). */}
+                                                                {(e.tipo == 1 || e.tipo == 2 || e.tipo == 5) && parseFloat(e.monto) != 0 ? (
+                                                                    <div className="ml-3 flex flex-col items-end gap-0.5">
+                                                                        <span className={`px-2 py-1 text-xs font-medium border rounded ${
+                                                                            parseFloat(e.monto) < 0
+                                                                                ? "text-red-700 !border-red-300 bg-red-100"
+                                                                                : "text-green-700 !border-green-300 bg-green-100"
+                                                                        }`}>
+                                                                            {e.tipo == 1 && "T. "}
+                                                                            {e.tipo == 2 && "D. "}
+                                                                            {e.tipo == 5 && "B. "}
+                                                                            {moneda(e.monto)}
                                                                         </span>
+                                                                        {parseFloat(e.monto) < 0 && (
+                                                                            <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold text-red-700 bg-red-50 border !border-red-200 rounded uppercase tracking-wide">
+                                                                                <i className="mr-1 fa fa-undo text-[9px]"></i>
+                                                                                Devolución
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                 ) : null}
                                                             </div>
@@ -4500,7 +4607,7 @@ export default function PagarMain({
 
                                 <div className="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 rounded border border-gray-200">
                                     {/* Auto resta */}
-                                    <div 
+                                    <div
                                         className="flex items-center gap-1 cursor-pointer hover:opacity-80"
                                         onClick={() => setautoCorrector(!autoCorrector)}
                                         title="Auto resta de pagos"
@@ -4508,6 +4615,19 @@ export default function PagarMain({
                                         <span className="text-[10px] text-gray-500">Auto</span>
                                         <span className={`text-[10px] px-1.5 py-0.5 rounded ${autoCorrector ? "bg-green-100 text-green-600" : "bg-gray-200 text-gray-400"}`}>
                                             {autoCorrector ? "ON" : "OFF"}
+                                        </span>
+                                    </div>
+
+                                    {/* SOBRANTE/REFUND 2026-05-27 — permite que Débito o Transferencia excedan el total.
+                                        El cajero balancea cargando una transferencia negativa (refund). */}
+                                    <div
+                                        className="flex items-center gap-1 cursor-pointer hover:opacity-80"
+                                        onClick={() => setpermiteSobrante(!permiteSobrante)}
+                                        title="Permitir sobrante en Débito/Transferencia (cliente pagó de más). Carga una transferencia negativa como refund para netear."
+                                    >
+                                        <span className="text-[10px] text-gray-500">Sobrante</span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${permiteSobrante ? "bg-orange-100 text-orange-700 font-semibold" : "bg-gray-200 text-gray-400"}`}>
+                                            {permiteSobrante ? "ON" : "OFF"}
                                         </span>
                                     </div>
 

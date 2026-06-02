@@ -15,11 +15,13 @@ export default function({
 
             {/* Versión Desktop - Una sola barra: Nuevo + todos los tabs (front y normales) juntos */}
             <div className="items-center flex-1 hidden min-w-0 gap-2 md:flex">
-                {/* Botón Nuevo Pedido (solo front, F1) - Desktop */}
-                {addNewPedidoFront && (
+                {/* Botón Nuevo Pedido (F1) - Desktop
+                    NUEVO 2026-05-27 — crea pedido en backend directamente (antes era front-only UUID).
+                    addNewPedidoFront sigue disponible para otros call sites (sync/offline). */}
+                {(addNewPedido || addNewPedidoFront) && (
                     <button
                         className="flex items-center flex-shrink-0 gap-1 px-2 py-1 text-xs font-medium text-blue-700 transition-colors border !border-blue-200 rounded bg-blue-50 hover:bg-blue-100"
-                        onClick={() => addNewPedidoFront()}
+                        onClick={() => (addNewPedido ? addNewPedido() : addNewPedidoFront())}
                         title="Nuevo pedido (F1)"
                     >
                         <i className="fa fa-plus"></i>
@@ -79,11 +81,11 @@ export default function({
 
             {/* Versión Mobile - Vertical */}
             <div className="flex items-center flex-1 min-w-0 gap-2 md:hidden">
-                {/* Botón Nuevo Pedido (F1) - Mobile */}
-                {addNewPedidoFront && (
+                {/* Botón Nuevo Pedido (F1) - Mobile — ver comentario en versión Desktop */}
+                {(addNewPedido || addNewPedidoFront) && (
                     <button
                         className="flex-shrink-0 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-500 p-1.5 rounded font-medium text-xs transition-colors"
-                        onClick={() => addNewPedidoFront()}
+                        onClick={() => (addNewPedido ? addNewPedido() : addNewPedidoFront())}
                         title="Nuevo pedido (F1)"
                     >
                         <i className="fa fa-plus"></i>
