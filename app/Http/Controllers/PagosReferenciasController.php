@@ -623,11 +623,140 @@ class PagosReferenciasController extends Controller
             }
 
             return Response::json(["msj"=>"¡Éxito!","estado"=>true,"id_referencia"=>$item->id]);
-            
+
         } catch (\Exception $e) {
             return Response::json(["msj"=>"Error: ".$e->getMessage(),"estado"=>false]);
         }
     }
+
+    /**
+     * BUSCAR-REF-MI-PEDIDO 2026-05-27
+     *
+     * Recupera desde central una ref que ya existe allá pero no está en pago_referencias
+     * local. Caso de uso: el cajero ya envió la ref hace días, central la persistió, pero
+     * la copia local se perdió (DB rota, browser crash, ventana cerrada antes de finalizar).
+     * Al reintentar el alta normal, central rechaza con
+     * "Ya existe una transferencia con este número de referencia...".
+     *
+     * Este endpoint hace:
+     *   1) Llama a central /buscarRefDeMiPedido autenticado con codigo_origen del cajero.
+     *      Central solo devuelve refs de la MISMA sucursal — no expone refs ajenas.
+     *   2) Si encuentra la ref, la persiste en pagos_referencias local con los datos
+     *      devueltos por central (banco, descripcion, monto, telefono, estatus, etc).
+     *   3) Si ya existe local una ref con misma descripcion+banco, devuelve la existente
+     *      sin duplicar (idempotente).
+     *
+     * Body (POST):
+     *   - id_pedido    (int o uuid) — al cual asignar la ref importada
+     *   - banco        (string) — código banco usado al crearla originalmente
+     *   - descripcion  (string) — loteserial/referencia (mismo input del cajero)
+     *   - monto        (decimal, opcional) — para acotar el match
+     *
+     * Retorna:
+     *   - { estado: true, msj: "...", id_referencia: <id local>, ref: {...} }
+     *   - { estado: false, msj: "..." }
+     */
+    public function importarRefDeCentral(Request $req)
+    {
+        try {
+            $id_pedido = $req->id_pedido;
+            $banco = $req->banco;
+            $descripcion = $req->descripcion;
+            $monto = $req->has('monto') && $req->monto !== '' && $req->monto !== null
+                ? (float) $req->monto
+                : null;
+
+            if (empty($id_pedido) || empty($banco) || empty($descripcion)) {
+                return Response::json([
+                    "estado" => false,
+                    "msj" => "Faltan parámetros: id_pedido, banco y descripcion son requeridos",
+                ]);
+            }
+
+            // Autoriza al usuario sobre el pedido — misma protección que addRefPago
+            (new PedidosController)->checkPedidoAuth($id_pedido);
+
+            // Idempotencia: si la ref ya existe local con misma descripcion+banco+id_pedido,
+            // devolverla en vez de pedirla otra vez a central. Evita lecturas inútiles a central.
+            $existeLocal = pagos_referencias::where("descripcion", $descripcion)
+                ->where("banco", $banco)
+                ->where("id_pedido", $id_pedido)
+                ->first();
+
+            if ($existeLocal) {
+                return Response::json([
+                    "estado" => true,
+                    "msj" => "La referencia ya está en local (no fue necesario importar).",
+                    "id_referencia" => $existeLocal->id,
+                    "ref" => $existeLocal->toArray(),
+                    "fuente" => "local_ya_existia",
+                ]);
+            }
+
+            // Consultar central
+            $payload = [
+                "banco"       => $banco,
+                "loteserial"  => $descripcion,
+                "id_pedido"   => $id_pedido,
+            ];
+            if ($monto !== null) {
+                $payload["monto"] = $monto;
+            }
+
+            $resultado = (new sendCentral)->buscarRefDeMiPedido($payload);
+
+            if (!is_array($resultado) || empty($resultado["estado"])) {
+                $msj = is_array($resultado) && !empty($resultado["msj"])
+                    ? $resultado["msj"]
+                    : "Central no respondió o no encontró la referencia.";
+                return Response::json([
+                    "estado" => false,
+                    "msj" => "No se pudo recuperar la referencia desde central: " . $msj,
+                ]);
+            }
+
+            $refCentral = $resultado["ref"] ?? null;
+            if (!$refCentral) {
+                return Response::json([
+                    "estado" => false,
+                    "msj" => "Central respondió OK pero sin payload de ref.",
+                ]);
+            }
+
+            // Persistir en local con los datos de central
+            $item = new pagos_referencias;
+            $item->tipo        = $refCentral["tipo"] ?? "transferencia";
+            $item->monto       = number_format((float) ($refCentral["monto"] ?? 0), 2, '.', '');
+            $item->id_pedido   = $id_pedido;
+            $item->descripcion = $refCentral["descripcion"] ?? $descripcion;
+            $item->banco       = $refCentral["banco"] ?? $banco;
+            $item->telefono    = $refCentral["telefono"] ?? null;
+            $item->banco_origen= $refCentral["banco_origen"] ?? null;
+            $item->fecha_pago  = $refCentral["fecha_pago"] ?? null;
+            $item->categoria   = $refCentral["categoria"] ?? "central";
+            $item->estatus     = $refCentral["estatus"] ?? "pendiente";
+            $item->cedula      = $refCentral["cedula"] ?? null;
+            if (isset($refCentral["monto_real"])) {
+                $item->monto_real = $refCentral["monto_real"];
+            }
+            $item->save();
+
+            return Response::json([
+                "estado" => true,
+                "msj" => "Referencia importada desde central. Estatus: " . $item->estatus . ".",
+                "id_referencia" => $item->id,
+                "ref" => $item->toArray(),
+                "fuente" => "importada_de_central",
+            ]);
+
+        } catch (\Exception $e) {
+            return Response::json([
+                "estado" => false,
+                "msj" => "Error al importar ref de central: " . $e->getMessage(),
+            ]);
+        }
+    }
+
     public function delRefPago(Request $req)
     {
          try {

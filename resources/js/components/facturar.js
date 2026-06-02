@@ -1700,6 +1700,13 @@ export default function Facturar({
             }
             // Pedido con id de backend: enviar al servidor
             let ref = descripcion_referenciapago;
+            // Capturar valores actuales en closure por si el usuario tipea de nuevo mientras importa
+            const refSnapshot = {
+                descripcion: ref,
+                banco: banco_referenciapago,
+                monto: monto_referenciapago,
+                id_pedido: pedidoData.id,
+            };
             db.addRefPago({
                 tipo: tipo_referenciapago,
                 descripcion: ref,
@@ -1711,6 +1718,52 @@ export default function Facturar({
                 categoria: categoria,
                 ...datosAdicionales,
             }).then((res) => {
+                // BUSCAR-REF-MI-PEDIDO 2026-05-27 — si central rechaza por duplicado,
+                // ofrecer al cajero importar la ref que vive en central pero falta local.
+                // Patrones de detección: el msj del addRefPago local de pagosReferenciasController
+                // ("Ya existe Referencia en Banco") o el de central que el cajero llegó a ver
+                // antes de salvar local ("Ya existe una transferencia con este número de referencia").
+                const msj = (res?.data?.msj || "").toString();
+                const estado = res?.data?.estado;
+                const esDuplicadoCentral = !estado && /ya existe/i.test(msj) && /(transferencia|referencia)/i.test(msj);
+                if (esDuplicadoCentral && refSnapshot.banco && refSnapshot.descripcion) {
+                    const confirmar = window.confirm(
+                        "Esta referencia ya está registrada en central:\n\n" +
+                        msj + "\n\n" +
+                        "¿Quieres importarla a tu sistema local para vincularla a este pedido?"
+                    );
+                    if (confirmar) {
+                        db.importarRefDeCentral({
+                            id_pedido:   refSnapshot.id_pedido,
+                            banco:       refSnapshot.banco,
+                            descripcion: refSnapshot.descripcion,
+                            monto:       refSnapshot.monto,
+                        }).then((resImp) => {
+                            notificar(resImp);
+                            if (resImp?.data?.estado) {
+                                getPedido(null, null, false);
+                                settogglereferenciapago(false);
+                                settipo_referenciapago("");
+                                setdescripcion_referenciapago("");
+                                setmonto_referenciapago("");
+                                setbanco_referenciapago("");
+                                setcedula_referenciapago("");
+                                settelefono_referenciapago("");
+                            }
+                            // Si falló, dejar el modal abierto con los datos para que el cajero
+                            // pueda reintentar manualmente.
+                        }).catch((err) => {
+                            console.error("Error importando ref de central:", err);
+                            notificar({ data: { msj: "Error de red importando ref desde central.", estado: false } });
+                        });
+                        return; // No cerrar el modal todavía — el import lo cierra al terminar OK
+                    }
+                    // Cajero canceló: notificar el error original y cerrar el modal
+                    notificar(res);
+                    settogglereferenciapago(false);
+                    return;
+                }
+
                 getPedido(null, null, false);
                 notificar(res);
                 settogglereferenciapago(false);
@@ -1723,7 +1776,7 @@ export default function Facturar({
                 settelefono_referenciapago("");
 
                 // Para módulos automáticos, enviar a merchant inmediatamente
-                if (res.data && res.data.estado && res.data.id_referencia && 
+                if (res.data && res.data.estado && res.data.id_referencia &&
                     (categoria === "pagomovil" || categoria === "banesco" || categoria === "interbancaria")) {
                     db.sendRefToMerchant({
                         id_ref: res.data.id_referencia,

@@ -292,6 +292,8 @@ const db = {
 
   
   addRefPago: data => axios.post(host + "addRefPago", data),
+  // BUSCAR-REF-MI-PEDIDO 2026-05-27 — importar ref existente en central que se perdió local
+  importarRefDeCentral: data => axios.post(host + "importarRefDeCentral", data),
   delRefPago: data=>axios.post(host+"delRefPago",data),
   registrarRefCentralFront: data => axios.post(host + "registrar-ref-central-front", data),
 

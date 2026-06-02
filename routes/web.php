@@ -216,6 +216,8 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('setconfigcredito', [PagoPedidosController::class,"setconfigcredito"]);
 
 		Route::post('addRefPago', [PagosReferenciasController::class,"addRefPago"]);
+		// BUSCAR-REF-MI-PEDIDO 2026-05-27 — recuperar ref ya existente en central que se perdió local
+		Route::post('importarRefDeCentral', [PagosReferenciasController::class,"importarRefDeCentral"]);
 		Route::post('sendRefToMerchant', [PagosReferenciasController::class,"sendRefToMerchant"]);
 		Route::post('procesarRespuestaMegasoft', [PagosReferenciasController::class,"procesarRespuestaMegasoft"]);
 		Route::post('validarCodigoAprobacion', [PagosReferenciasController::class,"validarCodigoAprobacion"]);

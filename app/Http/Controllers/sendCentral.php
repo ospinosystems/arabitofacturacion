@@ -3030,7 +3030,7 @@ class sendCentral extends Controller
             $codigo_origen = $this->getOrigen();
             $response = $this->requestToCentral('post', "/createTranferenciaAprobacion", [
                     "codigo_origen" => $codigo_origen,
-                    "data" => $data, 
+                    "data" => $data,
                 ]
             );
             \Log::info($response->body());
@@ -3043,6 +3043,32 @@ class sendCentral extends Controller
             }
         } catch (\Exception $e) {
             return Response::json(["msj" => "Error: " . $e->getMessage(), "estado" => false]);
+        }
+    }
+
+    /**
+     * BUSCAR-REF-MI-PEDIDO 2026-05-27
+     * Wrapper para el endpoint nuevo de central /buscarRefDeMiPedido.
+     * Caso: la ref existe en central pero no en local. Recupera el payload completo
+     * para que el caller la persista en pago_referencias local.
+     *
+     * @param array $payload [banco, loteserial, monto?, id_pedido?]
+     * @return array { estado: bool, msj: string, ref?: array }
+     */
+    function buscarRefDeMiPedido($payload) {
+        try {
+            $codigo_origen = $this->getOrigen();
+            $response = $this->requestToCentral('post', "/buscarRefDeMiPedido", array_merge(
+                ["codigo_origen" => $codigo_origen],
+                $payload
+            ), ['timeout' => 15]);
+
+            if ($response->ok()) {
+                return $response->json();
+            }
+            return ["estado" => false, "msj" => "Error HTTP central: " . $response->status()];
+        } catch (\Exception $e) {
+            return ["estado" => false, "msj" => "Error: " . $e->getMessage()];
         }
     }
 
