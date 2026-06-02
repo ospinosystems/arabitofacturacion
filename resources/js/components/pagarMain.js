@@ -2752,6 +2752,7 @@ export default function PagarMain({
                         pedidosFast={pedidosFast}
                         pedidosFrontPendientesList={pedidosFrontPendientesList}
                         onClickEditPedido={onClickEditPedido}
+                        addNewPedido={addNewPedido}
                         addNewPedidoFront={addNewPedidoFront}
                         togglereferenciapago={togglereferenciapago}
                         toggleAddPersona={toggleAddPersona}
@@ -4685,7 +4686,7 @@ export default function PagarMain({
                                             <>
                                                 <button
                                                     className="flex items-center gap-1 px-2 py-1 text-xs text-green-700 transition-colors border !border-green-300 rounded bg-green-100 hover:bg-green-200"
-                                                    onClick={facturar_pedido}
+                                                    onClick={() => facturar_pedido()}
                                                     title="Facturar e Imprimir (Enter)"
                                                 >
                                                     <i className="fa fa-paper-plane"></i>
