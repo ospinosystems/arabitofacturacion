@@ -1729,12 +1729,16 @@ export default function Facturar({
             }).then((res) => {
                 // BUSCAR-REF-MI-PEDIDO 2026-05-27 — si central rechaza por duplicado,
                 // ofrecer al cajero importar la ref que vive en central pero falta local.
-                // Patrones de detección: el msj del addRefPago local de pagosReferenciasController
-                // ("Ya existe Referencia en Banco") o el de central que el cajero llegó a ver
-                // antes de salvar local ("Ya existe una transferencia con este número de referencia").
+                // FIX 2026-05-27 — antes el regex matcheaba TAMBIÉN el rebote local
+                // ("Ya existe Referencia en Banco. <desc> <banco> PEDIDO <id>") y ofrecía
+                // importar de central, pero central NO tenía nada que importar porque la
+                // ref estaba 100% local. Ahora solo disparamos el flujo de import cuando
+                // el msj es claramente de central (menciona "sistema central" o "transferencia").
                 const msj = (res?.data?.msj || "").toString();
                 const estado = res?.data?.estado;
-                const esDuplicadoCentral = !estado && /ya existe/i.test(msj) && /(transferencia|referencia)/i.test(msj);
+                const mencionaCentral = /sistema central|en\s+central/i.test(msj);
+                const mencionaTransferencia = /transferencia/i.test(msj);
+                const esDuplicadoCentral = !estado && /ya existe/i.test(msj) && (mencionaCentral || mencionaTransferencia);
                 if (esDuplicadoCentral && refSnapshot.banco && refSnapshot.descripcion) {
                     const confirmar = window.confirm(
                         "Esta referencia ya está registrada en central:\n\n" +
