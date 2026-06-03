@@ -488,13 +488,19 @@ class PagosReferenciasController extends Controller
                     return $checkPedidoPago;
                 }
             }
-            if($req->banco){
-                $check_exist = pagos_referencias::where("descripcion",$req->descripcion)
-                ->where("banco",$req->banco)->first();
-                if($req->descripcion!="") {
-                    if ($check_exist) {
-                        return Response::json(["msj"=>"Error: Ya existe Referencia en Banco. ".$req->descripcion." ".$req->banco." PEDIDO ".$req->id_pedido,"estado"=>false]);
-                    }
+            // BUSCAR-REF-MI-PEDIDO 2026-05-27 (fix consistencia local) — el check de duplicado debe:
+            //   1) Filtrar por id_pedido — antes bloqueaba si la ref existía en CUALQUIER pedido,
+            //      incluso uno viejo o anulado, impidiendo registrarla en un pedido nuevo legítimo.
+            //   2) Excluir refs con estatus 'rechazada' o 'cancelada' — esas no sirven y se ignoran
+            //      como si no existieran (mismo criterio que central con estatus=2).
+            if($req->banco && $req->descripcion != "") {
+                $check_exist = pagos_referencias::where("descripcion", $req->descripcion)
+                    ->where("banco", $req->banco)
+                    ->where("id_pedido", $req->id_pedido)
+                    ->whereNotIn("estatus", ["rechazada", "cancelada", "anulada"])
+                    ->first();
+                if ($check_exist) {
+                    return Response::json(["msj"=>"Error: Ya existe Referencia en Banco. ".$req->descripcion." ".$req->banco." PEDIDO ".$req->id_pedido,"estado"=>false]);
                 }
             }
             
@@ -676,11 +682,13 @@ class PagosReferenciasController extends Controller
             // Autoriza al usuario sobre el pedido — misma protección que addRefPago
             (new PedidosController)->checkPedidoAuth($id_pedido);
 
-            // Idempotencia: si la ref ya existe local con misma descripcion+banco+id_pedido,
+            // Idempotencia: si la ref ya existe local con misma descripcion+banco+id_pedido
+            // Y NO está rechazada/cancelada/anulada (mismo criterio que el check de duplicado),
             // devolverla en vez de pedirla otra vez a central. Evita lecturas inútiles a central.
             $existeLocal = pagos_referencias::where("descripcion", $descripcion)
                 ->where("banco", $banco)
                 ->where("id_pedido", $id_pedido)
+                ->whereNotIn("estatus", ["rechazada", "cancelada", "anulada"])
                 ->first();
 
             if ($existeLocal) {
