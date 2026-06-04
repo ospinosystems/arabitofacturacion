@@ -5369,12 +5369,33 @@ export default function Facturar({
             );
         }
     };
+    // RECIBO-FISCAL-MODAL 2026-05-27 — antes usaba window.confirm() que puede ser
+    // bloqueado/auto-rechazado por el navegador (popup blocker, extensiones, modo kiosko).
+    // Cuando esto pasaba, el cajero hacía click en el botón y nada ocurría.
+    // Ahora usamos un modal React in-app que no depende del browser.
+    const [showConfirmReciboFiscal, setShowConfirmReciboFiscal] = useState(false);
+    const [enviandoReciboFiscal, setEnviandoReciboFiscal] = useState(false);
     const sendReciboFiscal = () => {
-        if (confirm("CONFIRME RECIBO FISCAL")) {
-            db.sendReciboFiscal({ pedido: pedidoData.id }).then((res) => {
-                notificar(res);
-            });
+        if (!pedidoData?.id) {
+            notificar({ data: { msj: "No hay pedido seleccionado.", estado: false } });
+            return;
         }
+        setShowConfirmReciboFiscal(true);
+    };
+    const confirmarYEnviarReciboFiscal = () => {
+        if (enviandoReciboFiscal) return; // evitar doble click
+        setEnviandoReciboFiscal(true);
+        db.sendReciboFiscal({ pedido: pedidoData.id })
+            .then((res) => {
+                notificar(res);
+            })
+            .catch((err) => {
+                notificar({ data: { msj: "Error de red al enviar recibo fiscal: " + (err?.message || ""), estado: false } });
+            })
+            .finally(() => {
+                setEnviandoReciboFiscal(false);
+                setShowConfirmReciboFiscal(false);
+            });
     };
     const [numReporteZ, setnumReporteZ] = useState("");
     const reportefiscal = (type) => {
@@ -11579,6 +11600,55 @@ export default function Facturar({
                         </div>
                     ))}
                 </>
+            )}
+
+            {/* RECIBO-FISCAL-MODAL 2026-05-27 — confirmación in-app (NO usa window.confirm
+                porque el browser puede bloquearlo) */}
+            {showConfirmReciboFiscal && (
+                <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50"
+                    onClick={() => !enviandoReciboFiscal && setShowConfirmReciboFiscal(false)}
+                >
+                    <div
+                        className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h3 className="text-lg font-bold mb-3 text-gray-900">
+                            <i className="fa fa-print mr-2 text-blue-500"></i>
+                            Confirmar Recibo Fiscal
+                        </h3>
+                        <p className="text-sm text-gray-700 mb-2">
+                            ¿Desea enviar el recibo fiscal del pedido #{pedidoData?.id}?
+                        </p>
+                        <p className="text-xs text-gray-500 mb-5">
+                            La impresora fiscal recibirá la solicitud. Verifique que esté encendida y conectada.
+                        </p>
+                        <div className="flex gap-2 justify-end">
+                            <button
+                                type="button"
+                                disabled={enviandoReciboFiscal}
+                                onClick={() => setShowConfirmReciboFiscal(false)}
+                                className="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                disabled={enviandoReciboFiscal}
+                                onClick={confirmarYEnviarReciboFiscal}
+                                className="px-4 py-2 rounded bg-green-500 text-white hover:bg-green-600 disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {enviandoReciboFiscal && (
+                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                                    </svg>
+                                )}
+                                {enviandoReciboFiscal ? "Enviando..." : "Confirmar y enviar"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
         </div>
