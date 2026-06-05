@@ -8165,20 +8165,31 @@ export default function Facturar({
         const items = cloneDeep(presupuestocarrito);
         db.addNewPedido({})
             .then((res) => {
-                if (!res.data) {
+                if (res.data === undefined || res.data === null) {
                     notificar({ data: { msj: "Backend no devolvió pedido.", estado: false } });
                     return;
                 }
-                if (res.data.estado === false) {
+                // addNewPedido del backend devuelve el id como NÚMERO directo (ej 88100),
+                // no como objeto. Si en algún ambiente devuelve {estado:false, msj} es error.
+                if (typeof res.data === 'object' && res.data.estado === false) {
                     notificar(res);
                     return;
                 }
-                const nuevoPedido = res.data;
-                const nuevoId = nuevoPedido.id;
+                // Aceptar number, string numérico u objeto { id }
+                let nuevoId = null;
+                if (typeof res.data === 'number' && res.data > 0) {
+                    nuevoId = res.data;
+                } else if (typeof res.data === 'string' && /^\d+$/.test(res.data)) {
+                    nuevoId = parseInt(res.data, 10);
+                } else if (typeof res.data === 'object' && res.data.id) {
+                    nuevoId = res.data.id;
+                }
                 if (!nuevoId) {
-                    notificar({ data: { msj: "Pedido creado sin id (backend).", estado: false } });
+                    notificar({ data: { msj: "Pedido creado sin id (backend). Respuesta: " + JSON.stringify(res.data).slice(0, 200), estado: false } });
                     return;
                 }
+                // Construir objeto-pedido para onClickEditPedido (que espera fila completa o algo con id)
+                const nuevoPedido = (typeof res.data === 'object' && res.data) ? res.data : { id: nuevoId };
                 // Agregar items en serie
                 const addNext = (i) => {
                     if (i >= items.length) {
