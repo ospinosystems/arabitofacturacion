@@ -5609,7 +5609,20 @@ export default function Facturar({
             }
 
             const transferenciaActualCheck = transferenciaRef.current;
-            const refsTransfer = refPago.filter((e) => e.tipo == 1 || e.tipo == 2);
+            // REFS-TIPOS 2026-05-27 — convención de tipos en pagos_referencias:
+            //   1 = transferencia central
+            //   2 = pago móvil / banesco / interbancaria
+            //   3 = transferencia electrónica adicional (Bs / divisa según banco)
+            //   5 = biopago
+            //   (tipo 4 = vuelto/crédito, no aplica)
+            // Antes el filtro solo aceptaba 1,2 y rebotaba con "Debe cargar referencia"
+            // aunque el cajero ya tenía cargada una ref tipo 3. pagarMain:4219 ya considera
+            // 1,2,5 como refs de transferencia; uniformamos acá incluyendo 3.
+            const esRefDeTransferencia = (e) => {
+                const t = parseInt(e.tipo);
+                return t === 1 || t === 2 || t === 3 || t === 5;
+            };
+            const refsTransfer = refPago.filter(esRefDeTransferencia);
             const tieneRefTransferencia = refsTransfer.length > 0;
             const usaMetodoTransferencia = parseFloat(transferenciaActualCheck || 0) !== 0;
 
@@ -5634,7 +5647,7 @@ export default function Facturar({
                 });
                 return;
             }
-            if (parseFloat(transferenciaActualCheck || 0) !== 0 && !refPago.filter((e) => e.tipo == 1 || e.tipo == 2).length) {
+            if (parseFloat(transferenciaActualCheck || 0) !== 0 && !refPago.filter(esRefDeTransferencia).length) {
                 console.log("[setPagoPedido] BLOQUEADO: transferencia indicada pero sin referencia cargada", { transferencia: transferenciaActualCheck, refPago });
                 alert(
                     "Error: Debe cargar referencia de transferencia electrónica."
