@@ -5879,6 +5879,45 @@ export default function Facturar({
             ? parseFloat(netoMetodosUSD.toFixed(2))
             : ((isFrontOnly && pedidoActual && pedidoActual.clean_total != null) ? parseFloat(pedidoActual.clean_total) : undefined);
 
+        // SOBRANTE-EFECTIVO 2026-05-27 — bloquear sobrantes/devoluciones SIN items
+        // cuando se cargan métodos que NO son exclusivamente transferencia.
+        //
+        // Regla: pedidos sin items SOLO pueden procesarse como devolución pura por
+        // transferencia con su ref saliente, y SOLO si el cajero activa conscientemente
+        // el toggle "Sobrante" o "Devol s/fact". Sin esos toggles, items=0 con efectivo,
+        // débito, crédito o biopago es siempre un error — un ingreso/egreso huérfano que
+        // se estaba aceptando como "devolución pura" cuando no lo era.
+        if (itemsPedidoLen === 0 && hayAlgunMetodoCargado && !permiteSobrante && !devolucionSinFactura) {
+            // efectivoDolarVal cubre efectivo USD. Cualquier monto en adicionalesUSDcalc
+            // viene de pagosAdicionales (efectivo Bs, COP). Si alguno es != 0, hay efectivo.
+            const hayEfectivo = efectivoDolarVal !== 0 || adicionalesUSDcalc !== 0;
+            const hayDebito = debitoUSDcalc !== 0;
+            const hayCredito = creditoUSDcalc !== 0;
+            const hayBiopago = biopagoUSDcalc !== 0;
+
+            if (hayEfectivo || hayDebito || hayCredito || hayBiopago) {
+                console.log("[setPagoPedido] BLOQUEADO: pedido sin items con método != transferencia", {
+                    itemsPedidoLen,
+                    efectivoUSD: efectivoDolarVal,
+                    adicionalesUSD: adicionalesUSDcalc,
+                    debitoUSD: debitoUSDcalc,
+                    creditoUSD: creditoUSDcalc,
+                    biopagoUSD: biopagoUSDcalc,
+                    permiteSobrante,
+                    devolucionSinFactura,
+                });
+                notificar({
+                    data: {
+                        msj: "No se puede crear un pedido sin items con efectivo/débito/crédito/biopago. " +
+                             "Los sobrantes y devoluciones sin factura solo se procesan por transferencia con su ref saliente, " +
+                             "activando el toggle 'Sobrante' o 'Devol s/fact' en el panel de pago.",
+                        estado: false,
+                    },
+                });
+                return;
+            }
+        }
+
         // Referencias de pago para pedido front: enviar en la misma petición (backend las creará al crear el pedido).
         // Se respeta el estatus real de cada ref: las "autovalidar" ya están "aprobada" y las "central"
         // pueden estar "pendiente" (serán aprobadas a posteriori en central); el backend acepta ambas.
