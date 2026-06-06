@@ -3,32 +3,20 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Proxy hacia arabitocentral para obtener la lista de bancos disponibles para la sucursal.
- * Cachea ~2 horas para evitar martillar central en cada montaje del componente.
+ * Consulta central en vivo en cada llamada (sin caché): la lista de bancos y su
+ * asignación por caja deben reflejarse de inmediato en la facturación.
  */
 class BancosListController extends Controller
 {
-    private const CACHE_KEY = 'bancos_list_by_sucursal';
-    private const CACHE_TTL_SECONDS = 7200; // 2 horas
-
     public function getBancos(Request $request)
     {
-        $force = $request->boolean('refresh', false);
-        if ($force) {
-            Cache::forget(self::CACHE_KEY);
-        }
+        $data = $this->fetchFromCentral();
 
-        $data = Cache::remember(self::CACHE_KEY, self::CACHE_TTL_SECONDS, function () {
-            return $this->fetchFromCentral();
-        });
-
-        // Si la última obtención falló (null), no cachear el error: forzar re-fetch en la siguiente llamada.
         if ($data === null) {
-            Cache::forget(self::CACHE_KEY);
             return response()->json([
                 'estado' => false,
                 'msj' => 'No se pudo obtener la lista de bancos desde central.',
@@ -39,7 +27,7 @@ class BancosListController extends Controller
             ], 200);
         }
 
-        return response()->json(array_merge($data, ['cached' => true]));
+        return response()->json(array_merge($data, ['cached' => false]));
     }
 
     private function fetchFromCentral(): ?array
