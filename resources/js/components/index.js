@@ -17,17 +17,40 @@ axios.interceptors.request.use(
     }
 );
 
+// Detecta el payload de sesión expirada que emite el middleware AuthenticateUser.
+const esSinSesionActiva = (data) =>
+    !!data &&
+    data.estado === false &&
+    typeof data.msj === 'string' &&
+    data.msj.includes('Sin sesión activa');
+
+// Limpia la sesión local y manda al login. Importante: el middleware responde
+// HTTP 200 (no error) con {estado:false}, así que hay que atraparlo también en
+// las respuestas exitosas; de lo contrario los .then() hacen .map() sobre un
+// objeto y revientan ("r.map is not a function").
+const manejarSesionExpirada = () => {
+    localStorage.removeItem('user_data');
+    localStorage.removeItem('session_token');
+    if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+    }
+    // Si ya estamos en /login no recargamos: el localStorage quedó limpio y
+    // el componente Login se renderiza solo (evita bucles de recarga).
+};
+
 // Interceptor para manejar errores de sesión
 axios.interceptors.response.use(
-    response => response,
+    response => {
+        if (esSinSesionActiva(response.data)) {
+            manejarSesionExpirada();
+            // Cortamos la cadena para que ningún .then() intente .map() sobre el objeto.
+            return Promise.reject(new axios.Cancel('Sesión expirada'));
+        }
+        return response;
+    },
     error => {
-        if (error.response && error.response.data && 
-            error.response.data.msj && 
-            error.response.data.msj.includes('Sin sesión activa')) {
-            // Limpiar datos de sesión y redirigir al login
-            localStorage.removeItem('user_data');
-            localStorage.removeItem('session_token');
-            window.location.reload();
+        if (error.response && esSinSesionActiva(error.response.data)) {
+            manejarSesionExpirada();
         }
         return Promise.reject(error);
     }

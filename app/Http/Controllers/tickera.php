@@ -1153,20 +1153,30 @@ class tickera extends Controller
                         'codigo_barras' => 0,
                         'cantidad' => $val->cantidad,
                         'pu' => $val->monto,
+                        'pu_full' => $val->monto,
                         'totalprecio' => $val->total,
                         "pu_bs" => $val->monto*$val->tasa,
+                        "pu_full_bs" => $val->monto*$val->tasa,
                         "totalprecio_bs" => $val->total*$val->tasa,
                     ];
                 }else{
                     // Usar precio_unitario del item (precio al momento de la venta)
                     $precioItem = $val->precio_unitario ?? $val->producto->precio;
+                    // El descuento se guarda como porcentaje (positivo). Lo aplicamos al P/U para
+                    // que el ticket muestre el precio CON descuento por línea, no el precio full
+                    // (antes la condición `descuento<0` nunca coincidía y salía el monto full).
+                    // (1 - desc/100) reproduce además el comportamiento legacy de descuento negativo.
+                    $factorDesc = 1 - (floatval($val->descuento ?? 0) / 100);
+                    $puConDesc = $precioItem * $factorDesc;
                     $items[] = [
                         'descripcion' => $val->producto->descripcion,
                         'codigo_barras' => $val->producto->codigo_barras,
                         'cantidad' => $val->cantidad,
                         'totalprecio' => $val->total,
-                        'pu' => ($val->descuento<0)?$precioItem-$val->des_unitario:$precioItem,
-                        "pu_bs" => ($val->descuento<0)?($precioItem-$val->des_unitario)*$val->tasa:$precioItem*$val->tasa,
+                        'pu' => $puConDesc,
+                        'pu_full' => $precioItem,
+                        "pu_bs" => $puConDesc*$val->tasa,
+                        "pu_full_bs" => $precioItem*$val->tasa,
                         "totalprecio_bs" => $val->total*$val->tasa,
                     ];
                 }
@@ -1174,6 +1184,8 @@ class tickera extends Controller
         }
        $total_bs = 0;
        $total_dolares = 0;
+       $subtotal_full_bs = 0;
+       $subtotal_full_dolares = 0;
         foreach ($items as $item) {
             //Current item ROW 1
            $printer->text($item['descripcion']);
@@ -1198,6 +1210,8 @@ class tickera extends Controller
                $printer->text("\n");
                $total_bs += $item['pu_bs']*$item['cantidad'];
                $total_dolares += $item['pu']*$item['cantidad'];
+               $subtotal_full_bs += ($item['pu_full_bs'] ?? $item['pu_bs'])*$item['cantidad'];
+               $subtotal_full_dolares += ($item['pu_full'] ?? $item['pu'])*$item['cantidad'];
            }
            
            // Imprimir Ct pequeño y cantidad grande
@@ -1276,16 +1290,17 @@ class tickera extends Controller
             $printer->text("\n");
             $printer->setEmphasis(true);
             
-            $printer->text("Desc: ". number_format(floatval($pedido->total_des ?? 0), 2));
-            $printer->text("\n");
-            // Agregar detalle de montos y formas de pago al log
-            // Descuento ya en Bs
-            $descuento_bs = floatval($pedido->total_des ?? 0);
-            $total_final_bs = $total_bs - $descuento_bs;
+            // total_bs ya viene CON el descuento aplicado por línea. El descuento mostrado se
+            // deriva de la diferencia con el subtotal full para que el ticket siempre cuadre:
+            // Sub-Total - Desc = Total.
+            $descuento_bs = round($subtotal_full_bs - $total_bs, 2);
 
-            $printer->text("Sub-Total: ". number_format($total_bs,2) );
+            $printer->text("Desc: ". number_format($descuento_bs, 2));
             $printer->text("\n");
-            $printer->text("Total: ". number_format($total_final_bs,2) );
+
+            $printer->text("Sub-Total: ". number_format($subtotal_full_bs, 2) );
+            $printer->text("\n");
+            $printer->text("Total: ". number_format($total_bs, 2) );
             $printer->text("\n");
             
             $printer->text("\n");

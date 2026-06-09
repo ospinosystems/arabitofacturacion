@@ -159,6 +159,43 @@
             <!-- Las tarjetas se generan dinámicamente -->
         </div>
 
+        <!-- Panel de Diagnóstico Real -->
+        <div class="bg-white rounded-lg shadow-md p-6 mt-6 border-l-4 border-purple-500">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-xl font-semibold text-gray-800">🔬 Diagnóstico de Transmisión</h2>
+                <span class="text-xs text-gray-400">Envía un lote y muestra lo que pasó de verdad</span>
+            </div>
+            <p class="text-sm text-gray-600 mb-4">
+                Selecciona una tabla y ejecuta un diagnóstico real: verás la <strong>petición enviada</strong>,
+                la <strong>respuesta cruda de central</strong>, cuántos registros <strong>guardó realmente</strong>
+                (insertados + actualizados) frente a los enviados, los <strong>errores</strong> reportados, y el
+                <strong>conteo en central antes/después</strong>. Por defecto es <em>dry-run</em> (no marca nada).
+            </p>
+
+            <div class="flex flex-wrap gap-3 items-end mb-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Tabla</label>
+                    <select id="diag-tabla" class="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[220px]">
+                        <option value="">Cargando tablas...</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Tamaño del lote</label>
+                    <input id="diag-limite" type="number" min="1" max="500" value="200"
+                           class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-28">
+                </div>
+                <label class="flex items-center gap-2 text-sm text-gray-700 mb-1 select-none cursor-pointer" title="Si se marca, marcará los registros como sincronizados (igual que el sync real). Si no, no altera nada.">
+                    <input id="diag-marcar" type="checkbox" class="w-4 h-4">
+                    Marcar como sincronizado (desactiva dry-run)
+                </label>
+                <button id="btn-diagnostico" class="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-lg font-semibold text-sm transition-colors">
+                    Ejecutar diagnóstico
+                </button>
+            </div>
+
+            <div id="diag-resultado" class="hidden mt-2"></div>
+        </div>
+
         <!-- Log de Actividad -->
         <div class="bg-white rounded-lg shadow-md p-6 mt-6">
             <h2 class="text-xl font-semibold text-gray-800 mb-4">Log de Actividad</h2>
@@ -342,6 +379,23 @@
             Object.entries(data.tablas).forEach(([key, tabla]) => {
                 container.appendChild(crearTarjetaTabla(key, tabla));
             });
+
+            // Poblar selector del panel de diagnóstico (conservando la selección actual)
+            poblarSelectorDiagnostico(data.tablas);
+        }
+
+        function poblarSelectorDiagnostico(tablas) {
+            const sel = document.getElementById('diag-tabla');
+            if (!sel) return;
+            const seleccionActual = sel.value;
+            sel.innerHTML = '';
+            Object.entries(tablas).forEach(([key, tabla]) => {
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.textContent = `${tabla.nombre} → ${tabla.tabla_destino}` + (tabla.pendientes ? ` (${tabla.pendientes} pend.)` : '');
+                sel.appendChild(opt);
+            });
+            if (seleccionActual) sel.value = seleccionActual;
         }
 
         // Crear tarjeta de tabla
@@ -564,6 +618,185 @@
             p.innerHTML = `<span class="text-gray-500">[${timestamp}]</span> ${mensaje}`;
             container.appendChild(p);
             container.scrollTop = container.scrollHeight;
+        }
+
+        // ================= PANEL DE DIAGNÓSTICO =================
+        document.getElementById('btn-diagnostico').addEventListener('click', ejecutarDiagnostico);
+
+        async function ejecutarDiagnostico() {
+            const tabla = document.getElementById('diag-tabla').value;
+            const limite = parseInt(document.getElementById('diag-limite').value || '200', 10);
+            const marcar = document.getElementById('diag-marcar').checked;
+            const cont = document.getElementById('diag-resultado');
+            const btn = document.getElementById('btn-diagnostico');
+
+            if (!tabla) { alert('Selecciona una tabla'); return; }
+
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            btn.textContent = 'Ejecutando...';
+            cont.classList.remove('hidden');
+            cont.innerHTML = `<div class="p-4 bg-gray-50 rounded-lg text-gray-600 text-sm">Enviando lote a central y midiendo respuesta real...</div>`;
+            log(`Diagnóstico de ${tabla} (lote ${limite}, ${marcar ? 'marcando' : 'dry-run'})...`, 'info');
+
+            try {
+                const res = await fetch(`${API_BASE}/sync/diagnostico`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                    },
+                    body: JSON.stringify({ tabla, limite, marcar, solo_nuevos: true })
+                });
+                const data = await res.json();
+                if (data.estado === false && !data.veredicto) {
+                    cont.innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">Error: ${esc(data.mensaje || 'desconocido')}${data.archivo ? '<br><span class="text-xs text-red-400">' + esc(data.archivo) + '</span>' : ''}</div>`;
+                    log(`Diagnóstico ${tabla}: ${data.mensaje}`, 'error');
+                } else {
+                    cont.innerHTML = renderDiagnostico(data);
+                    const v = data.veredicto || '-';
+                    log(`Diagnóstico ${tabla}: ${v} — ${data.resumen || ''}`, v === 'GUARDADO_OK' ? 'success' : (v === 'PARCIAL' ? 'info' : 'error'));
+                }
+            } catch (e) {
+                cont.innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">Error de conexión: ${esc(e.message)}</div>`;
+                log(`Diagnóstico ${tabla}: error de conexión ${e.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                btn.textContent = 'Ejecutar diagnóstico';
+            }
+        }
+
+        function renderDiagnostico(d) {
+            const vColors = {
+                'GUARDADO_OK': 'bg-green-100 text-green-800 border-green-300',
+                'PARCIAL': 'bg-yellow-100 text-yellow-800 border-yellow-300',
+                'NO_GUARDADO': 'bg-red-100 text-red-800 border-red-300',
+            };
+            const vClass = vColors[d.veredicto] || 'bg-gray-100 text-gray-800 border-gray-300';
+            const local = d.local || {};
+            const pet = d.peticion || {};
+            const resp = d.respuesta || {};
+            const conc = d.conciliacion || {};
+            const central = d.central || {};
+
+            let html = '';
+
+            // Cabecera veredicto + resumen
+            html += `<div class="border ${vClass} rounded-lg p-4 mb-3">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="text-lg font-bold">${esc(d.veredicto || '-')}</span>
+                    <span class="text-xs px-2 py-1 rounded-full ${d.dry_run ? 'bg-gray-200 text-gray-700' : 'bg-purple-200 text-purple-800'}">${d.dry_run ? 'DRY-RUN (no marca)' : 'MARCANDO'}</span>
+                </div>
+                <p class="text-sm mt-1">${esc(d.resumen || '')}</p>
+            </div>`;
+
+            // Tarjetas de conciliación
+            html += `<div class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
+                ${miniCard('Enviados', conc.enviados ?? local.enviados ?? '-')}
+                ${miniCard('Guardó central', conc.guardados_central ?? '-', 'text-green-600')}
+                ${miniCard('Insertados', conc.insertados ?? '-')}
+                ${miniCard('Actualizados', conc.actualizados ?? '-')}
+                ${miniCard('Faltantes', conc.faltantes ?? '-', (conc.faltantes > 0 ? 'text-red-600' : 'text-gray-700'))}
+            </div>`;
+
+            // Central antes/después
+            if (central && (central.antes !== undefined)) {
+                const delta = central.delta;
+                const deltaTxt = (delta === null || delta === undefined) ? 'n/d' : (delta >= 0 ? '+' + delta : '' + delta);
+                html += `<div class="bg-gray-50 rounded-lg p-3 mb-3 text-sm">
+                    <strong>Conteo en central</strong> (${esc(central.clave_status || 's/clave')}):
+                    antes <b>${fmtN(central.antes)}</b> → después <b>${fmtN(central.despues)}</b>
+                    <span class="ml-2 px-2 py-0.5 rounded ${delta > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}">Δ ${deltaTxt}</span>
+                </div>`;
+            }
+
+            // Advertencias
+            if (Array.isArray(d.advertencias) && d.advertencias.length) {
+                html += `<div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-sm text-amber-800">
+                    ${d.advertencias.map(a => '⚠ ' + esc(a)).join('<br>')}
+                </div>`;
+            }
+
+            // Petición / Respuesta lado a lado
+            html += `<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">`;
+            html += `<div class="bg-blue-50 rounded-lg p-3 text-sm">
+                <p class="font-semibold text-blue-800 mb-1">📤 Petición</p>
+                <div class="font-mono text-xs break-all text-gray-700">
+                    ${kv('URL', pet.url)}
+                    ${kv('Método', pet.metodo)}
+                    ${kv('Tabla destino', pet.tabla_destino)}
+                    ${kv('Batch size', pet.batch_size)}
+                    ${kv('Payload crudo', fmtBytes(pet.payload_bytes_crudo))}
+                    ${kv('Payload comprimido', fmtBytes(pet.payload_bytes_comprimido))}
+                </div>
+            </div>`;
+            html += `<div class="bg-green-50 rounded-lg p-3 text-sm">
+                <p class="font-semibold text-green-800 mb-1">📥 Respuesta de central</p>
+                <div class="font-mono text-xs break-all text-gray-700">
+                    ${kv('HTTP status', resp.http_status)}
+                    ${kv('Tiempo', resp.tiempo_ms !== undefined ? resp.tiempo_ms + ' ms' : '-')}
+                    ${kv('estado', String(resp.estado_central))}
+                    ${kv('procesados', resp.procesados)}
+                    ${kv('actualizados', resp.actualizados)}
+                    ${kv('errores', resp.errores)}
+                    ${resp.mensaje_central ? kv('mensaje', resp.mensaje_central) : ''}
+                    ${resp.error_transporte ? kv('error_transporte', resp.error_transporte) : ''}
+                </div>
+            </div>`;
+            html += `</div>`;
+
+            // Detalles de errores de central
+            if (Array.isArray(resp.detalles_errores) && resp.detalles_errores.length) {
+                html += `<details class="mb-3" open>
+                    <summary class="cursor-pointer text-sm font-semibold text-red-700">❌ detalles_errores de central (${resp.detalles_errores.length})</summary>
+                    <pre class="bg-gray-900 text-red-300 rounded-lg p-3 mt-1 text-xs overflow-auto max-h-64">${esc(JSON.stringify(resp.detalles_errores, null, 2))}</pre>
+                </details>`;
+            }
+
+            // IDs + muestra del lote
+            if (local.ids || local.muestra) {
+                html += `<details class="mb-3">
+                    <summary class="cursor-pointer text-sm font-semibold text-gray-700">🔎 IDs enviados y muestra del payload</summary>
+                    <div class="mt-1">
+                        <p class="text-xs text-gray-500 mb-1">IDs (${(local.ids || []).length}): <span class="font-mono break-all">${esc((local.ids || []).join(', '))}</span></p>
+                        <pre class="bg-gray-900 text-blue-300 rounded-lg p-3 text-xs overflow-auto max-h-64">${esc(JSON.stringify(local.muestra || [], null, 2))}</pre>
+                    </div>
+                </details>`;
+            }
+
+            // Body crudo
+            if (resp.body_crudo) {
+                html += `<details class="mb-1">
+                    <summary class="cursor-pointer text-sm font-semibold text-gray-700">📄 Body crudo de la respuesta</summary>
+                    <pre class="bg-gray-900 text-green-300 rounded-lg p-3 mt-1 text-xs overflow-auto max-h-64">${esc(resp.body_crudo)}</pre>
+                </details>`;
+            }
+
+            return html;
+        }
+
+        function miniCard(label, value, valueClass = 'text-gray-800') {
+            return `<div class="bg-white border border-gray-200 rounded-lg p-2 text-center">
+                <p class="text-[10px] uppercase text-gray-400">${esc(label)}</p>
+                <p class="text-lg font-bold ${valueClass}">${typeof value === 'number' ? fmtN(value) : esc(String(value))}</p>
+            </div>`;
+        }
+        function kv(k, v) {
+            return `<div><span class="text-gray-400">${esc(k)}:</span> ${esc(v === null || v === undefined ? '-' : String(v))}</div>`;
+        }
+        function fmtBytes(n) {
+            if (n === null || n === undefined) return '-';
+            if (n < 1024) return n + ' B';
+            if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+            return (n / 1024 / 1024).toFixed(2) + ' MB';
+        }
+        function fmtN(n) {
+            if (n === null || n === undefined) return 'n/d';
+            return new Intl.NumberFormat('es-VE').format(n);
+        }
+        function esc(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
 
         // Utilidades

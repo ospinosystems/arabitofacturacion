@@ -733,6 +733,8 @@ Route::get('sync/verificar-antiguos', [SyncProgressController::class, 'verificar
 Route::post('sync/marcar-antiguos', [SyncProgressController::class, 'marcarAntiguosComoSincronizados'])->name('sync.marcar-antiguos');
 Route::post('sync/all', [SyncProgressController::class, 'sincronizarTodo'])->name('sync.all');
 Route::post('sync/tabla', [SyncProgressController::class, 'sincronizarTablaIndividual'])->name('sync.tabla');
+// Panel de diagnóstico real: envía un lote y reporta petición/respuesta/guardado real
+Route::post('sync/diagnostico', [SyncProgressController::class, 'diagnostico'])->name('sync.diagnostico');
 Route::post('sync/reset', [SyncProgressController::class, 'resetearSincronizacion'])->name('sync.reset');
 Route::post('sync/marcar', [SyncProgressController::class, 'marcarSincronizados'])->name('sync.marcar');
 Route::get('sync/desmarcar', [SyncProgressController::class, 'desmarcarSincronizados'])->name('sync.desmarcar');

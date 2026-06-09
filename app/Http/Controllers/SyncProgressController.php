@@ -1226,20 +1226,35 @@ class SyncProgressController extends Controller
                         $resultado = $response->json();
                         
                         if ($resultado && ($resultado['estado'] ?? false)) {
+                            // VISIBILIDAD REAL: comparar lo enviado vs lo que central dice haber
+                            // guardado. Si guardó menos (o reportó errores) queda info sin subir,
+                            // aunque marquemos el lote como sincronizado. Lo dejamos registrado.
+                            $guardadosCentral = (int) ($resultado['procesados'] ?? 0) + (int) ($resultado['actualizados'] ?? 0);
+                            $erroresCentral = (int) ($resultado['errores'] ?? 0);
+                            $enviadosLote = count($data);
+                            if ($erroresCentral > 0 || ($guardadosCentral > 0 && $guardadosCentral < $enviadosLote)) {
+                                $faltantes = max(0, $enviadosLote - $guardadosCentral);
+                                $msgDiscrepancia = "[{$nombreTabla}] DISCREPANCIA: enviados {$enviadosLote}, central guardó {$guardadosCentral} ({$erroresCentral} errores, {$faltantes} faltantes)";
+                                Log::warning("    " . $msgDiscrepancia, [
+                                    'detalles_errores' => array_slice($resultado['detalles_errores'] ?? [], 0, 20),
+                                ]);
+                                $errores[] = $msgDiscrepancia . ". Use el panel de diagnóstico para ver detalles_errores.";
+                            }
+
                             // Marcar como sincronizados usando el campo correcto
                             // EXCEPTO para inventarios - no actualizar el campo push
                             if ($nombreTabla !== 'inventarios' && $nombreTabla !== 'usuarios_pos' && $campoSync !== null) {
                                 $ids = $registros->pluck('id')->toArray();
                                 $updateData = [$campoSync => 1];
-                                
+
                                 // Si no es 'push', también actualizar sincronizado_at
                                 if ($campoSync !== 'push') {
                                     $updateData['sincronizado_at'] = now();
                                 }
-                                
+
                                 $config['model']::whereIn('id', $ids)->update($updateData);
                             }
-                            
+
                             $procesados += count($data);
                             $exito = true;
                         } else {
@@ -1534,7 +1549,337 @@ class SyncProgressController extends Controller
             ], 500);
         }
     }
-    
+
+    /**
+     * PANEL DE DIAGNÓSTICO REAL
+     *
+     * Envía UN lote controlado a central y devuelve TODO lo que pasó realmente:
+     *  - estado local (total / pendientes / IDs y muestra del lote enviado)
+     *  - la petición exacta (url, tamaño del payload crudo y comprimido)
+     *  - la respuesta cruda de central (status HTTP, tiempo, body, JSON)
+     *  - cuántos guardó central de verdad (procesados + actualizados) vs enviados
+     *  - errores y detalles_errores que reporta central
+     *  - conteo en central ANTES y DESPUÉS (para ver si el número subió)
+     *  - un veredicto: GUARDADO_OK / PARCIAL / NO_GUARDADO
+     *
+     * Por defecto es dry-run: NO marca los registros como sincronizados, así se
+     * puede repetir sin ocultar pendientes. Con marcar=true sí los marca (solo si
+     * central confirma estado=true y 0 errores), igual que el sync normal.
+     */
+    public function diagnostico(Request $request)
+    {
+        $tabla = $request->input('tabla');
+        $soloNuevos = filter_var($request->input('solo_nuevos', true), FILTER_VALIDATE_BOOLEAN);
+        $marcar = filter_var($request->input('marcar', false), FILTER_VALIDATE_BOOLEAN);
+        $limite = (int) $request->input('limite', 200);
+        $limite = max(1, min($limite, self::BATCH_SIZE));
+
+        $configAll = $this->getTablesConfig();
+        if (!isset($configAll[$tabla])) {
+            return Response::json(['estado' => false, 'mensaje' => 'Tabla no válida'], 400);
+        }
+        $config = $configAll[$tabla];
+
+        if (!empty($config['es_calculo'])) {
+            return Response::json([
+                'estado' => false,
+                'mensaje' => 'El diagnóstico por lote no aplica a "deudores" (es un cálculo, no una tabla).',
+            ], 400);
+        }
+
+        $sc = new sendCentral();
+        $statusKey = $this->mapaCentralStatusKey($config['tabla_destino']);
+
+        $reporte = [
+            'estado' => true,
+            'tabla' => $tabla,
+            'nombre' => $config['nombre'],
+            'tabla_destino' => $config['tabla_destino'],
+            'dry_run' => !$marcar,
+            'timestamp' => now()->toDateTimeString(),
+            'advertencias' => [],
+        ];
+
+        try {
+            $model = $config['model'];
+            $campoSync = $config['campo_sync'] ?? 'sincronizado';
+            $campoFecha = $config['campo_fecha'] ?? 'created_at';
+            $fechaInicio = $this->getFechaInicioSync();
+
+            // ---------- Paso 1: estado LOCAL ----------
+            if ($tabla === 'usuarios_pos') {
+                $totalLocal = $model::count();
+                $pendientesLocal = 0;
+            } elseif ($tabla === 'cierres') {
+                $totalLocal = $model::where('tipo_cierre', 1)->count();
+                $pendientesLocal = $model::where('tipo_cierre', 1)->where($campoSync, 0)->count();
+            } else {
+                $totalLocal = $model::count();
+                $pendientesLocal = ($campoSync !== null) ? $model::where($campoSync, 0)->count() : 0;
+            }
+
+            // ---------- Construir el lote (mismos filtros que el sync real) ----------
+            $usandoMuestraYaSincronizada = false;
+            if ($tabla === 'inventarios' || $tabla === 'usuarios_pos') {
+                // En el sync real se envía TODO sin filtro; aquí tomamos los primeros $limite.
+                $query = $model::query();
+            } else {
+                $query = $model::query();
+                if ($soloNuevos && $campoSync !== null) {
+                    $query->where($campoSync, 0);
+                }
+                $query->where($campoFecha, '>=', $fechaInicio);
+                if ($tabla === 'cierres') {
+                    $query->where('tipo_cierre', 1);
+                }
+            }
+
+            $registros = $query->orderBy('id')->limit($limite)->get();
+
+            // Si no hay pendientes, probamos el transporte con una muestra reciente
+            // (ya sincronizada) — forzando dry-run para no alterar nada.
+            if ($registros->isEmpty()) {
+                $registros = $model::query()->orderBy('id', 'desc')->limit(min($limite, 50))->get();
+                if ($registros->isNotEmpty()) {
+                    $usandoMuestraYaSincronizada = true;
+                    $marcar = false;
+                    $reporte['dry_run'] = true;
+                    $reporte['advertencias'][] = 'No hay registros pendientes. Se usó una muestra de registros recientes (ya sincronizados) SOLO para probar el transporte; no se marcará nada.';
+                }
+            }
+
+            if ($registros->isEmpty()) {
+                $reporte['local'] = ['total' => $totalLocal, 'pendientes' => $pendientesLocal, 'enviados' => 0];
+                $reporte['advertencias'][] = 'No hay ningún registro para enviar en esta tabla.';
+                return Response::json($reporte);
+            }
+
+            // ---------- Construir payload EXACTO ----------
+            $data = $this->construirDataDiagnostico($tabla, $config, $registros);
+            $ids = $registros->pluck('id')->values()->toArray();
+            $jsonData = json_encode($data);
+            $comprimido = base64_encode(gzcompress($jsonData));
+            $enviados = count($data);
+
+            if ($tabla === 'cierres') {
+                $reporte['advertencias'][] = 'Para CIERRES, el sync real además anexa los lotes (pinpad / otros puntos) a cada cierre. El diagnóstico envía los campos del cierre; los conteos de central siguen siendo reales.';
+            }
+
+            $reporte['local'] = [
+                'total' => $totalLocal,
+                'pendientes' => $pendientesLocal,
+                'enviados' => $enviados,
+                'ids' => $ids,
+                'muestra' => array_slice($data, 0, 2),
+            ];
+
+            // ---------- Paso 2: conteo en central ANTES ----------
+            $centralAntes = $this->consultarConteoCentral($sc, $statusKey);
+
+            // ---------- Paso 3: enviar el lote y capturar TODO ----------
+            $reporte['peticion'] = [
+                'url' => $sc->path() . '/api/sync/batch',
+                'metodo' => 'POST',
+                'tabla' => $tabla,
+                'tabla_destino' => $config['tabla_destino'],
+                'batch_size' => $enviados,
+                'payload_bytes_crudo' => strlen($jsonData),
+                'payload_bytes_comprimido' => strlen($comprimido),
+            ];
+
+            $t0 = microtime(true);
+            $httpError = null;
+            $response = null;
+            try {
+                $response = $sc->requestToCentral('post', '/api/sync/batch', [
+                    'tabla' => $tabla,
+                    'tabla_destino' => $config['tabla_destino'],
+                    'data' => $comprimido,
+                    'batch_size' => $enviados,
+                ], ['timeout' => 120]);
+            } catch (\Throwable $e) {
+                $httpError = $e->getMessage();
+            }
+            $elapsedMs = (int) round((microtime(true) - $t0) * 1000);
+
+            if ($httpError !== null || $response === null) {
+                $reporte['respuesta'] = [
+                    'ok' => false,
+                    'http_status' => null,
+                    'tiempo_ms' => $elapsedMs,
+                    'error_transporte' => $httpError ?? 'Sin respuesta de central',
+                ];
+                $reporte['veredicto'] = 'NO_GUARDADO';
+                $reporte['resumen'] = "No se pudo contactar a central: " . ($httpError ?? 'sin respuesta') . ". El lote NO se transmitió.";
+                return Response::json($reporte);
+            }
+
+            $httpStatus = $response->status();
+            $body = $response->body();
+            $jsonResp = null;
+            try { $jsonResp = $response->json(); } catch (\Throwable $e) { $jsonResp = null; }
+
+            $estadoCentral = is_array($jsonResp) ? (bool) ($jsonResp['estado'] ?? false) : false;
+            $procesados = is_array($jsonResp) ? (int) ($jsonResp['procesados'] ?? 0) : 0;
+            $actualizados = is_array($jsonResp) ? (int) ($jsonResp['actualizados'] ?? 0) : 0;
+            $erroresCentral = is_array($jsonResp) ? (int) ($jsonResp['errores'] ?? 0) : 0;
+            $detallesErrores = is_array($jsonResp) ? ($jsonResp['detalles_errores'] ?? []) : [];
+            $mensajeCentral = is_array($jsonResp) ? ($jsonResp['mensaje'] ?? null) : null;
+            $guardados = $procesados + $actualizados;
+
+            $reporte['respuesta'] = [
+                'ok' => $response->ok(),
+                'http_status' => $httpStatus,
+                'tiempo_ms' => $elapsedMs,
+                'estado_central' => $estadoCentral,
+                'mensaje_central' => $mensajeCentral,
+                'procesados' => $procesados,
+                'actualizados' => $actualizados,
+                'errores' => $erroresCentral,
+                'detalles_errores' => array_slice(is_array($detallesErrores) ? $detallesErrores : [], 0, 50),
+                'body_crudo' => mb_strlen($body) > 4000 ? mb_substr($body, 0, 4000) . '… [truncado]' : $body,
+            ];
+
+            // ---------- Paso 4: ¿se guardó realmente? ----------
+            if (!$response->ok() || !$estadoCentral) {
+                $veredicto = 'NO_GUARDADO';
+            } elseif ($erroresCentral > 0 || $guardados < $enviados) {
+                $veredicto = 'PARCIAL';
+            } else {
+                $veredicto = 'GUARDADO_OK';
+            }
+            $reporte['veredicto'] = $veredicto;
+            $reporte['conciliacion'] = [
+                'enviados' => $enviados,
+                'guardados_central' => $guardados,
+                'insertados' => $procesados,
+                'actualizados' => $actualizados,
+                'errores' => $erroresCentral,
+                'faltantes' => max(0, $enviados - $guardados),
+            ];
+
+            // ---------- Paso 5: marcar (solo si se pidió y central confirmó OK total) ----------
+            $marcadosLocal = 0;
+            if ($marcar && $veredicto === 'GUARDADO_OK'
+                && !$usandoMuestraYaSincronizada
+                && $tabla !== 'inventarios' && $tabla !== 'usuarios_pos'
+                && $campoSync !== null) {
+                $updateData = [$campoSync => 1];
+                if ($campoSync !== 'push') {
+                    $updateData['sincronizado_at'] = now();
+                }
+                $marcadosLocal = $model::whereIn('id', $ids)->update($updateData);
+            }
+            $reporte['marcados_local'] = $marcadosLocal;
+
+            // ---------- Paso 6: conteo en central DESPUÉS ----------
+            $centralDespues = $this->consultarConteoCentral($sc, $statusKey);
+            $reporte['central'] = [
+                'clave_status' => $statusKey,
+                'antes' => $centralAntes,
+                'despues' => $centralDespues,
+                'delta' => ($centralAntes !== null && $centralDespues !== null) ? ($centralDespues - $centralAntes) : null,
+            ];
+
+            // ---------- Resumen legible ----------
+            if ($veredicto === 'GUARDADO_OK') {
+                $reporte['resumen'] = "OK — central confirmó {$guardados}/{$enviados} guardados ({$procesados} nuevos, {$actualizados} actualizados), 0 errores, en {$elapsedMs} ms.";
+            } elseif ($veredicto === 'PARCIAL') {
+                $reporte['resumen'] = "PARCIAL — se enviaron {$enviados} pero central guardó {$guardados} y reportó {$erroresCentral} errores. Faltaron " . max(0, $enviados - $guardados) . ". Revisa 'detalles_errores'.";
+                $reporte['advertencias'][] = 'En el sync normal estos registros igual se marcan como sincronizados aunque central no los guarde todos: por eso queda información sin subir. Revisa detalles_errores para la causa exacta.';
+            } else {
+                $reporte['resumen'] = "NO GUARDADO — HTTP {$httpStatus}, estado_central=" . ($estadoCentral ? 'true' : 'false') . ". " . ($mensajeCentral ? "Mensaje: {$mensajeCentral}" : 'Revisa el body crudo.');
+            }
+
+            return Response::json($reporte);
+        } catch (\Exception $e) {
+            return Response::json([
+                'estado' => false,
+                'mensaje' => 'Error en diagnóstico: ' . $e->getMessage(),
+                'archivo' => $e->getFile() . ':' . $e->getLine(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Construye el payload de un lote igual que sincronizarTabla (campos + transform).
+     * Fiel para las tablas de alto volumen. En cierres no anexa lotes (se documenta en el reporte).
+     */
+    private function construirDataDiagnostico($nombreTabla, $config, $registros)
+    {
+        $transformar = $config['transformar'] ?? null;
+        $campos = $config['campos'] ?? [];
+
+        if ($nombreTabla === 'usuarios_pos') {
+            $tableName = (new $config['model'])->getTable();
+            $cols = Schema::getColumnListing($tableName);
+            $campos = array_values(array_diff($cols, ['clave', 'password']));
+        }
+
+        if ($nombreTabla === 'pedidos') {
+            $registros->loadMissing('vendedor');
+        }
+
+        return $registros->map(function ($r, $index) use ($campos, $transformar, $nombreTabla) {
+            $atributos = array_merge($r->getAttributes(), $r->getOriginal());
+            $registro = [];
+            foreach ($campos as $campo) {
+                $registro[$campo] = array_key_exists($campo, $atributos)
+                    ? $atributos[$campo]
+                    : $r->getAttribute($campo);
+            }
+            if ($nombreTabla === 'pedidos') {
+                $registro['nombre_vendedor'] = $r->vendedor ? ($r->vendedor->nombre ?? null) : null;
+            }
+            if ($transformar && is_callable($transformar)) {
+                return $transformar($registro, $index);
+            }
+            return $registro;
+        })->values()->toArray();
+    }
+
+    /**
+     * Mapea la tabla_destino al nombre de la clave que devuelve /api/sync/status en central.
+     */
+    private function mapaCentralStatusKey($tablaDestino)
+    {
+        $map = [
+            'inventario_sucursals' => 'inventarios',
+            'sucursal_pedidos' => 'pedidos',
+            'sucursal_pedido_pagos' => 'pagos_pedidos',
+            'inventario_sucursal_estadisticas' => 'estadisticas',
+            'cierres' => 'cierres',
+            'puntosybiopagos' => 'puntos_biopagos',
+            'cajas' => 'cajas',
+            'movsinventarios' => 'movimientos',
+            'sucursal_usuarios' => 'usuarios_pos',
+        ];
+        return $map[$tablaDestino] ?? null;
+    }
+
+    /**
+     * Consulta el conteo real en central para una tabla (vía /api/sync/status).
+     * Devuelve int o null si no se pudo obtener.
+     */
+    private function consultarConteoCentral($sc, $statusKey)
+    {
+        if ($statusKey === null) {
+            return null;
+        }
+        try {
+            $resp = $sc->requestToCentral('get', '/api/sync/status', [], ['timeout' => 20]);
+            if ($resp->ok()) {
+                $j = $resp->json();
+                if (is_array($j) && isset($j['totales'][$statusKey])) {
+                    return (int) $j['totales'][$statusKey];
+                }
+            }
+        } catch (\Throwable $e) {
+            // silencioso: el reporte sigue siendo útil sin el conteo
+        }
+        return null;
+    }
+
     /**
      * Resetear estado de sincronización (para re-sincronizar todo)
      */

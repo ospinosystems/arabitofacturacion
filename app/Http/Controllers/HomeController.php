@@ -161,11 +161,14 @@ class HomeController extends Controller
             }
         }
         
-        // Fallback a sesión legacy
-        if (session()->has("id_usuario")) {
+        // Fallback a sesión legacy. Usamos el MISMO criterio que AuthenticateUser
+        // (session('tipo_usuario')); si aquí validáramos por 'id_usuario' y el
+        // middleware por 'tipo_usuario', el front podría montar el home mientras
+        // los endpoints protegidos responden "Sin sesión activa" y revientan.
+        if (session('tipo_usuario')) {
             return Response::json(["estado" => true]);
         }
-        
+
         return Response::json(["estado" => false]);
     }
     public function logout(Request $request)
