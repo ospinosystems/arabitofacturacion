@@ -687,11 +687,31 @@ class PagoPedidosController extends Controller
                         $diff = round($monto_tra - $montodolares, 6);
                         $tolerancia = 0.05; // Tolerancia de 5 centavos para casos de redondeo
 
+                        // SOBRANTE-TRANSFERENCIA 2026-05-27 — si el cajero activó el toggle "Sobrante"
+                        // se relaja el match estricto solo cuando las refs EXCEDEN al monto de
+                        // transferencia ($diff < 0). Esto cubre el caso C (cliente transfiere de más):
+                        //   refs entrante = $12, transferencia = $10, diff = -$2 → permitido como sobrante
+                        // El caso contrario (refs MENORES que transferencia) sigue bloqueado porque
+                        // sería un pago incompleto, no un sobrante.
+                        // is_devolucion_pura también relaja (refund puro con neto negativo).
+                        $permiteSobrante = (
+                            $req->permite_sobrante === true ||
+                            $req->permite_sobrante === '1' ||
+                            $req->permite_sobrante === 1
+                        );
+                        $esDevolucionPura = (
+                            $req->is_devolucion_pura === true ||
+                            $req->is_devolucion_pura === '1' ||
+                            $req->is_devolucion_pura === 1
+                        );
+                        $sobranteValido = $permiteSobrante && $diff < 0; // refs > transferencia
+                        $diffOk = abs($diff) <= $tolerancia || $sobranteValido || $esDevolucionPura;
+
                         // PERF 2026-05-27 — antes Log::info corría para CADA pedido exitoso (incluyendo
                         // el "Transferencia validada correctamente" al final). En sucursales con miles
                         // de transacciones/día eso es escritura de archivo en serie. Solo logueamos
                         // cuando falla la validación; el path feliz queda silencioso.
-                        if (abs($diff) > $tolerancia) {
+                        if (!$diffOk) {
                             \Log::warning("Validación transferencia falló - Pedido: {$req->id}", [
                                 'monto_transferencia' => $monto_tra,
                                 'monto_referencias_dolares' => $montodolares,
@@ -699,14 +719,19 @@ class PagoPedidosController extends Controller
                                 'diferencia_absoluta' => abs($diff),
                                 'tolerancia' => $tolerancia,
                                 'referencias_count' => $referencias->count(),
+                                'permite_sobrante' => $permiteSobrante,
+                                'is_devolucion_pura' => $esDevolucionPura,
                             ]);
-                            $monto_tra = moneda($monto_tra);
-                            $montodolares = moneda($montodolares);
-                            $diff = moneda($diff);
+                            $monto_tra_fmt = moneda($monto_tra);
+                            $montodolares_fmt = moneda($montodolares);
+                            $diff_fmt = moneda($diff);
+                            $sugerencia = ($diff < 0 && !$permiteSobrante)
+                                ? " Si el cliente transfirió de más, activá el toggle 'Sobrante' en el panel de pago."
+                                : "";
                             throw new \Exception(
-                                "Error: El monto de transferencia ($monto_tra) no coincide con las referencias cargadas ($montodolares). " .
-                                "Diferencia: ($diff). " .
-                                "Debe pagar exactamente lo que indica el sistema.",
+                                "Error: El monto de transferencia ($monto_tra_fmt) no coincide con las referencias cargadas ($montodolares_fmt). " .
+                                "Diferencia: ($diff_fmt). " .
+                                "Debe pagar exactamente lo que indica el sistema." . $sugerencia,
                                 1
                             );
                         }

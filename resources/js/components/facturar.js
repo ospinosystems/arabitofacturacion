@@ -5953,6 +5953,11 @@ export default function Facturar({
             // SOBRANTE/REFUND 2026-05-27 — pedido sin items: refund puro (caso B/D) o pago directo sin venta.
             // Auto-detectado por items vacíos + métodos cargados; el backend acepta items vacíos con esta flag.
             is_devolucion_pura: esDevolucionPuraAuto ? true : undefined,
+            // SOBRANTE-TRANSFERENCIA 2026-05-27 — toggle "Sobrante" del cajero. Cuando ON, el backend
+            // relaja la validación de match estricto entre Transferencia y suma de refs si las refs
+            // EXCEDEN el monto (cliente transfirió de más). Sin esta flag, el backend rebota con
+            // "no coincide con las referencias cargadas".
+            permite_sobrante: permiteSobrante ? true : undefined,
             items: frontItems || undefined,
             // Solo se envía debitos (array). Los campos debito y debitoRef están descontinuados y no se envían.
             debitos: debitosParam,
