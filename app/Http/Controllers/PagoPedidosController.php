@@ -575,36 +575,52 @@ class PagoPedidosController extends Controller
             //
             // SOBRECOBRO-DEBITO 2026-05-27 — fix de cuadre con débitos imborrable.
             // ANTES: $total_ins sumaba lo que el frontend mandaba en req->debitos. Si el
-            // pedido tenía 2 débitos imborrable en BD pero el frontend solo mandaba 1
-            // (porque el state local no se refrescó o porque el cajero tenía la versión
-            // vieja del bundle), $total_ins = monto de 1 débito → coincidía falsamente
-            // con $total_real → setPagoPedido cerraba el pedido aceptando 2 cobros físicos
-            // pero registrando solo 1 → DOBLE COBRO silencioso al cliente.
+            // pedido tenía débitos imborrable en BD pero el frontend solo mandaba 1
+            // (state local desactualizado), $total_ins coincidía falsamente con $total_real
+            // → DOBLE COBRO al cliente.
             //
-            // AHORA: source-of-truth para imborrable es BD. Sumamos todos los débitos
-            // imborrable persistidos (en USD via columna `monto`) + los débitos NO
-            // imborrable del request (los que vienen "nuevos" sin marcar). Si la BD
-            // tiene 2 imborrable, total_ins reflejará los 2 y la validación de cuadre
-            // detectará el sobrecobro.
+            // AHORA: source-of-truth para imborrable es BD. Sumamos los débitos imborrable
+            // persistidos (USD via columna `monto`) + los débitos NUEVOS del request.
+            //
+            // SKIP-MATCHING (refinamiento 2026-05-27): el frontend puede mandar tanto los
+            // imborrable como los nuevos en req->debitos. Para no doble-contar, skipeamos
+            // del request los que MATCHEAN (referencia + monto USD) a un imborrable en BD.
+            // Es posible que varios débitos compartan misma referencia (ej: cierre PINPAD
+            // que repite la ref del lote en cada transacción del lote), así que skipeamos
+            // hasta el número de imborrable matcheados — no todos.
             $debitoUSD = 0;
             $debitosImborrableEnBD = pago_pedidos::where('id_pedido', $req->id)
                 ->where('tipo', 2)
                 ->where('imborrable', 1)
                 ->get(['referencia', 'monto']);
             $debitoUSD += (float) $debitosImborrableEnBD->sum('monto');
-            $refsImborrablesSetCheck = array_flip(
-                $debitosImborrableEnBD->pluck('referencia')->map(fn ($r) => (string) $r)->all()
-            );
+
+            // Contador por (referencia + monto USD redondeado) → cuántos imborrable hay
+            // que matchean. Cada vez que skipeamos uno del request, decrementamos.
+            $imborrableMatchCounts = [];
+            foreach ($debitosImborrableEnBD as $imb) {
+                $refKey = (string) $imb->referencia;
+                $montoKey = (string) round((float) $imb->monto, 2); // USD a 2 decimales
+                $key = $refKey . '|' . $montoKey;
+                $imborrableMatchCounts[$key] = ($imborrableMatchCounts[$key] ?? 0) + 1;
+            }
+
             if ($req->debitos && is_array($req->debitos)) {
                 foreach ($req->debitos as $debitoItem) {
                     $referenciaItem = (string) ($debitoItem['referencia'] ?? '');
-                    // Si esta ref ya está como imborrable en BD, NO la cuentes otra vez
-                    // (ya se sumó en $debitosImborrableEnBD). Esto evita doble suma cuando
-                    // el frontend manda los imborrable junto con los nuevos.
-                    if ($referenciaItem !== '' && isset($refsImborrablesSetCheck[$referenciaItem])) {
+                    $montoBsItem = floatval($debitoItem['monto']);
+                    $montoUsdItem = $tasaDolar > 0 ? $montoBsItem / $tasaDolar : 0;
+                    $montoUsdKey = (string) round($montoUsdItem, 2);
+                    $matchKey = $referenciaItem . '|' . $montoUsdKey;
+
+                    if ($referenciaItem !== '' && ($imborrableMatchCounts[$matchKey] ?? 0) > 0) {
+                        // Este débito del request matchea con un imborrable de BD → skipear
+                        // (ya está contado en $debitosImborrableEnBD->sum) y decrementar el
+                        // contador para no skipear otro que tenga misma (ref+monto) por error.
+                        $imborrableMatchCounts[$matchKey]--;
                         continue;
                     }
-                    $debitoUSD += floatval($debitoItem['monto']) / $tasaDolar;
+                    $debitoUSD += $montoUsdItem;
                 }
             }
             
