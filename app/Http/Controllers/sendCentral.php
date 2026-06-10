@@ -1053,8 +1053,10 @@ class sendCentral extends Controller
         // connect_timeout corto: si un intento de conexión muere, falla en ~8s (no 21s) y el
         // reintento puede tomar otra ruta.
         $request = Http::timeout($timeout)
-            ->connectTimeout($options['connect_timeout'] ?? 8)
-            ->withOptions(['force_ip_resolve' => 'v4'])
+            ->withOptions([
+                'connect_timeout' => $options['connect_timeout'] ?? 8,
+                'force_ip_resolve' => 'v4',
+            ])
             ->withHeaders($headers);
 
         if ($methodUpper === 'GET') {

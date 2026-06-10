@@ -1524,8 +1524,7 @@ class SyncProgressController extends Controller
                         (new sendCentral())->throttleCentral(); // límite de ritmo del firewall de central
 
                         $response = Http::timeout(120)
-                            ->connectTimeout(8)
-                            ->withOptions(['force_ip_resolve' => 'v4'])
+                            ->withOptions(['connect_timeout' => 8, 'force_ip_resolve' => 'v4'])
                             ->withHeaders($this->centralRequestHeaders())
                             ->retry(2, 1000)
                             ->post($this->getCentralUrl() . "/api/sync/batch", [
@@ -1622,8 +1621,7 @@ class SyncProgressController extends Controller
             // Enviar a Central para que elimine los que no estén en esta lista
             (new sendCentral())->throttleCentral(); // límite de ritmo del firewall de central
             $response = Http::timeout(120)
-                ->connectTimeout(8)
-                ->withOptions(['force_ip_resolve' => 'v4'])
+                ->withOptions(['connect_timeout' => 8, 'force_ip_resolve' => 'v4'])
                 ->withHeaders($this->centralRequestHeaders())
                 ->post($this->getCentralUrl() . "/api/sync/limpiar-obsoletos", [
                     'codigo_origen' => $this->getCodigoOrigen(),
