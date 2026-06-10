@@ -563,9 +563,38 @@ class PagoPedidosController extends Controller
             
             // Calcular total de métodos de pago principales
             // Débito viene en Bs, hay que convertirlo a USD
+            //
+            // SOBRECOBRO-DEBITO 2026-05-27 — fix de cuadre con débitos imborrable.
+            // ANTES: $total_ins sumaba lo que el frontend mandaba en req->debitos. Si el
+            // pedido tenía 2 débitos imborrable en BD pero el frontend solo mandaba 1
+            // (porque el state local no se refrescó o porque el cajero tenía la versión
+            // vieja del bundle), $total_ins = monto de 1 débito → coincidía falsamente
+            // con $total_real → setPagoPedido cerraba el pedido aceptando 2 cobros físicos
+            // pero registrando solo 1 → DOBLE COBRO silencioso al cliente.
+            //
+            // AHORA: source-of-truth para imborrable es BD. Sumamos todos los débitos
+            // imborrable persistidos (en USD via columna `monto`) + los débitos NO
+            // imborrable del request (los que vienen "nuevos" sin marcar). Si la BD
+            // tiene 2 imborrable, total_ins reflejará los 2 y la validación de cuadre
+            // detectará el sobrecobro.
             $debitoUSD = 0;
+            $debitosImborrableEnBD = pago_pedidos::where('id_pedido', $req->id)
+                ->where('tipo', 2)
+                ->where('imborrable', 1)
+                ->get(['referencia', 'monto']);
+            $debitoUSD += (float) $debitosImborrableEnBD->sum('monto');
+            $refsImborrablesSetCheck = array_flip(
+                $debitosImborrableEnBD->pluck('referencia')->map(fn ($r) => (string) $r)->all()
+            );
             if ($req->debitos && is_array($req->debitos)) {
                 foreach ($req->debitos as $debitoItem) {
+                    $referenciaItem = (string) ($debitoItem['referencia'] ?? '');
+                    // Si esta ref ya está como imborrable en BD, NO la cuentes otra vez
+                    // (ya se sumó en $debitosImborrableEnBD). Esto evita doble suma cuando
+                    // el frontend manda los imborrable junto con los nuevos.
+                    if ($referenciaItem !== '' && isset($refsImborrablesSetCheck[$referenciaItem])) {
+                        continue;
+                    }
                     $debitoUSD += floatval($debitoItem['monto']) / $tasaDolar;
                 }
             }
