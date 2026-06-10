@@ -648,7 +648,22 @@
                     },
                     body: JSON.stringify({ tabla, limite, marcar, solo_nuevos: true })
                 });
-                const data = await res.json();
+
+                // Leer como texto primero: si el servidor devolvió HTML (error PHP) o un
+                // warning antes del JSON, lo mostramos crudo en vez de un error genérico.
+                const raw = await res.text();
+                let data;
+                try {
+                    data = JSON.parse(raw);
+                } catch (parseErr) {
+                    cont.innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm">
+                        <p class="text-red-700 font-semibold mb-2">El servidor devolvió una respuesta NO-JSON (HTTP ${res.status}). Contenido crudo:</p>
+                        <pre class="bg-gray-900 text-red-300 rounded-lg p-3 text-xs overflow-auto max-h-80">${esc(raw.slice(0, 6000))}</pre>
+                    </div>`;
+                    log(`Diagnóstico ${tabla}: respuesta no-JSON (HTTP ${res.status})`, 'error');
+                    return;
+                }
+
                 if (data.estado === false && !data.veredicto) {
                     cont.innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">Error: ${esc(data.mensaje || 'desconocido')}${data.archivo ? '<br><span class="text-xs text-red-400">' + esc(data.archivo) + '</span>' : ''}</div>`;
                     log(`Diagnóstico ${tabla}: ${data.mensaje}`, 'error');

@@ -1218,7 +1218,9 @@ class SyncProgressController extends Controller
                             'codigo_origen' => $this->getCodigoOrigen(),
                             'tabla' => $nombreTabla,
                             'tabla_destino' => $config['tabla_destino'],
-                            'data' => base64_encode(gzcompress(json_encode($data))),
+                            // JSON_INVALID_UTF8_SUBSTITUTE: evita que un cierre con bytes no-UTF8
+                            // (nota/POS) haga que json_encode devuelva false y se envíe data vacía.
+                            'data' => base64_encode(gzcompress(json_encode($data, JSON_INVALID_UTF8_SUBSTITUTE))),
                             'batch_size' => count($data),
                         ]);
                     
@@ -1651,13 +1653,19 @@ class SyncProgressController extends Controller
             if ($registros->isEmpty()) {
                 $reporte['local'] = ['total' => $totalLocal, 'pendientes' => $pendientesLocal, 'enviados' => 0];
                 $reporte['advertencias'][] = 'No hay ningún registro para enviar en esta tabla.';
-                return Response::json($reporte);
+                return $this->jsonReporte($reporte);
             }
 
             // ---------- Construir payload EXACTO ----------
             $data = $this->construirDataDiagnostico($tabla, $config, $registros);
             $ids = $registros->pluck('id')->values()->toArray();
-            $jsonData = json_encode($data);
+            // JSON_INVALID_UTF8_SUBSTITUTE: los cierres suelen traer bytes no-UTF8 en `nota`/
+            // datos POS; sin esto json_encode devuelve false y la respuesta se corrompe.
+            $jsonData = json_encode($data, JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE);
+            if ($jsonData === false) {
+                $jsonData = json_encode(['_error_encode' => json_last_error_msg()]);
+                $reporte['advertencias'][] = 'El payload contenía datos no codificables en JSON (' . json_last_error_msg() . '); se sustituyeron caracteres inválidos.';
+            }
             $comprimido = base64_encode(gzcompress($jsonData));
             $enviados = count($data);
 
@@ -1711,7 +1719,7 @@ class SyncProgressController extends Controller
                 ];
                 $reporte['veredicto'] = 'NO_GUARDADO';
                 $reporte['resumen'] = "No se pudo contactar a central: " . ($httpError ?? 'sin respuesta') . ". El lote NO se transmitió.";
-                return Response::json($reporte);
+                return $this->jsonReporte($reporte);
             }
 
             $httpStatus = $response->status();
@@ -1791,14 +1799,24 @@ class SyncProgressController extends Controller
                 $reporte['resumen'] = "NO GUARDADO — HTTP {$httpStatus}, estado_central=" . ($estadoCentral ? 'true' : 'false') . ". " . ($mensajeCentral ? "Mensaje: {$mensajeCentral}" : 'Revisa el body crudo.');
             }
 
-            return Response::json($reporte);
-        } catch (\Exception $e) {
+            return $this->jsonReporte($reporte);
+        } catch (\Throwable $e) {
             return Response::json([
                 'estado' => false,
                 'mensaje' => 'Error en diagnóstico: ' . $e->getMessage(),
                 'archivo' => $e->getFile() . ':' . $e->getLine(),
-            ], 500);
+            ], 500, [], JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE);
         }
+    }
+
+    /**
+     * Devuelve el reporte como JSON tolerando bytes no-UTF8 (cierres con `nota`/POS raros)
+     * y respuestas crudas de central. Sin esto, json_encode falla y el navegador recibe
+     * texto/HTML ("JSON.parse: unexpected character").
+     */
+    private function jsonReporte(array $reporte)
+    {
+        return Response::json($reporte, 200, [], JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE);
     }
 
     /**
