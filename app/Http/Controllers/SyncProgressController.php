@@ -489,6 +489,7 @@ class SyncProgressController extends Controller
                 'tabla_destino' => 'inventario_sucursals',
                 'orden' => 1,
                 'grupo' => 'primero',
+                'chunk' => 500, // catálogo: upserts rápidos, lote grande está bien
                 'campo_sync' => 'push', // Usa 'push' en lugar de 'sincronizado'
                 'campo_fecha' => 'updated_at', // Para filtro de 3 días
                 'limpiar_obsoletos' => true, // Eliminar productos que ya no existen
@@ -656,6 +657,7 @@ class SyncProgressController extends Controller
                 'tabla_destino' => 'sucursal_usuarios',
                 'orden' => 8,
                 'grupo' => 'tercero',
+                'chunk' => 500, // pocos usuarios; snapshot completo rápido
                 // Sin columna push: en cada sync se envía snapshot de todos los usuarios (sin clave).
                 'campo_sync' => null,
                 'campo_fecha' => 'updated_at',
@@ -1065,9 +1067,13 @@ class SyncProgressController extends Controller
         
         Log::info("    [{$nombreTabla}] Total a procesar: {$total}");
         
-        // Procesar en lotes
-        Log::info(">>> Iniciando chunk para {$nombreTabla}. Query SQL: " . $query->toSql());
-        $query->orderBy('id')->chunk(self::BATCH_SIZE, function($registros) use ($nombreTabla, $config, $campoSync, &$procesados, &$errores, $total, $progressCallback, $emitir, &$loteNum) {
+        // Procesar en lotes.
+        // Tamaño por tabla: las tablas TRANSACCIONALES (pedidos, pagos, items, cierres) usan lotes
+        // CHICOS para que cada transacción en central sea corta y no genere contención de locks /
+        // blowup de MVCC (causa de los timeouts cURL 28). El catálogo (inventarios) puede ir grande.
+        $chunkSize = (int) ($config['chunk'] ?? 100);
+        Log::info(">>> Iniciando chunk para {$nombreTabla} (tamaño {$chunkSize}). Query SQL: " . $query->toSql());
+        $query->orderBy('id')->chunk($chunkSize, function($registros) use ($nombreTabla, $config, $campoSync, &$procesados, &$errores, $total, $progressCallback, $emitir, &$loteNum) {
             Log::info(">>> Procesando lote de {$nombreTabla}: " . count($registros) . " registros");
             // Si hay función de transformación, aplicarla
             $transformar = $config['transformar'] ?? null;
