@@ -963,6 +963,53 @@ class sendCentral extends Controller
     }
 
     /**
+     * Espaciado mínimo entre peticiones a central, en milisegundos.
+     * El firewall de central limita 25 requests / 3s por IP. Como las IPs de las
+     * sucursales son dinámicas (no se pueden whitelistear), regulamos el ritmo desde
+     * aquí: ~180 ms entre llamadas ≈ 16 req/3s, con margen bajo el tope de 25.
+     */
+    const CENTRAL_MIN_GAP_MS = 180;
+
+    /**
+     * Gate de ritmo para TODAS las salidas a central. Coordinado entre todos los
+     * workers de PHP-FPM del servidor de la sucursal mediante un archivo + flock:
+     * cada llamada reserva el siguiente "slot" (último + GAP) y espera hasta él.
+     * Así, aunque varias cajas + el sync salgan a la vez, nunca se supera el límite
+     * del firewall y desaparecen los "Failed to connect (cURL 28)".
+     *
+     * Es a prueba de fallos: si no puede usar el archivo, no bloquea el flujo.
+     */
+    public function throttleCentral(int $minGapMs = self::CENTRAL_MIN_GAP_MS): void
+    {
+        $lockFile = storage_path('app/central_rate.lock');
+        $fp = @fopen($lockFile, 'c+');
+        if ($fp === false) {
+            return; // si no se puede abrir, no frenamos el flujo
+        }
+        try {
+            if (!@flock($fp, LOCK_EX)) {
+                return;
+            }
+            $nowMs = microtime(true) * 1000;
+            $last = (float) (stream_get_contents($fp) ?: 0);
+            // Reservar el próximo slot disponible (monótono creciente).
+            $slot = max($nowMs, $last + $minGapMs);
+            rewind($fp);
+            ftruncate($fp, 0);
+            fwrite($fp, (string) $slot);
+            fflush($fp);
+            @flock($fp, LOCK_UN);
+        } finally {
+            @fclose($fp);
+        }
+        // Dormir FUERA del lock hasta el slot reservado (cap de 5s para no colgar workers).
+        $waitMs = $slot - (microtime(true) * 1000);
+        if ($waitMs > 0) {
+            usleep((int) (min($waitMs, 5000) * 1000));
+        }
+    }
+
+    /**
      * Envía una petición a central con codigo_origen y API key si existe.
      * Si la respuesta trae X-Sucursal-Api-Key, lo guarda localmente (primera vez).
      * $path: ruta sin base (ej. "/api/garantias/solicitudes/1").
@@ -971,6 +1018,9 @@ class sendCentral extends Controller
      */
     public function requestToCentral(string $method, string $path, array $params = [], array $options = []): \Illuminate\Http\Client\Response
     {
+        // Respetar el límite de ritmo del firewall de central antes de salir.
+        $this->throttleCentral();
+
         $url = $this->path() . $path;
         $params = array_merge(['codigo_origen' => $this->getOrigen()], $params);
         $timeout = $options['timeout'] ?? 30;

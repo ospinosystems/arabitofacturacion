@@ -1277,6 +1277,10 @@ class SyncProgressController extends Controller
             ]);
 
             for ($intento = 1; $intento <= $maxReintentos && !$exito; $intento++) {
+                // Respetar el límite de ritmo del firewall de central (mismo gate que requestToCentral).
+                // Se hace ANTES de medir el tiempo para no contar la espera como tiempo de central.
+                (new sendCentral())->throttleCentral();
+
                 $tInicio = microtime(true);
                 $httpStatus = null;
                 $estadoCentral = false;
@@ -1502,7 +1506,9 @@ class SyncProgressController extends Controller
                             'total' => $totalDeudores,
                             'timestamp' => now()->toISOString(),
                         ], 3600);
-                        
+
+                        (new sendCentral())->throttleCentral(); // límite de ritmo del firewall de central
+
                         $response = Http::timeout(120)
                             ->withHeaders($this->centralRequestHeaders())
                             ->retry(2, 1000)
@@ -1598,6 +1604,7 @@ class SyncProgressController extends Controller
             Log::info("    [{$nombreTabla}] Enviando lista de " . count($idsExistentes) . " IDs para limpiar obsoletos");
             
             // Enviar a Central para que elimine los que no estén en esta lista
+            (new sendCentral())->throttleCentral(); // límite de ritmo del firewall de central
             $response = Http::timeout(120)
                 ->withHeaders($this->centralRequestHeaders())
                 ->post($this->getCentralUrl() . "/api/sync/limpiar-obsoletos", [
