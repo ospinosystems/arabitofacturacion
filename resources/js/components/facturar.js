@@ -6081,6 +6081,48 @@ export default function Facturar({
             return;
         }
 
+        // SOBRECOBRO-DEBITO 2026-05-27 — prevenir doble cobro:
+        // si el pedido ya tiene débitos imborrable cuyo monto suma cubre el total,
+        // bloquear (o pedir confirmación explícita al cajero) ANTES de mandar al POS.
+        // El POS físicamente cobra al cliente; si lo dejamos pasar y el backend
+        // rechaza con "sobrecobro", el cliente queda con un cobro fantasma hasta
+        // que el cajero haga el reverso manual.
+        const pedidoActual = pedidoDataRef.current;
+        if (pedidoActual && pedidoActual.id === inst.pedidoId) {
+            const totalBs = parseFloat(pedidoActual.bs ?? pedidoActual.bs_clean) || 0;
+            const debitosImborrable = (pedidoActual.pagos || []).filter((p) => {
+                const tipoOk = parseInt(p.tipo) === 2 || p.tipo === "2";
+                const imbOk = parseInt(p.imborrable) === 1 || p.imborrable === "1" || p.imborrable === 1;
+                return tipoOk && imbOk;
+            });
+            const sumaImborrablesBs = debitosImborrable.reduce(
+                (s, p) => s + (parseFloat(p.monto_original) || parseFloat(p.monto) || 0),
+                0
+            );
+            const toleranciaBs = 1.0;
+            if (totalBs > 0 && sumaImborrablesBs >= (totalBs - toleranciaBs)) {
+                const confirmacion = window.confirm(
+                    "⚠ ALERTA SOBRECOBRO ⚠\n\n" +
+                    "Este pedido ya tiene débitos POS aprobados por Bs " +
+                    sumaImborrablesBs.toFixed(2) +
+                    "\nTotal del pedido: Bs " + totalBs.toFixed(2) + "\n\n" +
+                    "Si pasa la tarjeta de nuevo, el cliente puede ser COBRADO DOS VECES.\n\n" +
+                    "¿Está SEGURO de pasar la tarjeta? (Cancelar si no)"
+                );
+                // Si confirm() es bloqueado por el browser retorna undefined → tratamos como NO
+                if (confirmacion !== true) {
+                    actualizarInstanciaPos(instanceId, {
+                        respuesta: {
+                            mensaje: "Cobro bloqueado: el pedido ya tiene débitos imborrable cubriendo el total. Si el cobro anterior falló, usá 'Validar' antes de re-pasar la tarjeta.",
+                            exito: false,
+                        },
+                        loading: false,
+                    });
+                    return;
+                }
+            }
+        }
+
         // PRE-VALIDACIÓN AUTOMÁTICA: si la instancia tiene un intento previo
         // con error (rechazo definitivo, indeterminado o cualquier estado de
         // validacion), consultar PRIMERO a central antes de re-enviar al POS.

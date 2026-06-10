@@ -80,6 +80,51 @@ class PagoPedidosController extends Controller
             if ($tasaDolar <= 0) $tasaDolar = 1;
             $montoUsd = $montoBs / $tasaDolar;
 
+            // SOBRECOBRO-DEBITO 2026-05-27 — bloquear el cobro si el pedido YA tiene débitos
+            // imborrable cuyo monto suma cubre el total. Antes solo se chequeaba idempotencia
+            // por referencia, pero dos transacciones POS con refs distintas pasaban y
+            // generaban DOBLE COBRO al cliente.
+            //
+            // Política: bloquear ANTES de crear la fila. La transacción del POS físico se
+            // habrá completado (el cliente vio "APROBADO") pero el sistema NO la asienta —
+            // el cajero debe hacer el reverso manual con el POS PINPAD del cobro indebido.
+            // Mejor reverso manual que doble cobro silencioso.
+            $totalPedido = (float) $pedido->total;
+            if ($totalPedido <= 0) {
+                // Fallback: sumar items si pedido.total no está poblado todavía
+                $totalPedido = (float) items_pedidos::where('id_pedido', $idPedido)
+                    ->selectRaw('SUM(monto * cantidad) as total')->value('total') ?? 0;
+            }
+            $totalPedidoBs = $totalPedido * $tasaDolar;
+            $debitosExistentesBs = (float) pago_pedidos::where('id_pedido', $idPedido)
+                ->where('tipo', 2)
+                ->where('imborrable', 1)
+                ->sum('monto_original') ?: (float) pago_pedidos::where('id_pedido', $idPedido)
+                ->where('tipo', 2)
+                ->where('imborrable', 1)
+                ->sum('monto');
+            $tolerancia = 1.0; // 1 Bs de tolerancia para redondeos
+            if ($totalPedidoBs > 0 && ($debitosExistentesBs + 0.01) >= ($totalPedidoBs - $tolerancia)) {
+                \Log::error('[POS] SOBRECOBRO DEBITO bloqueado', [
+                    'id_pedido' => $idPedido,
+                    'total_pedido_bs' => $totalPedidoBs,
+                    'debitos_existentes_bs' => $debitosExistentesBs,
+                    'nuevo_monto_bs' => $montoBs,
+                    'referencia' => $referencia,
+                ]);
+                return [
+                    'estado' => false,
+                    'sobrecobro' => true,
+                    'msj' => "ALERTA SOBRECOBRO: Este pedido ya tiene débitos imborrable por Bs " .
+                            number_format($debitosExistentesBs, 2) . " cubriendo el total Bs " .
+                            number_format($totalPedidoBs, 2) . ". El nuevo cobro Bs " .
+                            number_format($montoBs, 2) . " (ref " . $referencia . ") NO se asentó. " .
+                            "HACER REVERSO MANUAL EN EL POS PINPAD inmediatamente.",
+                    'total_pedido_bs' => $totalPedidoBs,
+                    'debitos_existentes_bs' => $debitosExistentesBs,
+                ];
+            }
+
             $amountRaw = isset($posData['amount']) ? trim((string) $posData['amount']) : '';
             $amountClean = $amountRaw !== '' ? str_replace(',', '', $amountRaw) : '';
             $posAmount = $amountClean !== '' && is_numeric($amountClean) ? (float) $amountClean : null;
