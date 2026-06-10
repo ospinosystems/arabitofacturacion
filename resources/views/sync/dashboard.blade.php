@@ -593,7 +593,22 @@
             diagLine('text-purple-300', '— Consultando estado del servidor central —');
             try {
                 const res = await fetch(`${API_BASE}/sync/central-server-stats`);
-                const j = await res.json();
+                const raw = await res.text();
+                let j;
+                try {
+                    j = JSON.parse(raw);
+                } catch (_) {
+                    diagLine('text-red-400', `❌ La sucursal respondió NO-JSON (HTTP ${res.status}) en /sync/central-server-stats.`);
+                    if (res.status === 404) {
+                        diagLine('text-yellow-300', 'Ruta no encontrada → falta resetear opcache en ESTA sucursal (abre /opcache-reset.php y recarga).');
+                    } else {
+                        const p = document.createElement('pre');
+                        p.className = 'bg-black/40 text-red-300 rounded p-2 overflow-auto max-h-60 whitespace-pre-wrap';
+                        p.textContent = raw.slice(0, 3000);
+                        diagAppend(p);
+                    }
+                    return;
+                }
                 if (!j.estado) {
                     diagLine('text-red-400', `❌ ${esc(j.mensaje || 'No se pudo obtener el estado')}` + (j.body ? ` · ${esc(j.body.slice(0,200))}` : ''));
                     diagLine('text-yellow-300', 'Si ni siquiera conecta, ESA es la prueba: central está saturado (sin workers o MySQL al tope).');
