@@ -1922,6 +1922,49 @@ class sendCentral extends Controller
             return Response::json(["msj" => "Error: " . $e->getMessage(), "estado" => false]);
         }
     }
+    /**
+     * SANEAR EXPORT 2026-06-09 — lista los espejos de exportación no extraídos que
+     * central tiene a nombre de esta sucursal (estados 1/3/4). Lo usa el comando
+     * pedidos:sanear-exportados para cruzarlos contra los pedidos locales.
+     */
+    public function getPedidosEspejoCentral()
+    {
+        try {
+            $response = $this->requestToCentral('post', "/getPedidosEspejoByOrigen", []);
+            if ($response->ok()) {
+                $res = $this->jsonFromCentral($response);
+                return $res !== null ? $res : ["estado" => false, "msj" => "Respuesta no válida de central (cuerpo no JSON)."];
+            }
+            return ["estado" => false, "msj" => "HTTP " . $response->status() . " de central"];
+        } catch (\Exception $e) {
+            return ["estado" => false, "msj" => "Error: " . $e->getMessage()];
+        }
+    }
+
+    /**
+     * SANEAR EXPORT 2026-06-09 — borra en central espejos de exportación por id local
+     * explícito (ids_pedido_local), sin requerir que el pedido siga existiendo en esta
+     * sucursal (caso huérfano: payload "pedidos" llega vacío). NO toca estado local;
+     * eso lo decide el llamador (pedidos:sanear-exportados) según cada caso.
+     */
+    public function deletePedidosEspejoCentral(array $idsLocales)
+    {
+        try {
+            $response = $this->requestToCentral('post', "/setPedidoInCentralFromMasters", [
+                "type" => "delete",
+                "pedidos" => [],
+                "ids_pedido_local" => array_values($idsLocales),
+            ]);
+            if ($response->ok()) {
+                $res = $this->jsonFromCentral($response);
+                return $res !== null ? $res : ["estado" => false, "msj" => "Respuesta no válida de central (cuerpo no JSON)."];
+            }
+            return ["estado" => false, "msj" => "HTTP " . $response->status() . " de central"];
+        } catch (\Exception $e) {
+            return ["estado" => false, "msj" => "Error: " . $e->getMessage()];
+        }
+    }
+
     function sendItemsPedidosChecked($items) {
         try {
             $codigo_origen = $this->getOrigen();

@@ -912,6 +912,32 @@ class PedidosController extends Controller
     }
     public function delPedidoFun($id, $motivo)
     {
+        // EXPORT 2026-06-09 — un pedido exportado tiene un espejo en central pendiente
+        // de extraer por la sucursal destino. Si se elimina aquí sin retirar ese espejo,
+        // queda huérfano flotando y el destino aún puede extraerlo (inventario duplicado:
+        // el origen repone stock al eliminar y el destino lo incorpora al extraer). Se
+        // desexporta primero y solo si central confirma se continúa con la eliminación.
+        // Cubre delpedido, delpedidoForce y delpedidoAdmin (todos pasan por aquí).
+        $pedidoExportado = pedidos::find($id);
+        if ($pedidoExportado && $pedidoExportado->export) {
+            $resCentral = (new sendCentral)->setPedidoInCentralFromMaster($id, null, "delete");
+            $resArr = null;
+            if (is_array($resCentral)) {
+                $resArr = $resCentral;
+            } elseif ($resCentral instanceof \Illuminate\Http\JsonResponse) {
+                $resArr = $resCentral->getData(true);
+            }
+            if (!is_array($resArr) || empty($resArr["estado"])) {
+                $msjCentral = is_array($resArr) && isset($resArr["msj"]) ? $resArr["msj"] : "Sin respuesta válida de central.";
+                return Response::json([
+                    "msj" => "No se eliminó: el pedido está EXPORTADO y central no confirmó retirar el espejo. " . $msjCentral,
+                    "estado" => false,
+                ]);
+            }
+            // Central retiró el espejo y setPedidoInCentralFromMaster ya dejó el pedido
+            // local en estado=0/export=0; la eliminación continúa por la ruta normal.
+        }
+
         $items = items_pedidos::with("producto")->where("id_pedido", $id)->get();
         $monto_pedido = pago_pedidos::where("id_pedido", $id)->where("monto", "<>", 0)->get();
         $pedido = pedidos::with("cliente")->find($id);
