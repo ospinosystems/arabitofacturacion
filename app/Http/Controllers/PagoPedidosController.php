@@ -47,147 +47,134 @@ class PagoPedidosController extends Controller
         // en BD. Caso verificado por SQL del usuario: 2 filas con mismo sequence, authid,
         // referencia, monto, created_at exactos.
         //
-        // Solución: GET_LOCK de MySQL (advisory lock) para serializar la sección crítica
-        // por (pedido, referencia). El segundo request espera hasta 5s al primero, luego
-        // re-chequea, ve la fila ya creada y devuelve duplicado=true.
-        $lockKey = "pos_imborrable_p{$idPedido}_r{$referencia}";
-        $lockObtained = false;
+        // Solución: transacción + lockForUpdate sobre la fila del PEDIDO. InnoDB serializa
+        // los 2 SELECT FOR UPDATE concurrentes para la misma fila; el segundo espera a que
+        // el primero haga COMMIT/ROLLBACK, después re-chequea y ve la fila ya creada.
+        // No depende de advisory locks ni de cambios de esquema.
         try {
             if ($idPedido <= 0 || $montoBs <= 0 || $referencia === '') {
                 return ['estado' => false, 'msj' => 'Parámetros inválidos'];
             }
 
-            // Adquirir lock advisory (5s timeout). Si dos requests llegan simultáneos,
-            // el segundo espera al primero antes de hacer su check de idempotencia.
-            $lockResult = \DB::selectOne("SELECT GET_LOCK(?, 5) AS got", [$lockKey]);
-            $lockObtained = $lockResult && (int) ($lockResult->got ?? 0) === 1;
-            if (!$lockObtained) {
-                \Log::warning('[POS] persistirPosImborrable: no se pudo obtener lock', [
-                    'id_pedido' => $idPedido,
-                    'referencia' => $referencia,
-                    'lock_key' => $lockKey,
-                ]);
-                return ['estado' => false, 'msj' => 'No se pudo obtener lock para procesar el pago POS.'];
-            }
+            return \DB::transaction(function () use ($idPedido, $montoBs, $referencia, $posData) {
+                // Lock pesimista sobre la fila del pedido. Los 2 requests concurrentes
+                // para el mismo idPedido se serializan acá: el 2do espera al COMMIT del 1ro.
+                $pedido = pedidos::where('id', $idPedido)->lockForUpdate()->first();
+                if (!$pedido) {
+                    return ['estado' => false, 'msj' => 'Pedido no encontrado'];
+                }
+                // No bloqueamos si el pedido ya fue facturado: el cobro POS sigue siendo real;
+                // solo no aplica imborrable porque setPagoPedido ya cerró. Lo loguea como warning.
+                if ((int) $pedido->estado === 1) {
+                    \Log::warning('[POS] persistirPosImborrable: pedido ya facturado', [
+                        'id_pedido' => $idPedido,
+                        'referencia' => $referencia,
+                    ]);
+                    return ['estado' => false, 'msj' => 'Pedido ya facturado'];
+                }
 
-            $pedido = pedidos::find($idPedido);
-            if (!$pedido) {
-                return ['estado' => false, 'msj' => 'Pedido no encontrado'];
-            }
-            // No bloqueamos si el pedido ya fue facturado: el cobro POS sigue siendo real;
-            // solo no aplica imborrable porque setPagoPedido ya cerró. Lo loguea como warning.
-            if ((int) $pedido->estado === 1) {
-                \Log::warning('[POS] persistirPosImborrable: pedido ya facturado', [
-                    'id_pedido' => $idPedido,
-                    'referencia' => $referencia,
-                ]);
-                return ['estado' => false, 'msj' => 'Pedido ya facturado'];
-            }
+                // Idempotencia DENTRO del lock — si el otro request creó la fila, la vemos.
+                $existente = pago_pedidos::where('id_pedido', $idPedido)
+                    ->where('tipo', 2)
+                    ->where('referencia', $referencia)
+                    ->where('imborrable', 1)
+                    ->first();
+                if ($existente) {
+                    return [
+                        'estado' => true,
+                        'id_pago_pedido' => $existente->id,
+                        'duplicado' => true,
+                    ];
+                }
 
-            // Idempotencia: si ya existe esta referencia en este pedido, devolverla.
-            // Ya estamos DENTRO del lock — si la otra request creó la fila, la vemos aquí.
-            $existente = pago_pedidos::where('id_pedido', $idPedido)
-                ->where('tipo', 2)
-                ->where('referencia', $referencia)
-                ->where('imborrable', 1)
-                ->first();
-            if ($existente) {
+                // Tasa del pedido (histórica del primer item; consistente con setPagoPedido)
+                $primerItem = items_pedidos::where('id_pedido', $idPedido)->first();
+                $tasaDolar = $primerItem ? floatval($primerItem->tasa) : 1;
+                if ($tasaDolar <= 0) $tasaDolar = 1;
+                $montoUsd = $montoBs / $tasaDolar;
+
+                // SOBRECOBRO-DEBITO 2026-05-27 — bloquear el cobro si el pedido YA tiene débitos
+                // imborrable cuyo monto suma cubre el total. Antes solo se chequeaba idempotencia
+                // por referencia, pero dos transacciones POS con refs distintas pasaban y
+                // generaban DOBLE COBRO al cliente.
+                //
+                // Política: bloquear ANTES de crear la fila. La transacción del POS físico se
+                // habrá completado (el cliente vio "APROBADO") pero el sistema NO la asienta —
+                // el cajero debe hacer el reverso manual con el POS PINPAD del cobro indebido.
+                $totalPedido = (float) $pedido->total;
+                if ($totalPedido <= 0) {
+                    $totalPedido = (float) items_pedidos::where('id_pedido', $idPedido)
+                        ->selectRaw('SUM(monto * cantidad) as total')->value('total') ?? 0;
+                }
+                $totalPedidoBs = $totalPedido * $tasaDolar;
+                $debitosExistentesBs = (float) pago_pedidos::where('id_pedido', $idPedido)
+                    ->where('tipo', 2)
+                    ->where('imborrable', 1)
+                    ->sum('monto_original') ?: (float) pago_pedidos::where('id_pedido', $idPedido)
+                    ->where('tipo', 2)
+                    ->where('imborrable', 1)
+                    ->sum('monto');
+                $tolerancia = 1.0;
+                if ($totalPedidoBs > 0 && ($debitosExistentesBs + 0.01) >= ($totalPedidoBs - $tolerancia)) {
+                    \Log::error('[POS] SOBRECOBRO DEBITO bloqueado', [
+                        'id_pedido' => $idPedido,
+                        'total_pedido_bs' => $totalPedidoBs,
+                        'debitos_existentes_bs' => $debitosExistentesBs,
+                        'nuevo_monto_bs' => $montoBs,
+                        'referencia' => $referencia,
+                    ]);
+                    return [
+                        'estado' => false,
+                        'sobrecobro' => true,
+                        'msj' => "ALERTA SOBRECOBRO: Este pedido ya tiene débitos imborrable por Bs " .
+                                number_format($debitosExistentesBs, 2) . " cubriendo el total Bs " .
+                                number_format($totalPedidoBs, 2) . ". El nuevo cobro Bs " .
+                                number_format($montoBs, 2) . " (ref " . $referencia . ") NO se asentó. " .
+                                "HACER REVERSO MANUAL EN EL POS PINPAD inmediatamente.",
+                        'total_pedido_bs' => $totalPedidoBs,
+                        'debitos_existentes_bs' => $debitosExistentesBs,
+                    ];
+                }
+
+                $amountRaw = isset($posData['amount']) ? trim((string) $posData['amount']) : '';
+                $amountClean = $amountRaw !== '' ? str_replace(',', '', $amountRaw) : '';
+                $posAmount = $amountClean !== '' && is_numeric($amountClean) ? (float) $amountClean : null;
+
+                $jsonRaw = $posData['json_response'] ?? null;
+                $posJsonResponse = is_array($jsonRaw) ? json_encode($jsonRaw) : ($jsonRaw ?? json_encode($posData));
+
+                // ABONO PINPAD 2026-06-10 — un pedido de abono a deudor (items con id_producto
+                // null, misma detección que setPagoPedido) debe asentarse con cuenta=0: la deuda
+                // del cliente solo suma pagos cuenta=0. Antes se hardcodeaba cuenta=1 y, como
+                // setPagoPedido salta las filas imborrable=1 sin corregirles la cuenta, el abono
+                // pagado con débito PINPAD nunca bajaba la deuda del deudor.
+                $esAbono = items_pedidos::where('id_pedido', $idPedido)
+                    ->whereNull('id_producto')
+                    ->exists();
+
+                $pago = pago_pedidos::create([
+                    'id_pedido'        => $idPedido,
+                    'tipo'             => 2, // débito
+                    'cuenta'           => $esAbono ? 0 : 1, // 0=abono, 1=factura
+                    'monto'            => $montoUsd,
+                    'monto_original'   => $montoBs,
+                    'moneda'           => 'bs',
+                    'referencia'       => $referencia,
+                    'pos_message'      => $posData['message'] ?? null,
+                    'pos_lote'         => $posData['lote'] ?? null,
+                    'pos_responsecode' => $posData['responsecode'] ?? null,
+                    'pos_amount'       => $posAmount,
+                    'pos_terminal'     => $posData['terminal'] ?? null,
+                    'pos_json_response'=> $posJsonResponse,
+                    'imborrable'       => 1,
+                ]);
+
                 return [
                     'estado' => true,
-                    'id_pago_pedido' => $existente->id,
-                    'duplicado' => true,
+                    'id_pago_pedido' => $pago->id,
+                    'duplicado' => false,
                 ];
-            }
-
-            // Tasa del pedido (histórica del primer item; consistente con setPagoPedido)
-            $primerItem = items_pedidos::where('id_pedido', $idPedido)->first();
-            $tasaDolar = $primerItem ? floatval($primerItem->tasa) : 1;
-            if ($tasaDolar <= 0) $tasaDolar = 1;
-            $montoUsd = $montoBs / $tasaDolar;
-
-            // SOBRECOBRO-DEBITO 2026-05-27 — bloquear el cobro si el pedido YA tiene débitos
-            // imborrable cuyo monto suma cubre el total. Antes solo se chequeaba idempotencia
-            // por referencia, pero dos transacciones POS con refs distintas pasaban y
-            // generaban DOBLE COBRO al cliente.
-            //
-            // Política: bloquear ANTES de crear la fila. La transacción del POS físico se
-            // habrá completado (el cliente vio "APROBADO") pero el sistema NO la asienta —
-            // el cajero debe hacer el reverso manual con el POS PINPAD del cobro indebido.
-            // Mejor reverso manual que doble cobro silencioso.
-            $totalPedido = (float) $pedido->total;
-            if ($totalPedido <= 0) {
-                // Fallback: sumar items si pedido.total no está poblado todavía
-                $totalPedido = (float) items_pedidos::where('id_pedido', $idPedido)
-                    ->selectRaw('SUM(monto * cantidad) as total')->value('total') ?? 0;
-            }
-            $totalPedidoBs = $totalPedido * $tasaDolar;
-            $debitosExistentesBs = (float) pago_pedidos::where('id_pedido', $idPedido)
-                ->where('tipo', 2)
-                ->where('imborrable', 1)
-                ->sum('monto_original') ?: (float) pago_pedidos::where('id_pedido', $idPedido)
-                ->where('tipo', 2)
-                ->where('imborrable', 1)
-                ->sum('monto');
-            $tolerancia = 1.0; // 1 Bs de tolerancia para redondeos
-            if ($totalPedidoBs > 0 && ($debitosExistentesBs + 0.01) >= ($totalPedidoBs - $tolerancia)) {
-                \Log::error('[POS] SOBRECOBRO DEBITO bloqueado', [
-                    'id_pedido' => $idPedido,
-                    'total_pedido_bs' => $totalPedidoBs,
-                    'debitos_existentes_bs' => $debitosExistentesBs,
-                    'nuevo_monto_bs' => $montoBs,
-                    'referencia' => $referencia,
-                ]);
-                return [
-                    'estado' => false,
-                    'sobrecobro' => true,
-                    'msj' => "ALERTA SOBRECOBRO: Este pedido ya tiene débitos imborrable por Bs " .
-                            number_format($debitosExistentesBs, 2) . " cubriendo el total Bs " .
-                            number_format($totalPedidoBs, 2) . ". El nuevo cobro Bs " .
-                            number_format($montoBs, 2) . " (ref " . $referencia . ") NO se asentó. " .
-                            "HACER REVERSO MANUAL EN EL POS PINPAD inmediatamente.",
-                    'total_pedido_bs' => $totalPedidoBs,
-                    'debitos_existentes_bs' => $debitosExistentesBs,
-                ];
-            }
-
-            $amountRaw = isset($posData['amount']) ? trim((string) $posData['amount']) : '';
-            $amountClean = $amountRaw !== '' ? str_replace(',', '', $amountRaw) : '';
-            $posAmount = $amountClean !== '' && is_numeric($amountClean) ? (float) $amountClean : null;
-
-            $jsonRaw = $posData['json_response'] ?? null;
-            $posJsonResponse = is_array($jsonRaw) ? json_encode($jsonRaw) : ($jsonRaw ?? json_encode($posData));
-
-            // ABONO PINPAD 2026-06-10 — un pedido de abono a deudor (items con id_producto
-            // null, misma detección que setPagoPedido) debe asentarse con cuenta=0: la deuda
-            // del cliente solo suma pagos cuenta=0. Antes se hardcodeaba cuenta=1 y, como
-            // setPagoPedido salta las filas imborrable=1 sin corregirles la cuenta, el abono
-            // pagado con débito PINPAD nunca bajaba la deuda del deudor.
-            $esAbono = items_pedidos::where('id_pedido', $idPedido)
-                ->whereNull('id_producto')
-                ->exists();
-
-            $pago = pago_pedidos::create([
-                'id_pedido'        => $idPedido,
-                'tipo'             => 2, // débito
-                'cuenta'           => $esAbono ? 0 : 1, // 0=abono, 1=factura
-                'monto'            => $montoUsd,
-                'monto_original'   => $montoBs,
-                'moneda'           => 'bs',
-                'referencia'       => $referencia,
-                'pos_message'      => $posData['message'] ?? null,
-                'pos_lote'         => $posData['lote'] ?? null,
-                'pos_responsecode' => $posData['responsecode'] ?? null,
-                'pos_amount'       => $posAmount,
-                'pos_terminal'     => $posData['terminal'] ?? null,
-                'pos_json_response'=> $posJsonResponse,
-                'imborrable'       => 1,
-            ]);
-
-            return [
-                'estado' => true,
-                'id_pago_pedido' => $pago->id,
-                'duplicado' => false,
-            ];
+            }); // fin DB::transaction
         } catch (\Throwable $e) {
             \Log::error('[POS] persistirPosImborrable fallo', [
                 'id_pedido' => $idPedido,
@@ -195,15 +182,6 @@ class PagoPedidosController extends Controller
                 'error' => $e->getMessage(),
             ]);
             return ['estado' => false, 'msj' => $e->getMessage()];
-        } finally {
-            // Liberar el advisory lock SIEMPRE — éxito, error o duplicado
-            if ($lockObtained) {
-                try {
-                    \DB::selectOne("SELECT RELEASE_LOCK(?)", [$lockKey]);
-                } catch (\Throwable $eLock) {
-                    \Log::warning('[POS] RELEASE_LOCK falló (lock se libera al cerrar la sesión MySQL): ' . $eLock->getMessage());
-                }
-            }
         }
     }
 
