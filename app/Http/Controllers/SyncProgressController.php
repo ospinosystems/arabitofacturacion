@@ -1277,6 +1277,7 @@ class SyncProgressController extends Controller
                 $procCentral = 0; $actCentral = 0; $errCentral = 0; $detallesErrores = [];
                 $mensajeCentral = null;
                 $bodyCrudo = '';
+                $perfCentral = null;
 
                 try {
                     // Guardar checkpoint antes de enviar
@@ -1310,6 +1311,7 @@ class SyncProgressController extends Controller
                         $actCentral = (int) ($resultado['actualizados'] ?? 0);
                         $errCentral = (int) ($resultado['errores'] ?? 0);
                         $detallesErrores = is_array($resultado['detalles_errores'] ?? null) ? $resultado['detalles_errores'] : [];
+                        $perfCentral = is_array($resultado['perf'] ?? null) ? $resultado['perf'] : null;
 
                         // Marcar como sincronizados (EXCEPTO inventarios/usuarios_pos)
                         if ($nombreTabla !== 'inventarios' && $nombreTabla !== 'usuarios_pos' && $campoSync !== null) {
@@ -1378,6 +1380,7 @@ class SyncProgressController extends Controller
                     'faltantes' => max(0, $enviadosLote - $guardadosCentral),
                     'mensaje_central' => $mensajeCentral,
                     'detalles_errores' => array_slice($detallesErrores, 0, 20),
+                    'perf_central' => $perfCentral,
                     'body_crudo' => mb_strlen($bodyCrudo) > 2000 ? mb_substr($bodyCrudo, 0, 2000) . '… [truncado]' : $bodyCrudo,
                     'acumulado' => $procesados,
                     'total' => $total,

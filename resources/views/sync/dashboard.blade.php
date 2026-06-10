@@ -533,10 +533,13 @@
                 : `<span class="text-red-400">central NO respondió</span>`;
             const httpTxt = d.http_status !== null && d.http_status !== undefined ? `HTTP ${d.http_status}` : 'sin HTTP';
             const reintento = d.intento > 1 ? ` <span class="text-yellow-400">(intento ${d.intento})</span>` : '';
+            // Métrica de rendimiento que reporta central (sólo si respondió)
+            const p = d.perf_central;
+            const perfTxt = p ? ` <span class="text-gray-500">· central ${p.ms_total}ms (DB ${p.db_ms}ms / ${p.db_queries}q)</span>` : '';
 
             const wrap = document.createElement('div');
             wrap.className = cls;
-            let inner = `↓ Lote ${d.lote}${reintento}: <b>${badge}</b> · ${httpTxt} · ${d.tiempo_ms} ms · ${recibio}`;
+            let inner = `↓ Lote ${d.lote}${reintento}: <b>${badge}</b> · ${httpTxt} · ${d.tiempo_ms} ms · ${recibio}${perfTxt}`;
 
             // Detalle si hubo errores / no se guardó / mensaje de central
             const hayDetalle = (d.errores > 0) || !d.estado_central || (d.detalles_errores && d.detalles_errores.length) || d.mensaje_central || (d.body_crudo && !d.estado_central);
