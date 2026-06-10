@@ -132,10 +132,19 @@ class PagoPedidosController extends Controller
             $jsonRaw = $posData['json_response'] ?? null;
             $posJsonResponse = is_array($jsonRaw) ? json_encode($jsonRaw) : ($jsonRaw ?? json_encode($posData));
 
+            // ABONO PINPAD 2026-06-10 — un pedido de abono a deudor (items con id_producto
+            // null, misma detección que setPagoPedido) debe asentarse con cuenta=0: la deuda
+            // del cliente solo suma pagos cuenta=0. Antes se hardcodeaba cuenta=1 y, como
+            // setPagoPedido salta las filas imborrable=1 sin corregirles la cuenta, el abono
+            // pagado con débito PINPAD nunca bajaba la deuda del deudor.
+            $esAbono = items_pedidos::where('id_pedido', $idPedido)
+                ->whereNull('id_producto')
+                ->exists();
+
             $pago = pago_pedidos::create([
                 'id_pedido'        => $idPedido,
                 'tipo'             => 2, // débito
-                'cuenta'           => 1, // factura
+                'cuenta'           => $esAbono ? 0 : 1, // 0=abono, 1=factura
                 'monto'            => $montoUsd,
                 'monto_original'   => $montoBs,
                 'moneda'           => 'bs',
@@ -837,6 +846,15 @@ class PagoPedidosController extends Controller
                     pago_pedidos::where("id_pedido", $req->id)
                         ->where("imborrable", 0)
                         ->delete();
+                    // ABONO PINPAD 2026-06-10 — las filas imborrable=1 se crearon en
+                    // persistirPosImborrable antes de conocer la cuenta definitiva del pedido
+                    // y no se re-insertan abajo (se saltan por referencia). Sincronizar acá su
+                    // `cuenta` con la calculada: si el pedido es abono (cuenta=0) el débito
+                    // PINPAD debe sumar a la deuda del deudor.
+                    pago_pedidos::where("id_pedido", $req->id)
+                        ->where("imborrable", 1)
+                        ->where("cuenta", "!=", $cuenta)
+                        ->update(["cuenta" => $cuenta]);
                     if($req->transferencia) {
                         // Validar descuentos antes de procesar transferencia
                         
