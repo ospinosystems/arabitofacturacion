@@ -1048,7 +1048,14 @@ class sendCentral extends Controller
             $params['sucursal_version'] = $versionSucursal;
         }
 
-        $request = Http::timeout($timeout)->withHeaders($headers);
+        // force_ip_resolve=v4: evita los timeouts de conexión por IPv6 roto/IP inalcanzable
+        // (síntoma "Failed to connect to port 443" en la 1ª petición aun sin tráfico).
+        // connect_timeout corto: si un intento de conexión muere, falla en ~8s (no 21s) y el
+        // reintento puede tomar otra ruta.
+        $request = Http::timeout($timeout)
+            ->connectTimeout($options['connect_timeout'] ?? 8)
+            ->withOptions(['force_ip_resolve' => 'v4'])
+            ->withHeaders($headers);
 
         if ($methodUpper === 'GET') {
             $response = $request->get($url, $params);

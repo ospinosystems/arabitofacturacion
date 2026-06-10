@@ -1072,8 +1072,23 @@ class SyncProgressController extends Controller
         // CHICOS para que cada transacción en central sea corta y no genere contención de locks /
         // blowup de MVCC (causa de los timeouts cURL 28). El catálogo (inventarios) puede ir grande.
         $chunkSize = (int) ($config['chunk'] ?? 100);
+
+        // UN solo cliente HTTP con KEEP-ALIVE reutilizado para TODOS los lotes de esta tabla.
+        // Antes se abría una conexión TLS nueva por lote; como la red sucursal→central pierde
+        // SYN intermitentemente (timeouts de 7/15/21s = retransmisión de SYN), cada conexión
+        // nueva era una oportunidad de fallar. Reusando la conexión hacemos UN handshake y
+        // desaparecen los "Failed to connect".
+        $gclient = new \GuzzleHttp\Client([
+            'base_uri' => $this->getCentralUrl(),
+            'timeout' => 120,
+            'connect_timeout' => 8,
+            'force_ip_resolve' => 'v4',
+            'http_errors' => false,
+            'headers' => array_merge($this->centralRequestHeaders(), ['Connection' => 'keep-alive']),
+        ]);
+
         Log::info(">>> Iniciando chunk para {$nombreTabla} (tamaño {$chunkSize}). Query SQL: " . $query->toSql());
-        $query->orderBy('id')->chunk($chunkSize, function($registros) use ($nombreTabla, $config, $campoSync, &$procesados, &$errores, $total, $progressCallback, $emitir, &$loteNum) {
+        $query->orderBy('id')->chunk($chunkSize, function($registros) use ($nombreTabla, $config, $campoSync, &$procesados, &$errores, $total, $progressCallback, $emitir, &$loteNum, $gclient) {
             Log::info(">>> Procesando lote de {$nombreTabla}: " . count($registros) . " registros");
             // Si hay función de transformación, aplicarla
             $transformar = $config['transformar'] ?? null;
@@ -1298,24 +1313,23 @@ class SyncProgressController extends Controller
                         'timestamp' => now()->toISOString(),
                     ], 3600); // 1 hora
 
-                    $response = Http::timeout(120)
-                        ->withHeaders($this->centralRequestHeaders())
-                        ->post($this->getCentralUrl() . "/api/sync/batch", [
+                    // Conexión reutilizada (keep-alive) — un handshake para todos los lotes.
+                    $gres = $gclient->post('/api/sync/batch', [
+                        'json' => [
                             'codigo_origen' => $this->getCodigoOrigen(),
                             'tabla' => $nombreTabla,
                             'tabla_destino' => $config['tabla_destino'],
-                            // JSON_INVALID_UTF8_SUBSTITUTE: evita que un cierre con bytes no-UTF8
-                            // (nota/POS) haga que json_encode devuelva false y se envíe data vacía.
                             'data' => $comprimido,
                             'batch_size' => $enviadosLote,
-                        ]);
+                        ],
+                    ]);
 
-                    $httpStatus = $response->status();
-                    $bodyCrudo = $response->body();
-                    $resultado = null;
-                    try { $resultado = $response->json(); } catch (\Throwable $e) { $resultado = null; }
+                    $httpStatus = $gres->getStatusCode();
+                    $bodyCrudo = (string) $gres->getBody();
+                    $ok = $httpStatus >= 200 && $httpStatus < 300;
+                    $resultado = json_decode($bodyCrudo, true);
 
-                    if ($response->ok() && is_array($resultado) && ($resultado['estado'] ?? false)) {
+                    if ($ok && is_array($resultado) && ($resultado['estado'] ?? false)) {
                         $estadoCentral = true;
                         $procCentral = (int) ($resultado['procesados'] ?? 0);
                         $actCentral = (int) ($resultado['actualizados'] ?? 0);
@@ -1334,7 +1348,7 @@ class SyncProgressController extends Controller
 
                         $procesados += $enviadosLote;
                         $exito = true;
-                    } elseif ($response->ok()) {
+                    } elseif ($ok) {
                         // 200 pero estado=false (o body no-JSON)
                         $mensajeCentral = is_array($resultado) ? ($resultado['mensaje'] ?? $resultado['message'] ?? null) : null;
                         $ultimoError = $mensajeCentral ?: ('Central respondió 200 sin estado OK. Body: ' . mb_substr($bodyCrudo, 0, 300));
@@ -1510,6 +1524,8 @@ class SyncProgressController extends Controller
                         (new sendCentral())->throttleCentral(); // límite de ritmo del firewall de central
 
                         $response = Http::timeout(120)
+                            ->connectTimeout(8)
+                            ->withOptions(['force_ip_resolve' => 'v4'])
                             ->withHeaders($this->centralRequestHeaders())
                             ->retry(2, 1000)
                             ->post($this->getCentralUrl() . "/api/sync/batch", [
@@ -1606,6 +1622,8 @@ class SyncProgressController extends Controller
             // Enviar a Central para que elimine los que no estén en esta lista
             (new sendCentral())->throttleCentral(); // límite de ritmo del firewall de central
             $response = Http::timeout(120)
+                ->connectTimeout(8)
+                ->withOptions(['force_ip_resolve' => 'v4'])
                 ->withHeaders($this->centralRequestHeaders())
                 ->post($this->getCentralUrl() . "/api/sync/limpiar-obsoletos", [
                     'codigo_origen' => $this->getCodigoOrigen(),
