@@ -159,41 +159,24 @@
             <!-- Las tarjetas se generan dinámicamente -->
         </div>
 
-        <!-- Panel de Diagnóstico Real -->
+        <!-- Consola de Diagnóstico en Vivo -->
         <div class="bg-white rounded-lg shadow-md p-6 mt-6 border-l-4 border-purple-500">
-            <div class="flex items-center justify-between mb-2">
-                <h2 class="text-xl font-semibold text-gray-800">🔬 Diagnóstico de Transmisión</h2>
-                <span class="text-xs text-gray-400">Envía un lote y muestra lo que pasó de verdad</span>
+            <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+                <h2 class="text-xl font-semibold text-gray-800">🔬 Diagnóstico en vivo</h2>
+                <div class="flex items-center gap-3">
+                    <button id="btn-limpiar-diag" class="text-xs text-gray-500 hover:text-gray-700 underline">Limpiar</button>
+                    <span class="text-xs text-gray-400">Se llena automáticamente al sincronizar</span>
+                </div>
             </div>
-            <p class="text-sm text-gray-600 mb-4">
-                Selecciona una tabla y ejecuta un diagnóstico real: verás la <strong>petición enviada</strong>,
-                la <strong>respuesta cruda de central</strong>, cuántos registros <strong>guardó realmente</strong>
-                (insertados + actualizados) frente a los enviados, los <strong>errores</strong> reportados, y el
-                <strong>conteo en central antes/después</strong>. Por defecto es <em>dry-run</em> (no marca nada).
+            <p class="text-sm text-gray-600 mb-3">
+                Al sincronizar (botón global o por tabla) verás <strong>en tiempo real</strong>, lote por lote:
+                la <strong>petición enviada</strong> (IDs, tamaño), la <strong>respuesta de central</strong>
+                (HTTP, tiempo), y si central <strong>recibió e insertó/actualizó</strong> los registros o
+                cuántos <strong>fallaron</strong> con su detalle de error.
             </p>
-
-            <div class="flex flex-wrap gap-3 items-end mb-4">
-                <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Tabla</label>
-                    <select id="diag-tabla" class="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[220px]">
-                        <option value="">Cargando tablas...</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Tamaño del lote</label>
-                    <input id="diag-limite" type="number" min="1" max="500" value="200"
-                           class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-28">
-                </div>
-                <label class="flex items-center gap-2 text-sm text-gray-700 mb-1 select-none cursor-pointer" title="Si se marca, marcará los registros como sincronizados (igual que el sync real). Si no, no altera nada.">
-                    <input id="diag-marcar" type="checkbox" class="w-4 h-4">
-                    Marcar como sincronizado (desactiva dry-run)
-                </label>
-                <button id="btn-diagnostico" class="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-lg font-semibold text-sm transition-colors">
-                    Ejecutar diagnóstico
-                </button>
+            <div id="diag-live" class="bg-gray-900 rounded-lg p-3 h-96 overflow-y-auto font-mono text-xs space-y-1">
+                <p class="text-gray-500">Sin actividad todavía. Pulsa “Sincronizar Pendientes” o “Sincronizar” en una tabla.</p>
             </div>
-
-            <div id="diag-resultado" class="hidden mt-2"></div>
         </div>
 
         <!-- Log de Actividad -->
@@ -379,23 +362,6 @@
             Object.entries(data.tablas).forEach(([key, tabla]) => {
                 container.appendChild(crearTarjetaTabla(key, tabla));
             });
-
-            // Poblar selector del panel de diagnóstico (conservando la selección actual)
-            poblarSelectorDiagnostico(data.tablas);
-        }
-
-        function poblarSelectorDiagnostico(tablas) {
-            const sel = document.getElementById('diag-tabla');
-            if (!sel) return;
-            const seleccionActual = sel.value;
-            sel.innerHTML = '';
-            Object.entries(tablas).forEach(([key, tabla]) => {
-                const opt = document.createElement('option');
-                opt.value = key;
-                opt.textContent = `${tabla.nombre} → ${tabla.tabla_destino}` + (tabla.pendientes ? ` (${tabla.pendientes} pend.)` : '');
-                sel.appendChild(opt);
-            });
-            if (seleccionActual) sel.value = seleccionActual;
         }
 
         // Crear tarjeta de tabla
@@ -448,93 +414,173 @@
             await ejecutarSincronizacion();
         });
 
-        // Función de sincronización (siempre aplica filtro de fecha)
+        // Sincronización GLOBAL (todas las pendientes) vía stream en vivo
         async function ejecutarSincronizacion() {
-            if (syncEnProgreso) return;
-            
-            syncEnProgreso = true;
-            mostrarSyncActiva(true);
-            
-            log('Iniciando sincronización de pendientes (desde 2025-12-01)...', 'info');
-            
-            try {
-                const response = await fetch(`${API_BASE}/sync/all`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
-                    body: JSON.stringify({
-                        tablas: ['all'],
-                        solo_nuevos: true,
-                        primera_sync: true // Siempre aplica filtro de fecha de corte
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.estado) {
-                    log(`Sincronización completada en ${data.resultado.tiempo_total}`, 'success');
-                    log(`Total procesados: ${formatNumber(data.resultado.registros_totales)} registros`, 'success');
-                    
-                    // Mostrar detalle por tabla
-                    Object.entries(data.resultado.tablas).forEach(([tabla, resultado]) => {
-                        if (resultado.estado === 'completado') {
-                            log(`✓ ${tabla}: ${resultado.registros} registros (${resultado.tiempo})`, 'success');
-                        } else {
-                            log(`✗ ${tabla}: ${resultado.mensaje}`, 'error');
-                        }
-                    });
-                } else {
-                    log(`Error: ${data.mensaje}`, 'error');
-                }
-            } catch (error) {
-                log(`Error: ${error.message}`, 'error');
-            } finally {
-                syncEnProgreso = false;
-                mostrarSyncActiva(false);
-                cargarEstado();
-            }
+            iniciarSyncStream(['all'], 'Todas las pendientes');
         }
 
-        // Sincronizar tabla individual
-        async function sincronizarTabla(tabla) {
+        // Sincronizar tabla individual vía stream en vivo
+        function sincronizarTabla(tabla) {
+            iniciarSyncStream([tabla], tabla);
+        }
+
+        // ===== Núcleo: abre el stream SSE y vuelca el diagnóstico en vivo =====
+        let _evtSource = null;
+        function iniciarSyncStream(tablas, etiqueta) {
             if (syncEnProgreso) return;
-            
             syncEnProgreso = true;
-            mostrarSyncActiva(true, tabla);
-            log(`Sincronizando ${tabla}...`, 'info');
-            
-            try {
-                const soloNuevos = document.getElementById('solo-nuevos').checked;
-                
-                const response = await fetch(`${API_BASE}/sync/tabla`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
-                    body: JSON.stringify({
-                        tabla: tabla,
-                        solo_nuevos: soloNuevos
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.estado) {
-                    log(`✓ ${tabla}: ${data.registros_procesados} registros sincronizados (${data.tiempo})`, 'success');
-                } else {
-                    log(`✗ ${tabla}: ${data.mensaje}`, 'error');
-                }
-            } catch (error) {
-                log(`Error: ${error.message}`, 'error');
-            } finally {
+            mostrarSyncActiva(true, etiqueta);
+            diagReset();
+            diagLine('text-purple-300', `▶ Iniciando sincronización: ${esc(etiqueta)}`);
+            log(`Iniciando sincronización: ${etiqueta}...`, 'info');
+
+            // EventSource solo soporta GET: parámetros por query string
+            const params = new URLSearchParams();
+            (Array.isArray(tablas) ? tablas : [tablas]).forEach(t => params.append('tablas[]', t));
+            params.append('solo_nuevos', '1');
+            const es = new EventSource(`${API_BASE}/sync/stream?` + params.toString());
+            _evtSource = es;
+            let terminado = false;
+
+            const cerrar = () => {
+                if (terminado) return;
+                terminado = true;
+                try { es.close(); } catch (e) {}
+                _evtSource = null;
                 syncEnProgreso = false;
                 mostrarSyncActiva(false);
                 cargarEstado();
+            };
+
+            es.addEventListener('tabla_inicio', e => diagTabla(JSON.parse(e.data)));
+            es.addEventListener('lote_envio', e => diagEnvio(JSON.parse(e.data)));
+            es.addEventListener('lote_respuesta', e => diagRespuesta(JSON.parse(e.data)));
+            es.addEventListener('progreso', e => actualizarProgresoGlobal(JSON.parse(e.data)));
+            es.addEventListener('tabla_fin', e => {
+                const d = JSON.parse(e.data);
+                diagLine('text-green-300', `✓ ${esc(d.nombre)}: ${formatNumber(d.registros)} registros (${esc(d.tiempo)})`);
+                log(`✓ ${d.nombre}: ${d.registros} registros`, 'success');
+            });
+            es.addEventListener('tabla_error', e => {
+                const d = JSON.parse(e.data);
+                diagLine('text-red-400', `✗ ${esc(d.nombre)}: ${esc(d.mensaje)}`);
+                log(`✗ ${d.nombre}: ${d.mensaje}`, 'error');
+            });
+            es.addEventListener('completado', e => {
+                let d = {}; try { d = JSON.parse(e.data); } catch (_) {}
+                diagLine('text-green-300 font-bold', `✅ ${esc(d.mensaje || 'Sincronización completada')}`);
+                log('✅ Sincronización completada', 'success');
+                cerrar();
+            });
+            // 'error' cubre tanto el evento nombrado del servidor como fallos de conexión
+            es.addEventListener('error', e => {
+                if (terminado) return;
+                let msg = 'Conexión SSE interrumpida o el servidor no soporta streaming.';
+                if (e && e.data) { try { msg = JSON.parse(e.data).mensaje || msg; } catch (_) {} }
+                diagLine('text-red-400 font-bold', `❌ ${esc(msg)}`);
+                log(`Error de sincronización: ${msg}`, 'error');
+                cerrar();
+            });
+        }
+
+        // ===================== Consola de diagnóstico =====================
+        function diagBox() { return document.getElementById('diag-live'); }
+        function diagReset() {
+            const box = diagBox();
+            if (box) box.innerHTML = '';
+        }
+        function diagAppend(node) {
+            const box = diagBox();
+            if (!box) return;
+            box.appendChild(node);
+            box.scrollTop = box.scrollHeight;
+        }
+        function diagLine(cls, html) {
+            const p = document.createElement('p');
+            p.className = cls;
+            p.innerHTML = `<span class="text-gray-600">[${new Date().toLocaleTimeString()}]</span> ${html}`;
+            diagAppend(p);
+        }
+        function diagTabla(d) {
+            const div = document.createElement('div');
+            div.className = 'mt-2 mb-1 pt-2 border-t border-gray-700 text-purple-300 font-bold';
+            div.innerHTML = `📦 ${esc(d.nombre)} <span class="text-gray-500 font-normal">→ ${esc(d.tabla_destino || '')}</span>`;
+            diagAppend(div);
+        }
+        function diagEnvio(d) {
+            const p = d.peticion || {};
+            const det = document.createElement('details');
+            det.className = 'text-blue-300';
+            const idsTxt = (p.ids || []).join(', ') + (p.ids_total > (p.ids || []).length ? ` … (+${p.ids_total - (p.ids || []).length})` : '');
+            det.innerHTML = `
+                <summary class="cursor-pointer">↑ Lote ${d.lote}: enviando <b>${formatNumber(d.enviados)}</b> reg · ${fmtBytes(p.payload_bytes_comprimido)} comprimido</summary>
+                <div class="pl-4 text-gray-400 break-all">
+                    <div>POST ${esc(p.url || '')}</div>
+                    <div>destino: ${esc(p.tabla_destino || '')} · crudo ${fmtBytes(p.payload_bytes_crudo)}</div>
+                    <div>IDs: ${esc(idsTxt)}</div>
+                </div>`;
+            diagAppend(det);
+        }
+        function diagRespuesta(d) {
+            const vMap = {
+                'GUARDADO_OK': ['text-green-300', '✅ GUARDADO'],
+                'PARCIAL': ['text-yellow-300', '⚠ PARCIAL'],
+                'NO_GUARDADO': ['text-red-400', '❌ NO GUARDADO'],
+            };
+            const [cls, badge] = vMap[d.veredicto] || ['text-gray-300', d.veredicto || '?'];
+            const recibio = d.recibio_central
+                ? `central recibió e insertó <b>${formatNumber(d.insertados)}</b>, actualizó <b>${formatNumber(d.actualizados)}</b>, errores <b>${formatNumber(d.errores)}</b>, faltan <b>${formatNumber(d.faltantes)}</b>`
+                : `<span class="text-red-400">central NO respondió</span>`;
+            const httpTxt = d.http_status !== null && d.http_status !== undefined ? `HTTP ${d.http_status}` : 'sin HTTP';
+            const reintento = d.intento > 1 ? ` <span class="text-yellow-400">(intento ${d.intento})</span>` : '';
+
+            const wrap = document.createElement('div');
+            wrap.className = cls;
+            let inner = `↓ Lote ${d.lote}${reintento}: <b>${badge}</b> · ${httpTxt} · ${d.tiempo_ms} ms · ${recibio}`;
+
+            // Detalle si hubo errores / no se guardó / mensaje de central
+            const hayDetalle = (d.errores > 0) || !d.estado_central || (d.detalles_errores && d.detalles_errores.length) || d.mensaje_central || (d.body_crudo && !d.estado_central);
+            if (hayDetalle) {
+                const det = document.createElement('details');
+                det.open = (d.veredicto === 'NO_GUARDADO');
+                det.innerHTML = `<summary class="cursor-pointer">${inner}</summary>
+                    <div class="pl-4 text-gray-300">
+                        ${d.mensaje_central ? `<div class="text-red-300">mensaje backend: ${esc(d.mensaje_central)}</div>` : ''}
+                        ${(d.detalles_errores && d.detalles_errores.length) ? `<div class="text-red-300 mb-1">detalles_errores:</div><pre class="bg-black/40 rounded p-2 overflow-auto max-h-48 text-red-300">${esc(JSON.stringify(d.detalles_errores, null, 2))}</pre>` : ''}
+                        ${(d.body_crudo && !d.estado_central) ? `<div class="text-gray-400 mt-1">body crudo:</div><pre class="bg-black/40 rounded p-2 overflow-auto max-h-48 text-gray-300">${esc(d.body_crudo)}</pre>` : ''}
+                    </div>`;
+                wrap.appendChild(det);
+            } else {
+                wrap.innerHTML = inner;
+            }
+            diagAppend(wrap);
+
+            if (d.veredicto !== 'GUARDADO_OK') {
+                log(`Lote ${d.lote} de ${d.nombre || d.tabla}: ${d.veredicto}` + (d.mensaje_central ? ` — ${d.mensaje_central}` : ''), d.veredicto === 'PARCIAL' ? 'info' : 'error');
             }
         }
+        function actualizarProgresoGlobal(d) {
+            const pct = d.porcentaje_global ?? 0;
+            const bar = document.getElementById('sync-progress');
+            if (bar) bar.style.width = pct + '%';
+            const proc = document.getElementById('sync-procesados');
+            if (proc) proc.textContent = `${formatNumber(d.procesados_global)} / ${formatNumber(d.total_global)}`;
+            const t = document.getElementById('sync-tiempo');
+            if (t) t.textContent = `Restante ~${d.tiempo_estimado_restante}s`;
+        }
+        function fmtBytes(n) {
+            if (n === null || n === undefined) return '-';
+            if (n < 1024) return n + ' B';
+            if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+            return (n / 1048576).toFixed(2) + ' MB';
+        }
+        function esc(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+        document.getElementById('btn-limpiar-diag').addEventListener('click', () => {
+            diagReset();
+            diagLine('text-gray-500', 'Consola limpiada.');
+        });
 
         // Resetear tabla
         async function resetearTabla(tabla) {
@@ -618,238 +664,6 @@
             p.innerHTML = `<span class="text-gray-500">[${timestamp}]</span> ${mensaje}`;
             container.appendChild(p);
             container.scrollTop = container.scrollHeight;
-        }
-
-        // ================= PANEL DE DIAGNÓSTICO =================
-        document.getElementById('btn-diagnostico').addEventListener('click', ejecutarDiagnostico);
-
-        async function ejecutarDiagnostico() {
-            const tabla = document.getElementById('diag-tabla').value;
-            const limite = parseInt(document.getElementById('diag-limite').value || '200', 10);
-            const marcar = document.getElementById('diag-marcar').checked;
-            const cont = document.getElementById('diag-resultado');
-            const btn = document.getElementById('btn-diagnostico');
-
-            if (!tabla) { alert('Selecciona una tabla'); return; }
-
-            // Detalle EXACTO de la petición que se va a enviar (para mostrarlo pase lo que pase)
-            const reqBody = { tabla, limite, marcar, solo_nuevos: true };
-            const peticionLocal = {
-                url: window.location.origin + '/sync/diagnostico',
-                metodo: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '(token de sesión)' },
-                body: reqBody,
-            };
-
-            btn.disabled = true;
-            btn.classList.add('opacity-50', 'cursor-not-allowed');
-            btn.textContent = 'Ejecutando...';
-            cont.classList.remove('hidden');
-            cont.innerHTML = `<div class="p-4 bg-gray-50 rounded-lg text-gray-600 text-sm">Enviando lote a central y midiendo respuesta real...</div>`;
-            log(`Diagnóstico de ${tabla} (lote ${limite}, ${marcar ? 'marcando' : 'dry-run'})...`, 'info');
-
-            try {
-                const res = await fetch(`${API_BASE}/sync/diagnostico`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
-                    body: JSON.stringify(reqBody)
-                });
-
-                // Leer como texto primero: si el servidor devolvió HTML (error PHP) o un
-                // warning antes del JSON, lo mostramos crudo en vez de un error genérico.
-                const raw = await res.text();
-                let data;
-                try {
-                    data = JSON.parse(raw);
-                } catch (parseErr) {
-                    cont.innerHTML = renderPeticionLocal(peticionLocal, res.status) + `
-                    <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm">
-                        <p class="text-red-700 font-semibold mb-2">El servidor devolvió una respuesta NO-JSON (HTTP ${res.status}). Contenido crudo:</p>
-                        <p class="text-red-600 text-xs mb-2">${diagnosticarHttp(res.status)}</p>
-                        <pre class="bg-gray-900 text-red-300 rounded-lg p-3 text-xs overflow-auto max-h-80">${esc(raw.slice(0, 6000))}</pre>
-                    </div>`;
-                    log(`Diagnóstico ${tabla}: respuesta no-JSON (HTTP ${res.status})`, 'error');
-                    return;
-                }
-
-                if (data.estado === false && !data.veredicto) {
-                    cont.innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">Error: ${esc(data.mensaje || 'desconocido')}${data.archivo ? '<br><span class="text-xs text-red-400">' + esc(data.archivo) + '</span>' : ''}</div>`;
-                    log(`Diagnóstico ${tabla}: ${data.mensaje}`, 'error');
-                } else {
-                    cont.innerHTML = renderDiagnostico(data);
-                    const v = data.veredicto || '-';
-                    log(`Diagnóstico ${tabla}: ${v} — ${data.resumen || ''}`, v === 'GUARDADO_OK' ? 'success' : (v === 'PARCIAL' ? 'info' : 'error'));
-                }
-            } catch (e) {
-                cont.innerHTML = renderPeticionLocal(peticionLocal, 'sin respuesta') + `
-                    <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">Error de conexión (la petición no llegó o se cortó): ${esc(e.message)}</div>`;
-                log(`Diagnóstico ${tabla}: error de conexión ${e.message}`, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                btn.textContent = 'Ejecutar diagnóstico';
-            }
-        }
-
-        // Muestra la petición que el navegador envió (útil cuando el servidor responde error/HTML)
-        function renderPeticionLocal(p, httpStatus) {
-            return `<div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm">
-                <p class="font-semibold text-blue-800 mb-1">📤 Petición enviada por el navegador (HTTP recibido: ${esc(String(httpStatus))})</p>
-                <div class="font-mono text-xs break-all text-gray-700">
-                    ${kv('URL', p.url)}
-                    ${kv('Método', p.metodo)}
-                    ${kv('Content-Type', p.headers['Content-Type'])}
-                </div>
-                <p class="text-xs text-gray-500 mt-2 mb-1">Body (JSON):</p>
-                <pre class="bg-gray-900 text-blue-300 rounded-lg p-3 text-xs overflow-auto max-h-40">${esc(JSON.stringify(p.body, null, 2))}</pre>
-            </div>`;
-        }
-
-        // Explicación legible del código HTTP del error
-        function diagnosticarHttp(status) {
-            const m = {
-                404: 'Ruta no encontrada. El servidor que estás usando aún no tiene la ruta /sync/diagnostico: hay que limpiar opcache/route cache y/o desplegar el código actualizado en ESTE servidor.',
-                405: 'Método no permitido. La ruta existe pero no acepta POST (revisar definición de ruta).',
-                419: 'Token CSRF inválido o expirado. Recarga la página para refrescar el token.',
-                500: 'Error interno del servidor (PHP). El contenido crudo de abajo trae el detalle.',
-                302: 'Redirección (posible sesión expirada → redirige a /login).',
-            };
-            return m[status] || ('Código HTTP ' + status + '.');
-        }
-
-        function renderDiagnostico(d) {
-            const vColors = {
-                'GUARDADO_OK': 'bg-green-100 text-green-800 border-green-300',
-                'PARCIAL': 'bg-yellow-100 text-yellow-800 border-yellow-300',
-                'NO_GUARDADO': 'bg-red-100 text-red-800 border-red-300',
-            };
-            const vClass = vColors[d.veredicto] || 'bg-gray-100 text-gray-800 border-gray-300';
-            const local = d.local || {};
-            const pet = d.peticion || {};
-            const resp = d.respuesta || {};
-            const conc = d.conciliacion || {};
-            const central = d.central || {};
-
-            let html = '';
-
-            // Cabecera veredicto + resumen
-            html += `<div class="border ${vClass} rounded-lg p-4 mb-3">
-                <div class="flex items-center justify-between flex-wrap gap-2">
-                    <span class="text-lg font-bold">${esc(d.veredicto || '-')}</span>
-                    <span class="text-xs px-2 py-1 rounded-full ${d.dry_run ? 'bg-gray-200 text-gray-700' : 'bg-purple-200 text-purple-800'}">${d.dry_run ? 'DRY-RUN (no marca)' : 'MARCANDO'}</span>
-                </div>
-                <p class="text-sm mt-1">${esc(d.resumen || '')}</p>
-            </div>`;
-
-            // Tarjetas de conciliación
-            html += `<div class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
-                ${miniCard('Enviados', conc.enviados ?? local.enviados ?? '-')}
-                ${miniCard('Guardó central', conc.guardados_central ?? '-', 'text-green-600')}
-                ${miniCard('Insertados', conc.insertados ?? '-')}
-                ${miniCard('Actualizados', conc.actualizados ?? '-')}
-                ${miniCard('Faltantes', conc.faltantes ?? '-', (conc.faltantes > 0 ? 'text-red-600' : 'text-gray-700'))}
-            </div>`;
-
-            // Central antes/después
-            if (central && (central.antes !== undefined)) {
-                const delta = central.delta;
-                const deltaTxt = (delta === null || delta === undefined) ? 'n/d' : (delta >= 0 ? '+' + delta : '' + delta);
-                html += `<div class="bg-gray-50 rounded-lg p-3 mb-3 text-sm">
-                    <strong>Conteo en central</strong> (${esc(central.clave_status || 's/clave')}):
-                    antes <b>${fmtN(central.antes)}</b> → después <b>${fmtN(central.despues)}</b>
-                    <span class="ml-2 px-2 py-0.5 rounded ${delta > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}">Δ ${deltaTxt}</span>
-                </div>`;
-            }
-
-            // Advertencias
-            if (Array.isArray(d.advertencias) && d.advertencias.length) {
-                html += `<div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-sm text-amber-800">
-                    ${d.advertencias.map(a => '⚠ ' + esc(a)).join('<br>')}
-                </div>`;
-            }
-
-            // Petición / Respuesta lado a lado
-            html += `<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">`;
-            html += `<div class="bg-blue-50 rounded-lg p-3 text-sm">
-                <p class="font-semibold text-blue-800 mb-1">📤 Petición</p>
-                <div class="font-mono text-xs break-all text-gray-700">
-                    ${kv('URL', pet.url)}
-                    ${kv('Método', pet.metodo)}
-                    ${kv('Tabla destino', pet.tabla_destino)}
-                    ${kv('Batch size', pet.batch_size)}
-                    ${kv('Payload crudo', fmtBytes(pet.payload_bytes_crudo))}
-                    ${kv('Payload comprimido', fmtBytes(pet.payload_bytes_comprimido))}
-                </div>
-            </div>`;
-            html += `<div class="bg-green-50 rounded-lg p-3 text-sm">
-                <p class="font-semibold text-green-800 mb-1">📥 Respuesta de central</p>
-                <div class="font-mono text-xs break-all text-gray-700">
-                    ${kv('HTTP status', resp.http_status)}
-                    ${kv('Tiempo', resp.tiempo_ms !== undefined ? resp.tiempo_ms + ' ms' : '-')}
-                    ${kv('estado', String(resp.estado_central))}
-                    ${kv('procesados', resp.procesados)}
-                    ${kv('actualizados', resp.actualizados)}
-                    ${kv('errores', resp.errores)}
-                    ${resp.mensaje_central ? kv('mensaje', resp.mensaje_central) : ''}
-                    ${resp.error_transporte ? kv('error_transporte', resp.error_transporte) : ''}
-                </div>
-            </div>`;
-            html += `</div>`;
-
-            // Detalles de errores de central
-            if (Array.isArray(resp.detalles_errores) && resp.detalles_errores.length) {
-                html += `<details class="mb-3" open>
-                    <summary class="cursor-pointer text-sm font-semibold text-red-700">❌ detalles_errores de central (${resp.detalles_errores.length})</summary>
-                    <pre class="bg-gray-900 text-red-300 rounded-lg p-3 mt-1 text-xs overflow-auto max-h-64">${esc(JSON.stringify(resp.detalles_errores, null, 2))}</pre>
-                </details>`;
-            }
-
-            // IDs + muestra del lote
-            if (local.ids || local.muestra) {
-                html += `<details class="mb-3">
-                    <summary class="cursor-pointer text-sm font-semibold text-gray-700">🔎 IDs enviados y muestra del payload</summary>
-                    <div class="mt-1">
-                        <p class="text-xs text-gray-500 mb-1">IDs (${(local.ids || []).length}): <span class="font-mono break-all">${esc((local.ids || []).join(', '))}</span></p>
-                        <pre class="bg-gray-900 text-blue-300 rounded-lg p-3 text-xs overflow-auto max-h-64">${esc(JSON.stringify(local.muestra || [], null, 2))}</pre>
-                    </div>
-                </details>`;
-            }
-
-            // Body crudo
-            if (resp.body_crudo) {
-                html += `<details class="mb-1">
-                    <summary class="cursor-pointer text-sm font-semibold text-gray-700">📄 Body crudo de la respuesta</summary>
-                    <pre class="bg-gray-900 text-green-300 rounded-lg p-3 mt-1 text-xs overflow-auto max-h-64">${esc(resp.body_crudo)}</pre>
-                </details>`;
-            }
-
-            return html;
-        }
-
-        function miniCard(label, value, valueClass = 'text-gray-800') {
-            return `<div class="bg-white border border-gray-200 rounded-lg p-2 text-center">
-                <p class="text-[10px] uppercase text-gray-400">${esc(label)}</p>
-                <p class="text-lg font-bold ${valueClass}">${typeof value === 'number' ? fmtN(value) : esc(String(value))}</p>
-            </div>`;
-        }
-        function kv(k, v) {
-            return `<div><span class="text-gray-400">${esc(k)}:</span> ${esc(v === null || v === undefined ? '-' : String(v))}</div>`;
-        }
-        function fmtBytes(n) {
-            if (n === null || n === undefined) return '-';
-            if (n < 1024) return n + ' B';
-            if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
-            return (n / 1024 / 1024).toFixed(2) + ' MB';
-        }
-        function fmtN(n) {
-            if (n === null || n === undefined) return 'n/d';
-            return new Intl.NumberFormat('es-VE').format(n);
-        }
-        function esc(s) {
-            return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
 
         // Utilidades
