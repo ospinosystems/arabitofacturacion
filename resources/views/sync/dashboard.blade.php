@@ -164,6 +164,7 @@
             <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
                 <h2 class="text-xl font-semibold text-gray-800">🔬 Diagnóstico en vivo</h2>
                 <div class="flex items-center gap-3">
+                    <button id="btn-estado-central" class="text-xs bg-purple-100 text-purple-700 hover:bg-purple-200 px-3 py-1 rounded font-semibold">Estado servidor central</button>
                     <button id="btn-limpiar-diag" class="text-xs text-gray-500 hover:text-gray-700 underline">Limpiar</button>
                     <span class="text-xs text-gray-400">Se llena automáticamente al sincronizar</span>
                 </div>
@@ -583,6 +584,39 @@
         document.getElementById('btn-limpiar-diag').addEventListener('click', () => {
             diagReset();
             diagLine('text-gray-500', 'Consola limpiada.');
+        });
+
+        // ===== Estado del servidor central (MySQL/carga) — para diagnosticar saturación =====
+        document.getElementById('btn-estado-central').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-estado-central');
+            btn.disabled = true; const txt = btn.textContent; btn.textContent = 'Consultando...';
+            diagLine('text-purple-300', '— Consultando estado del servidor central —');
+            try {
+                const res = await fetch(`${API_BASE}/sync/central-server-stats`);
+                const j = await res.json();
+                if (!j.estado) {
+                    diagLine('text-red-400', `❌ ${esc(j.mensaje || 'No se pudo obtener el estado')}` + (j.body ? ` · ${esc(j.body.slice(0,200))}` : ''));
+                    diagLine('text-yellow-300', 'Si ni siquiera conecta, ESA es la prueba: central está saturado (sin workers o MySQL al tope).');
+                } else {
+                    const d = j.data || {};
+                    const c = d.mysql_conexiones || {};
+                    const t = d.transacciones || {};
+                    const s = d.sistema || {};
+                    const pre = document.createElement('pre');
+                    pre.className = 'bg-black/40 text-cyan-200 rounded p-2 overflow-auto max-h-96 whitespace-pre-wrap';
+                    pre.textContent = JSON.stringify(d, null, 2);
+                    diagLine('text-cyan-300', `🩺 Central — latencia ${d._latencia_sucursal_a_central_ms ?? '?'}ms · `
+                        + `MySQL conexiones ${c.threads_connected ?? '?'}/${c.max_connections ?? '?'} (${c.uso_pct ?? '?'}%), corriendo ${c.threads_running ?? '?'} · `
+                        + `trx activas ${t.total_activas ?? '?'} (más vieja ${t.mas_vieja_seg ?? '?'}s) · `
+                        + `load ${s.load_1m ?? '?'} · locks en espera ${d.locks_en_espera ?? '?'}`);
+                    (d.alertas || []).forEach(a => diagLine('text-yellow-300', '⚠ ' + esc(a)));
+                    diagAppend(pre);
+                }
+            } catch (e) {
+                diagLine('text-red-400', `❌ Error consultando estado central: ${esc(e.message)}`);
+            } finally {
+                btn.disabled = false; btn.textContent = txt;
+            }
         });
 
         // Resetear tabla

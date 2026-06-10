@@ -1661,6 +1661,40 @@ class SyncProgressController extends Controller
     }
 
     /**
+     * Proxy al diagnóstico de servidor de central (evita CORS desde el navegador).
+     * Devuelve el estado en vivo de MySQL/sistema de central para verlo en el panel.
+     */
+    public function centralServerStats(Request $request)
+    {
+        try {
+            $sc = new sendCentral();
+            $t0 = microtime(true);
+            $resp = $sc->requestToCentral('get', '/api/sync/server-stats', [], ['timeout' => 20]);
+            $latenciaMs = (int) round((microtime(true) - $t0) * 1000);
+
+            if ($resp->ok()) {
+                $data = $resp->json();
+                if (is_array($data)) {
+                    $data['_latencia_sucursal_a_central_ms'] = $latenciaMs;
+                    return Response::json(['estado' => true, 'data' => $data]);
+                }
+            }
+            return Response::json([
+                'estado' => false,
+                'mensaje' => 'Central respondió HTTP ' . $resp->status(),
+                'latencia_ms' => $latenciaMs,
+                'body' => mb_substr($resp->body(), 0, 1000),
+            ]);
+        } catch (\Throwable $e) {
+            // Si ni siquiera conecta, ESA es la prueba de saturación de central.
+            return Response::json([
+                'estado' => false,
+                'mensaje' => 'No se pudo conectar a central: ' . $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * Resetear estado de sincronización (para re-sincronizar todo)
      */
     public function resetearSincronizacion(Request $request)
