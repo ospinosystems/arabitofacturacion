@@ -632,6 +632,15 @@
 
             if (!tabla) { alert('Selecciona una tabla'); return; }
 
+            // Detalle EXACTO de la petición que se va a enviar (para mostrarlo pase lo que pase)
+            const reqBody = { tabla, limite, marcar, solo_nuevos: true };
+            const peticionLocal = {
+                url: window.location.origin + '/sync/diagnostico',
+                metodo: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '(token de sesión)' },
+                body: reqBody,
+            };
+
             btn.disabled = true;
             btn.classList.add('opacity-50', 'cursor-not-allowed');
             btn.textContent = 'Ejecutando...';
@@ -646,7 +655,7 @@
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
-                    body: JSON.stringify({ tabla, limite, marcar, solo_nuevos: true })
+                    body: JSON.stringify(reqBody)
                 });
 
                 // Leer como texto primero: si el servidor devolvió HTML (error PHP) o un
@@ -656,8 +665,10 @@
                 try {
                     data = JSON.parse(raw);
                 } catch (parseErr) {
-                    cont.innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm">
+                    cont.innerHTML = renderPeticionLocal(peticionLocal, res.status) + `
+                    <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm">
                         <p class="text-red-700 font-semibold mb-2">El servidor devolvió una respuesta NO-JSON (HTTP ${res.status}). Contenido crudo:</p>
+                        <p class="text-red-600 text-xs mb-2">${diagnosticarHttp(res.status)}</p>
                         <pre class="bg-gray-900 text-red-300 rounded-lg p-3 text-xs overflow-auto max-h-80">${esc(raw.slice(0, 6000))}</pre>
                     </div>`;
                     log(`Diagnóstico ${tabla}: respuesta no-JSON (HTTP ${res.status})`, 'error');
@@ -673,13 +684,40 @@
                     log(`Diagnóstico ${tabla}: ${v} — ${data.resumen || ''}`, v === 'GUARDADO_OK' ? 'success' : (v === 'PARCIAL' ? 'info' : 'error'));
                 }
             } catch (e) {
-                cont.innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">Error de conexión: ${esc(e.message)}</div>`;
+                cont.innerHTML = renderPeticionLocal(peticionLocal, 'sin respuesta') + `
+                    <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">Error de conexión (la petición no llegó o se cortó): ${esc(e.message)}</div>`;
                 log(`Diagnóstico ${tabla}: error de conexión ${e.message}`, 'error');
             } finally {
                 btn.disabled = false;
                 btn.classList.remove('opacity-50', 'cursor-not-allowed');
                 btn.textContent = 'Ejecutar diagnóstico';
             }
+        }
+
+        // Muestra la petición que el navegador envió (útil cuando el servidor responde error/HTML)
+        function renderPeticionLocal(p, httpStatus) {
+            return `<div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm">
+                <p class="font-semibold text-blue-800 mb-1">📤 Petición enviada por el navegador (HTTP recibido: ${esc(String(httpStatus))})</p>
+                <div class="font-mono text-xs break-all text-gray-700">
+                    ${kv('URL', p.url)}
+                    ${kv('Método', p.metodo)}
+                    ${kv('Content-Type', p.headers['Content-Type'])}
+                </div>
+                <p class="text-xs text-gray-500 mt-2 mb-1">Body (JSON):</p>
+                <pre class="bg-gray-900 text-blue-300 rounded-lg p-3 text-xs overflow-auto max-h-40">${esc(JSON.stringify(p.body, null, 2))}</pre>
+            </div>`;
+        }
+
+        // Explicación legible del código HTTP del error
+        function diagnosticarHttp(status) {
+            const m = {
+                404: 'Ruta no encontrada. El servidor que estás usando aún no tiene la ruta /sync/diagnostico: hay que limpiar opcache/route cache y/o desplegar el código actualizado en ESTE servidor.',
+                405: 'Método no permitido. La ruta existe pero no acepta POST (revisar definición de ruta).',
+                419: 'Token CSRF inválido o expirado. Recarga la página para refrescar el token.',
+                500: 'Error interno del servidor (PHP). El contenido crudo de abajo trae el detalle.',
+                302: 'Redirección (posible sesión expirada → redirige a /login).',
+            };
+            return m[status] || ('Código HTTP ' + status + '.');
         }
 
         function renderDiagnostico(d) {
