@@ -41,9 +41,33 @@ class PagoPedidosController extends Controller
      */
     public static function persistirPosImborrable(int $idPedido, float $montoBs, string $referencia, array $posData): array
     {
+        // RACE-CONDITION 2026-05-27 — el frontend a veces dispara 2 POSTs casi simultáneos
+        // (reintento, doble click, retry de axios al ver timeout). Ambos llegan al mismo
+        // segundo, ambos hacen SELECT existente → null, ambos hacen INSERT → duplicado real
+        // en BD. Caso verificado por SQL del usuario: 2 filas con mismo sequence, authid,
+        // referencia, monto, created_at exactos.
+        //
+        // Solución: GET_LOCK de MySQL (advisory lock) para serializar la sección crítica
+        // por (pedido, referencia). El segundo request espera hasta 5s al primero, luego
+        // re-chequea, ve la fila ya creada y devuelve duplicado=true.
+        $lockKey = "pos_imborrable_p{$idPedido}_r{$referencia}";
+        $lockObtained = false;
         try {
             if ($idPedido <= 0 || $montoBs <= 0 || $referencia === '') {
                 return ['estado' => false, 'msj' => 'Parámetros inválidos'];
+            }
+
+            // Adquirir lock advisory (5s timeout). Si dos requests llegan simultáneos,
+            // el segundo espera al primero antes de hacer su check de idempotencia.
+            $lockResult = \DB::selectOne("SELECT GET_LOCK(?, 5) AS got", [$lockKey]);
+            $lockObtained = $lockResult && (int) ($lockResult->got ?? 0) === 1;
+            if (!$lockObtained) {
+                \Log::warning('[POS] persistirPosImborrable: no se pudo obtener lock', [
+                    'id_pedido' => $idPedido,
+                    'referencia' => $referencia,
+                    'lock_key' => $lockKey,
+                ]);
+                return ['estado' => false, 'msj' => 'No se pudo obtener lock para procesar el pago POS.'];
             }
 
             $pedido = pedidos::find($idPedido);
@@ -61,6 +85,7 @@ class PagoPedidosController extends Controller
             }
 
             // Idempotencia: si ya existe esta referencia en este pedido, devolverla.
+            // Ya estamos DENTRO del lock — si la otra request creó la fila, la vemos aquí.
             $existente = pago_pedidos::where('id_pedido', $idPedido)
                 ->where('tipo', 2)
                 ->where('referencia', $referencia)
@@ -170,6 +195,15 @@ class PagoPedidosController extends Controller
                 'error' => $e->getMessage(),
             ]);
             return ['estado' => false, 'msj' => $e->getMessage()];
+        } finally {
+            // Liberar el advisory lock SIEMPRE — éxito, error o duplicado
+            if ($lockObtained) {
+                try {
+                    \DB::selectOne("SELECT RELEASE_LOCK(?)", [$lockKey]);
+                } catch (\Throwable $eLock) {
+                    \Log::warning('[POS] RELEASE_LOCK falló (lock se libera al cerrar la sesión MySQL): ' . $eLock->getMessage());
+                }
+            }
         }
     }
 
