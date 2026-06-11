@@ -164,25 +164,63 @@ class PagoPedidosController extends Controller
             return ['cuadra' => false, 'msj' => 'Pedido no encontrado'];
         }
 
-        // total_pedido en USD: priorizar clean_total (incluye descuentos), fallback a total
-        $totalPedidoUsd = (float) ($pedido->clean_total ?? $pedido->total ?? 0);
+        // BUG-RAIZ 2026-06-11 — `clean_total` y `total` NO son columnas de la tabla pedidos.
+        // Son atributos CALCULADOS solo dentro de getPedidoFun. La versión anterior leía
+        // $pedido->clean_total → NULL → totalPedidoUsd=0 → cuadra siempre con 0 pagos.
+        // Por eso NUNCA bloqueó nada (caso #343756 cerrado descuadrado).
+        //
+        // Fix: calcular el total REAL replicando la lógica de getPedidoFun:
+        //   subtotal_linea = precio_unitario * cantidad  (redondeado 2 dec)
+        //   total_des      = (descuento/100) * subtotal_linea
+        //   subtotal_c_desc= subtotal_linea - total_des
+        //   total          = Σ subtotal_c_desc * (retencion ? 1.16 : 1)
+        // El precio_unitario vive en items_pedidos; si null, se usa el precio del producto.
+        $items = items_pedidos::where('id_pedido', $idPedido)
+            ->with(['producto:id,precio,iva'])
+            ->get();
 
-        // Si está vacío, calcular desde items
-        if ($totalPedidoUsd <= 0) {
-            $totalPedidoUsd = (float) (items_pedidos::where('id_pedido', $idPedido)
-                ->selectRaw('SUM((monto * cantidad) * (1 - IFNULL(descuento,0)/100)) as t')
-                ->value('t') ?? 0);
+        $retencion = (bool) $pedido->retencion;
+        $totalPedidoUsd = 0.0;
+        foreach ($items as $item) {
+            // Items sin producto (pagos/abonos) no cuentan para el total de venta
+            $precioUnitario = $item->precio_unitario;
+            if ($precioUnitario === null && $item->producto) {
+                $precioUnitario = $item->producto->precio;
+            }
+            if ($precioUnitario === null) {
+                // item sin precio (ej: abono) — usar su monto directo
+                $precioUnitario = $item->monto;
+            }
+            $precioUnitario = (float) $precioUnitario;
+            $cantidad = (float) $item->cantidad;
+
+            $subtotalLinea = round($precioUnitario * $cantidad, 2);
+            $totalDes = round(($item->descuento / 100) * $subtotalLinea, 2);
+            $subtotalCDesc = round($subtotalLinea - $totalDes, 2);
+            $totalLineaConIva = round($subtotalCDesc * ($retencion ? 1.16 : 1), 2);
+            $totalPedidoUsd += $totalLineaConIva;
         }
+        $totalPedidoUsd = round($totalPedidoUsd, 2);
 
-        // Suma de pago_pedidos: columna `monto` está en USD para casi todos los tipos.
-        // El crédito siempre se guarda como cuenta=1 (factura), el resto también.
-        // Excluimos cuenta=0 (abono a deudor histórico) porque ese flujo es de saldo cliente.
+        // Suma de pago_pedidos en USD. cuenta=1 (factura). Excluimos cuenta=0 (abono deudor).
+        // Sumamos todo (positivos y negativos) excepto el ficticio tipo=4 monto=0.00001
+        // que mete sendCentral al exportar.
         $totalPagosUsd = (float) pago_pedidos::where('id_pedido', $idPedido)
             ->where('cuenta', 1)
+            ->whereRaw('ABS(monto) > 0.001') // excluir el ficticio 0.00001
             ->sum('monto');
 
         $diff = round($totalPedidoUsd - $totalPagosUsd, 4);
         $cuadra = abs($diff) <= $toleranciaUsd;
+
+        // DEVOLUCION-PURA 2026-06-11 — un pedido SIN items con pagos netos negativos
+        // (refund de sobrante viejo, caso B/D) es legítimo: total_pedido=0 pero los pagos
+        // son negativos porque representan dinero que SALE. NO es un descuadre.
+        // Lo reconocemos: items=0 + total_pagos < 0 → devolución pura → cuadra.
+        $esDevolucionPura = $items->count() === 0 && $totalPagosUsd < -0.001;
+        if ($esDevolucionPura) {
+            $cuadra = true;
+        }
 
         return [
             'cuadra' => $cuadra,
@@ -190,6 +228,9 @@ class PagoPedidosController extends Controller
             'total_pagos_usd' => round($totalPagosUsd, 4),
             'diferencia_usd' => $diff,
             'tolerancia' => $toleranciaUsd,
+            'items_count' => $items->count(),
+            'retencion' => $retencion,
+            'es_devolucion_pura' => $esDevolucionPura,
         ];
     }
 
