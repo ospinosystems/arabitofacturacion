@@ -214,6 +214,8 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::get('printBultos', [PedidosController::class,"printBultos"]);
 		
 		Route::post('setconfigcredito', [PagoPedidosController::class,"setconfigcredito"]);
+		// CUADRE-DIAGNOSTICO 2026-06-11 — admin: GET /diagnostico-cuadre?id=NNN
+		Route::get('diagnostico-cuadre', [PagoPedidosController::class,"diagnosticarCuadre"]);
 
 		Route::post('addRefPago', [PagosReferenciasController::class,"addRefPago"]);
 		// BUSCAR-REF-MI-PEDIDO 2026-05-27 — recuperar ref ya existente en central que se perdió local

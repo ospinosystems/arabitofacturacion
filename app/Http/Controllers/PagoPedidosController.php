@@ -40,6 +40,108 @@ class PagoPedidosController extends Controller
      * puede tumbar el response al cajero.
      */
     /**
+     * DIAGNOSTICO-CUADRE 2026-06-11
+     *
+     * Endpoint admin para inspeccionar un pedido descuadrado en producción.
+     * Devuelve fila completa del pedido + items + pago_pedidos + resultado
+     * de validarCuadrePedido. SOLO admin (tipo_usuario=1).
+     *
+     * Uso: GET /diagnostico-cuadre?id=343756
+     */
+    public function diagnosticarCuadre(Request $req)
+    {
+        if ((int) session('tipo_usuario') !== 1) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'Solo administradores pueden ver este diagnóstico.',
+            ], 403);
+        }
+
+        $id = (int) $req->id;
+        if (!$id) {
+            return Response::json(['estado' => false, 'msj' => 'Falta parámetro id'], 400);
+        }
+
+        $pedido = pedidos::find($id);
+        if (!$pedido) {
+            return Response::json(['estado' => false, 'msj' => "Pedido #{$id} no encontrado"], 404);
+        }
+
+        $items = items_pedidos::where('id_pedido', $id)->get();
+        $pagos = pago_pedidos::where('id_pedido', $id)
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        $tiposPago = [
+            1 => 'transferencia',
+            2 => 'débito',
+            3 => 'efectivo',
+            4 => 'crédito',
+            5 => 'biopago',
+            6 => 'vuelto',
+        ];
+
+        $pagosAnotados = $pagos->map(function ($p) use ($tiposPago) {
+            return [
+                'id' => $p->id,
+                'tipo' => (int) $p->tipo,
+                'tipo_humano' => $tiposPago[(int) $p->tipo] ?? 'desconocido',
+                'cuenta' => (int) $p->cuenta,
+                'monto_usd' => (float) $p->monto,
+                'monto_original' => (float) $p->monto_original,
+                'moneda' => $p->moneda,
+                'referencia' => $p->referencia,
+                'imborrable' => (int) ($p->imborrable ?? 0),
+                'created_at' => (string) $p->created_at,
+            ];
+        });
+
+        $cuadre = self::validarCuadrePedido($id);
+
+        // Suma por cuenta para detectar pagos de cuenta=0 (abono) que el cuadre excluye
+        $sumaCuenta0 = (float) $pagos->where('cuenta', 0)->sum('monto');
+        $sumaCuenta1 = (float) $pagos->where('cuenta', 1)->sum('monto');
+
+        return Response::json([
+            'estado' => true,
+            'pedido' => [
+                'id' => $pedido->id,
+                'estado' => (int) $pedido->estado,
+                'estado_humano' => $pedido->estado == 1 ? 'cerrado' : 'pendiente',
+                'clean_total' => (float) ($pedido->clean_total ?? 0),
+                'total' => (float) ($pedido->total ?? 0),
+                'export' => (int) ($pedido->export ?? 0),
+                'fiscal' => (int) ($pedido->fiscal ?? 0),
+                'id_cliente' => $pedido->id_cliente,
+                'id_vendedor' => $pedido->id_vendedor,
+                'fecha_factura' => (string) $pedido->fecha_factura,
+                'created_at' => (string) $pedido->created_at,
+                'updated_at' => (string) $pedido->updated_at,
+                'isdevolucionOriginalid' => $pedido->isdevolucionOriginalid,
+            ],
+            'items' => $items->map(fn ($i) => [
+                'id' => $i->id,
+                'id_producto' => $i->id_producto,
+                'cantidad' => (float) $i->cantidad,
+                'monto' => (float) $i->monto,
+                'descuento' => (float) ($i->descuento ?? 0),
+                'tasa' => (float) ($i->tasa ?? 0),
+                'subtotal' => (float) $i->cantidad * (float) $i->monto,
+            ]),
+            'pagos' => $pagosAnotados,
+            'totales' => [
+                'suma_pagos_cuenta1_usd' => $sumaCuenta1,
+                'suma_pagos_cuenta0_usd' => $sumaCuenta0,
+            ],
+            'cuadre' => $cuadre,
+            'alerta' => $cuadre['cuadra']
+                ? 'OK — pedido cuadra'
+                : "❌ DESCUADRA: faltan " . abs($cuadre['diferencia_usd']) . " USD para cuadrar. " .
+                  "Si el pedido está cerrado (estado=1), fue cerrado descuadrado.",
+        ]);
+    }
+
+    /**
      * CUADRE-PEDIDO 2026-06-11
      *
      * Helper centralizado: dado un id_pedido, calcula el cuadre real entre
