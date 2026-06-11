@@ -222,6 +222,22 @@ class PagoPedidosController extends Controller
             $cuadra = true;
         }
 
+        // TRANSFERENCIA-MERCANCIA 2026-06-11 — flujo legítimo "Transferir a Sucursal":
+        // setPagoPedidoTrans borra todos los pagos y crea UN solo pago tipo=4 (crédito)
+        // monto=0.00001 ficticio, luego cierra el pedido (estado=1). No hay cobro real
+        // porque la mercancía se transfiere, no se vende. Mi validación veía items por
+        // $X vs pagos $0 → bloqueaba el flujo (caso reportado pedido #425647).
+        //
+        // Firma: el ÚNICO pago del pedido es tipo=4 con |monto| < 0.001 (el ficticio).
+        // Si esa es la única fila de pago, es transferencia de mercancía → cuadra.
+        $todosPagos = pago_pedidos::where('id_pedido', $idPedido)->get(['tipo', 'monto']);
+        $esTransferenciaMercancia = $todosPagos->count() > 0 && $todosPagos->every(function ($p) {
+            return (int) $p->tipo === 4 && abs((float) $p->monto) < 0.001;
+        });
+        if ($esTransferenciaMercancia) {
+            $cuadra = true;
+        }
+
         return [
             'cuadra' => $cuadra,
             'total_pedido_usd' => round($totalPedidoUsd, 4),
@@ -231,6 +247,7 @@ class PagoPedidosController extends Controller
             'items_count' => $items->count(),
             'retencion' => $retencion,
             'es_devolucion_pura' => $esDevolucionPura,
+            'es_transferencia_mercancia' => $esTransferenciaMercancia,
         ];
     }
 
