@@ -38,6 +38,14 @@ class pedidos extends Model
 
         // CUADRE-INTERCEPTOR — antes de guardar, si estado pasa de 0→1, validar cuadre.
         static::saving(function (pedidos $pedido) {
+            // Solo validar UPDATES de pedidos que YA existen en BD. En un INSERT nuevo
+            // (exists=false) el pedido aún no tiene id ni pagos posibles → validarCuadrePedido
+            // no lo encontraría y bloquearía falsamente. El cierre descuadrado que queremos
+            // atajar SIEMPRE es un UPDATE (pedido creado en 0, luego facturado a 1).
+            if (!$pedido->exists) {
+                return;
+            }
+
             // Solo intervenir si estado va a quedar en 1 y antes no lo era
             $estadoNuevo = (int) ($pedido->estado ?? 0);
             $estadoAnterior = (int) ($pedido->getOriginal('estado') ?? 0);
