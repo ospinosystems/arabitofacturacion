@@ -39,6 +39,58 @@ class PagoPedidosController extends Controller
      * NUNCA tira excepción — su llamada está dentro del flujo crítico del cobro y no
      * puede tumbar el response al cajero.
      */
+    /**
+     * CUADRE-PEDIDO 2026-06-11
+     *
+     * Helper centralizado: dado un id_pedido, calcula el cuadre real entre
+     * total del pedido (clean_total) y suma de pago_pedidos. Devuelve:
+     *   - cuadra: bool
+     *   - total_pedido_usd, total_pagos_usd, diferencia_usd
+     *   - tolerancia
+     *
+     * Útil para BLOQUEAR cierres de pedidos descuadrados desde cualquier path
+     * (sendCentral export, setGastoOperativo, etc.) — no solo setPagoPedido.
+     *
+     * Caso reportado por usuario (pedido #343756): se cerró con $26.84 cobrado
+     * vs $49.30 que valía. La validación de setPagoPedido SÍ rebota pero hay
+     * otros paths que cierran sin chequear. Esta helper estandariza el chequeo.
+     */
+    public static function validarCuadrePedido(int $idPedido, float $toleranciaUsd = 0.1): array
+    {
+        $pedido = pedidos::find($idPedido);
+        if (!$pedido) {
+            return ['cuadra' => false, 'msj' => 'Pedido no encontrado'];
+        }
+
+        // total_pedido en USD: priorizar clean_total (incluye descuentos), fallback a total
+        $totalPedidoUsd = (float) ($pedido->clean_total ?? $pedido->total ?? 0);
+
+        // Si está vacío, calcular desde items
+        if ($totalPedidoUsd <= 0) {
+            $totalPedidoUsd = (float) (items_pedidos::where('id_pedido', $idPedido)
+                ->selectRaw('SUM((monto * cantidad) * (1 - IFNULL(descuento,0)/100)) as t')
+                ->value('t') ?? 0);
+        }
+
+        // Suma de pago_pedidos: columna `monto` está en USD para casi todos los tipos.
+        // El crédito siempre se guarda como cuenta=1 (factura), el resto también.
+        // Excluimos cuenta=0 (abono a deudor histórico) porque ese flujo es de saldo cliente.
+        $totalPagosUsd = (float) pago_pedidos::where('id_pedido', $idPedido)
+            ->where('cuenta', 1)
+            ->sum('monto');
+
+        $diff = round($totalPedidoUsd - $totalPagosUsd, 4);
+        $cuadra = abs($diff) <= $toleranciaUsd;
+
+        return [
+            'cuadra' => $cuadra,
+            'total_pedido_usd' => round($totalPedidoUsd, 4),
+            'total_pagos_usd' => round($totalPagosUsd, 4),
+            'diferencia_usd' => $diff,
+            'tolerancia' => $toleranciaUsd,
+        ];
+    }
+
     public static function persistirPosImborrable(int $idPedido, float $montoBs, string $referencia, array $posData): array
     {
         // RACE-CONDITION 2026-05-27 — el frontend a veces dispara 2 POSTs casi simultáneos
@@ -1136,6 +1188,36 @@ class PagoPedidosController extends Controller
                     if (!$pedido) {
                         \DB::rollback();
                         return Response::json(["msj" => "Error: No se encontró el pedido al procesar pago", "estado" => false]);
+                    }
+
+                    // CUADRE 2026-06-11 — defensa final ANTES de cerrar el pedido.
+                    // Re-leemos pago_pedidos de BD y comparamos contra clean_total del pedido.
+                    // Aunque setPagoPedido tiene su validación de montos al inicio (línea 635),
+                    // esto cubre cualquier path edge (imborrable insertado fuera del request,
+                    // bulk insert que ignora algo, etc.). Si descuadra, ABORTAR el cierre.
+                    $cuadreFinal = self::validarCuadrePedido((int) $pedido->id);
+                    if (!$cuadreFinal['cuadra']) {
+                        \DB::rollback();
+                        \Log::error('[setPagoPedido] BLOQUEADO cierre por descuadre final', [
+                            'id_pedido' => $pedido->id,
+                            'cuadre' => $cuadreFinal,
+                            'req_total_pedido_usd' => $req->total_pedido_usd ?? null,
+                            'req_debitos' => $req->debitos ?? null,
+                            'req_efectivo' => $req->efectivo ?? null,
+                            'req_transferencia' => $req->transferencia ?? null,
+                            'req_credito' => $req->credito ?? null,
+                            'req_is_devolucion_pura' => $req->is_devolucion_pura ?? null,
+                            'req_permite_sobrante' => $req->permite_sobrante ?? null,
+                        ]);
+                        return Response::json([
+                            "msj" => "BLOQUEADO: El pedido #{$pedido->id} no cuadra al cerrar. " .
+                                    "Pedido USD " . $cuadreFinal['total_pedido_usd'] .
+                                    " vs Pagos USD " . $cuadreFinal['total_pagos_usd'] .
+                                    " (diferencia " . $cuadreFinal['diferencia_usd'] . " USD). " .
+                                    "Contactar admin si esto persiste.",
+                            "estado" => false,
+                            "cuadre_detalle" => $cuadreFinal,
+                        ]);
                     }
 
                     if ($pedido->estado==0) {

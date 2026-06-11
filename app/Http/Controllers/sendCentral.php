@@ -1958,6 +1958,28 @@ class sendCentral extends Controller
                 }
 
                 if (!empty($resretur["estado"])) {
+                    // CUADRE 2026-06-11 — solo bloquear el cierre cuando type='add'.
+                    // Para 'add' validar que el pedido cuadre ANTES de borrar pagos y
+                    // reemplazar por uno ficticio de 0.00001. Antes este flujo cerraba
+                    // pedidos descuadrados sin chequear → cliente cobrado menos sin alerta.
+                    if ($type === "add") {
+                        $cuadre = \App\Http\Controllers\PagoPedidosController::validarCuadrePedido((int) $id);
+                        if (!$cuadre['cuadra']) {
+                            \Log::error('[sendCentral export] BLOQUEADO cierre por descuadre', [
+                                'id_pedido' => $id,
+                                'cuadre' => $cuadre,
+                            ]);
+                            return Response::json([
+                                "estado" => false,
+                                "msj" => "BLOQUEADO: El pedido #{$id} no cuadra. Pedido USD " .
+                                        $cuadre['total_pedido_usd'] . " vs Pagos USD " .
+                                        $cuadre['total_pagos_usd'] . " (diff " . $cuadre['diferencia_usd'] . " USD). " .
+                                        "No se puede exportar a central hasta que cuadre.",
+                                "cuadre_detalle" => $cuadre,
+                            ]);
+                        }
+                    }
+
                     pago_pedidos::where("id_pedido",$id)->delete();
                     pago_pedidos::updateOrCreate(["id_pedido"=>$id,"tipo"=>4],["cuenta"=>1,"monto"=>0.00001]);
 
