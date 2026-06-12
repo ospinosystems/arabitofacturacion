@@ -131,7 +131,8 @@ export default function HistorialVentasCierre({ onClose }) {
 	const totalMetodos = useMemo(() => {
 		const acc = {};
 		(data?.cierres || []).forEach((c) => {
-			(c.metodosPago || []).forEach((mp) => {
+			// Laravel serializa la relación metodosPago como metodos_pago (snake_case)
+			(c.metodos_pago || c.metodosPago || []).forEach((mp) => {
 				const tipo = parseInt(mp.tipo_pago);
 				const moneda = (mp.moneda || "BS").toUpperCase();
 				if (!acc[tipo]) acc[tipo] = {};
@@ -469,7 +470,7 @@ export default function HistorialVentasCierre({ onClose }) {
 								{data.cierres.map((c) => {
 									const descuadre = parseNum(c.descuadre);
 									const cuadraOk = Math.abs(descuadre) < 0.01;
-									const agr = agruparMetodos(c.metodosPago);
+									const agr = agruparMetodos(c.metodos_pago || c.metodosPago);
 									// Renderiza una celda Dig o Real de un tipo con sus monedas apiladas.
 									const celda = (tipo, campo, extraClass = "") => {
 										const lineas = lineasDeTipo(agr, tipo);
