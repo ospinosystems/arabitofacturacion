@@ -1705,7 +1705,17 @@ class PedidosController extends Controller
             // Saldo inicial en bolívares (BS)
             $caja_inicialbs = round($ultimo_cierre->sum("dejar_bss"), 3);
         }
-        
+
+        // Override opcional: cerrar SIN arrastrar el saldo inicial (caja_inicial=0).
+        // Aditivo y guardado: si no se pasa la opción, el comportamiento es idéntico.
+        // Usado en backfills de días viejos donde el "dejar" del día anterior no es
+        // un saldo inicial real (ver comando temporal cierres:rehacer-junio).
+        if (!empty($opciones['caja_inicial_cero'])) {
+            $caja_inicial = 0;
+            $caja_inicialpeso = 0;
+            $caja_inicialbs = 0;
+        }
+
         \Log::info('CERRARFUN - Caja Inicial:');
         \Log::info('CERRARFUN - caja_inicial (USD): ' . $caja_inicial);
         \Log::info('CERRARFUN - caja_inicialpeso (COP): ' . $caja_inicialpeso);
@@ -2921,6 +2931,7 @@ class PedidosController extends Controller
                     'totalizarcierre' => $totalizarcierre,
                     'check_pendiente' => true,
                     'pendiente_filtrar_fecha' => $cierrePorFecha,
+                    'caja_inicial_cero' => filter_var($req->caja_inicial_cero ?? false, FILTER_VALIDATE_BOOLEAN),
                     'usuario' => null
                 ]
             );
