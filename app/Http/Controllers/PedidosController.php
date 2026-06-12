@@ -1653,7 +1653,17 @@ class PedidosController extends Controller
         }
 
         if ($check_pendiente) {
-            $pedido_pendientes_check = pedidos::where("estado", 0)->get();
+            // PENDIENTES-POR-FECHA 2026-06-12 — por defecto el chequeo es GLOBAL (cualquier
+            // pendiente bloquea), comportamiento histórico que el resto de flujos conserva.
+            // Solo el endpoint cierreAdministradorPorFecha pasa pendiente_filtrar_fecha=true
+            // para que el bloqueo aplique SOLO a pendientes de la fecha que se está cerrando:
+            // un pendiente del día 12 no debe impedir cerrar el día 9.
+            $pendienteFiltrarFecha = $opciones['pendiente_filtrar_fecha'] ?? false;
+            $queryPendientes = pedidos::where("estado", 0);
+            if ($pendienteFiltrarFecha) {
+                $queryPendientes->where("fecha_factura", "LIKE", $fecha . "%");
+            }
+            $pedido_pendientes_check = $queryPendientes->get();
             if (count($pedido_pendientes_check)) {
                 $pendientes_info = $pedido_pendientes_check->map(function ($q) {
                     return [
@@ -2887,6 +2897,11 @@ class PedidosController extends Controller
                     ->get();
             }
             
+            // PENDIENTES-POR-FECHA 2026-06-12 — solo el cierre administrador por fecha
+            // (cierreAdministradorPorFecha arma el payload con cierre_por_fecha=true) limita
+            // el chequeo de pendientes a la fecha cerrada. El cierre normal queda global.
+            $cierrePorFecha = filter_var($req->cierre_por_fecha ?? false, FILTER_VALIDATE_BOOLEAN);
+
             $resultado_cierre = $this->cerrarFun(
                 $today,
                 [
@@ -2903,6 +2918,7 @@ class PedidosController extends Controller
                     'grafica' => false,
                     'totalizarcierre' => $totalizarcierre,
                     'check_pendiente' => true,
+                    'pendiente_filtrar_fecha' => $cierrePorFecha,
                     'usuario' => null
                 ]
             );
