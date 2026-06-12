@@ -812,30 +812,43 @@ class PagoPedidosController extends Controller
             // Es posible que varios débitos compartan misma referencia (ej: cierre PINPAD
             // que repite la ref del lote en cada transacción del lote), así que skipeamos
             // hasta el número de imborrable matcheados — no todos.
+            // TASA-FALLBACK 2026-06-12 — si el primer item no tiene tasa (item viejo, o
+            // creado sin tasa), $tasaDolar caía a 1 y los débitos en Bs se trataban como USD.
+            // Caso reportado (#374436): débito 10371.81 Bs se sumó como 10371.81 USD → descuadre.
+            // Fallback robusto: usar la tasa global actual si el item no la trae.
+            if ($tasaDolar <= 1) {
+                $tasaGlobal = (float) ((new PedidosController)->get_moneda()['bs'] ?? 0);
+                if ($tasaGlobal > 1) {
+                    $tasaDolar = $tasaGlobal;
+                }
+            }
+
             $debitoUSD = 0;
             $debitosImborrableEnBD = pago_pedidos::where('id_pedido', $req->id)
                 ->where('tipo', 2)
                 ->where('imborrable', 1)
-                ->get(['referencia', 'monto']);
+                ->get(['referencia', 'monto', 'monto_original']);
             $debitoUSD += (float) $debitosImborrableEnBD->sum('monto');
 
-            // Contador por (referencia + monto USD redondeado) → cuántos imborrable hay
-            // que matchean. Cada vez que skipeamos uno del request, decrementamos.
+            // SKIP-MATCHING 2026-06-12 (fix #374436) — el contador del imborrable se construye
+            // por (referencia + monto_original en Bs), NO por monto USD calculado. El match por
+            // USD dependía de la tasa: si la tasa era incorrecta (1), el imborrable (17.80 USD)
+            // nunca matcheaba al request (10371.81 "USD" porque no se dividió) → se sumaba dos
+            // veces. Comparar por Bs (monto_original vs monto del request, ambos en Bs) es
+            // independiente de la tasa y siempre matchea correctamente.
             $imborrableMatchCounts = [];
             foreach ($debitosImborrableEnBD as $imb) {
                 $refKey = (string) $imb->referencia;
-                $montoKey = (string) round((float) $imb->monto, 2); // USD a 2 decimales
-                $key = $refKey . '|' . $montoKey;
+                $montoBsKey = (string) round((float) $imb->monto_original, 2); // Bs, no USD
+                $key = $refKey . '|' . $montoBsKey;
                 $imborrableMatchCounts[$key] = ($imborrableMatchCounts[$key] ?? 0) + 1;
             }
 
             if ($req->debitos && is_array($req->debitos)) {
                 foreach ($req->debitos as $debitoItem) {
                     $referenciaItem = (string) ($debitoItem['referencia'] ?? '');
-                    $montoBsItem = floatval($debitoItem['monto']);
-                    $montoUsdItem = $tasaDolar > 0 ? $montoBsItem / $tasaDolar : 0;
-                    $montoUsdKey = (string) round($montoUsdItem, 2);
-                    $matchKey = $referenciaItem . '|' . $montoUsdKey;
+                    $montoBsItem = floatval($debitoItem['monto']); // el débito del request viene en Bs
+                    $matchKey = $referenciaItem . '|' . (string) round($montoBsItem, 2);
 
                     if ($referenciaItem !== '' && ($imborrableMatchCounts[$matchKey] ?? 0) > 0) {
                         // Este débito del request matchea con un imborrable de BD → skipear
@@ -844,7 +857,8 @@ class PagoPedidosController extends Controller
                         $imborrableMatchCounts[$matchKey]--;
                         continue;
                     }
-                    $debitoUSD += $montoUsdItem;
+                    // Débito nuevo (no imborrable) → convertir Bs a USD con la tasa
+                    $debitoUSD += $tasaDolar > 0 ? $montoBsItem / $tasaDolar : 0;
                 }
             }
             
