@@ -2721,10 +2721,20 @@ class PedidosController extends Controller
             "cierres" => $cierres->get(),
             "numventas" => $cierres->sum("numventas"),
 
+            // REAL (conciliado en el cierre)
             "debito" => number_format($cierres->sum("debito"), 2),
             "efectivo" => number_format($cierres->sum("efectivo"), 2),
             "transferencia" => number_format($cierres->sum("transferencia"), 2),
             "caja_biopago" => number_format($cierres->sum("caja_biopago"), 2),
+
+            // DIGITAL (lo que registró el sistema) — HISTORIAL-DETALLADO 2026-06-12
+            "debito_digital" => number_format($cierres->sum("debito_digital"), 2),
+            "efectivo_digital" => number_format($cierres->sum("efectivo_digital"), 2),
+            "transferencia_digital" => number_format($cierres->sum("transferencia_digital"), 2),
+            "biopago_digital" => number_format($cierres->sum("biopago_digital"), 2),
+
+            // CUADRE — suma de descuadres del rango
+            "descuadre" => number_format($cierres->sum("descuadre"), 2),
 
 
             "precio" => number_format($cierres->sum("precio"), 2),

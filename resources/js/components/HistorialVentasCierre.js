@@ -342,100 +342,151 @@ export default function HistorialVentasCierre({ onClose }) {
 				</>
 			)}
 
-			{/* Vista detallada: tabla por cierre */}
+			{/* Vista detallada: tabla por cierre — HISTORIAL-DETALLADO 2026-06-12:
+			    digital vs real por método, cuadre, y dejar en caja en las 3 monedas */}
 			{data && data.cierres && data.cierres.length > 0 && !vistaResumen && (
 				<div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-					<div className="px-4 py-3 border-b border-gray-200">
+					<div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
 						<h3 className="text-lg font-semibold text-gray-800">
 							Detalle por cierre ({data.cierres.length} registro(s))
 						</h3>
+						<span className="text-xs text-gray-500">
+							<span className="font-semibold text-gray-600">Dig</span> = registrado por el sistema ·{" "}
+							<span className="font-semibold text-gray-600">Real</span> = conciliado en el cierre
+						</span>
 					</div>
 					<div className="overflow-x-auto">
-						<table className="min-w-full divide-y divide-gray-200">
+						<table className="min-w-full divide-y divide-gray-200 text-xs">
 							<thead className="bg-gray-50">
+								{/* Fila de grupos */}
 								<tr>
-									<th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+									<th className="px-2 py-1.5 text-left font-medium text-gray-500 uppercase border-r border-gray-200" rowSpan={2}>
 										Usuario
 									</th>
-									<th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+									<th className="px-2 py-1.5 text-left font-medium text-gray-500 uppercase border-r border-gray-200" rowSpan={2}>
 										Fecha
 									</th>
-									<th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
-										Nº ventas
+									<th className="px-2 py-1.5 text-right font-medium text-gray-500 uppercase border-r border-gray-200" rowSpan={2}>
+										Nº
 									</th>
-									<th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+									<th className="px-2 py-1.5 text-center font-medium text-orange-700 uppercase border-r border-gray-200 bg-orange-50" colSpan={2}>
 										Efectivo
 									</th>
-									<th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+									<th className="px-2 py-1.5 text-center font-medium text-blue-700 uppercase border-r border-gray-200 bg-blue-50" colSpan={2}>
 										Débito
 									</th>
-									<th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+									<th className="px-2 py-1.5 text-center font-medium text-purple-700 uppercase border-r border-gray-200 bg-purple-50" colSpan={2}>
 										Transferencia
 									</th>
-									<th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+									<th className="px-2 py-1.5 text-center font-medium text-teal-700 uppercase border-r border-gray-200 bg-teal-50" colSpan={2}>
 										Biopago
 									</th>
-									<th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+									<th className="px-2 py-1.5 text-right font-medium text-red-700 uppercase border-r border-gray-200 bg-red-50" rowSpan={2}>
+										Cuadre
+									</th>
+									<th className="px-2 py-1.5 text-center font-medium text-gray-600 uppercase border-r border-gray-200 bg-gray-100" colSpan={3}>
+										Dejar en caja
+									</th>
+									<th className="px-2 py-1.5 text-right font-medium text-gray-500 uppercase border-r border-gray-200" rowSpan={2}>
 										Total
 									</th>
-									<th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">
+									<th className="px-2 py-1.5 text-center font-medium text-gray-500 uppercase" rowSpan={2}>
 										Acción
 									</th>
 								</tr>
+								{/* Fila de sub-columnas */}
+								<tr>
+									<th className="px-2 py-1 text-right font-normal text-gray-400 bg-orange-50">Dig</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-400 border-r border-gray-200 bg-orange-50">Real</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-400 bg-blue-50">Dig</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-400 border-r border-gray-200 bg-blue-50">Real</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-400 bg-purple-50">Dig</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-400 border-r border-gray-200 bg-purple-50">Real</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-400 bg-teal-50">Dig</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-400 border-r border-gray-200 bg-teal-50">Real</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-400 bg-gray-100">USD</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-400 bg-gray-100">Bs</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-400 border-r border-gray-200 bg-gray-100">COP</th>
+								</tr>
 							</thead>
 							<tbody className="bg-white divide-y divide-gray-200">
-								{data.cierres.map((c) => (
-									<tr key={c.id} className="hover:bg-gray-50">
-										<td className="px-4 py-2 text-sm text-gray-800">
-											{c.usuario?.usuario ?? c.id_usuario ?? "—"}
-										</td>
-										<td className="px-4 py-2 text-sm text-gray-600">{c.fecha}</td>
-										<td className="px-4 py-2 text-sm text-right text-gray-800">
-											{c.numventas ?? 0}
-										</td>
-										<td className="px-4 py-2 text-sm text-right text-gray-700">
-											{c.efectivo ?? "0.00"}
-										</td>
-										<td className="px-4 py-2 text-sm text-right text-gray-700">
-											{c.debito ?? "0.00"}
-										</td>
-										<td className="px-4 py-2 text-sm text-right text-gray-700">
-											{c.transferencia ?? "0.00"}
-										</td>
-										<td className="px-4 py-2 text-sm text-right text-gray-700">
-											{c.caja_biopago ?? "0.00"}
-										</td>
-										<td className="px-4 py-2 text-sm text-right font-medium text-gray-800">
-											{c.precio ?? "0.00"}
-										</td>
-										<td className="px-4 py-2 text-center">
-											<button
-												type="button"
-												onClick={() => verReporteCierre(c)}
-												className="px-3 py-1.5 text-sm font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded hover:bg-orange-100"
-											>
-												Ver reporte de cierre
-											</button>
-										</td>
-									</tr>
-								))}
+								{data.cierres.map((c) => {
+									const descuadre = parseNum(c.descuadre);
+									const cuadraOk = Math.abs(descuadre) < 0.01;
+									return (
+										<tr key={c.id} className="hover:bg-gray-50">
+											<td className="px-2 py-1.5 text-gray-800 border-r border-gray-100">
+												{c.usuario?.usuario ?? c.id_usuario ?? "—"}
+											</td>
+											<td className="px-2 py-1.5 text-gray-600 border-r border-gray-100 whitespace-nowrap">{c.fecha}</td>
+											<td className="px-2 py-1.5 text-right text-gray-800 border-r border-gray-100">
+												{c.numventas ?? 0}
+											</td>
+											{/* Efectivo */}
+											<td className="px-2 py-1.5 text-right text-gray-500">{c.efectivo_digital ?? "0.00"}</td>
+											<td className="px-2 py-1.5 text-right text-gray-800 border-r border-gray-100">{c.efectivo ?? "0.00"}</td>
+											{/* Débito */}
+											<td className="px-2 py-1.5 text-right text-gray-500">{c.debito_digital ?? "0.00"}</td>
+											<td className="px-2 py-1.5 text-right text-gray-800 border-r border-gray-100">{c.debito ?? "0.00"}</td>
+											{/* Transferencia */}
+											<td className="px-2 py-1.5 text-right text-gray-500">{c.transferencia_digital ?? "0.00"}</td>
+											<td className="px-2 py-1.5 text-right text-gray-800 border-r border-gray-100">{c.transferencia ?? "0.00"}</td>
+											{/* Biopago */}
+											<td className="px-2 py-1.5 text-right text-gray-500">{c.biopago_digital ?? "0.00"}</td>
+											<td className="px-2 py-1.5 text-right text-gray-800 border-r border-gray-100">{c.caja_biopago ?? "0.00"}</td>
+											{/* Cuadre */}
+											<td className={`px-2 py-1.5 text-right font-medium border-r border-gray-100 ${cuadraOk ? "text-green-600" : "text-red-600"}`}>
+												{c.descuadre ?? "0.00"}
+											</td>
+											{/* Dejar en caja 3 monedas */}
+											<td className="px-2 py-1.5 text-right text-gray-700">{c.dejar_dolar ?? "0.00"}</td>
+											<td className="px-2 py-1.5 text-right text-gray-700">{c.dejar_bss ?? "0.00"}</td>
+											<td className="px-2 py-1.5 text-right text-gray-700 border-r border-gray-100">{c.dejar_peso ?? "0.00"}</td>
+											{/* Total */}
+											<td className="px-2 py-1.5 text-right font-medium text-gray-800 border-r border-gray-100">
+												{c.precio ?? "0.00"}
+											</td>
+											{/* Acción */}
+											<td className="px-2 py-1.5 text-center">
+												<button
+													type="button"
+													onClick={() => verReporteCierre(c)}
+													className="px-2 py-1 font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded hover:bg-orange-100 whitespace-nowrap"
+												>
+													Ver
+												</button>
+											</td>
+										</tr>
+									);
+								})}
 							</tbody>
 							<tfoot className="bg-gray-100 font-medium">
 								<tr>
-									<td className="px-4 py-2 text-sm" colSpan={2}>
+									<td className="px-2 py-1.5 border-r border-gray-200" colSpan={2}>
 										Total
 									</td>
-									<td className="px-4 py-2 text-sm text-right">{data.numventas}</td>
-									<td className="px-4 py-2 text-sm text-right">{data.efectivo}</td>
-									<td className="px-4 py-2 text-sm text-right">{data.debito}</td>
-									<td className="px-4 py-2 text-sm text-right">
-										{data.transferencia}
-									</td>
-									<td className="px-4 py-2 text-sm text-right">
-										{data.caja_biopago}
-									</td>
-									<td className="px-4 py-2 text-sm text-right">{data.precio}</td>
-									<td className="px-4 py-2" />
+									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.numventas}</td>
+									{/* Efectivo */}
+									<td className="px-2 py-1.5 text-right text-gray-500">{data.efectivo_digital}</td>
+									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.efectivo}</td>
+									{/* Débito */}
+									<td className="px-2 py-1.5 text-right text-gray-500">{data.debito_digital}</td>
+									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.debito}</td>
+									{/* Transferencia */}
+									<td className="px-2 py-1.5 text-right text-gray-500">{data.transferencia_digital}</td>
+									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.transferencia}</td>
+									{/* Biopago */}
+									<td className="px-2 py-1.5 text-right text-gray-500">{data.biopago_digital}</td>
+									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.caja_biopago}</td>
+									{/* Cuadre */}
+									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.descuadre}</td>
+									{/* Dejar 3 monedas */}
+									<td className="px-2 py-1.5 text-right">{data.dejar_dolar}</td>
+									<td className="px-2 py-1.5 text-right">{data.dejar_bss}</td>
+									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.dejar_peso}</td>
+									{/* Total */}
+									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.precio}</td>
+									<td className="px-2 py-1.5" />
 								</tr>
 							</tfoot>
 						</table>
