@@ -63,6 +63,11 @@ function lineasDeTipo(agrupado, tipo) {
 		.filter((l) => Math.abs(l.dig) > 0.001 || Math.abs(l.real) > 0.001);
 }
 
+// Valor de un (tipo, moneda, campo) — para columnas separadas por moneda (Efectivo).
+function valorMoneda(agrupado, tipo, moneda, campo) {
+	return (agrupado?.[tipo]?.[moneda]?.[campo]) ?? 0;
+}
+
 export default function HistorialVentasCierre({ onClose }) {
 	const [fechaDesde, setFechaDesde] = useState("");
 	const [fechaHasta, setFechaHasta] = useState("");
@@ -426,7 +431,7 @@ export default function HistorialVentasCierre({ onClose }) {
 									<th className="px-2 py-1.5 text-right font-medium text-gray-500 uppercase border-r border-gray-200" rowSpan={2}>
 										Nº
 									</th>
-									<th className="px-2 py-1.5 text-center font-medium text-orange-700 uppercase border-r border-gray-200 bg-orange-50" colSpan={2}>
+									<th className="px-2 py-1.5 text-center font-medium text-orange-700 uppercase border-r border-gray-200 bg-orange-50" colSpan={6}>
 										Efectivo
 									</th>
 									<th className="px-2 py-1.5 text-center font-medium text-blue-700 uppercase border-r border-gray-200 bg-blue-50" colSpan={2}>
@@ -453,8 +458,13 @@ export default function HistorialVentasCierre({ onClose }) {
 								</tr>
 								{/* Fila de sub-columnas */}
 								<tr>
-									<th className="px-2 py-1 text-right font-normal text-gray-400 bg-orange-50">Dig</th>
-									<th className="px-2 py-1 text-right font-normal text-gray-400 border-r border-gray-200 bg-orange-50">Real</th>
+									{/* Efectivo: 3 monedas × Dig/Real */}
+									<th className="px-2 py-1 text-right font-normal text-gray-500 bg-orange-50">$ Dig</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-500 bg-orange-50">$ Real</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-500 bg-orange-50">Bs Dig</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-500 bg-orange-50">Bs Real</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-500 bg-orange-50">COP Dig</th>
+									<th className="px-2 py-1 text-right font-normal text-gray-500 border-r border-gray-200 bg-orange-50">COP Real</th>
 									<th className="px-2 py-1 text-right font-normal text-gray-400 bg-blue-50">Dig</th>
 									<th className="px-2 py-1 text-right font-normal text-gray-400 border-r border-gray-200 bg-blue-50">Real</th>
 									<th className="px-2 py-1 text-right font-normal text-gray-400 bg-purple-50">Dig</th>
@@ -486,6 +496,19 @@ export default function HistorialVentasCierre({ onClose }) {
 											</td>
 										);
 									};
+									// Celda de UNA moneda (para Efectivo en columnas separadas).
+									const celdaMon = (tipo, moneda, campo, extraClass = "") => {
+										const v = valorMoneda(agr, tipo, moneda, campo);
+										return (
+											<td className={`px-2 py-1.5 text-right whitespace-nowrap ${extraClass}`}>
+												{Math.abs(v) < 0.001 ? (
+													<span className="text-gray-300">—</span>
+												) : (
+													fmtMoneda(v, moneda)
+												)}
+											</td>
+										);
+									};
 									return (
 										<tr key={c.id} className="hover:bg-gray-50">
 											<td className="px-2 py-1.5 text-gray-800 border-r border-gray-100 align-top">
@@ -495,9 +518,13 @@ export default function HistorialVentasCierre({ onClose }) {
 											<td className="px-2 py-1.5 text-right text-gray-800 border-r border-gray-100 align-top">
 												{c.numventas ?? 0}
 											</td>
-											{/* Efectivo (multimoneda) */}
-											{celda(TIPO_PAGO.EFECTIVO, "dig", "text-gray-500 align-top")}
-											{celda(TIPO_PAGO.EFECTIVO, "real", "text-gray-800 border-r border-gray-100 align-top")}
+											{/* Efectivo: USD / Bs / COP, cada una Dig y Real */}
+											{celdaMon(TIPO_PAGO.EFECTIVO, "USD", "dig", "text-gray-500 align-top")}
+											{celdaMon(TIPO_PAGO.EFECTIVO, "USD", "real", "text-gray-800 align-top")}
+											{celdaMon(TIPO_PAGO.EFECTIVO, "BS", "dig", "text-gray-500 align-top")}
+											{celdaMon(TIPO_PAGO.EFECTIVO, "BS", "real", "text-gray-800 align-top")}
+											{celdaMon(TIPO_PAGO.EFECTIVO, "COP", "dig", "text-gray-500 align-top")}
+											{celdaMon(TIPO_PAGO.EFECTIVO, "COP", "real", "text-gray-800 border-r border-gray-100 align-top")}
 											{/* Débito (Bs, pinpad + otros) */}
 											{celda(TIPO_PAGO.DEBITO, "dig", "text-gray-500 align-top")}
 											{celda(TIPO_PAGO.DEBITO, "real", "text-gray-800 border-r border-gray-100 align-top")}
@@ -551,15 +578,32 @@ export default function HistorialVentasCierre({ onClose }) {
 												</td>
 											);
 										};
+										// Total de UNA moneda (Efectivo en columnas separadas).
+										const celdaTotalMon = (tipo, moneda, campo, extraClass = "") => {
+											const v = valorMoneda(totalMetodos, tipo, moneda, campo);
+											return (
+												<td className={`px-2 py-1.5 text-right whitespace-nowrap align-top ${extraClass}`}>
+													{Math.abs(v) < 0.001 ? (
+														<span className="text-gray-300">—</span>
+													) : (
+														fmtMoneda(v, moneda)
+													)}
+												</td>
+											);
+										};
 										return (
 											<>
 												<td className="px-2 py-1.5 border-r border-gray-200 align-top" colSpan={2}>
 													Total
 												</td>
 												<td className="px-2 py-1.5 text-right border-r border-gray-200 align-top">{data.numventas}</td>
-												{/* Efectivo */}
-												{celdaTotal(TIPO_PAGO.EFECTIVO, "dig", "text-gray-500")}
-												{celdaTotal(TIPO_PAGO.EFECTIVO, "real", "border-r border-gray-200")}
+												{/* Efectivo: USD / Bs / COP, cada una Dig y Real */}
+												{celdaTotalMon(TIPO_PAGO.EFECTIVO, "USD", "dig", "text-gray-500")}
+												{celdaTotalMon(TIPO_PAGO.EFECTIVO, "USD", "real")}
+												{celdaTotalMon(TIPO_PAGO.EFECTIVO, "BS", "dig", "text-gray-500")}
+												{celdaTotalMon(TIPO_PAGO.EFECTIVO, "BS", "real")}
+												{celdaTotalMon(TIPO_PAGO.EFECTIVO, "COP", "dig", "text-gray-500")}
+												{celdaTotalMon(TIPO_PAGO.EFECTIVO, "COP", "real", "border-r border-gray-200")}
 												{/* Débito */}
 												{celdaTotal(TIPO_PAGO.DEBITO, "dig", "text-gray-500")}
 												{celdaTotal(TIPO_PAGO.DEBITO, "real", "border-r border-gray-200")}
