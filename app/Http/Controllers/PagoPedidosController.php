@@ -1171,14 +1171,26 @@ class PagoPedidosController extends Controller
                         $debitosBulk = [];
                         $ahora = now();
 
-                        // Cargar referencias ya persistidas imborrable=1 para este pedido
-                        $refsImborrables = pago_pedidos::where('id_pedido', $req->id)
+                        // Cargar filas imborrable=1 ya persistidas con (referencia + monto_original).
+                        // SKIP-MATCHING 2026-06-11 — antes el skip era SOLO por referencia. Cuando el
+                        // cliente paga con la MISMA tarjeta dos veces (parcial), ambos débitos comparten
+                        // la terminación de 4 dígitos (ej "0967"). El bulk insert saltaba el SEGUNDO
+                        // débito porque su ref ya estaba imborrable → solo quedaba 1 cobro en BD →
+                        // descuadre (caso #411148: débitos 7866.26 + 5244.18 ambos ref 0967, solo se
+                        // contaba el primero → "Pedido 22.5 vs Pagos 13.5").
+                        //
+                        // Fix: skip por (referencia + monto_original Bs), y solo TANTAS veces como
+                        // imborrable haya con esa combinación. Un débito con misma ref pero distinto
+                        // monto es un cobro distinto que SÍ debe insertarse.
+                        $imborrablesEnBD = pago_pedidos::where('id_pedido', $req->id)
                             ->where('tipo', 2)
                             ->where('imborrable', 1)
-                            ->pluck('referencia')
-                            ->map(fn ($r) => (string) $r)
-                            ->all();
-                        $refsImborrablesSet = array_flip($refsImborrables);
+                            ->get(['referencia', 'monto_original']);
+                        $imborrableMatchCounts = [];
+                        foreach ($imborrablesEnBD as $imb) {
+                            $key = (string) $imb->referencia . '|' . (string) round((float) $imb->monto_original, 2);
+                            $imborrableMatchCounts[$key] = ($imborrableMatchCounts[$key] ?? 0) + 1;
+                        }
 
                         foreach ($req->debitos as $index => $debitoItem) {
                             $montoOriginalBs = floatval($debitoItem['monto']);
@@ -1203,8 +1215,11 @@ class PagoPedidosController extends Controller
 
                             $totalDebitoUSD += $montoDebito;
 
-                            // Skip si ya existe la fila imborrable (POS la persistió al aprobar)
-                            if (isset($refsImborrablesSet[(string) $referencia])) {
+                            // Skip solo si hay un imborrable que matchee (referencia + monto). Decrementar
+                            // el contador para no saltar dos débitos distintos con la misma combinación.
+                            $matchKey = (string) $referencia . '|' . (string) round($montoOriginalBs, 2);
+                            if (($imborrableMatchCounts[$matchKey] ?? 0) > 0) {
+                                $imborrableMatchCounts[$matchKey]--;
                                 continue;
                             }
 
