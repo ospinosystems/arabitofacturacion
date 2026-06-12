@@ -24,6 +24,45 @@ function parseNum(val) {
 	return Number.isNaN(n) ? 0 : n;
 }
 
+// HISTORIAL-MONEDA-ORIGINAL 2026-06-12 — tipo_pago en cierres_metodos_pago:
+// 1=Transferencia, 2=Débito, 3=Efectivo, 5=Biopago. Cada fila trae moneda
+// (BS/USD/COP) + monto_digital + monto_real EN SU MONEDA ORIGINAL.
+const TIPO_PAGO = { TRANSFERENCIA: 1, DEBITO: 2, EFECTIVO: 3, BIOPAGO: 5 };
+const ORDEN_MONEDA = ["BS", "USD", "COP"];
+
+function fmtMoneda(monto, moneda) {
+	const n = Number(monto || 0);
+	const txt = n.toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+	const m = (moneda || "").toUpperCase();
+	if (m === "USD") return `$${txt}`;
+	if (m === "COP") return `${txt} COP`;
+	return `${txt} Bs`; // BS por defecto
+}
+
+// Agrupa los metodosPago de un cierre por tipo → moneda → {dig, real}.
+// Suma subtipos (ej débito pinpad + otros_puntos) que comparten tipo y moneda.
+function agruparMetodos(metodos) {
+	const acc = {}; // { tipo: { moneda: { dig, real } } }
+	(metodos || []).forEach((mp) => {
+		const tipo = parseInt(mp.tipo_pago);
+		const moneda = (mp.moneda || "BS").toUpperCase();
+		if (!acc[tipo]) acc[tipo] = {};
+		if (!acc[tipo][moneda]) acc[tipo][moneda] = { dig: 0, real: 0 };
+		acc[tipo][moneda].dig += parseNum(mp.monto_digital);
+		acc[tipo][moneda].real += parseNum(mp.monto_real);
+	});
+	return acc;
+}
+
+// Devuelve líneas [{moneda, dig, real}] de un tipo, en orden BS→USD→COP, solo con valor.
+function lineasDeTipo(agrupado, tipo) {
+	const porMoneda = agrupado[tipo] || {};
+	return ORDEN_MONEDA
+		.filter((m) => porMoneda[m])
+		.map((m) => ({ moneda: m, ...porMoneda[m] }))
+		.filter((l) => Math.abs(l.dig) > 0.001 || Math.abs(l.real) > 0.001);
+}
+
 export default function HistorialVentasCierre({ onClose }) {
 	const [fechaDesde, setFechaDesde] = useState("");
 	const [fechaHasta, setFechaHasta] = useState("");
@@ -86,6 +125,23 @@ export default function HistorialVentasCierre({ onClose }) {
 
 	const totalVentas = data?.numventas != null ? data.numventas : 0;
 	const totalPrecio = data?.precio ? parseNum(data.precio) : 0;
+
+	// HISTORIAL-MONEDA-ORIGINAL 2026-06-12 — total agregado por (tipo, moneda) de
+	// todos los cierres del rango, para el footer en moneda original.
+	const totalMetodos = useMemo(() => {
+		const acc = {};
+		(data?.cierres || []).forEach((c) => {
+			(c.metodosPago || []).forEach((mp) => {
+				const tipo = parseInt(mp.tipo_pago);
+				const moneda = (mp.moneda || "BS").toUpperCase();
+				if (!acc[tipo]) acc[tipo] = {};
+				if (!acc[tipo][moneda]) acc[tipo][moneda] = { dig: 0, real: 0 };
+				acc[tipo][moneda].dig += parseNum(mp.monto_digital);
+				acc[tipo][moneda].real += parseNum(mp.monto_real);
+			});
+		});
+		return acc;
+	}, [data]);
 
 	const verReporteCierre = (cierre) => {
 		// Cierre cajero (tipo_cierre 0): enviar id_usuario para ver esa caja. Cierre admin (1): no enviar usuario.
@@ -413,41 +469,57 @@ export default function HistorialVentasCierre({ onClose }) {
 								{data.cierres.map((c) => {
 									const descuadre = parseNum(c.descuadre);
 									const cuadraOk = Math.abs(descuadre) < 0.01;
+									const agr = agruparMetodos(c.metodosPago);
+									// Renderiza una celda Dig o Real de un tipo con sus monedas apiladas.
+									const celda = (tipo, campo, extraClass = "") => {
+										const lineas = lineasDeTipo(agr, tipo);
+										return (
+											<td className={`px-2 py-1.5 text-right whitespace-nowrap ${extraClass}`}>
+												{lineas.length === 0 ? (
+													<span className="text-gray-300">—</span>
+												) : (
+													lineas.map((l) => (
+														<div key={l.moneda}>{fmtMoneda(l[campo], l.moneda)}</div>
+													))
+												)}
+											</td>
+										);
+									};
 									return (
 										<tr key={c.id} className="hover:bg-gray-50">
-											<td className="px-2 py-1.5 text-gray-800 border-r border-gray-100">
+											<td className="px-2 py-1.5 text-gray-800 border-r border-gray-100 align-top">
 												{c.usuario?.usuario ?? c.id_usuario ?? "—"}
 											</td>
-											<td className="px-2 py-1.5 text-gray-600 border-r border-gray-100 whitespace-nowrap">{c.fecha}</td>
-											<td className="px-2 py-1.5 text-right text-gray-800 border-r border-gray-100">
+											<td className="px-2 py-1.5 text-gray-600 border-r border-gray-100 whitespace-nowrap align-top">{c.fecha}</td>
+											<td className="px-2 py-1.5 text-right text-gray-800 border-r border-gray-100 align-top">
 												{c.numventas ?? 0}
 											</td>
-											{/* Efectivo */}
-											<td className="px-2 py-1.5 text-right text-gray-500">{c.efectivo_digital ?? "0.00"}</td>
-											<td className="px-2 py-1.5 text-right text-gray-800 border-r border-gray-100">{c.efectivo ?? "0.00"}</td>
-											{/* Débito */}
-											<td className="px-2 py-1.5 text-right text-gray-500">{c.debito_digital ?? "0.00"}</td>
-											<td className="px-2 py-1.5 text-right text-gray-800 border-r border-gray-100">{c.debito ?? "0.00"}</td>
+											{/* Efectivo (multimoneda) */}
+											{celda(TIPO_PAGO.EFECTIVO, "dig", "text-gray-500 align-top")}
+											{celda(TIPO_PAGO.EFECTIVO, "real", "text-gray-800 border-r border-gray-100 align-top")}
+											{/* Débito (Bs, pinpad + otros) */}
+											{celda(TIPO_PAGO.DEBITO, "dig", "text-gray-500 align-top")}
+											{celda(TIPO_PAGO.DEBITO, "real", "text-gray-800 border-r border-gray-100 align-top")}
 											{/* Transferencia */}
-											<td className="px-2 py-1.5 text-right text-gray-500">{c.transferencia_digital ?? "0.00"}</td>
-											<td className="px-2 py-1.5 text-right text-gray-800 border-r border-gray-100">{c.transferencia ?? "0.00"}</td>
+											{celda(TIPO_PAGO.TRANSFERENCIA, "dig", "text-gray-500 align-top")}
+											{celda(TIPO_PAGO.TRANSFERENCIA, "real", "text-gray-800 border-r border-gray-100 align-top")}
 											{/* Biopago */}
-											<td className="px-2 py-1.5 text-right text-gray-500">{c.biopago_digital ?? "0.00"}</td>
-											<td className="px-2 py-1.5 text-right text-gray-800 border-r border-gray-100">{c.caja_biopago ?? "0.00"}</td>
-											{/* Cuadre */}
-											<td className={`px-2 py-1.5 text-right font-medium border-r border-gray-100 ${cuadraOk ? "text-green-600" : "text-red-600"}`}>
+											{celda(TIPO_PAGO.BIOPAGO, "dig", "text-gray-500 align-top")}
+											{celda(TIPO_PAGO.BIOPAGO, "real", "text-gray-800 border-r border-gray-100 align-top")}
+											{/* Cuadre (USD, sigue siendo el descuadre consolidado) */}
+											<td className={`px-2 py-1.5 text-right font-medium border-r border-gray-100 align-top ${cuadraOk ? "text-green-600" : "text-red-600"}`}>
 												{c.descuadre ?? "0.00"}
 											</td>
 											{/* Dejar en caja 3 monedas */}
-											<td className="px-2 py-1.5 text-right text-gray-700">{c.dejar_dolar ?? "0.00"}</td>
-											<td className="px-2 py-1.5 text-right text-gray-700">{c.dejar_bss ?? "0.00"}</td>
-											<td className="px-2 py-1.5 text-right text-gray-700 border-r border-gray-100">{c.dejar_peso ?? "0.00"}</td>
+											<td className="px-2 py-1.5 text-right text-gray-700 align-top">{c.dejar_dolar ?? "0.00"}</td>
+											<td className="px-2 py-1.5 text-right text-gray-700 align-top">{c.dejar_bss ?? "0.00"}</td>
+											<td className="px-2 py-1.5 text-right text-gray-700 border-r border-gray-100 align-top">{c.dejar_peso ?? "0.00"}</td>
 											{/* Total */}
-											<td className="px-2 py-1.5 text-right font-medium text-gray-800 border-r border-gray-100">
+											<td className="px-2 py-1.5 text-right font-medium text-gray-800 border-r border-gray-100 align-top">
 												{c.precio ?? "0.00"}
 											</td>
 											{/* Acción */}
-											<td className="px-2 py-1.5 text-center">
+											<td className="px-2 py-1.5 text-center align-top">
 												<button
 													type="button"
 													onClick={() => verReporteCierre(c)}
@@ -462,31 +534,52 @@ export default function HistorialVentasCierre({ onClose }) {
 							</tbody>
 							<tfoot className="bg-gray-100 font-medium">
 								<tr>
-									<td className="px-2 py-1.5 border-r border-gray-200" colSpan={2}>
-										Total
-									</td>
-									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.numventas}</td>
-									{/* Efectivo */}
-									<td className="px-2 py-1.5 text-right text-gray-500">{data.efectivo_digital}</td>
-									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.efectivo}</td>
-									{/* Débito */}
-									<td className="px-2 py-1.5 text-right text-gray-500">{data.debito_digital}</td>
-									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.debito}</td>
-									{/* Transferencia */}
-									<td className="px-2 py-1.5 text-right text-gray-500">{data.transferencia_digital}</td>
-									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.transferencia}</td>
-									{/* Biopago */}
-									<td className="px-2 py-1.5 text-right text-gray-500">{data.biopago_digital}</td>
-									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.caja_biopago}</td>
-									{/* Cuadre */}
-									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.descuadre}</td>
-									{/* Dejar 3 monedas */}
-									<td className="px-2 py-1.5 text-right">{data.dejar_dolar}</td>
-									<td className="px-2 py-1.5 text-right">{data.dejar_bss}</td>
-									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.dejar_peso}</td>
-									{/* Total */}
-									<td className="px-2 py-1.5 text-right border-r border-gray-200">{data.precio}</td>
-									<td className="px-2 py-1.5" />
+									{(() => {
+										// Celda total de un tipo/campo en moneda original (apilada por moneda)
+										const celdaTotal = (tipo, campo, extraClass = "") => {
+											const lineas = lineasDeTipo(totalMetodos, tipo);
+											return (
+												<td className={`px-2 py-1.5 text-right whitespace-nowrap align-top ${extraClass}`}>
+													{lineas.length === 0 ? (
+														<span className="text-gray-300">—</span>
+													) : (
+														lineas.map((l) => (
+															<div key={l.moneda}>{fmtMoneda(l[campo], l.moneda)}</div>
+														))
+													)}
+												</td>
+											);
+										};
+										return (
+											<>
+												<td className="px-2 py-1.5 border-r border-gray-200 align-top" colSpan={2}>
+													Total
+												</td>
+												<td className="px-2 py-1.5 text-right border-r border-gray-200 align-top">{data.numventas}</td>
+												{/* Efectivo */}
+												{celdaTotal(TIPO_PAGO.EFECTIVO, "dig", "text-gray-500")}
+												{celdaTotal(TIPO_PAGO.EFECTIVO, "real", "border-r border-gray-200")}
+												{/* Débito */}
+												{celdaTotal(TIPO_PAGO.DEBITO, "dig", "text-gray-500")}
+												{celdaTotal(TIPO_PAGO.DEBITO, "real", "border-r border-gray-200")}
+												{/* Transferencia */}
+												{celdaTotal(TIPO_PAGO.TRANSFERENCIA, "dig", "text-gray-500")}
+												{celdaTotal(TIPO_PAGO.TRANSFERENCIA, "real", "border-r border-gray-200")}
+												{/* Biopago */}
+												{celdaTotal(TIPO_PAGO.BIOPAGO, "dig", "text-gray-500")}
+												{celdaTotal(TIPO_PAGO.BIOPAGO, "real", "border-r border-gray-200")}
+												{/* Cuadre */}
+												<td className="px-2 py-1.5 text-right border-r border-gray-200 align-top">{data.descuadre}</td>
+												{/* Dejar 3 monedas */}
+												<td className="px-2 py-1.5 text-right align-top">{data.dejar_dolar}</td>
+												<td className="px-2 py-1.5 text-right align-top">{data.dejar_bss}</td>
+												<td className="px-2 py-1.5 text-right border-r border-gray-200 align-top">{data.dejar_peso}</td>
+												{/* Total */}
+												<td className="px-2 py-1.5 text-right border-r border-gray-200 align-top">{data.precio}</td>
+												<td className="px-2 py-1.5" />
+											</>
+										);
+									})()}
 								</tr>
 							</tfoot>
 						</table>

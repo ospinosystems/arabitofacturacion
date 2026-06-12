@@ -2712,14 +2712,16 @@ class PedidosController extends Controller
         $fechaGetCierre2 = $req->fechaGetCierre2;
         $tipoUsuarioCierre = $req->tipoUsuarioCierre;
 
+        // HISTORIAL-MONEDA-ORIGINAL 2026-06-12 — cargar metodosPago (cierres_metodos_pago)
+        // para mostrar Dig/Real en su moneda original (Bs/USD/COP), no convertido a USD.
         if (!$fechaGetCierre && !$fechaGetCierre2) {
-            $cierres = cierres::with("usuario")
+            $cierres = cierres::with(["usuario", "metodosPago"])
                 ->when($tipoUsuarioCierre !== null && $tipoUsuarioCierre !== "", function ($q) use ($tipoUsuarioCierre) {
                     $q->where("tipo_cierre", $tipoUsuarioCierre);
                 })
                 ->orderBy("fecha", "desc");
         } else {
-            $cierres = cierres::with("usuario")
+            $cierres = cierres::with(["usuario", "metodosPago"])
                 ->whereBetween("fecha", [$fechaGetCierre, $fechaGetCierre2])
                 ->when($tipoUsuarioCierre !== null && $tipoUsuarioCierre !== "", function ($q) use ($tipoUsuarioCierre) {
                     $q->where("tipo_cierre", $tipoUsuarioCierre);
