@@ -205,10 +205,34 @@ class PagoPedidosController extends Controller
         // Suma de pago_pedidos en USD. cuenta=1 (factura). Excluimos cuenta=0 (abono deudor).
         // Sumamos todo (positivos y negativos) excepto el ficticio tipo=4 monto=0.00001
         // que mete sendCentral al exportar.
-        $totalPagosUsd = (float) pago_pedidos::where('id_pedido', $idPedido)
+        //
+        // MONTO-USD-CONFIABLE 2026-06-12 (fix #374436) — para débitos imborrable, el monto USD
+        // guardado puede estar corrupto (tasa=1 al persistir → monto USD = monto Bs). Recalcular
+        // el USD de esos desde monto_original (Bs) / tasa del item. El resto suma su monto USD.
+        $tasaItemCuadre = 0.0;
+        $primerItemCuadre = $items->first();
+        if ($primerItemCuadre && (float) $primerItemCuadre->tasa > 1) {
+            $tasaItemCuadre = (float) $primerItemCuadre->tasa;
+        } else {
+            $tasaItemCuadre = (float) ((new PedidosController)->get_moneda()['bs'] ?? 0);
+        }
+
+        $pagosCuenta1 = pago_pedidos::where('id_pedido', $idPedido)
             ->where('cuenta', 1)
             ->whereRaw('ABS(monto) > 0.001') // excluir el ficticio 0.00001
-            ->sum('monto');
+            ->get(['tipo', 'monto', 'monto_original', 'imborrable']);
+
+        $totalPagosUsd = 0.0;
+        foreach ($pagosCuenta1 as $pg) {
+            $esDebitoImborrable = (int) $pg->tipo === 2 && (int) ($pg->imborrable ?? 0) === 1;
+            $montoOrig = (float) $pg->monto_original;
+            if ($esDebitoImborrable && $montoOrig != 0 && $tasaItemCuadre > 1) {
+                // Recalcular desde Bs para evitar el monto USD corrupto
+                $totalPagosUsd += $montoOrig / $tasaItemCuadre;
+            } else {
+                $totalPagosUsd += (float) $pg->monto;
+            }
+        }
 
         $diff = round($totalPedidoUsd - $totalPagosUsd, 4);
         $cuadra = abs($diff) <= $toleranciaUsd;
@@ -300,8 +324,15 @@ class PagoPedidosController extends Controller
                 }
 
                 // Tasa del pedido (histórica del primer item; consistente con setPagoPedido)
+                // TASA-FALLBACK 2026-06-12 (fix #374436) — si el item no tiene tasa, ANTES caía a 1
+                // y persistía monto USD = monto Bs (corrupto: ej 10371.81 USD en vez de 17.8).
+                // Fallback a la tasa global actual para guardar el monto USD correcto.
                 $primerItem = items_pedidos::where('id_pedido', $idPedido)->first();
                 $tasaDolar = $primerItem ? floatval($primerItem->tasa) : 1;
+                if ($tasaDolar <= 1) {
+                    $tasaGlobal = (float) ((new PedidosController)->get_moneda()['bs'] ?? 0);
+                    if ($tasaGlobal > 1) $tasaDolar = $tasaGlobal;
+                }
                 if ($tasaDolar <= 0) $tasaDolar = 1;
                 $montoUsd = $montoBs / $tasaDolar;
 
@@ -828,7 +859,18 @@ class PagoPedidosController extends Controller
                 ->where('tipo', 2)
                 ->where('imborrable', 1)
                 ->get(['referencia', 'monto', 'monto_original']);
-            $debitoUSD += (float) $debitosImborrableEnBD->sum('monto');
+            // MONTO-USD-CONFIABLE 2026-06-12 (fix #374436) — NO confiar en imborrable.monto (USD),
+            // que puede estar corrupto si la tasa era 1 al persistir (ej 10371.81 USD en vez de 17.8).
+            // Recalcular el USD desde monto_original (Bs, siempre correcto) / tasa actual.
+            foreach ($debitosImborrableEnBD as $imb) {
+                $montoOrigBs = (float) $imb->monto_original;
+                if ($montoOrigBs > 0 && $tasaDolar > 1) {
+                    $debitoUSD += $montoOrigBs / $tasaDolar;
+                } else {
+                    // Sin monto_original o sin tasa válida: usar el monto USD guardado como último recurso
+                    $debitoUSD += (float) $imb->monto;
+                }
+            }
 
             // SKIP-MATCHING 2026-06-12 (fix #374436) — el contador del imborrable se construye
             // por (referencia + monto_original en Bs), NO por monto USD calculado. El match por
