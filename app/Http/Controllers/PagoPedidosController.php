@@ -180,15 +180,26 @@ class PagoPedidosController extends Controller
             ->get();
 
         $retencion = (bool) $pedido->retencion;
-        $totalPedidoUsd = 0.0;
+        // ABONO 2026-06-13 (fix #374930) — separar la VENTA (items con producto, contraparte
+        // de pagos cuenta=1) del ABONO a deuda (items sin id_producto, contraparte de pagos
+        // cuenta=0). Antes se sumaba TODO a un solo total y se comparaba solo contra cuenta=1,
+        // así que CUALQUIER abono (transfer/débito/efectivo) se veía como descuadre del 100%
+        // (verificado en data local: peds 409770/398444/337373... cuadra=NO con sumaC0==total).
+        $totalVentaUsd = 0.0;  // items con producto → cuadran contra cuenta=1
+        $totalAbonoUsd = 0.0;  // items sin producto (abono a deuda) → cuadran contra cuenta=0
         foreach ($items as $item) {
-            // Items sin producto (pagos/abonos) no cuentan para el total de venta
+            // Ítem de abono a deuda (id_producto NULL, misma detección que checkIfAbono en
+            // setPagoPedido): su contraparte son los pagos cuenta=0, NO la venta.
+            if (is_null($item->id_producto)) {
+                $totalAbonoUsd += (float) $item->monto;
+                continue;
+            }
             $precioUnitario = $item->precio_unitario;
             if ($precioUnitario === null && $item->producto) {
                 $precioUnitario = $item->producto->precio;
             }
             if ($precioUnitario === null) {
-                // item sin precio (ej: abono) — usar su monto directo
+                // item con producto pero sin precio cargado — usar su monto directo
                 $precioUnitario = $item->monto;
             }
             $precioUnitario = (float) $precioUnitario;
@@ -198,9 +209,10 @@ class PagoPedidosController extends Controller
             $totalDes = round(($item->descuento / 100) * $subtotalLinea, 2);
             $subtotalCDesc = round($subtotalLinea - $totalDes, 2);
             $totalLineaConIva = round($subtotalCDesc * ($retencion ? 1.16 : 1), 2);
-            $totalPedidoUsd += $totalLineaConIva;
+            $totalVentaUsd += $totalLineaConIva;
         }
-        $totalPedidoUsd = round($totalPedidoUsd, 2);
+        $totalVentaUsd = round($totalVentaUsd, 2);
+        $totalAbonoUsd = round($totalAbonoUsd, 2);
 
         // Suma de pago_pedidos en USD. cuenta=1 (factura). Excluimos cuenta=0 (abono deudor).
         // Sumamos todo (positivos y negativos) excepto el ficticio tipo=4 monto=0.00001
@@ -217,31 +229,44 @@ class PagoPedidosController extends Controller
             $tasaItemCuadre = (float) ((new PedidosController)->get_moneda()['bs'] ?? 0);
         }
 
-        $pagosCuenta1 = pago_pedidos::where('id_pedido', $idPedido)
-            ->where('cuenta', 1)
-            ->whereRaw('ABS(monto) > 0.001') // excluir el ficticio 0.00001
-            ->get(['tipo', 'monto', 'monto_original', 'imborrable']);
-
-        $totalPagosUsd = 0.0;
-        foreach ($pagosCuenta1 as $pg) {
-            $esDebitoImborrable = (int) $pg->tipo === 2 && (int) ($pg->imborrable ?? 0) === 1;
-            $montoOrig = (float) $pg->monto_original;
-            if ($esDebitoImborrable && $montoOrig != 0 && $tasaItemCuadre > 1) {
-                // Recalcular desde Bs para evitar el monto USD corrupto
-                $totalPagosUsd += $montoOrig / $tasaItemCuadre;
-            } else {
-                $totalPagosUsd += (float) $pg->monto;
+        // Suma en USD de los pagos de una cuenta dada. Para débitos imborrable recalcula el
+        // USD desde monto_original (Bs)/tasa para evitar el USD corrupto (#374436). Excluye el
+        // ficticio 0.00001 que mete sendCentral al exportar.
+        $sumarPagosUsd = function (int $cuenta) use ($idPedido, $tasaItemCuadre) {
+            $pagos = pago_pedidos::where('id_pedido', $idPedido)
+                ->where('cuenta', $cuenta)
+                ->whereRaw('ABS(monto) > 0.001')
+                ->get(['tipo', 'monto', 'monto_original', 'imborrable']);
+            $total = 0.0;
+            foreach ($pagos as $pg) {
+                $esDebitoImborrable = (int) $pg->tipo === 2 && (int) ($pg->imborrable ?? 0) === 1;
+                $montoOrig = (float) $pg->monto_original;
+                if ($esDebitoImborrable && $montoOrig != 0 && $tasaItemCuadre > 1) {
+                    $total += $montoOrig / $tasaItemCuadre;
+                } else {
+                    $total += (float) $pg->monto;
+                }
             }
-        }
+            return $total;
+        };
 
-        $diff = round($totalPedidoUsd - $totalPagosUsd, 4);
-        $cuadra = abs($diff) <= $toleranciaUsd;
+        $totalPagosUsd = $sumarPagosUsd(1);      // contraparte de la VENTA (cuenta=1 factura)
+        $totalPagosAbonoUsd = $sumarPagosUsd(0); // contraparte del ABONO a deuda (cuenta=0)
+
+        // Cada lado cuadra por separado: venta↔cuenta=1, abono↔cuenta=0. Así una venta de
+        // contado sigue exigiendo Σcuenta=1 == total de productos (no reabre el "delito"),
+        // y un abono legítimo cuadra contra sus propios pagos cuenta=0.
+        $diffVenta = round($totalVentaUsd - $totalPagosUsd, 4);
+        $diffAbono = round($totalAbonoUsd - $totalPagosAbonoUsd, 4);
+        $diff = round($diffVenta + $diffAbono, 4);
+        $cuadra = abs($diffVenta) <= $toleranciaUsd && abs($diffAbono) <= $toleranciaUsd;
 
         // DEVOLUCION-PURA 2026-06-11 — un pedido SIN items con pagos netos negativos
         // (refund de sobrante viejo, caso B/D) es legítimo: total_pedido=0 pero los pagos
         // son negativos porque representan dinero que SALE. NO es un descuadre.
         // Lo reconocemos: items=0 + total_pagos < 0 → devolución pura → cuadra.
-        $esDevolucionPura = $items->count() === 0 && $totalPagosUsd < -0.001;
+        // (combinado cuenta=1+cuenta=0 por si el refund se asentó en cuenta=0)
+        $esDevolucionPura = $items->count() === 0 && ($totalPagosUsd + $totalPagosAbonoUsd) < -0.001;
         if ($esDevolucionPura) {
             $cuadra = true;
         }
@@ -264,14 +289,22 @@ class PagoPedidosController extends Controller
 
         return [
             'cuadra' => $cuadra,
-            'total_pedido_usd' => round($totalPedidoUsd, 4),
-            'total_pagos_usd' => round($totalPagosUsd, 4),
+            // Combinados (venta + abono) para mensajes y compatibilidad con callers existentes.
+            'total_pedido_usd' => round($totalVentaUsd + $totalAbonoUsd, 4),
+            'total_pagos_usd' => round($totalPagosUsd + $totalPagosAbonoUsd, 4),
             'diferencia_usd' => $diff,
             'tolerancia' => $toleranciaUsd,
             'items_count' => $items->count(),
             'retencion' => $retencion,
             'es_devolucion_pura' => $esDevolucionPura,
             'es_transferencia_mercancia' => $esTransferenciaMercancia,
+            // Desglose venta vs abono (#374930) — para diagnóstico.
+            'total_venta_usd' => round($totalVentaUsd, 4),
+            'total_abono_usd' => round($totalAbonoUsd, 4),
+            'pagos_cuenta1_usd' => round($totalPagosUsd, 4),
+            'pagos_cuenta0_usd' => round($totalPagosAbonoUsd, 4),
+            'diferencia_venta_usd' => $diffVenta,
+            'diferencia_abono_usd' => $diffAbono,
         ];
     }
 
