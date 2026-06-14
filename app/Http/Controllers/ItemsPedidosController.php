@@ -112,6 +112,18 @@ class ItemsPedidosController extends Controller
                 return Response::json(["msj"=>"Error: Ítem no encontrado","estado"=>false]);
             }
 
+            // SOBRECOBRO 2026-06-13 (caso #426735) — NO permitir cambiar el descuento de un
+            // pedido YA FACTURADO (estado=1): bajaría el total por debajo de lo ya cobrado y
+            // dejaría un sobrecobro fantasma (efectivo > total). El cuadre solo valida al cerrar,
+            // no cuando se toca un descuento después. Si hace falta, debe ir por devolución.
+            $pedidoGuard = pedidos::find($item->id_pedido);
+            if ($pedidoGuard && (int) $pedidoGuard->estado === 1) {
+                return Response::json([
+                    "msj" => "Error: El pedido #{$item->id_pedido} ya está facturado. No se puede aplicar o cambiar un descuento (generaría un sobrecobro). Use una devolución.",
+                    "estado" => false
+                ]);
+            }
+
             $descuento = floatval($req->descuento);
             if ($descuento > 0) {
                 // Verificar cliente (sigue siendo un requisito real; central exigirá id_cliente en la solicitud)
@@ -213,6 +225,16 @@ class ItemsPedidosController extends Controller
             if ($pedido && $pedido->isdevolucionOriginalid) {
                 return Response::json([
                     "msj" => "No se puede aplicar descuento en un pedido de devolución vinculado a factura original",
+                    "estado" => false
+                ]);
+            }
+
+            // SOBRECOBRO 2026-06-13 (caso #426735) — NO permitir cambiar el descuento de un
+            // pedido YA FACTURADO (estado=1): bajaría el total por debajo de lo ya cobrado y
+            // dejaría un sobrecobro fantasma (efectivo > total). Si hace falta, vía devolución.
+            if ($pedido && (int) $pedido->estado === 1) {
+                return Response::json([
+                    "msj" => "Error: El pedido #{$req->index} ya está facturado. No se puede aplicar o cambiar un descuento (generaría un sobrecobro). Use una devolución.",
                     "estado" => false
                 ]);
             }
