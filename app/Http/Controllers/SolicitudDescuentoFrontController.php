@@ -174,6 +174,20 @@ class SolicitudDescuentoFrontController extends Controller
             return Response::json($resultado);
         }
 
+        // SOBRECOBRO 2026-06-13 (caso #426735) — NO aplicar el descuento a un pedido ya
+        // facturado (estado=1): bajaría el total por debajo de lo ya cobrado y dejaría un
+        // sobrecobro fantasma (efectivo > total). Devolver sin aplicar.
+        $pedidoEstado = \App\Models\pedidos::find((int) $request->id_pedido);
+        if ($pedidoEstado && (int) $pedidoEstado->estado === 1) {
+            Log::channel('single')->warning('[solicitudDescuentoBackendVerificar] descuento NO aplicado: pedido ya facturado', [
+                'id_pedido' => (int) $request->id_pedido,
+            ]);
+            return Response::json(array_merge($resultado, [
+                'aplicado' => false,
+                'msj_aplicacion' => 'Pedido ya facturado: no se aplica el descuento para evitar sobrecobro.',
+            ]));
+        }
+
         // Aprobado + monto_porcentaje → aplicar a items_pedidos del pedido.
         $idsProductos = $resultado['data']['ids_productos'] ?? [];
         if (!is_array($idsProductos) || count($idsProductos) === 0) {
