@@ -2880,11 +2880,23 @@ class PedidosController extends Controller
             // 3. Array de puntos + lotesPinpad separado (formato actual del frontend limpio)
             $puntos_adicionales_request = [];
             if (is_array($dataPuntosAdicionales)) {
-                // Array plano - asumimos que son solo "otros puntos"
-                $puntos_adicionales_request = [
-                    "puntos" => $dataPuntosAdicionales,
-                    "lotes_pinpad" => $lotesPinpad
-                ];
+                // OJO: con body JSON, Laravel decodifica el objeto {puntos, lotes_pinpad}
+                // como ARRAY ASOCIATIVO, no como stdClass. Hay que distinguir el formato
+                // anidado (array con clave 'puntos') del array plano de lotes.
+                if (array_key_exists('puntos', $dataPuntosAdicionales)
+                    || array_key_exists('lotes_pinpad', $dataPuntosAdicionales)) {
+                    // Objeto anidado decodificado como array asociativo
+                    $puntos_adicionales_request = [
+                        "puntos" => $dataPuntosAdicionales['puntos'] ?? [],
+                        "lotes_pinpad" => $dataPuntosAdicionales['lotes_pinpad'] ?? $lotesPinpad
+                    ];
+                } else {
+                    // Array plano - asumimos que son solo "otros puntos"
+                    $puntos_adicionales_request = [
+                        "puntos" => $dataPuntosAdicionales,
+                        "lotes_pinpad" => $lotesPinpad
+                    ];
+                }
             } else if (is_object($dataPuntosAdicionales)) {
                 // Objeto anidado
                 $puntos_adicionales_request = [
