@@ -2898,7 +2898,41 @@ class PedidosController extends Controller
                     "lotes_pinpad" => $lotesPinpad
                 ];
             }
-            
+
+            // ========== GUARD: NUNCA GUARDAR UN PUNTO DE VENTA SIN BANCO ==========
+            // El cajero puede omitir el banco de un lote de "otros puntos" (DEBITO/CREDITO).
+            // La validación del front (facturar.js) es esquivable, así que aquí se rechaza
+            // de forma dura cualquier punto cuyo banco quede en null/''/bid: sin id.
+            // Los lotes pinpad NO entran: su banco viene autodetectado del POS y central
+            // hace el mapeo (ver FIX 2026-05-26 en facturar.js guardar_cierre).
+            $bancoVacio = function ($banco) {
+                if ($banco === null) return true;
+                $b = trim((string) $banco);
+                if ($b === '' || strcasecmp($b, 'null') === 0 || strcasecmp($b, 'undefined') === 0) return true;
+                // Formato del front "bid:<id>"; "bid:" o "bid:0" se considera sin banco.
+                if (stripos($b, 'bid:') === 0) {
+                    $id = trim(substr($b, 4));
+                    return $id === '' || $id === '0';
+                }
+                return false;
+            };
+            $puntosSinBanco = [];
+            foreach (($puntos_adicionales_request['puntos'] ?? []) as $idx => $punto) {
+                $p = is_object($punto) ? (array) $punto : (array) $punto;
+                $categoria = $p['categoria'] ?? null;
+                if ($categoria === 'pinpad') continue; // pinpad: banco autodetectado
+                if ($bancoVacio($p['banco'] ?? null)) {
+                    $puntosSinBanco[] = $idx + 1;
+                }
+            }
+            if (!empty($puntosSinBanco)) {
+                return Response::json([
+                    "msj" => "No se puede guardar el cierre: hay puntos de venta sin banco asignado (fila(s): "
+                        . implode(", ", $puntosSinBanco) . "). Seleccione el banco de cada lote antes de guardar.",
+                    "estado" => false,
+                ]);
+            }
+
             // RECALCULAR TODO usando cerrarFun con datos originales
             // NOTA: total_punto se calcula automáticamente dentro de cerrarFun
             
