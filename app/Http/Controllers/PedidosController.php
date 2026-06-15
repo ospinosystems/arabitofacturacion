@@ -2917,12 +2917,14 @@ class PedidosController extends Controller
                 return false;
             };
             $puntosSinBanco = [];
-            foreach (($puntos_adicionales_request['puntos'] ?? []) as $idx => $punto) {
+            $filaPunto = 0;
+            foreach (($puntos_adicionales_request['puntos'] ?? []) as $punto) {
+                $filaPunto++;
                 $p = is_object($punto) ? (array) $punto : (array) $punto;
                 $categoria = $p['categoria'] ?? null;
                 if ($categoria === 'pinpad') continue; // pinpad: banco autodetectado
                 if ($bancoVacio($p['banco'] ?? null)) {
-                    $puntosSinBanco[] = $idx + 1;
+                    $puntosSinBanco[] = $filaPunto;
                 }
             }
             if (!empty($puntosSinBanco)) {
