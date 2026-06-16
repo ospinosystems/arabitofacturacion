@@ -936,6 +936,35 @@ class PedidosController extends Controller
             }
             // Central retiró el espejo y setPedidoInCentralFromMaster ya dejó el pedido
             // local en estado=0/export=0; la eliminación continúa por la ruta normal.
+        } elseif ($pedidoExportado) {
+            // ORPHAN-GUARD 2026-06-13 — aunque el flag local export=0, PUEDE existir un espejo
+            // en central: el export crea el espejo en central y luego marca export=1 local, pero
+            // si la RESPUESTA se pierde (central lenta/caída — los cURL 28 que vimos), el espejo
+            // queda creado y export=0 local. Al borrar, el bloque de arriba se saltaba → espejo
+            // HUÉRFANO en central (verificado: el delete de central enmascara el no-match como
+            // estado=true). Retiro idempotente y SIN efectos locales (deletePedidosEspejoCentral
+            // NO toca pago_pedidos, a diferencia del wrapper setPedidoInCentralFromMaster).
+            try {
+                $resEspejo = (new sendCentral)->deletePedidosEspejoCentral([$id]);
+                if (is_array($resEspejo) && !empty($resEspejo["extraidos"])) {
+                    // El espejo ya fue EXTRAÍDO por el destino → borrar el local duplicaría
+                    // inventario. Bloquear igual que un export normal extraído.
+                    return Response::json([
+                        "estado" => false,
+                        "msj" => "No se eliminó: existe un espejo YA EXTRAÍDO en central para el pedido #{$id}. " . ($resEspejo["msj"] ?? ""),
+                    ]);
+                }
+                if (is_array($resEspejo) && !empty($resEspejo["eliminados"])) {
+                    \Log::warning("[delPedidoFun] espejo HUÉRFANO retirado al borrar (pedido local export=0)", [
+                        "id_pedido" => $id,
+                        "resultado" => $resEspejo,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                // Best-effort: si central no responde NO bloqueamos el borrado normal. El comando
+                // pedidos:sanear-exportados es la red de seguridad para cualquier huérfano restante.
+                \Log::warning("[delPedidoFun] no se pudo verificar espejo en central (export=0): " . $e->getMessage(), ["id_pedido" => $id]);
+            }
         }
 
         $items = items_pedidos::with("producto")->where("id_pedido", $id)->get();
