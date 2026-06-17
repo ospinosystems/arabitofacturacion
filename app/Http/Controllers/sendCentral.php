@@ -405,13 +405,13 @@ class sendCentral extends Controller
                                         continue;
                                     }
 
-                                    // RENOMBRADO: el verde NO existe todavía. NO renombramos el id del
-                                    // rojo (UPDATE de la PK): hay tablas hijas sin ON UPDATE CASCADE
-                                    // (tcd_orden_items, warehouse_*) que lo bloquean con error 1451.
-                                    // En su lugar creamos el verde como copia del rojo, repuntamos TODAS
-                                    // las hijas hacia el verde (ya existe -> sin 1452) y borramos el rojo
-                                    // (ya sin hijas que lo referencien -> sin 1451). Como en sucursal no
-                                    // hay índices únicos en inventarios, clonar es seguro.
+                                    // RENOMBRADO: el verde NO existe todavía. Cambiamos el id del rojo a
+                                    // verde. No se puede:
+                                    //  - clonar el rojo (hay índice único en codigo_barras -> error 1062), ni
+                                    //  - dejar que el UPDATE de la PK dispare los cascades (hay hijas sin
+                                    //    ON UPDATE CASCADE: tcd_orden_items, warehouse_* -> error 1451).
+                                    // Solución: desactivar FOREIGN_KEY_CHECKS, cambiar la PK y repuntar a
+                                    // mano TODAS las hijas. Al reactivar, MySQL no revalida filas existentes.
                                     $this->generateReport('product_replacement', [[
                                         'deleted_id' => $task["id_producto_rojo"],
                                         'replacement_id' => $task["id_producto_verde"],
@@ -420,16 +420,17 @@ class sendCentral extends Controller
                                         'date' => date('Y-m-d H:i:s')
                                     ]]);
 
-                                    // Crear el verde clonando todas las columnas del rojo con el nuevo id.
-                                    $nuevoVerde = $producto_rojo->getAttributes();
-                                    $nuevoVerde['id'] = $task["id_producto_verde"];
-                                    DB::table('inventarios')->insert($nuevoVerde);
-
-                                    // Repuntar TODAS las hijas del rojo hacia el verde (ya existe).
-                                    $updates = $repointChildren($task["id_producto_rojo"], $task["id_producto_verde"]);
-
-                                    // Borrar el rojo: ya no quedan hijas que lo referencien.
-                                    DB::table('inventarios')->where('id', $task["id_producto_rojo"])->delete();
+                                    try {
+                                        DB::statement('SET FOREIGN_KEY_CHECKS=0');
+                                        // Cambiar la PK del rojo al id del verde.
+                                        DB::table('inventarios')
+                                            ->where('id', $task["id_producto_rojo"])
+                                            ->update(['id' => $task["id_producto_verde"], 'updated_at' => date('Y-m-d H:i:s')]);
+                                        // Repuntar a mano TODAS las hijas (el cascade no corre con checks off).
+                                        $updates = $repointChildren($task["id_producto_rojo"], $task["id_producto_verde"]);
+                                    } finally {
+                                        DB::statement('SET FOREIGN_KEY_CHECKS=1');
+                                    }
 
                                     $stats['tasks_success']++;
                                     $idsSuccess[] = $task["id_producto_verde"];
