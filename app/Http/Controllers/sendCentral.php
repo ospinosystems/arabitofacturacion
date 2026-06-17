@@ -241,13 +241,19 @@ class sendCentral extends Controller
                         
                         $taskChanges = [];
 
-                        // Repunta todas las tablas hijas de id_producto $from -> $to.
+                        // Tablas opcionales (módulos nuevos) que referencian inventarios por
+                        // `inventario_id` y NO tienen ON UPDATE CASCADE. Pueden no existir en
+                        // sucursales viejas, por eso comprobamos su existencia una sola vez.
+                        $hasTcdItems = \Schema::hasTable('tcd_orden_items');
+                        $hasWhMov    = \Schema::hasTable('warehouse_movements');
+                        $hasWhInv    = \Schema::hasTable('warehouse_inventory');
+
+                        // Repunta TODAS las tablas hijas de inventarios desde $from -> $to.
                         // IMPORTANTE: el destino ($to) ya debe existir en `inventarios`, de lo
-                        // contrario las FK con ON UPDATE CASCADE (movimientos_inventariounitarios,
-                        // items_pedidos, garantias, inventarios_novedades, items_facturas,
-                        // transferencias_inventario_items) fallan con error 1452. La tabla
-                        // movimientos_inventarios NO tiene FK, así que siempre se repunta a mano.
-                        $repointChildren = function($from, $to) {
+                        // contrario las FK fallan con error 1452. Incluye tanto las hijas por
+                        // `id_producto` como las nuevas por `inventario_id` (tcd/warehouse), que
+                        // si no se repuntan bloquean (restrict) o borran en cascada al rojo.
+                        $repointChildren = function($from, $to) use ($hasTcdItems, $hasWhMov, $hasWhInv) {
                             $result = [
                                 'items_pedidos' => DB::table('items_pedidos')->where("id_producto", $from)->update(["id_producto" => $to]),
                                 'garantias' => DB::table('garantias')->where("id_producto", $from)->update(["id_producto" => $to]),
@@ -270,6 +276,17 @@ class sendCentral extends Controller
                             }
                             $result['items_factura'] = DB::table('items_facturas')->where("id_producto", $from)->update(["id_producto" => $to]);
                             $result['transferencias_inventario_items'] = DB::table('transferencias_inventario_items')->where("id_producto", $from)->update(["id_producto" => $to]);
+
+                            // Tablas que referencian por inventario_id (módulos tcd/warehouse)
+                            if ($hasTcdItems) {
+                                $result['tcd_orden_items'] = DB::table('tcd_orden_items')->where("inventario_id", $from)->update(["inventario_id" => $to]);
+                            }
+                            if ($hasWhMov) {
+                                $result['warehouse_movements'] = DB::table('warehouse_movements')->where("inventario_id", $from)->update(["inventario_id" => $to]);
+                            }
+                            if ($hasWhInv) {
+                                $result['warehouse_inventory'] = DB::table('warehouse_inventory')->where("inventario_id", $from)->update(["inventario_id" => $to]);
+                            }
 
                             return $result;
                         };
@@ -388,10 +405,13 @@ class sendCentral extends Controller
                                         continue;
                                     }
 
-                                    // RENOMBRADO: el verde NO existe todavía. Renombramos PRIMERO el id del
-                                    // rojo a verde; las tablas con FK ON UPDATE CASCADE se actualizan solas.
-                                    // (Repuntar las hijas antes de que el verde exista era la causa del
-                                    // error 1452: no se puede apuntar a un id_producto inexistente.)
+                                    // RENOMBRADO: el verde NO existe todavía. NO renombramos el id del
+                                    // rojo (UPDATE de la PK): hay tablas hijas sin ON UPDATE CASCADE
+                                    // (tcd_orden_items, warehouse_*) que lo bloquean con error 1451.
+                                    // En su lugar creamos el verde como copia del rojo, repuntamos TODAS
+                                    // las hijas hacia el verde (ya existe -> sin 1452) y borramos el rojo
+                                    // (ya sin hijas que lo referencien -> sin 1451). Como en sucursal no
+                                    // hay índices únicos en inventarios, clonar es seguro.
                                     $this->generateReport('product_replacement', [[
                                         'deleted_id' => $task["id_producto_rojo"],
                                         'replacement_id' => $task["id_producto_verde"],
@@ -400,14 +420,16 @@ class sendCentral extends Controller
                                         'date' => date('Y-m-d H:i:s')
                                     ]]);
 
-                                    // UPDATE inventarios SET id=verde WHERE id=rojo (dispara el cascade).
-                                    $producto_rojo->id = $task["id_producto_verde"];
-                                    $producto_rojo->save();
+                                    // Crear el verde clonando todas las columnas del rojo con el nuevo id.
+                                    $nuevoVerde = $producto_rojo->getAttributes();
+                                    $nuevoVerde['id'] = $task["id_producto_verde"];
+                                    DB::table('inventarios')->insert($nuevoVerde);
 
-                                    // Repuntar lo que el cascade NO cubre: movimientos_inventarios no tiene
-                                    // FK. Las demás tablas ya fueron movidas por el cascade, así que aquí
-                                    // resultan 0 filas (inofensivo).
+                                    // Repuntar TODAS las hijas del rojo hacia el verde (ya existe).
                                     $updates = $repointChildren($task["id_producto_rojo"], $task["id_producto_verde"]);
+
+                                    // Borrar el rojo: ya no quedan hijas que lo referencien.
+                                    DB::table('inventarios')->where('id', $task["id_producto_rojo"])->delete();
 
                                     $stats['tasks_success']++;
                                     $idsSuccess[] = $task["id_producto_verde"];
