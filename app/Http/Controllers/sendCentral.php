@@ -62,8 +62,8 @@ class sendCentral extends Controller
 
     public function path()
     {
-        //return "http://127.0.0.1:8001";
-        return "https://titanio-central.com";
+        return "http://127.0.0.1:8001";
+        //return "https://titanio-central.com";
     }
 
     public function sends()
@@ -240,6 +240,40 @@ class sendCentral extends Controller
                         \Log::info('Procesando ' . count($res["tareas"]) . ' tareas');
                         
                         $taskChanges = [];
+
+                        // Repunta todas las tablas hijas de id_producto $from -> $to.
+                        // IMPORTANTE: el destino ($to) ya debe existir en `inventarios`, de lo
+                        // contrario las FK con ON UPDATE CASCADE (movimientos_inventariounitarios,
+                        // items_pedidos, garantias, inventarios_novedades, items_facturas,
+                        // transferencias_inventario_items) fallan con error 1452. La tabla
+                        // movimientos_inventarios NO tiene FK, así que siempre se repunta a mano.
+                        $repointChildren = function($from, $to) {
+                            $result = [
+                                'items_pedidos' => DB::table('items_pedidos')->where("id_producto", $from)->update(["id_producto" => $to]),
+                                'garantias' => DB::table('garantias')->where("id_producto", $from)->update(["id_producto" => $to]),
+                                'movimientos_inventario' => DB::table('movimientos_inventarios')->where("id_producto", $from)->update(["id_producto" => $to]),
+                                'movimientos_inventario_unitario' => DB::table('movimientos_inventariounitarios')->where("id_producto", $from)->update(["id_producto" => $to]),
+                                'inventarios_novedades' => DB::table('inventarios_novedades')->where("id_producto", $from)->update(["id_producto" => $to]),
+                            ];
+
+                            // items_facturas: borrar primero los que causarían duplicado (mismo id_factura)
+                            $duplicates = DB::table('items_facturas as if1')
+                                ->join('items_facturas as if2', function($join) use ($from, $to) {
+                                    $join->on('if1.id_factura', '=', 'if2.id_factura')
+                                        ->where('if1.id_producto', '=', $from)
+                                        ->where('if2.id_producto', '=', $to);
+                                })
+                                ->select('if1.id')
+                                ->get();
+                            if ($duplicates->count() > 0) {
+                                DB::table('items_facturas')->whereIn('id', $duplicates->pluck('id'))->delete();
+                            }
+                            $result['items_factura'] = DB::table('items_facturas')->where("id_producto", $from)->update(["id_producto" => $to]);
+                            $result['transferencias_inventario_items'] = DB::table('transferencias_inventario_items')->where("id_producto", $from)->update(["id_producto" => $to]);
+
+                            return $result;
+                        };
+
                         $chunks = array_chunk($res["tareas"], 20);
                         
                         foreach ($chunks as $chunkIndex => $chunk) {
@@ -304,75 +338,29 @@ class sendCentral extends Controller
                                         continue;
                                     }
                                     
-                                    // Actualizar todas las tablas relacionadas
-                                    if($task["verde_sucursal"]==$codigo_origen){
-                                        $updates = [
-                                            'items_pedidos' => DB::table('items_pedidos')->where("id_producto", $task["verde_idinsucursal"])->update(["id_producto" => $task["id_producto_verde"]]),
-                                            'garantias' => DB::table('garantias')->where("id_producto", $task["verde_idinsucursal"])->update(["id_producto" => $task["id_producto_verde"]]),
-                                            'movimientos_inventario' => DB::table('movimientos_inventarios')->where("id_producto", $task["verde_idinsucursal"])->update(["id_producto" => $task["id_producto_verde"]]),
-                                            'movimientos_inventario_unitario' => DB::table('movimientos_inventariounitarios')->where("id_producto", $task["verde_idinsucursal"])->update(["id_producto" => $task["id_producto_verde"]]),
-                                            'inventarios_novedades' => DB::table('inventarios_novedades')->where("id_producto", $task["verde_idinsucursal"])->update(["id_producto" => $task["id_producto_verde"]]),
-                                            'items_factura' => function() use ($task) {
-                                                // Primero identificamos los registros que causarían duplicados
-                                                $duplicates = DB::table('items_facturas as if1')
-                                                    ->join('items_facturas as if2', function($join) use ($task) {
-                                                        $join->on('if1.id_factura', '=', 'if2.id_factura')
-                                                            ->where('if1.id_producto', '=', $task["verde_idinsucursal"])
-                                                            ->where('if2.id_producto', '=', $task["id_producto_verde"]);
-                                                    })
-                                                    ->select('if1.id')
-                                                    ->get();
-                                                
-                                                // Eliminamos los registros que causarían duplicados
-                                                if ($duplicates->count() > 0) {
-                                                    DB::table('items_facturas')
-                                                        ->whereIn('id', $duplicates->pluck('id'))
-                                                        ->delete();
-                                                }
-                                                
-                                                // Ahora podemos actualizar sin problemas de duplicados
-                                                return DB::table('items_facturas')
-                                                    ->where("id_producto", $task["verde_idinsucursal"])
-                                                    ->update(["id_producto" => $task["id_producto_verde"]]);
-                                            },
-                                            'transferencias_inventario_items' => DB::table('transferencias_inventario_items')->where("id_producto", $task["verde_idinsucursal"])->update(["id_producto" => $task["id_producto_verde"]])
-                                        ];
-                                    }
-                                    $updates = [
-                                       'items_pedidos' => DB::table('items_pedidos')->where("id_producto", $task["id_producto_rojo"])->update(["id_producto" => $task["id_producto_verde"]]),
-                                       'garantias' => DB::table('garantias')->where("id_producto", $task["id_producto_rojo"])->update(["id_producto" => $task["id_producto_verde"]]),
-                                       'movimientos_inventario' => DB::table('movimientos_inventarios')->where("id_producto", $task["id_producto_rojo"])->update(["id_producto" => $task["id_producto_verde"]]),
-                                       'movimientos_inventario_unitario' => DB::table('movimientos_inventariounitarios')->where("id_producto", $task["id_producto_rojo"])->update(["id_producto" => $task["id_producto_verde"]]),
-                                       'inventarios_novedades' => DB::table('inventarios_novedades')->where("id_producto", $task["id_producto_rojo"])->update(["id_producto" => $task["id_producto_verde"]]),
-                                       'items_factura' => function() use ($task) {
-                                           // Primero identificamos los registros que causarían duplicados
-                                           $duplicates = DB::table('items_facturas as if1')
-                                               ->join('items_facturas as if2', function($join) use ($task) {
-                                                   $join->on('if1.id_factura', '=', 'if2.id_factura')
-                                                       ->where('if1.id_producto', '=', $task["id_producto_rojo"])
-                                                       ->where('if2.id_producto', '=', $task["id_producto_verde"]);
-                                               })
-                                               ->select('if1.id')
-                                               ->get();
-                                           
-                                           // Eliminamos los registros que causarían duplicados
-                                           if ($duplicates->count() > 0) {
-                                               DB::table('items_facturas')
-                                                   ->whereIn('id', $duplicates->pluck('id'))
-                                                   ->delete();
-                                           }
-                                           
-                                           // Ahora podemos actualizar sin problemas de duplicados
-                                           return DB::table('items_facturas')
-                                               ->where("id_producto", $task["id_producto_rojo"])
-                                               ->update(["id_producto" => $task["id_producto_verde"]]);
-                                       },
-                                       'transferencias_inventario_items' => DB::table('transferencias_inventario_items')->where("id_producto", $task["id_producto_rojo"])->update(["id_producto" => $task["id_producto_verde"]])
-                                    
-                                    ];
+                                    // ============================================================
+                                    // Reasignación de id_producto: rojo -> verde.
+                                    // ============================================================
 
                                     if ($producto_verde_existente) {
-                                        // Si el producto verde existe, sumar las cantidades
+                                        // FUSIÓN: el verde ya existe en `inventarios`. Como su id está
+                                        // ocupado no podemos renombrar el rojo a verde, así que repuntamos
+                                        // las tablas hijas del rojo hacia el verde (existe -> la FK no se
+                                        // viola) y luego eliminamos el rojo.
+                                        $updates = $repointChildren($task["id_producto_rojo"], $task["id_producto_verde"]);
+
+                                        // Si el verde además existe localmente bajo otro idinsucursal,
+                                        // fusionarlo también: repuntar sus hijas y sumar su cantidad.
+                                        if ($task["verde_sucursal"] == $codigo_origen
+                                            && $task["verde_idinsucursal"] != $task["id_producto_verde"]) {
+                                            $producto_verde_insucursal = inventario::find($task["verde_idinsucursal"]);
+                                            if ($producto_verde_insucursal) {
+                                                $repointChildren($task["verde_idinsucursal"], $task["id_producto_verde"]);
+                                                $producto_verde_existente->cantidad += $producto_verde_insucursal->cantidad;
+                                                $producto_verde_insucursal->delete();
+                                            }
+                                        }
+
                                         $cantidad_anterior = $producto_verde_existente->cantidad;
                                         $producto_verde_existente->cantidad += $producto_rojo->cantidad;
                                         $producto_verde_existente->save();
@@ -393,10 +381,17 @@ class sendCentral extends Controller
                                             'tipo' => 'Fusión de productos',
                                             'descripcion' => 'Fusión de producto ' . $task["id_producto_rojo"] . ' en ' . $task["id_producto_verde"]
                                         ]);
+
+                                        $taskChange['status'] = 'Exitoso';
+                                        $taskChange['details'] = 'Tarea procesada correctamente';
+                                        $taskChanges[] = $taskChange;
                                         continue;
                                     }
-                                    
-                                    // Registrar el reemplazo de producto
+
+                                    // RENOMBRADO: el verde NO existe todavía. Renombramos PRIMERO el id del
+                                    // rojo a verde; las tablas con FK ON UPDATE CASCADE se actualizan solas.
+                                    // (Repuntar las hijas antes de que el verde exista era la causa del
+                                    // error 1452: no se puede apuntar a un id_producto inexistente.)
                                     $this->generateReport('product_replacement', [[
                                         'deleted_id' => $task["id_producto_rojo"],
                                         'replacement_id' => $task["id_producto_verde"],
@@ -405,50 +400,44 @@ class sendCentral extends Controller
                                         'date' => date('Y-m-d H:i:s')
                                     ]]);
 
-                                    // Actualizar el ID en la tabla inventario
-                                    $producto_rojo = inventario::find($task["id_producto_rojo"]);
-                                    if ($producto_rojo) {
-                                        $producto_rojo->id = $task["id_producto_verde"];
-                                        $producto_rojo->save();
-                                        $stats['tasks_success']++;
-                                        $idsSuccess[] = $task["id_producto_verde"];
-                                        $taskResult['updates'] = $updates;
-                                        
-                                        if($task["verde_sucursal"]==$codigo_origen){
-                                            $producto_verde_insucursal = inventario::find($task["verde_idinsucursal"]);
-                                            if($producto_verde_insucursal){
-                                                $ct_verde = $producto_verde_insucursal->cantidad;
-                                                $producto_verde = inventario::find($task["id_producto_verde"]);
-                                                $producto_verde->cantidad += $ct_verde;
-                                                if($producto_verde->save()){    
-                                                    $idsSuccess[] = $task["id_producto_verde"];
-                                                    // Generar reporte del movimiento
-                                                    $this->generateReport('product_movement', [
-                                                        'id_producto' => $task["id_producto_verde"],
-                                                        'cantidad_anterior' => $ct_verde,
-                                                        'cantidad_nueva' => $producto_verde->cantidad,
-                                                        'tipo' => 'Fusión de productos',
-                                                        'descripcion' => 'Fusión de producto ' . $task["id_producto_rojo"] . ' en ' . $task["id_producto_verde"]
-                                                    ]);
+                                    // UPDATE inventarios SET id=verde WHERE id=rojo (dispara el cascade).
+                                    $producto_rojo->id = $task["id_producto_verde"];
+                                    $producto_rojo->save();
 
-                                                    // Eliminar el producto verde después de actualizar
-                                                    $producto_verde_insucursal->delete();
-                                                }
-                                            }
-                                        }
-                                        $stats['tasks_details']['successful'][] = $taskResult;
-                                        \Log::info('Tarea exitosa procesada', $taskResult);
-                                    } else {
-                                        $taskResult['error'] = 'Producto rojo no encontrado';
-                                        $stats['tasks_error']++;
-                                        $stats['tasks_details']['failed'][] = $taskResult;
-                                        \Log::warning('Tarea fallida: Producto rojo no encontrado', $taskResult);
-                                    }
+                                    // Repuntar lo que el cascade NO cubre: movimientos_inventarios no tiene
+                                    // FK. Las demás tablas ya fueron movidas por el cascade, así que aquí
+                                    // resultan 0 filas (inofensivo).
+                                    $updates = $repointChildren($task["id_producto_rojo"], $task["id_producto_verde"]);
 
                                     $stats['tasks_success']++;
+                                    $idsSuccess[] = $task["id_producto_verde"];
                                     $taskResult['updates'] = $updates;
+
+                                    // Si el verde también existía localmente bajo otro idinsucursal,
+                                    // fusionarlo: el verde ya existe (recién renombrado), así que podemos
+                                    // repuntar sus hijas, sumar su cantidad y eliminarlo.
+                                    if ($task["verde_sucursal"] == $codigo_origen
+                                        && $task["verde_idinsucursal"] != $task["id_producto_verde"]) {
+                                        $producto_verde_insucursal = inventario::find($task["verde_idinsucursal"]);
+                                        if ($producto_verde_insucursal) {
+                                            $ct_verde = $producto_verde_insucursal->cantidad;
+                                            $repointChildren($task["verde_idinsucursal"], $task["id_producto_verde"]);
+                                            $producto_verde = inventario::find($task["id_producto_verde"]);
+                                            $producto_verde->cantidad += $ct_verde;
+                                            $producto_verde->save();
+                                            $producto_verde_insucursal->delete();
+                                            $this->generateReport('product_movement', [
+                                                'id_producto' => $task["id_producto_verde"],
+                                                'cantidad_anterior' => $producto_verde->cantidad - $ct_verde,
+                                                'cantidad_nueva' => $producto_verde->cantidad,
+                                                'tipo' => 'Fusión de productos',
+                                                'descripcion' => 'Fusión de producto ' . $task["id_producto_rojo"] . ' en ' . $task["id_producto_verde"]
+                                            ]);
+                                        }
+                                    }
+
                                     $stats['tasks_details']['successful'][] = $taskResult;
-                                    \Log::info('Tarea exitosa procesada', $taskResult);
+                                    \Log::info('Tarea exitosa procesada (renombrado)', $taskResult);
 
                                     // Update task change status
                                     $taskChange['status'] = 'Exitoso';
@@ -1942,6 +1931,21 @@ class sendCentral extends Controller
     public function setPedidoInCentralFromMaster($id, $id_sucursal, $type = "add")
     {
         try {
+            // GUARD: no exportar un pedido sin ítems o con ítems en cantidad 0.
+            // Solo aplica al "add" (export); el "delete"/desexport debe poder pasar siempre.
+            if ($type == "add") {
+                $pedidoExport = pedidos::with("items")->find($id);
+                if (!$pedidoExport || $pedidoExport->items->isEmpty()) {
+                    return Response::json(["estado" => false, "msj" => "No se puede exportar el pedido #{$id}: no tiene ítems."]);
+                }
+                $itemsCero = $pedidoExport->items->filter(function ($it) {
+                    return abs((float) $it->cantidad) < 0.0001;
+                });
+                if ($itemsCero->isNotEmpty()) {
+                    return Response::json(["estado" => false, "msj" => "No se puede exportar el pedido #{$id}: tiene {$itemsCero->count()} ítem(s) con cantidad 0."]);
+                }
+            }
+
             $codigo_origen = $this->getOrigen();
             $response = $this->requestToCentral('post', "/setPedidoInCentralFromMasters", [
                     "codigo_origen" => $codigo_origen,
@@ -2249,7 +2253,7 @@ class sendCentral extends Controller
         }
     }
     function settransferenciaDici(Request $req) {
-        /* DB::beginTransaction();
+        DB::beginTransaction();
         try {
             $type = $req->actualizando ? "update" : "add";
             $codigo_origen = $this->getOrigen();
@@ -2266,6 +2270,20 @@ class sendCentral extends Controller
                 $transferencia->observacion = $req->observaciones;
                 $transferencia->save();
 
+                // Reintegrar al inventario las cantidades de los items anteriores antes de borrarlos
+                // (así el update queda como un delta neto: reintegra lo viejo, descuenta lo nuevo).
+                foreach (transferencias_inventario_items::where('id_transferencia', $transferencia->id)->get() as $oldItem) {
+                    $prodOld = inventario::find($oldItem->id_producto);
+                    if ($prodOld) {
+                        (new \App\Http\Controllers\InventarioController)->descontarInventario(
+                            $prodOld->id,
+                            $prodOld->cantidad + $oldItem->cantidad,
+                            $prodOld->cantidad,
+                            null,
+                            "TRANS.REINT DICI #" . $transferencia->id
+                        );
+                    }
+                }
                 // Eliminar items existentes
                 transferencias_inventario_items::where('id_transferencia', $transferencia->id)->delete();
 
@@ -2283,6 +2301,15 @@ class sendCentral extends Controller
                             'cantidad' => $item['cantidad'],
                             'cantidad_original_stock_inventario' => $producto->cantidad
                         ]);
+
+                        // Descontar del inventario local (queda auditado en movimientos).
+                        (new \App\Http\Controllers\InventarioController)->descontarInventario(
+                            $producto->id,
+                            $producto->cantidad - $item['cantidad'],
+                            $producto->cantidad,
+                            null,
+                            "TRANS.SAL DICI #" . $transferencia->id
+                        );
                     }
                 }
             } else {
@@ -2308,6 +2335,15 @@ class sendCentral extends Controller
                             'cantidad' => $item['cantidad'],
                             'cantidad_original_stock_inventario' => $producto->cantidad
                         ]);
+
+                        // Descontar del inventario local (queda auditado en movimientos).
+                        (new \App\Http\Controllers\InventarioController)->descontarInventario(
+                            $producto->id,
+                            $producto->cantidad - $item['cantidad'],
+                            $producto->cantidad,
+                            null,
+                            "TRANS.SAL DICI #" . $transferencia->id
+                        );
                     }
                 }
             }
@@ -2370,7 +2406,68 @@ class sendCentral extends Controller
                 "estado" => false,
                 "msj" => "Error: " . $e->getMessage()." LINE ".$e->getLine(),
             ]);
-        } */
+        }
+    }
+
+    /**
+     * Elimina/anula una transferencia DICI: retira el espejo en central, reintegra el
+     * inventario local de sus items y borra la transferencia local. Aborta si el espejo
+     * ya fue EXTRAÍDO/recibido en destino (evita duplicar inventario).
+     * $req->id = id del espejo en central (lo que el front tiene en la lista),
+     * con fallback al id local de transferencias_inventario.
+     */
+    function delTransferenciaDici(Request $req) {
+        DB::beginTransaction();
+        try {
+            $transferencia = transferencias_inventario::where("id_transferencia_central", $req->id)->first();
+            if (!$transferencia) {
+                $transferencia = transferencias_inventario::find($req->id);
+            }
+            if (!$transferencia) {
+                return Response::json(["estado" => false, "msj" => "Transferencia no encontrada localmente (id {$req->id})."]);
+            }
+
+            // 1) Retirar el espejo en central (idinsucursal del espejo = id local de la transferencia).
+            $resEspejo = $this->deletePedidosEspejoCentral([$transferencia->id]);
+            if (is_array($resEspejo) && !empty($resEspejo["extraidos"])) {
+                DB::rollBack();
+                return Response::json([
+                    "estado" => false,
+                    "msj" => "No se puede eliminar: la transferencia ya fue EXTRAÍDA/recibida en destino.",
+                ]);
+            }
+            if (!is_array($resEspejo) || empty($resEspejo["estado"])) {
+                DB::rollBack();
+                return Response::json([
+                    "estado" => false,
+                    "msj" => "Central no confirmó el retiro del espejo. " . (is_array($resEspejo) ? ($resEspejo["msj"] ?? "") : ""),
+                ]);
+            }
+
+            // 2) Reintegrar el inventario de cada item (auditado en movimientos).
+            foreach (transferencias_inventario_items::where("id_transferencia", $transferencia->id)->get() as $it) {
+                $prod = inventario::find($it->id_producto);
+                if ($prod) {
+                    (new \App\Http\Controllers\InventarioController)->descontarInventario(
+                        $prod->id,
+                        $prod->cantidad + $it->cantidad,
+                        $prod->cantidad,
+                        null,
+                        "TRANS.ANUL DICI #" . $transferencia->id
+                    );
+                }
+            }
+
+            // 3) Borrar la transferencia local + sus items.
+            transferencias_inventario_items::where("id_transferencia", $transferencia->id)->delete();
+            $transferencia->delete();
+
+            DB::commit();
+            return Response::json(["estado" => true, "msj" => "Transferencia eliminada y stock reintegrado."]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return Response::json(["estado" => false, "msj" => "Error: " . $e->getMessage() . " LINE " . $e->getLine()]);
+        }
     }
     function reqMipedidos(Request $req) {
         
