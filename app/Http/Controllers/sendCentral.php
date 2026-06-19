@@ -291,29 +291,29 @@ class sendCentral extends Controller
                             return $result;
                         };
 
-                        // Inserta un movimiento MARCADOR de fusión en el histórico del superviviente.
-                        // OJO: cantidad=0 a propósito. El stock del producto absorbido entra al
-                        // histórico vía sus propios movimientos (repuntados al verde), que ya aportan
-                        // sus deltas reales; si el marcador sumara otra vez la cantidad habría doble
-                        // conteo y la secuencia recalculada arrancaría en negativo. El marcador solo
-                        // documenta el evento (de qué producto y cuánto) con su fecha.
-                        // $origenProducto = modelo inventario del producto absorbido (rojo o verde local).
+                        // Registra un movimiento en el histórico del producto (movimientos_inventariounitarios)
+                        // por la cantidad sumada al fusionar dos productos, dejando traza con fecha y origen.
+                        // $origenProducto = modelo inventario del producto absorbido (rojo o verde local);
+                        // se denormaliza su descripción y código porque después se elimina.
                         $registrarMovFusion = function($idProducto, $cantidadSumada, $cantidadFinal, $origenProducto) {
+                            if ($cantidadSumada == 0) {
+                                return; // sin suma no hay movimiento que registrar
+                            }
                             try {
                                 $desc = trim((string)($origenProducto->descripcion ?? ''));
                                 $cod  = $origenProducto->codigo_barras ?: ($origenProducto->codigo_proveedor ?: $origenProducto->id);
-                                $origen = 'FUSIÓN: +' . $cantidadSumada . ' de ' . $desc . ' [' . $cod . '] (id ' . $origenProducto->id . ')';
+                                $origen = 'FUSIÓN: ' . $desc . ' [' . $cod . '] (id ' . $origenProducto->id . ')';
 
                                 $mov = new movimientosinventariounitario;
                                 $mov->id_producto   = $idProducto;
-                                $mov->cantidad      = 0;               // marcador; no aporta al total (evita doble conteo)
-                                $mov->cantidadafter = $cantidadFinal;  // se reajusta en el recálculo
+                                $mov->cantidad      = $cantidadSumada;   // delta sumado por la fusión
+                                $mov->cantidadafter = $cantidadFinal;    // cantidad resultante
                                 $mov->origen        = mb_substr($origen, 0, 250);
                                 $mov->id_usuario    = session('id_usuario') ?? 1;
                                 $mov->id_pedido     = null;
                                 $mov->save();
                             } catch (\Exception $e) {
-                                \Log::warning('No se pudo registrar marcador de fusión para producto ' . $idProducto . ': ' . $e->getMessage());
+                                \Log::warning('No se pudo registrar movimiento de fusión para producto ' . $idProducto . ': ' . $e->getMessage());
                             }
                         };
 
@@ -332,33 +332,6 @@ class sendCentral extends Controller
                                     ->update(['origen' => DB::raw("LEFT(CONCAT(COALESCE(origen, ''), " . $tagQuoted . "), 250)")]);
                             } catch (\Exception $e) {
                                 \Log::warning('No se pudo etiquetar movimientos de fusión del producto ' . $sourceId . ': ' . $e->getMessage());
-                            }
-                        };
-
-                        // Recalcula la columna cantidadafter de TODO el histórico del producto para que
-                        // sea correlativa tras fusionar dos historias. Se ancla al stock real actual y
-                        // se camina hacia atrás (del más reciente al más antiguo) restando cada delta.
-                        // Así la secuencia termina exactamente en el stock real.
-                        $recalcularCantidadAfter = function($idProducto) {
-                            try {
-                                $prod = inventario::find($idProducto);
-                                if (!$prod) {
-                                    return;
-                                }
-                                $running = $prod->cantidad; // stock real actual = cantidadafter del más reciente
-                                $movs = DB::table('movimientos_inventariounitarios')
-                                    ->where('id_producto', $idProducto)
-                                    ->orderBy('created_at', 'desc')
-                                    ->orderBy('id', 'desc')
-                                    ->get(['id', 'cantidad']);
-                                foreach ($movs as $m) {
-                                    DB::table('movimientos_inventariounitarios')
-                                        ->where('id', $m->id)
-                                        ->update(['cantidadafter' => $running]);
-                                    $running = $running - $m->cantidad; // cantidadafter del movimiento anterior
-                                }
-                            } catch (\Exception $e) {
-                                \Log::warning('No se pudo recalcular cantidadafter del producto ' . $idProducto . ': ' . $e->getMessage());
                             }
                         };
 
@@ -451,7 +424,7 @@ class sendCentral extends Controller
                                                 $repointChildren($task["verde_idinsucursal"], $task["id_producto_verde"]);
                                                 $producto_verde_existente->cantidad += $ctLocal;
                                                 $producto_verde_existente->save();
-                                                // Histórico: marcador de fusión del verde local
+                                                // Histórico: suma por fusión del verde local
                                                 $registrarMovFusion($task["id_producto_verde"], $ctLocal, $producto_verde_existente->cantidad, $producto_verde_insucursal);
                                                 $producto_verde_insucursal->delete();
                                             }
@@ -461,15 +434,12 @@ class sendCentral extends Controller
                                         $ctRojo = $producto_rojo->cantidad;
                                         $producto_verde_existente->cantidad += $ctRojo;
                                         $producto_verde_existente->save();
-                                        // Histórico: marcador de fusión del producto rojo
+                                        // Histórico: suma por fusión del producto rojo
                                         $registrarMovFusion($task["id_producto_verde"], $ctRojo, $producto_verde_existente->cantidad, $producto_rojo);
                                         \Log::info('Sumas de CT. CT_ROJO= '.$producto_rojo->cantidad.' id_rojo= '.$producto_rojo->id.' & CT_VERDE= '.$producto_verde_existente->cantidad.' id_verde= '.$producto_verde_existente->id);
 
                                         // Eliminar el producto rojo después de la fusión
                                         $producto_rojo->delete();
-
-                                        // Recalcular la secuencia de cantidadafter del verde (historias fusionadas).
-                                        $recalcularCantidadAfter($task["id_producto_verde"]);
                                         $stats['tasks_success']++;
                                         $idsSuccess[] = $task["id_producto_verde"];
                                         $taskResult['updates'] = $updates;
@@ -535,11 +505,9 @@ class sendCentral extends Controller
                                             $producto_verde = inventario::find($task["id_producto_verde"]);
                                             $producto_verde->cantidad += $ct_verde;
                                             $producto_verde->save();
-                                            // Histórico: marcador de fusión del verde local
+                                            // Histórico: suma por fusión del verde local
                                             $registrarMovFusion($task["id_producto_verde"], $ct_verde, $producto_verde->cantidad, $producto_verde_insucursal);
                                             $producto_verde_insucursal->delete();
-                                            // Recalcular la secuencia de cantidadafter (historias fusionadas).
-                                            $recalcularCantidadAfter($task["id_producto_verde"]);
                                             $this->generateReport('product_movement', [
                                                 'id_producto' => $task["id_producto_verde"],
                                                 'cantidad_anterior' => $producto_verde->cantidad - $ct_verde,
