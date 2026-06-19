@@ -831,9 +831,10 @@ class PagosReferenciasController extends Controller
             if ($modoTransferencia === 'central') {
                 $resultCentral = (new sendCentral)->deleteTranferenciaAprobacion(
                     $pagos_referencias->id_pedido,
-                    $pagos_referencias->descripcion // loteserial/referencia
+                    $pagos_referencias->descripcion, // loteserial/referencia
+                    $pagos_referencias->id // idinsucursal: clave única con la que central creó la transferencia
                 );
-                
+
                 \Log::info("Resultado eliminar en central:", [
                     'result' => $resultCentral,
                     'tipo_estado' => isset($resultCentral['estado']) ? gettype($resultCentral['estado']) : 'no existe',

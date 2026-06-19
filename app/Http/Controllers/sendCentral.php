@@ -62,8 +62,8 @@ class sendCentral extends Controller
 
     public function path()
     {
-        //return "http://127.0.0.1:8001";
-        return "https://titanio-central.com";
+        return "http://127.0.0.1:8001";
+        //return "https://titanio-central.com";
     }
 
     public function sends()
@@ -2281,6 +2281,14 @@ class sendCentral extends Controller
             $type = $req->actualizando ? "update" : "add";
             $codigo_origen = $this->getOrigen();
 
+            // DEADLOCK-FIX — descontar los productos SIEMPRE en el mismo orden (id ascendente).
+            // Sin esto, dos transferencias concurrentes que tocan los mismos productos en distinto
+            // orden generan espera circular con lockForUpdate → deadlock (1213). Ordenando por
+            // id_producto, todas adquieren los locks en el mismo orden y no hay deadlock.
+            $itemsOrdenados = collect($req->items ?? [])
+                ->sortBy(fn ($it) => (int) (is_array($it) ? ($it['id_producto_insucursal'] ?? 0) : ($it->id_producto_insucursal ?? 0)))
+                ->values()->all();
+
             if ($req->actualizando) {
                 // Actualizar transferencia existente
                 $transferencia = transferencias_inventario::where("id_transferencia_central",$req->id)->first();
@@ -2311,7 +2319,7 @@ class sendCentral extends Controller
                 transferencias_inventario_items::where('id_transferencia', $transferencia->id)->delete();
 
                 // Crear nuevos items
-                foreach($req->items as $item) {
+                foreach($itemsOrdenados as $item) {
                     $producto = inventario::find($item['id_producto_insucursal']);
                     // Verificar si hay suficiente cantidad disponible
                     if($producto) {
@@ -2346,7 +2354,7 @@ class sendCentral extends Controller
                 ]);
 
                 // Crear items
-                foreach($req->items as $item) {
+                foreach($itemsOrdenados as $item) {
                     $producto = inventario::find($item['id_producto_insucursal']);
                     if($producto) {
                         if ($producto->cantidad < $item['cantidad']) {
@@ -3305,13 +3313,14 @@ class sendCentral extends Controller
         }
     }
 
-    function deleteTranferenciaAprobacion($id_pedido, $loteserial) {
+    function deleteTranferenciaAprobacion($id_pedido, $loteserial, $idinsucursal = null) {
         try {
             $codigo_origen = $this->getOrigen();
-            
+
             \Log::info("Intentando eliminar transferencia en central", [
                 'id_pedido' => $id_pedido,
                 'loteserial' => $loteserial,
+                'idinsucursal' => $idinsucursal,
                 'codigo_origen' => $codigo_origen
             ]);
 
@@ -3319,6 +3328,10 @@ class sendCentral extends Controller
                     "codigo_origen" => $codigo_origen,
                     "id_pedido" => $id_pedido,
                     "loteserial" => $loteserial, // referencia/descripcion de la transferencia
+                    // MATCH 2026-06-19 — id de la pagos_referencias local. Central lo guardó como
+                    // idinsucursal al crear; es la clave ÚNICA para borrar la transferencia exacta
+                    // (loteserial puede traer prefijo y id_pedido puede no coincidir → caso #431049).
+                    "idinsucursal" => $idinsucursal,
                 ], ['timeout' => 30]
             );
 
