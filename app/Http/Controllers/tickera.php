@@ -1115,7 +1115,9 @@ class tickera extends Controller
         $printer->setEmphasis(false);
         $printer->setTextSize(1,1);
         $printer -> text("\n");
-        $printer->text("ORDEN DE DESPACHO");
+        // Si el pedido fue EXPORTADO (transferencia de mercancía a otra sucursal), el ticket
+        // es una transferencia, no una orden de despacho normal.
+        $printer->text(!empty($pedido->export) ? "TRANSFERENCIA" : "ORDEN DE DESPACHO");
         $printer -> text("\n");
         $printer->text($sucursal->sucursal);
         $printer -> text("\n");
