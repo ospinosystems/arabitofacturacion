@@ -291,6 +291,26 @@ class sendCentral extends Controller
                             return $result;
                         };
 
+                        // Registra un movimiento en el histórico del producto (movimientos_inventariounitarios)
+                        // por la cantidad sumada al fusionar dos productos, dejando traza con fecha y origen.
+                        $registrarMovFusion = function($idProducto, $cantidadSumada, $cantidadFinal, $idOrigen) {
+                            if ($cantidadSumada == 0) {
+                                return; // sin suma no hay movimiento que registrar
+                            }
+                            try {
+                                $mov = new movimientosinventariounitario;
+                                $mov->id_producto   = $idProducto;
+                                $mov->cantidad      = $cantidadSumada;   // delta sumado por la fusión
+                                $mov->cantidadafter = $cantidadFinal;    // cantidad resultante
+                                $mov->origen        = 'FUSIÓN DE PRODUCTOS (' . $idOrigen . ' -> ' . $idProducto . ')';
+                                $mov->id_usuario    = session('id_usuario') ?? 1;
+                                $mov->id_pedido     = null;
+                                $mov->save();
+                            } catch (\Exception $e) {
+                                \Log::warning('No se pudo registrar movimiento de fusión para producto ' . $idProducto . ': ' . $e->getMessage());
+                            }
+                        };
+
                         $chunks = array_chunk($res["tareas"], 20);
                         
                         foreach ($chunks as $chunkIndex => $chunk) {
@@ -373,14 +393,21 @@ class sendCentral extends Controller
                                             $producto_verde_insucursal = inventario::find($task["verde_idinsucursal"]);
                                             if ($producto_verde_insucursal) {
                                                 $repointChildren($task["verde_idinsucursal"], $task["id_producto_verde"]);
-                                                $producto_verde_existente->cantidad += $producto_verde_insucursal->cantidad;
+                                                $ctLocal = $producto_verde_insucursal->cantidad;
+                                                $producto_verde_existente->cantidad += $ctLocal;
+                                                $producto_verde_existente->save();
+                                                // Histórico: suma por fusión del verde local
+                                                $registrarMovFusion($task["id_producto_verde"], $ctLocal, $producto_verde_existente->cantidad, $task["verde_idinsucursal"]);
                                                 $producto_verde_insucursal->delete();
                                             }
                                         }
 
                                         $cantidad_anterior = $producto_verde_existente->cantidad;
-                                        $producto_verde_existente->cantidad += $producto_rojo->cantidad;
+                                        $ctRojo = $producto_rojo->cantidad;
+                                        $producto_verde_existente->cantidad += $ctRojo;
                                         $producto_verde_existente->save();
+                                        // Histórico: suma por fusión del producto rojo
+                                        $registrarMovFusion($task["id_producto_verde"], $ctRojo, $producto_verde_existente->cantidad, $task["id_producto_rojo"]);
                                         \Log::info('Sumas de CT. CT_ROJO= '.$producto_rojo->cantidad.' id_rojo= '.$producto_rojo->id.' & CT_VERDE= '.$producto_verde_existente->cantidad.' id_verde= '.$producto_verde_existente->id);
 
                                         // Eliminar el producto rojo después de la fusión
@@ -448,6 +475,8 @@ class sendCentral extends Controller
                                             $producto_verde = inventario::find($task["id_producto_verde"]);
                                             $producto_verde->cantidad += $ct_verde;
                                             $producto_verde->save();
+                                            // Histórico: suma por fusión del verde local
+                                            $registrarMovFusion($task["id_producto_verde"], $ct_verde, $producto_verde->cantidad, $task["verde_idinsucursal"]);
                                             $producto_verde_insucursal->delete();
                                             $this->generateReport('product_movement', [
                                                 'id_producto' => $task["id_producto_verde"],
