@@ -62,8 +62,8 @@ class sendCentral extends Controller
 
     public function path()
     {
-        return "http://127.0.0.1:8001";   
-        //return "https://titanio-central.com";
+        // return "http://127.0.0.1:8001"; // SOLO para pruebas locales — NUNCA en producción
+        return "https://titanio-central.com";
     }
 
     public function sends()
