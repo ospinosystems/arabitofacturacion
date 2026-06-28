@@ -832,7 +832,8 @@ class PagosReferenciasController extends Controller
                 $resultCentral = (new sendCentral)->deleteTranferenciaAprobacion(
                     $pagos_referencias->id_pedido,
                     $pagos_referencias->descripcion, // loteserial/referencia
-                    $pagos_referencias->id // idinsucursal: clave única con la que central creó la transferencia
+                    $pagos_referencias->id, // idinsucursal: clave única con la que central creó la transferencia
+                    $pagos_referencias->monto // monto: fallback para transferencias autovalidar
                 );
 
                 \Log::info("Resultado eliminar en central:", [

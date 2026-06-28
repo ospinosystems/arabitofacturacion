@@ -62,8 +62,8 @@ class sendCentral extends Controller
 
     public function path()
     {
-        //return "http://127.0.0.1:8001";
-        return "https://titanio-central.com";
+        return "http://127.0.0.1:8001";   
+        //return "https://titanio-central.com";
     }
 
     public function sends()
@@ -3372,7 +3372,7 @@ class sendCentral extends Controller
         }
     }
 
-    function deleteTranferenciaAprobacion($id_pedido, $loteserial, $idinsucursal = null) {
+    function deleteTranferenciaAprobacion($id_pedido, $loteserial, $idinsucursal = null, $monto = null) {
         try {
             $codigo_origen = $this->getOrigen();
 
@@ -3380,6 +3380,7 @@ class sendCentral extends Controller
                 'id_pedido' => $id_pedido,
                 'loteserial' => $loteserial,
                 'idinsucursal' => $idinsucursal,
+                'monto' => $monto,
                 'codigo_origen' => $codigo_origen
             ]);
 
@@ -3391,6 +3392,10 @@ class sendCentral extends Controller
                     // idinsucursal al crear; es la clave ÚNICA para borrar la transferencia exacta
                     // (loteserial puede traer prefijo y id_pedido puede no coincidir → caso #431049).
                     "idinsucursal" => $idinsucursal,
+                    // FALLBACK AUTOVALIDAR 2026-06-27 — monto para el match por
+                    // (id_sucursal, id_pedido, monto, referencia) de transferencias autovalidar
+                    // (idinsucursal temporal negativo + loteserial normalizado por el banco).
+                    "monto" => $monto,
                 ], ['timeout' => 30]
             );
 
