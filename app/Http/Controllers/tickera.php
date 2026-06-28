@@ -1522,6 +1522,12 @@ class tickera extends Controller
                 $ipReal = gethostbyname($nombre_equipo);
                 $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo]);
         }
+
+        if($codigo_origen=="upata"){
+                $nombre_equipo = "caja2";
+                $ipReal = gethostbyname($nombre_equipo);
+                $response = $this->makeFiscalRequest($ipReal, $parametros, ['origen' => $codigo_origen, 'caja' => $caja, 'nombre_equipo' => $nombre_equipo]);
+        }
         
         if($codigo_origen=="elsombrero"){
                 $nombre_equipo = "caja1";
