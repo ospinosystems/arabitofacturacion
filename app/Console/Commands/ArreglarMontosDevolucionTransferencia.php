@@ -5,8 +5,8 @@ namespace App\Console\Commands;
 use App\Models\pago_pedidos;
 use App\Models\pagos_referencias;
 use App\Models\items_pedidos;
-use App\Support\BancoMoneda;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -14,18 +14,20 @@ use Illuminate\Support\Facades\DB;
  *
  * Corrige los pagos históricos del bug donde, en una DEVOLUCIÓN sin items por
  * transferencia, el pago tipo=1 guardó el monto EN BS de la referencia como si fuera
- * USD (1:1), en vez de convertirlo. El fix de código ya evita los nuevos; este comando
- * arregla los que ya quedaron mal.
+ * USD (1:1), en vez de convertirlo. El fix de código ya evita los nuevos.
  *
  * Enfoque (según el flujo real):
  *   1. Parte de `pagos_referencias` (tipo=1) cargadas en la fecha indicada.
- *   2. Por cada pedido de esas refs: confirma que NO tiene items (devolución pura) y
- *      que SÍ tiene un pago registrado (pago_pedidos tipo=1).
- *   3. Mira la MONEDA del banco de cada ref (BancoMoneda::esDivisa, del catálogo central):
- *      - banco en Bs  → el USD correcto = monto_ref / tasa.
- *      - banco en USD → el USD correcto = monto_ref (directo).
- *   4. Si el pago está guardado 1:1 con el Bs (sin convertir), lo corrige al USD real,
+ *   2. Por cada pedido: confirma que NO tiene items (devolución pura) y que SÍ tiene
+ *      un pago registrado (pago_pedidos tipo=1).
+ *   3. Mira la MONEDA del banco de cada ref (catálogo de central):
+ *      - banco en Bs  → USD correcto = monto_ref / tasa.
+ *      - banco en USD → USD correcto = monto_ref (directo).
+ *   4. Si el pago está 1:1 con el Bs (sin convertir), lo corrige al USD real,
  *      conservando el signo y seteando monto_original (moneda del banco) + moneda.
+ *
+ * El catálogo de bancos se trae de central UNA vez con reintentos y se cachea 1h, así
+ * el --aplicar reusa lo que trajo el dry-run aunque central esté intermitente.
  *
  * SEGURO: dry-run por defecto; solo toca pagos cuya firma es EXACTAMENTE la del bug
  * (monto == suma Bs de las refs SIN convertir, y distinto del USD correcto).
@@ -36,9 +38,12 @@ class ArreglarMontosDevolucionTransferencia extends Command
                             {--fecha= : Fecha (YYYY-MM-DD) de las referencias a revisar. OBLIGATORIA.}
                             {--hasta= : Fecha fin (YYYY-MM-DD). Default = --fecha (un solo día).}
                             {--tasa= : Tasa Bs/USD a usar. Si no se da, se toma de `monedas` (tipo=1) para la fecha.}
+                            {--refrescar-bancos : Ignora el catálogo cacheado y lo vuelve a traer de central.}
                             {--aplicar : Ejecuta la corrección. Sin esta bandera solo lista (dry-run).}';
 
     protected $description = 'Corrige pagos de transferencia (tipo=1) de DEVOLUCIONES sin items donde el Bs quedó guardado como USD (1:1). Recalcula el USD según la moneda del banco.';
+
+    private const CACHE_KEY = 'arreglo_devol_catalogo_bancos';
 
     public function handle(): int
     {
@@ -50,14 +55,34 @@ class ArreglarMontosDevolucionTransferencia extends Command
         $hasta = $this->option('hasta') ?: $fecha;
         $aplicar = (bool) $this->option('aplicar');
 
-        // Guard: el catálogo de bancos (de central) es necesario para clasificar la moneda.
-        // Sin él, esDivisa cae a false y podría malinterpretar un banco en dólares.
-        $catCount = $this->contarCatalogoBancos();
-        if ($catCount === 0) {
-            $this->error('No se pudo cargar el catálogo de bancos desde central (0 bancos). ' .
-                'Es necesario para clasificar la moneda del banco. Verificá que central esté accesible y reintentá.');
+        // Catálogo de bancos (de central) — necesario para clasificar la moneda del banco.
+        if ($this->option('refrescar-bancos')) {
+            Cache::forget(self::CACHE_KEY);
+        }
+        $bancos = $this->cargarCatalogo();
+        if (empty($bancos)) {
+            $this->error('No se pudo cargar el catálogo de bancos desde central (0 bancos) tras varios intentos. ' .
+                'Central está intermitente. Esperá unos segundos y reintentá; una vez que cargue, queda cacheado 1h.');
             return self::FAILURE;
         }
+        // Mapas locales para clasificar moneda sin volver a llamar a central.
+        [$byId, $byCodigo] = $this->indexarBancos($bancos);
+        $esDivisa = function ($banco) use ($byId, $byCodigo) {
+            if ($banco === null || $banco === '') return false;
+            $v = (string) $banco;
+            $b = null;
+            if (str_starts_with($v, 'bid:')) {
+                $idStr = substr($v, 4);
+                if (ctype_digit($idStr)) $b = $byId[(int) $idStr] ?? null;
+            } else {
+                $b = $byCodigo[$v] ?? null;
+            }
+            if ($b !== null) {
+                return strtolower((string) ($b['moneda'] ?? '')) === 'dolar';
+            }
+            // Fallback legacy: nombres que siempre fueron divisa.
+            return in_array(strtoupper(trim($v)), ['ZELLE', 'BINANCE', 'AIRTM'], true);
+        };
 
         // Tasa Bs/USD: --tasa o, si no, la activa en `monedas` para la fecha.
         $tasa = $this->option('tasa') ? (float) $this->option('tasa') : null;
@@ -75,7 +100,7 @@ class ArreglarMontosDevolucionTransferencia extends Command
             return self::FAILURE;
         }
 
-        $this->info("Rango: {$fecha} → {$hasta} | Tasa Bs/USD: {$tasa} | Catálogo bancos: {$catCount}");
+        $this->info("Rango: {$fecha} → {$hasta} | Tasa Bs/USD: {$tasa} | Catálogo bancos: " . count($bancos));
 
         // 1) Pedidos que tienen referencias de transferencia (tipo=1) cargadas en el rango.
         $pedidoIds = pagos_referencias::where('tipo', 1)
@@ -110,10 +135,10 @@ class ArreglarMontosDevolucionTransferencia extends Command
             $monedas = [];
             foreach ($refs as $r) {
                 $m = (float) $r->monto;
-                $esDiv = BancoMoneda::esDivisa($r->banco);
+                $div = $esDivisa($r->banco);
                 $bsSum += $m;
-                $monedas[] = $esDiv ? 'dolar' : 'bs';
-                $correctUsd += $esDiv ? $m : ($m / $tasa);
+                $monedas[] = $div ? 'dolar' : 'bs';
+                $correctUsd += $div ? $m : ($m / $tasa);
             }
             $monedaUnica = (count(array_unique($monedas)) === 1) ? $monedas[0] : null;
 
@@ -121,8 +146,7 @@ class ArreglarMontosDevolucionTransferencia extends Command
             $signo = $cur < 0 ? -1 : 1;
 
             // 4) Firma EXACTA del bug: el pago está 1:1 con el Bs (== suma de refs sin convertir)
-            // Y distinto del USD correcto. NO matchea pagos ya correctos ni bancos en dólares
-            // (cuyo USD correcto == el monto guardado).
+            // Y distinto del USD correcto. NO matchea pagos ya correctos ni bancos en dólares.
             $esBuggy = abs(abs($cur) - abs($bsSum)) < 0.5
                     && abs(abs($cur) - abs($correctUsd)) > 0.5;
             if (!$esBuggy) {
@@ -173,15 +197,49 @@ class ArreglarMontosDevolucionTransferencia extends Command
         return self::SUCCESS;
     }
 
-    /** Cuenta los bancos del catálogo (de central vía el proxy local). */
-    private function contarCatalogoBancos(): int
+    /**
+     * Trae el catálogo de bancos de central UNA vez (con reintentos) y lo cachea 1h.
+     * Así el --aplicar reusa lo que trajo el dry-run aunque central esté intermitente.
+     */
+    private function cargarCatalogo(): array
     {
-        try {
-            $resp = (new \App\Http\Controllers\BancosListController())->getBancos(new \Illuminate\Http\Request());
-            $payload = json_decode($resp->getContent(), true);
-            return is_array($payload['bancos'] ?? null) ? count($payload['bancos']) : 0;
-        } catch (\Throwable $e) {
-            return 0;
+        $cached = Cache::get(self::CACHE_KEY);
+        if (is_array($cached) && count($cached) > 0) {
+            return $cached;
         }
+
+        for ($i = 1; $i <= 5; $i++) {
+            try {
+                $resp = (new \App\Http\Controllers\BancosListController())->getBancos(new \Illuminate\Http\Request());
+                $payload = json_decode($resp->getContent(), true);
+                $bancos = $payload['bancos'] ?? [];
+                if (is_array($bancos) && count($bancos) > 0) {
+                    Cache::put(self::CACHE_KEY, $bancos, now()->addHour());
+                    return $bancos;
+                }
+            } catch (\Throwable $e) {
+                // reintentar
+            }
+            if ($i < 5) {
+                $this->line("  Catálogo no respondió, reintentando ({$i}/5)...");
+                sleep(2);
+            }
+        }
+        return [];
+    }
+
+    /** @return array{0: array<int,array>, 1: array<string,array>} */
+    private function indexarBancos(array $bancos): array
+    {
+        $byId = [];
+        $byCodigo = [];
+        foreach ($bancos as $b) {
+            if (!is_array($b) || !isset($b['id'])) continue;
+            $byId[(int) $b['id']] = $b;
+            if (!empty($b['codigo'])) {
+                $byCodigo[(string) $b['codigo']] = $b;
+            }
+        }
+        return [$byId, $byCodigo];
     }
 }
