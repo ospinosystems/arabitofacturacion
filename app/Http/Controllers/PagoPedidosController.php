@@ -1064,6 +1064,8 @@ class PagoPedidosController extends Controller
 
                         $monto_tra = floatval($req->transferencia);
                         $montodolares = 0.0;
+                        $montoOriginalRefs = 0.0; // suma en la moneda ORIGINAL de cada banco (Bs o USD)
+                        $monedasRefs = [];        // moneda de cada ref según el banco
                         $bs = (new PedidosController)->get_moneda()["bs"];
                         
                         // Obtener todas las referencias del pedido
@@ -1081,8 +1083,11 @@ class PagoPedidosController extends Controller
                         // central vía `App\Support\BancoMoneda::esDivisa($valor)`.
                         foreach ($referencias as $referencia) {
                             $monto_ref = floatval($referencia->monto);
+                            $esDivisaRef = \App\Support\BancoMoneda::esDivisa($referencia->banco);
+                            $montoOriginalRefs += $monto_ref;
+                            $monedasRefs[] = $esDivisaRef ? 'dolar' : 'bs';
 
-                            if (\App\Support\BancoMoneda::esDivisa($referencia->banco)) {
+                            if ($esDivisaRef) {
                                 // Bancos en dólares - usar monto directo
                                 $montodolares += $monto_ref;
                             } else {
@@ -1094,6 +1099,8 @@ class PagoPedidosController extends Controller
                                 }
                             }
                         }
+                        // Moneda única si todas las refs son del mismo tipo de banco (lo normal).
+                        $monedaTransfRef = (count(array_unique($monedasRefs)) === 1) ? ($monedasRefs[0] ?? null) : null;
                         
                         // Calcular diferencia con precisión de 6 decimales para mayor precisión
                         $diff = round($monto_tra - $montodolares, 6);
@@ -1220,6 +1227,25 @@ class PagoPedidosController extends Controller
                             if ($resultadoValidacion !== true) {
                                 return $resultadoValidacion;
                             }
+                        }
+
+                        // MONEDA-TRANSFERENCIA 2026-06-27 — validarDescuentosPorMetodoPago crea el pago
+                        // tipo=1 con monto = $req->transferencia (lo que manda el front). En DEVOLUCIONES
+                        // sin items la validación de montos está relajada (es_devolucion_pura) y el front
+                        // mandaba el monto EN BS de la ref como si fuera USD → el pago guardaba Bs en el
+                        // campo USD. La fuente de verdad es $montodolares: las refs convertidas según la
+                        // MONEDA DEL BANCO (BancoMoneda::esDivisa, que viene del catálogo de central).
+                        // Sobreescribimos el pago de transferencia con el USD correcto + monto_original
+                        // (en la moneda del banco) + moneda. Solo en devoluciones ($total_real < 0); las
+                        // ventas normales ya están validadas (transferencia ≈ montodolares).
+                        if ($total_real < 0 && $montodolares != 0) {
+                            pago_pedidos::where('id_pedido', $req->id)
+                                ->where('tipo', 1)
+                                ->update([
+                                    'monto'          => -abs($montodolares),       // USD correcto (negativo: devolución)
+                                    'monto_original' => -abs($montoOriginalRefs),   // monto en la moneda del banco
+                                    'moneda'         => $monedaTransfRef,           // 'bs' / 'dolar' / null si mezcla
+                                ]);
                         }
 
 
