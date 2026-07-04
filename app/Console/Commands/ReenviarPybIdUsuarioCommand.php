@@ -34,6 +34,7 @@ class ReenviarPybIdUsuarioCommand extends Command
     protected $signature = 'puntos:reenviar-id-usuario
         {--desde= : Fecha inicio (YYYY-MM-DD) — requerido}
         {--hasta= : Fecha fin (YYYY-MM-DD) — requerido}
+        {--solo-puntos : Solo movimientos PUNTO X (excluye PINPAD).}
         {--aplicar : POST real al endpoint de central. Sin esto solo arma y reporta.}';
 
     protected $description = 'Reenvía id_usuario/nombre_usuario reales de cada cajero al pyb correspondiente en central (sin retransmitir cierres).';
@@ -55,6 +56,7 @@ class ReenviarPybIdUsuarioCommand extends Command
         }
         if ($desde > $hasta) [$desde, $hasta] = [$hasta, $desde];
         $aplicar = (bool) $this->option('aplicar');
+        $soloPuntos = (bool) $this->option('solo-puntos');
 
         // Mapa id_usuario → nombre desde la tabla usuarios local
         $nombrePorId = DB::table('usuarios')->pluck('nombre', 'id')->all();
@@ -85,7 +87,7 @@ class ReenviarPybIdUsuarioCommand extends Command
             foreach ($cajeros as $cajero) {
                 $idUsuarioCajero = (int) $cajero->id_usuario;
 
-                $reg_pinpad = $cajero->metodosPago->where('subtipo', 'pinpad')->first();
+                $reg_pinpad = $soloPuntos ? null : $cajero->metodosPago->where('subtipo', 'pinpad')->first();
                 if ($reg_pinpad) {
                     $meta = is_string($reg_pinpad->metadatos)
                         ? json_decode($reg_pinpad->metadatos, true)
