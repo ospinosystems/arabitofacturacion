@@ -1549,6 +1549,26 @@ class PedidosController extends Controller
      * Se respeta el banco asignado al lote agrupado y se propaga a cada hijo
      * (cuando los hijos no traen su propio `bank`).
      */
+    /**
+     * REGLA ÚNICA del loteserial PINPAD que se transmite a central:
+     *   loteserial = LPAD(terminal, 8, '0') . LPAD(lote, 3, '0')   (11 chars)
+     *
+     * Central agrupa PINPAD por (id_sucursal, loteserial, fecha), así que ambos
+     * componentes son obligatorios. Si faltara uno (dato viejo/incompleto), se
+     * devuelve lo que haya (terminal preferido) para no romper el envío — pero
+     * lo correcto es que SIEMPRE lleguen los dos. Único punto de verdad: todo
+     * builder de sync (sendCentral, SyncProgress, comandos de reenvío) debe usar
+     * este método.
+     */
+    public static function loteserialPinpad($terminal, $lote): string {
+        $t = trim((string) ($terminal ?? ''));
+        $l = trim((string) ($lote ?? ''));
+        if ($t !== '' && $l !== '') {
+            return str_pad($t, 8, '0', STR_PAD_LEFT) . str_pad($l, 3, '0', STR_PAD_LEFT);
+        }
+        return $t !== '' ? $t : $l;
+    }
+
     public function expandirLotesPinpad($lotes): array {
         if (!is_array($lotes)) return [];
         $out = [];
@@ -1564,7 +1584,17 @@ class PedidosController extends Controller
             $idUsuario = $lote['id_usuario'] ?? null;
 
             if ($cantidad <= 1 || count($transacciones) <= 1) {
-                // Ya está desagrupado (1 trans = 1 lote). Pasa tal cual.
+                // Ya está desagrupado (1 trans = 1 lote). Pasa tal cual, pero
+                // asegura el 'lote' (pos_lote) al nivel superior: vive dentro de
+                // transacciones[0] y central lo necesita para armar el loteserial
+                // (terminal + lote).
+                if (! isset($lote['lote']) || $lote['lote'] === '' || $lote['lote'] === null) {
+                    $t0 = $transacciones[0] ?? [];
+                    if (is_object($t0)) $t0 = json_decode(json_encode($t0), true);
+                    $lote['lote'] = (is_array($t0) ? ($t0['lote'] ?? $t0['pos_lote'] ?? '') : '');
+                }
+                // loteserial canónico ya calculado (regla única).
+                $lote['loteserial'] = self::loteserialPinpad($lote['terminal'] ?? '', $lote['lote'] ?? '');
                 $out[] = $lote;
                 continue;
             }
@@ -1578,9 +1608,14 @@ class PedidosController extends Controller
                 if ($monto_bs == 0 && isset($t['monto_original'])) {
                     $monto_bs = floatval($t['monto_original']);
                 }
+                $termOut = $t['terminal'] ?? ($lote['terminal'] ?? '');
+                $loteOut = $t['lote'] ?? $t['pos_lote'] ?? ($lote['lote'] ?? '');
                 $out[] = [
                     'pago_id' => $t['id'] ?? null,
-                    'terminal' => $t['terminal'] ?? ($lote['terminal'] ?? ''),
+                    'terminal' => $termOut,
+                    // lote (pos_lote) + loteserial canónico ya listo (regla única).
+                    'lote' => $loteOut,
+                    'loteserial' => self::loteserialPinpad($termOut, $loteOut),
                     'monto_bs' => $monto_bs,
                     'monto_usd' => floatval($t['monto'] ?? 0),
                     'cantidad_transacciones' => 1,

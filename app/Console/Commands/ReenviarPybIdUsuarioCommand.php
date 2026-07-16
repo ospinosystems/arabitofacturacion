@@ -92,15 +92,29 @@ class ReenviarPybIdUsuarioCommand extends Command
                     $meta = is_string($reg_pinpad->metadatos)
                         ? json_decode($reg_pinpad->metadatos, true)
                         : (array) ($reg_pinpad->metadatos ?? []);
-                    foreach (($meta['lotes'] ?? []) as $lote) {
-                        if (is_object($lote)) $lote = json_decode(json_encode($lote), true);
+                    // Normaliza igual que el sync (expande grupos legacy y deja el
+                    // loteserial canónico terminal+lote), para que central matchee
+                    // exactamente las mismas filas PINPAD.
+                    $pedidosCtrl = new \App\Http\Controllers\PedidosController();
+                    foreach ($pedidosCtrl->expandirLotesPinpad($meta['lotes'] ?? []) as $lote) {
                         $idu = (int) ($lote['id_usuario'] ?? $idUsuarioCajero);
+                        // loteserial = terminal + lote, reconstruido desde los campos POS del pago
+                        // (autoritativo) para cubrir cierres legacy / pos_lote poblado tarde.
+                        $posTerminal = $lote['terminal'] ?? '';
+                        $posLote     = $lote['lote'] ?? '';
+                        if (($posLote === '' || $posLote === null) && !empty($lote['pago_id'])) {
+                            $pagoPos = \App\Models\pago_pedidos::find($lote['pago_id']);
+                            if ($pagoPos) {
+                                if ($posTerminal === '' || $posTerminal === null) $posTerminal = $pagoPos->pos_terminal;
+                                $posLote = $pagoPos->pos_lote;
+                            }
+                        }
                         $items[] = [
                             'idinsucursal'   => 'PINPAD-'.$admin->id.'-'.$idxPinpad,
                             'id_usuario'     => $idu,
                             'nombre_usuario' => $nombrePorId[$idu] ?? null,
-                            // Para fallback por fragmentos del split-aplicar (PINPAD splittado en central).
-                            'loteserial'     => (string) ($lote['terminal'] ?? $lote['lote'] ?? ''),
+                            // loteserial canónico (regla única) — central matchea por él.
+                            'loteserial'     => \App\Http\Controllers\PedidosController::loteserialPinpad($posTerminal, $posLote),
                             'fecha'          => (string) $admin->fecha,
                             'tipo'           => 'PINPAD',
                         ];

@@ -1202,11 +1202,24 @@ class SyncProgressController extends Controller
                                 // idinsucursal único por pago — usar pago_id si existe para no colisionar
                                 // cuando varias transacciones comparten terminal.
                                 $pagoId = $lote['pago_id'] ?? $loteIndex;
+                                // loteserial canónico = terminal + lote. Se RECONSTRUYE desde los campos
+                                // POS del PAGO (pos_terminal + pos_lote) para transmitir terminal+lote también
+                                // en cierres legacy o cuando el pos_lote se pobló tras guardar la metadata.
+                                $posTerminal = $lote['terminal'] ?? '';
+                                $posLote     = $lote['lote'] ?? '';
+                                if (($posLote === '' || $posLote === null) && !empty($lote['pago_id'])) {
+                                    $pagoPos = \App\Models\pago_pedidos::find($lote['pago_id']);
+                                    if ($pagoPos) {
+                                        if ($posTerminal === '' || $posTerminal === null) $posTerminal = $pagoPos->pos_terminal;
+                                        $posLote = $pagoPos->pos_lote;
+                                    }
+                                }
+                                $loteserialPinpad = \App\Http\Controllers\PedidosController::loteserialPinpad($posTerminal, $posLote);
                                 $loteData = [
                                     "idinsucursal" => "PINPAD-".$r->id."-".$pagoId,
                                     "monto" => floatval($lote['monto_bs'] ?? $lote['monto'] ?? 0),
                                     "banco" => $lote['banco_nombre'] ?? $lote['banco'] ?? '',
-                                    "loteserial" => $lote['terminal'] ?? $lote['lote'] ?? '',
+                                    "loteserial" => $loteserialPinpad,
                                     "fecha" => $today,
                                     "id_usuario" => $idUsuarioLote,
                                     "nombre_usuario" => $nombreUsuarioFn($idUsuarioLote),

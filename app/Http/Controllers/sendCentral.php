@@ -2858,11 +2858,26 @@ class sendCentral extends Controller
                             // El banco viene como string del PINPAD ('Bancaribe', 'Banesco', etc.).
                             // Compat con lotes viejos que guardaban banco_nombre o ya el codigo.
                             $bancoStr = $lote['banco'] ?? $lote['banco_nombre'] ?? '';
+                            // loteserial canónico = terminal + lote (regla única PedidosController::loteserialPinpad).
+                            // Se RECONSTRUYE desde los campos POS del PAGO (fuente autoritativa:
+                            // pos_terminal + pos_lote) en vez de confiar en el loteserial guardado. Así se
+                            // transmite terminal+lote también en cierres legacy o cuando el pos_lote se
+                            // pobló DESPUÉS de guardar la metadata (antes esos casos mandaban solo el terminal).
+                            $posTerminal = $lote['terminal'] ?? '';
+                            $posLote     = $lote['lote'] ?? '';
+                            if (($posLote === '' || $posLote === null) && !empty($lote['pago_id'])) {
+                                $pagoPos = \App\Models\pago_pedidos::find($lote['pago_id']);
+                                if ($pagoPos) {
+                                    if ($posTerminal === '' || $posTerminal === null) $posTerminal = $pagoPos->pos_terminal;
+                                    $posLote = $pagoPos->pos_lote;
+                                }
+                            }
+                            $loteserialPinpad = \App\Http\Controllers\PedidosController::loteserialPinpad($posTerminal, $posLote);
                             $loteData = [
                                 "idinsucursal" => "PINPAD-".$cierre->id."-".$pagoId,
                                 "monto" => floatval($lote['monto_bs'] ?? $lote['monto'] ?? 0),
                                 "banco" => $bancoStr,
-                                "loteserial" => $lote['terminal'] ?? $lote['lote'] ?? '',
+                                "loteserial" => $loteserialPinpad,
                                 "fecha" => $today,
                                 "id_usuario" => $idUsuarioLote,
                                 "nombre_usuario" => $nombreUsuarioFn($idUsuarioLote),
