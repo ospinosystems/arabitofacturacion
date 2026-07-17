@@ -1355,16 +1355,18 @@ class GarantiaController extends Controller
                     'solicitud_id' => $request->solicitud_id
                 ]);
 
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
+                // \Throwable (no solo \Exception): un error fatal como TypeError en la ejecución
+                // local también debe revertir el candado EJECUTANDO en central, no dejarlo colgado.
                 DB::rollBack();
-                
+
                 // Revertir estatus en central
                 $this->revertirEstatusEnCentral($request->solicitud_id, $codigoOrigen, 'APROBADA');
-                
+
                 throw $e;
             }
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Error ejecutando solicitud de garantía moderna', [
                 'solicitud_id' => $request->solicitud_id ?? 'N/A',
                 'error' => $e->getMessage(),
