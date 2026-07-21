@@ -712,6 +712,12 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
             datosTransferencia.actualizando = false; // Indicador de que es una creación
         }
 
+        // Si nace de una premonta (orden de redistribución aprobada), reenviamos su id para que
+        // central marque la orden "En Tránsito" y ancle el pedido.
+        if (esPremonta && transferenciaToEdit?.id_orden_distribucion) {
+            datosTransferencia.id_orden_distribucion = transferenciaToEdit.id_orden_distribucion;
+        }
+
         setEstaCargando(true);
         try {
             const res = await db.settransferenciaDici(datosTransferencia);
@@ -1306,6 +1312,8 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const [filtrosActivos, setFiltrosActivos] = useState({ q: '', estatus_string: '', id_origen: '', id_destino: '', limit: 10 });
     const [paginacion, setPaginacion] = useState({});
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
+    // Premontas = órdenes de redistribución 'Aprobada' de central donde ESTA sucursal es el origen.
+    const [premontas, setPremontas] = useState([]);
 
     const cargarTransferencias = useCallback(async (filtros) => {
         try {
@@ -1349,6 +1357,64 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         cargarSucursales();
     }, []);
 
+    // Cargar premontas (órdenes de redistribución aprobadas para esta sucursal origen).
+    useEffect(() => {
+        db.getPremontadas({ limit: 50 })
+            .then(res => setPremontas(res.data?.premontadas || []))
+            .catch(() => setPremontas([]));
+    }, [refreshListKey]);
+
+    // Abre una premonta en el formulario como transferencia nueva, mapeando cada producto
+    // al inventario local por código de barras, y llevando el id de la orden de redistribución.
+    const abrirPremonta = async (prem) => {
+        setEstaCargando(true);
+        try {
+            const items = [];
+            const noEncontrados = [];
+            for (const it of (prem.items || [])) {
+                const barras = it.producto?.codigo_barras;
+                let local = null;
+                if (barras) {
+                    try {
+                        const r = await db.getinventario({ vendedor: null, num: 5, itemCero: true, qProductosMain: barras, orderColumn: 'descripcion', orderBy: 'asc' });
+                        const arr = r.data || [];
+                        local = arr.find(p => String(p.codigo_barras) === String(barras)) || null;
+                    } catch (e) { /* ignore */ }
+                }
+                if (local) {
+                    items.push({
+                        id: it.id,
+                        id_producto_insucursal: local.id,
+                        cantidad: it.cantidad,
+                        descuento: 0,
+                        producto: {
+                            id: local.id, precio_base: local.precio_base, precio: local.precio,
+                            codigo_barras: local.codigo_barras, codigo_proveedor: local.codigo_proveedor, descripcion: local.descripcion,
+                        },
+                        created_at: null, updated_at: null,
+                    });
+                } else {
+                    noEncontrados.push(it.producto?.descripcion || barras || ('#' + (it.producto_id_master || it.id)));
+                }
+            }
+            if (noEncontrados.length) {
+                alert('Estos productos de la orden no están en tu inventario local y no se cargaron:\n- ' + noEncontrados.join('\n- '));
+            }
+            if (!items.length) { alert('Ningún producto de la orden se pudo mapear a tu inventario local.'); return; }
+            setTransferenciaSeleccionada({
+                id: null,
+                es_premontada: true,
+                id_orden_distribucion: prem.id_orden_distribucion,
+                id_destino: prem.sucursal_destino?.id || '',
+                observaciones: '',
+                items,
+            });
+            setVistaActual('form');
+        } finally {
+            setEstaCargando(false);
+        }
+    };
+
     const handleSaveTransfer = (transferenciaGuardada) => {
         console.log("Transferencia guardada:", transferenciaGuardada);
         setVistaActual('list');
@@ -1389,8 +1455,28 @@ const TransferenciasModule = ({ sucursalActualId }) => {
             </header>
             <main>
                 {vistaActual === 'list' && (
-                    <TransferenciaList 
-                        sucursalActualId={idOrigenReal} 
+                    <>
+                    {premontas.length > 0 && (
+                        <div className="mb-3 border border-amber-300 bg-amber-50 rounded-lg p-3">
+                            <h4 className="text-sm font-bold text-amber-800 mb-2"><i className="fas fa-inbox mr-1"></i>Órdenes de redistribución para despachar ({premontas.length})</h4>
+                            <div className="space-y-2">
+                                {premontas.map(prem => (
+                                    <div key={prem.id_orden_distribucion} className="flex items-center justify-between gap-3 bg-white border border-amber-200 rounded-md px-3 py-2 flex-wrap">
+                                        <div className="text-sm">
+                                            <span className="font-bold text-amber-800">Redistribución #{prem.id_orden_distribucion}</span>
+                                            <span className="text-gray-500 ml-2">&rarr; {prem.sucursal_destino?.nombre || prem.sucursal_destino?.codigo || ('Destino ' + (prem.sucursal_destino?.id ?? '—'))}</span>
+                                            <span className="text-gray-400 ml-2">· {(prem.items || []).length} producto(s)</span>
+                                        </div>
+                                        <button onClick={() => abrirPremonta(prem)} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-md">
+                                            <i className="fas fa-truck-arrow-right mr-1"></i>Despachar
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    <TransferenciaList
+                        sucursalActualId={idOrigenReal}
                         onRequireRefresh={refreshListKey} 
                         onEdit={handleEditTransfer} 
                         onViewDetails={handleViewDetails}
@@ -1412,6 +1498,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                         mostrarFiltros={mostrarFiltros}
                         setMostrarFiltros={setMostrarFiltros}
                     />
+                    </>
                 )}
                 {vistaActual === 'form' && (
                     <TransferenciaForm 
