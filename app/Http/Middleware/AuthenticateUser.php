@@ -35,6 +35,7 @@ class AuthenticateUser
         // Pedidos y transferencias
         'reqpedidos',
         'reqMipedidos',
+        'getPremontadas',
         'settransferenciaDici',
         'delTransferenciaDici',
         // Despacho con recolección y bultos (TCD): el patrón {accion} cubre todas las sub-rutas

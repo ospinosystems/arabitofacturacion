@@ -542,7 +542,10 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
 };
 
 const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaToEdit = null, sucursales, cargarTransferencias }) => {
-    const esEdicion = !!transferenciaToEdit;
+    // Una premonta (orden de redistribución traída de central) se arma como transferencia NUEVA,
+    // no como edición de una transferencia local existente.
+    const esPremonta = !!transferenciaToEdit?.es_premontada;
+    const esEdicion = !!transferenciaToEdit && !esPremonta;
     const idSucursalOrigen = sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER;
 
     const [idSucursalDestinoSeleccionada, setIdSucursalDestinoSeleccionada] = useState(transferenciaToEdit?.id_destino || '');

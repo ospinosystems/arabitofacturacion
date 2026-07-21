@@ -2334,6 +2334,32 @@ class sendCentral extends Controller
             return Response::json(["estado" => false, "msj" => "Error de sucursal: " . $e->getMessage()]);
         }
     }
+    /**
+     * Premontas: órdenes de redistribución (OrdenDistribucion 'Aprobada') creadas en central
+     * cuya sucursal ORIGEN es ésta y que aún no se han despachado. Proxy a central; no toca
+     * nada local. El DICI las verá en el TCD como transferencias listas para dar salida.
+     */
+    function getPremontadas(Request $req) {
+        try {
+            $codigo_origen = $this->getOrigen();
+            $response = $this->requestToCentral('post', '/getPremontadasFromOrdenDistribucion', [
+                'codigo_origen' => $codigo_origen,
+                'limit' => $req->limit ?? 50,
+            ]);
+            if ($response->ok()) {
+                $res = $response->json();
+                return Response::json([
+                    'estado' => $res['estado'] ?? true,
+                    'premontadas' => $res['premontadas'] ?? [],
+                    'msj' => $res['msj'] ?? null,
+                ]);
+            }
+            return Response::json(['estado' => false, 'premontadas' => [], 'msj' => 'Central respondió ' . $response->status()]);
+        } catch (\Throwable $e) {
+            return Response::json(['estado' => false, 'premontadas' => [], 'msj' => 'Error premontadas: ' . $e->getMessage()]);
+        }
+    }
+
     function settransferenciaDici(Request $req) {
         DB::beginTransaction();
         try {
@@ -2464,6 +2490,9 @@ class sendCentral extends Controller
                 "observaciones" => $req->observaciones,
                 'type' => $type,
                 'id_transferencia_central' => $req->id ?? null,
+                // Si esta transferencia nace de una premonta (orden de redistribución), reenviamos
+                // su id para que central ancle el espejo y marque la OD 'En Tránsito'.
+                'id_orden_distribucion' => $req->id_orden_distribucion ?? null,
                 'pedidos' => $pedidos,
             ]);
 
