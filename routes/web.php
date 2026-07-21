@@ -636,6 +636,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		
 		Route::post('reqpedidos', [sendCentral::class,"reqpedidos"]);
 		Route::post('reqMipedidos', [sendCentral::class,"reqMipedidos"]);
+		Route::post('getPremontadas', [sendCentral::class,"getPremontadas"]);
 		Route::post('settransferenciaDici', [sendCentral::class,"settransferenciaDici"]);
 		Route::post('delTransferenciaDici', [sendCentral::class,"delTransferenciaDici"]);
 
