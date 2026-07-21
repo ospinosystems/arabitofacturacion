@@ -789,21 +789,31 @@ export default function TCRModule({
                                                 </div>
                                             </div>
 
-                                            {/* Botón de guardar cuando todos los productos están chequeados (con o sin ubicación) */}
-                                            {pedidosCentral[indexPedidoCentral].items.length > 0 &&
-                                             pedidosCentral[indexPedidoCentral].items.every(itemListo) && (
-                                                <div className="pt-3 border-t border-gray-200">
-                                                    <button
-                                                        onClick={checkPedidosCentral}
-                                                        className="w-full px-3 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow transition flex items-center justify-center gap-2"
-                                                    >
-                                                        <i className="fas fa-save"></i>
-                                                        {pedidosCentral[indexPedidoCentral].items.every(item => item.warehouse_codigo)
-                                                            ? 'Guardar Recepción con Ubicaciones'
-                                                            : 'Guardar Recepción'}
-                                                    </button>
-                                                </div>
-                                            )}
+                                            {/* En REVISADO los productos ya fueron verificados en PENDIENTE: el pistoleo de
+                                                ubicación es OPCIONAL, así que la recepción se puede guardar siempre (no exige
+                                                volver a escanear/chequear cada producto). */}
+                                            {pedidosCentral[indexPedidoCentral].items.length > 0 && (() => {
+                                                const items = pedidosCentral[indexPedidoCentral].items;
+                                                const pendientes = items.filter(e => !itemListo(e)).length;
+                                                const todosConUbic = items.every(item => item.warehouse_codigo);
+                                                return (
+                                                    <div className="pt-3 border-t border-gray-200">
+                                                        {pendientes > 0 && (
+                                                            <p className="text-xs text-gray-500 mb-2 text-center">
+                                                                <i className="fas fa-circle-info mr-1"></i>
+                                                                {pendientes} producto(s) sin ubicación. No es obligatorio: podés recibir igual.
+                                                            </p>
+                                                        )}
+                                                        <button
+                                                            onClick={checkPedidosCentral}
+                                                            className="w-full px-3 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow transition flex items-center justify-center gap-2"
+                                                        >
+                                                            <i className="fas fa-save"></i>
+                                                            {todosConUbic ? 'Guardar Recepción con Ubicaciones' : 'Guardar Recepción'}
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
                                     )}
                                 </div>

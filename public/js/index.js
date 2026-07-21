@@ -135710,18 +135710,30 @@ function TCRModule(_ref) {
                       children: [Math.round(pedidosCentral[indexPedidoCentral].items.filter(itemListo).length / pedidosCentral[indexPedidoCentral].items.length * 100), "%"]
                     })
                   })
-                }), pedidosCentral[indexPedidoCentral].items.length > 0 && pedidosCentral[indexPedidoCentral].items.every(itemListo) && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
-                  className: "pt-3 border-t border-gray-200",
-                  children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("button", {
-                    onClick: checkPedidosCentral,
-                    className: "w-full px-3 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow transition flex items-center justify-center gap-2",
-                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
-                      className: "fas fa-save"
-                    }), pedidosCentral[indexPedidoCentral].items.every(function (item) {
-                      return item.warehouse_codigo;
-                    }) ? 'Guardar Recepción con Ubicaciones' : 'Guardar Recepción']
-                  })
-                })]
+                }), pedidosCentral[indexPedidoCentral].items.length > 0 && function () {
+                  var items = pedidosCentral[indexPedidoCentral].items;
+                  var pendientes = items.filter(function (e) {
+                    return !itemListo(e);
+                  }).length;
+                  var todosConUbic = items.every(function (item) {
+                    return item.warehouse_codigo;
+                  });
+                  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
+                    className: "pt-3 border-t border-gray-200",
+                    children: [pendientes > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("p", {
+                      className: "text-xs text-gray-500 mb-2 text-center",
+                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                        className: "fas fa-circle-info mr-1"
+                      }), pendientes, " producto(s) sin ubicaci\xF3n. No es obligatorio: pod\xE9s recibir igual."]
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("button", {
+                      onClick: checkPedidosCentral,
+                      className: "w-full px-3 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow transition flex items-center justify-center gap-2",
+                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                        className: "fas fa-save"
+                      }), todosConUbic ? 'Guardar Recepción con Ubicaciones' : 'Guardar Recepción']
+                    })]
+                  });
+                }()]
               })]
             })]
           })]
