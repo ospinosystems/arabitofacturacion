@@ -360,79 +360,75 @@ export default function TCRModule({
                                     {pedidosCentral.length ? (
                                         pedidosCentral.map((e, i) =>
                                             e ? (
-                                                <div 
-                                                    onClick={() => setIndexPedidoCentral(i)} 
-                                                    data-index={i} 
-                                                    key={e.id} 
-                                                    className={`group cursor-pointer rounded-lg border transition-all ${
-                                                        indexPedidoCentral === i 
-                                                            ? 'border-blue-400 bg-blue-50 shadow' 
+                                                <div
+                                                    onClick={() => setIndexPedidoCentral(i)}
+                                                    data-index={i}
+                                                    key={e.id}
+                                                    className={`group cursor-pointer rounded-lg border overflow-hidden transition-all ${
+                                                        indexPedidoCentral === i
+                                                            ? 'border-blue-400 bg-blue-50 shadow'
                                                             : 'border-gray-200 hover:border-blue-300 bg-white hover:shadow'
                                                     }`}
                                                 >
-                                                    <div className="flex items-stretch">
-                                                        {/* Indicador de estado */}
-                                                        <div className={`flex items-center justify-center w-12 rounded-l-lg ${
-                                                            e.estado == 1 ? 'bg-red-500' :
-                                                            e.estado == 2 ? 'bg-green-500' :
-                                                            e.estado == 3 ? 'bg-yellow-500' :
-                                                            e.estado == 4 ? 'bg-blue-500' : 'bg-gray-300'
-                                                        }`}>
-                                                            <i className={`fas ${
-                                                                e.estado == 1 ? 'fa-exclamation-circle' :
-                                                                e.estado == 2 ? 'fa-check-circle' :
-                                                                e.estado == 3 ? 'fa-search' :
-                                                                e.estado == 4 ? 'fa-check-double' : 'fa-question-circle'
-                                                            } text-white text-lg`}></i>
-                                                        </div>
-                                                        
-                                                        {/* Contenido */}
-                                                        <div className="flex-1 p-3">
-                                                            <div className="flex items-center justify-between mb-2">
-                                                                <div className="flex items-center gap-2 flex-wrap">
-                                                                    <span className="px-2 py-1 bg-gray-700 text-white text-xs font-bold rounded">
-                                                                        #{e.id}
-                                                                    </span>
-                                                                    <span 
-                                                                        className="px-2 py-1 text-xs font-bold rounded"
-                                                                        style={{ 
-                                                                            backgroundColor: e.origen.background, 
-                                                                            color: e.origen.color || '#fff' 
-                                                                        }}
-                                                                    >
-                                                                        {e.origen.codigo}
-                                                                    </span>
-                                                                    <span className={`px-2 py-1 text-[10px] font-bold rounded border ${
-                                                                        e.estado == 1 ? 'bg-red-100 text-red-700 border-red-200' :
-                                                                        e.estado == 3 ? 'bg-orange-100 text-orange-700 border-orange-200' :
-                                                                        e.estado == 4 ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                                                                        'bg-gray-100 text-gray-600 border-gray-200'
-                                                                    }`}>
-                                                                        {e.estado == 1 ? 'PENDIENTE' :
-                                                                         e.estado == 3 ? 'EN REVISIÓN' :
-                                                                         e.estado == 4 ? 'REVISADO' : 'DESCONOCIDO'}
-                                                                    </span>
-                                                                </div>
-                                                                <span className="text-xs text-gray-500 font-semibold">
-                                                                    <i className="fas fa-boxes mr-1"></i>
-                                                                    {e.items.length}
+                                                    {/* Barra de estado SUPERIOR */}
+                                                    <div className={`h-1.5 w-full ${
+                                                        e.estado == 1 ? 'bg-red-500' :
+                                                        e.estado == 2 ? 'bg-green-500' :
+                                                        e.estado == 3 ? 'bg-yellow-500' :
+                                                        e.estado == 4 ? 'bg-blue-500' : 'bg-gray-300'
+                                                    }`}></div>
+
+                                                    {/* Contenido */}
+                                                    <div className="p-3">
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className="px-2 py-1 bg-gray-700 text-white text-xs font-bold rounded">
+                                                                    #{e.id}
+                                                                </span>
+                                                                <span
+                                                                    className="px-2 py-1 text-xs font-bold rounded"
+                                                                    style={{
+                                                                        backgroundColor: e.origen.background,
+                                                                        color: e.origen.color || '#fff'
+                                                                    }}
+                                                                >
+                                                                    {e.origen.codigo}
+                                                                </span>
+                                                                <span className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded border ${
+                                                                    e.estado == 1 ? 'bg-red-100 text-red-700 border-red-200' :
+                                                                    e.estado == 3 ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                                                                    e.estado == 4 ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                                    'bg-gray-100 text-gray-600 border-gray-200'
+                                                                }`}>
+                                                                    <i className={`fas ${
+                                                                        e.estado == 1 ? 'fa-exclamation-circle' :
+                                                                        e.estado == 3 ? 'fa-search' :
+                                                                        e.estado == 4 ? 'fa-check-double' : 'fa-question-circle'
+                                                                    }`}></i>
+                                                                    {e.estado == 1 ? 'PENDIENTE' :
+                                                                     e.estado == 3 ? 'EN REVISIÓN' :
+                                                                     e.estado == 4 ? 'REVISADO' : 'DESCONOCIDO'}
                                                                 </span>
                                                             </div>
-                                                            
-                                                            {e.cxp && (
-                                                                <div className="text-xs font-semibold text-gray-700 mb-1">
-                                                                    <span className="text-blue-600">FACT {e.cxp.numfact}</span>
-                                                                    <span className="text-gray-500 ml-2">
-                                                                        {e.cxp.proveedor.descripcion.substr(0, 20)}
-                                                                        {e.cxp.proveedor.descripcion.length > 20 ? "..." : ""}
-                                                                    </span>
-                                                                </div>
-                                                            )}
-                                                            
-                                                            <div className="text-xs text-gray-400">
-                                                                <i className="far fa-clock mr-1"></i>
-                                                                {e.created_at}
+                                                            <span className="text-xs text-gray-500 font-semibold">
+                                                                <i className="fas fa-boxes mr-1"></i>
+                                                                {e.items.length}
+                                                            </span>
+                                                        </div>
+
+                                                        {e.cxp && (
+                                                            <div className="text-xs font-semibold text-gray-700 mb-1">
+                                                                <span className="text-blue-600">FACT {e.cxp.numfact}</span>
+                                                                <span className="text-gray-500 ml-2">
+                                                                    {e.cxp.proveedor.descripcion.substr(0, 20)}
+                                                                    {e.cxp.proveedor.descripcion.length > 20 ? "..." : ""}
+                                                                </span>
                                                             </div>
+                                                        )}
+
+                                                        <div className="text-xs text-gray-400">
+                                                            <i className="far fa-clock mr-1"></i>
+                                                            {e.created_at}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -483,25 +479,27 @@ export default function TCRModule({
                             <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
                                 <div className="bg-blue-600 px-3 py-2 border-b border-blue-700 flex items-center justify-between gap-2 flex-wrap">
                                     <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                                        <i className="fas fa-barcode"></i>
-                                        {ubicacionOpcional ? 'Pistoleo · Chequeo de Productos' : 'Pistoleo · Asignación de Ubicaciones'}
+                                        <i className={`fas ${(pedidosCentral[indexPedidoCentral].estado === 4 && ubicacionOpcional) ? 'fa-clipboard-check' : 'fa-barcode'}`}></i>
+                                        {pedidosCentral[indexPedidoCentral].estado === 4
+                                            ? (ubicacionOpcional ? 'Recepción de Productos' : 'Pistoleo · Asignación de Ubicaciones')
+                                            : 'Revisión de Productos'}
                                     </h2>
-                                    {/* Toggle: ubicación opcional (por defecto ON = solo chequea) */}
+                                    {/* Toggle: asignar ubicaciones (por defecto OFF = recibir sin pistolear) */}
                                     {pedidosCentral[indexPedidoCentral].estado === 4 && (
                                         <button
                                             type="button"
                                             onClick={toggleUbicacionOpcional}
-                                            className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-bold transition border ${ubicacionOpcional ? 'bg-white text-blue-700 border-white' : 'bg-blue-500/30 text-white border-blue-300'}`}
-                                            title={ubicacionOpcional ? 'Ubicación opcional activada: escanear solo chequea el producto. Click para exigir ubicación.' : 'Se exige escanear ubicación tras cada producto. Click para hacerla opcional.'}
+                                            className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-bold transition border ${!ubicacionOpcional ? 'bg-white text-blue-700 border-white' : 'bg-blue-500/30 text-white border-blue-300'}`}
+                                            title={!ubicacionOpcional ? 'Asignación de ubicaciones activada: escaneá producto y luego ubicación. Click para desactivar.' : 'Recepción directa sin pistolear. Click para asignar ubicaciones con pistola.'}
                                         >
-                                            <i className={`fas ${ubicacionOpcional ? 'fa-toggle-on' : 'fa-toggle-off'}`}></i>
-                                            {ubicacionOpcional ? 'Ubicación opcional' : 'Ubicación requerida'}
+                                            <i className={`fas ${!ubicacionOpcional ? 'fa-toggle-on' : 'fa-toggle-off'}`}></i>
+                                            {!ubicacionOpcional ? 'Asignando ubicaciones' : 'Asignar ubicaciones'}
                                         </button>
                                     )}
                                 </div>
 
-                                {/* Input de pistoleo - STICKY - Solo si está REVISADO */}
-                                {pedidosCentral[indexPedidoCentral].estado === 4 && (
+                                {/* Input de pistoleo - STICKY - Solo en REVISADO y con asignación de ubicaciones activada */}
+                                {pedidosCentral[indexPedidoCentral].estado === 4 && !ubicacionOpcional && (
                                     <div className={`sticky top-0 z-50 border-b px-3 py-2 bg-white ${esperandoUbicacion ? 'border-amber-500' : 'border-blue-500'}`}>
                                         <div className="flex items-center gap-2">
                                             <span className={`flex items-center gap-1 text-xs font-bold whitespace-nowrap ${esperandoUbicacion ? 'text-amber-700' : 'text-blue-700'}`}>
@@ -564,12 +562,12 @@ export default function TCRModule({
                                             {pedidosCentral[indexPedidoCentral].estado === 4 && (
                                                 <span className="text-sm font-normal text-gray-500 ml-2">
                                                     {ubicacionOpcional
-                                                        ? '(Escanea cada producto para chequearlo — ubicación opcional)'
+                                                        ? '(Ya revisado — podés recibir directo)'
                                                         : '(Escanea el producto y luego su ubicación)'}
                                                 </span>
                                             )}
                                         </h3>
-                                        
+
                                         <div className="max-h-[600px] overflow-y-auto overflow-x-auto border border-gray-200 rounded-lg">
                                             <table className="w-full text-xs border-collapse">
                                                 <thead className="sticky top-0 z-10 bg-gray-100">
@@ -582,10 +580,12 @@ export default function TCRModule({
                                                         <th className="px-2 py-1.5 text-left whitespace-nowrap">Cód. Barras</th>
                                                         <th className="px-2 py-1.5 text-left whitespace-nowrap">Cód. Prov.</th>
                                                         <th className="px-2 py-1.5 text-center w-14">Cant.</th>
-                                                        {pedidosCentral[indexPedidoCentral].estado === 4 && (
+                                                        {pedidosCentral[indexPedidoCentral].estado === 4 && !ubicacionOpcional && (
                                                             <th className="px-2 py-1.5 text-left whitespace-nowrap w-28">Ubicación</th>
                                                         )}
-                                                        <th className="px-2 py-1.5 text-center w-24">Estado</th>
+                                                        {(pedidosCentral[indexPedidoCentral].estado === 1 || (pedidosCentral[indexPedidoCentral].estado === 4 && !ubicacionOpcional)) && (
+                                                            <th className="px-2 py-1.5 text-center w-24">Estado</th>
+                                                        )}
                                                         <th className="px-2 py-1.5 text-center w-10"></th>
                                                     </tr>
                                                 </thead>
@@ -654,7 +654,7 @@ export default function TCRModule({
                                                                 <td className="px-2 py-1.5 text-center align-middle">
                                                                     <span className="font-bold text-blue-600">{e.cantidad}</span>
                                                                 </td>
-                                                                {estado === 4 && (
+                                                                {estado === 4 && !ubicacionOpcional && (
                                                                     <td className="px-2 py-1.5 align-middle whitespace-nowrap">
                                                                         {e.warehouse_codigo ? (
                                                                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 font-mono font-bold rounded border border-emerald-300">
@@ -670,6 +670,7 @@ export default function TCRModule({
                                                                         )}
                                                                     </td>
                                                                 )}
+                                                                {(estado === 1 || (estado === 4 && !ubicacionOpcional)) && (
                                                                 <td className="px-2 py-1.5 text-center align-middle">
                                                                     {estado === 4 ? (
                                                                         listo ? (
@@ -717,6 +718,7 @@ export default function TCRModule({
                                                                         )
                                                                     ) : null}
                                                                 </td>
+                                                                )}
                                                                 <td className="px-2 py-1.5 text-center align-middle">
                                                                     <button
                                                                         onClick={() => imprimirTicketProducto(e.producto)}
@@ -740,6 +742,7 @@ export default function TCRModule({
                                     {/* Resumen de progreso - Solo si está REVISADO */}
                                     {pedidosCentral[indexPedidoCentral].estado === 4 && (
                                         <div className="bg-white rounded-lg p-4 shadow space-y-3">
+                                            {!ubicacionOpcional && (<>
                                             <h3 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
                                                 <i className="fas fa-chart-pie text-blue-500"></i>
                                                 Progreso de Recepción
@@ -788,6 +791,7 @@ export default function TCRModule({
                                                     </span>
                                                 </div>
                                             </div>
+                                            </>)}
 
                                             {/* En REVISADO los productos ya fueron verificados en PENDIENTE: el pistoleo de
                                                 ubicación es OPCIONAL, así que la recepción se puede guardar siempre (no exige
@@ -797,8 +801,8 @@ export default function TCRModule({
                                                 const pendientes = items.filter(e => !itemListo(e)).length;
                                                 const todosConUbic = items.every(item => item.warehouse_codigo);
                                                 return (
-                                                    <div className="pt-3 border-t border-gray-200">
-                                                        {pendientes > 0 && (
+                                                    <div className={ubicacionOpcional ? '' : 'pt-3 border-t border-gray-200'}>
+                                                        {!ubicacionOpcional && pendientes > 0 && (
                                                             <p className="text-xs text-gray-500 mb-2 text-center">
                                                                 <i className="fas fa-circle-info mr-1"></i>
                                                                 {pendientes} producto(s) sin ubicación. No es obligatorio: podés recibir igual.

@@ -135289,62 +135289,58 @@ function TCRModule(_ref) {
                   maxHeight: '70vh'
                 },
                 children: pedidosCentral.length ? pedidosCentral.map(function (e, i) {
-                  return e ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
+                  return e ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
                     onClick: function onClick() {
                       return setIndexPedidoCentral(i);
                     },
                     "data-index": i,
-                    className: "group cursor-pointer rounded-lg border transition-all ".concat(indexPedidoCentral === i ? 'border-blue-400 bg-blue-50 shadow' : 'border-gray-200 hover:border-blue-300 bg-white hover:shadow'),
-                    children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
-                      className: "flex items-stretch",
-                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
-                        className: "flex items-center justify-center w-12 rounded-l-lg ".concat(e.estado == 1 ? 'bg-red-500' : e.estado == 2 ? 'bg-green-500' : e.estado == 3 ? 'bg-yellow-500' : e.estado == 4 ? 'bg-blue-500' : 'bg-gray-300'),
-                        children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
-                          className: "fas ".concat(e.estado == 1 ? 'fa-exclamation-circle' : e.estado == 2 ? 'fa-check-circle' : e.estado == 3 ? 'fa-search' : e.estado == 4 ? 'fa-check-double' : 'fa-question-circle', " text-white text-lg")
-                        })
-                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
-                        className: "flex-1 p-3",
+                    className: "group cursor-pointer rounded-lg border overflow-hidden transition-all ".concat(indexPedidoCentral === i ? 'border-blue-400 bg-blue-50 shadow' : 'border-gray-200 hover:border-blue-300 bg-white hover:shadow'),
+                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
+                      className: "h-1.5 w-full ".concat(e.estado == 1 ? 'bg-red-500' : e.estado == 2 ? 'bg-green-500' : e.estado == 3 ? 'bg-yellow-500' : e.estado == 4 ? 'bg-blue-500' : 'bg-gray-300')
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
+                      className: "p-3",
+                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
+                        className: "flex items-center justify-between mb-2",
                         children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
-                          className: "flex items-center justify-between mb-2",
-                          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
-                            className: "flex items-center gap-2 flex-wrap",
-                            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
-                              className: "px-2 py-1 bg-gray-700 text-white text-xs font-bold rounded",
-                              children: ["#", e.id]
-                            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("span", {
-                              className: "px-2 py-1 text-xs font-bold rounded",
-                              style: {
-                                backgroundColor: e.origen.background,
-                                color: e.origen.color || '#fff'
-                              },
-                              children: e.origen.codigo
-                            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("span", {
-                              className: "px-2 py-1 text-[10px] font-bold rounded border ".concat(e.estado == 1 ? 'bg-red-100 text-red-700 border-red-200' : e.estado == 3 ? 'bg-orange-100 text-orange-700 border-orange-200' : e.estado == 4 ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-gray-100 text-gray-600 border-gray-200'),
-                              children: e.estado == 1 ? 'PENDIENTE' : e.estado == 3 ? 'EN REVISIÓN' : e.estado == 4 ? 'REVISADO' : 'DESCONOCIDO'
-                            })]
-                          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
-                            className: "text-xs text-gray-500 font-semibold",
-                            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
-                              className: "fas fa-boxes mr-1"
-                            }), e.items.length]
-                          })]
-                        }), e.cxp && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
-                          className: "text-xs font-semibold text-gray-700 mb-1",
+                          className: "flex items-center gap-2 flex-wrap",
                           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
-                            className: "text-blue-600",
-                            children: ["FACT ", e.cxp.numfact]
+                            className: "px-2 py-1 bg-gray-700 text-white text-xs font-bold rounded",
+                            children: ["#", e.id]
+                          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("span", {
+                            className: "px-2 py-1 text-xs font-bold rounded",
+                            style: {
+                              backgroundColor: e.origen.background,
+                              color: e.origen.color || '#fff'
+                            },
+                            children: e.origen.codigo
                           }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
-                            className: "text-gray-500 ml-2",
-                            children: [e.cxp.proveedor.descripcion.substr(0, 20), e.cxp.proveedor.descripcion.length > 20 ? "..." : ""]
+                            className: "inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded border ".concat(e.estado == 1 ? 'bg-red-100 text-red-700 border-red-200' : e.estado == 3 ? 'bg-orange-100 text-orange-700 border-orange-200' : e.estado == 4 ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-gray-100 text-gray-600 border-gray-200'),
+                            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                              className: "fas ".concat(e.estado == 1 ? 'fa-exclamation-circle' : e.estado == 3 ? 'fa-search' : e.estado == 4 ? 'fa-check-double' : 'fa-question-circle')
+                            }), e.estado == 1 ? 'PENDIENTE' : e.estado == 3 ? 'EN REVISIÓN' : e.estado == 4 ? 'REVISADO' : 'DESCONOCIDO']
                           })]
-                        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
-                          className: "text-xs text-gray-400",
+                        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
+                          className: "text-xs text-gray-500 font-semibold",
                           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
-                            className: "far fa-clock mr-1"
-                          }), e.created_at]
+                            className: "fas fa-boxes mr-1"
+                          }), e.items.length]
                         })]
+                      }), e.cxp && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
+                        className: "text-xs font-semibold text-gray-700 mb-1",
+                        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
+                          className: "text-blue-600",
+                          children: ["FACT ", e.cxp.numfact]
+                        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
+                          className: "text-gray-500 ml-2",
+                          children: [e.cxp.proveedor.descripcion.substr(0, 20), e.cxp.proveedor.descripcion.length > 20 ? "..." : ""]
+                        })]
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
+                        className: "text-xs text-gray-400",
+                        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                          className: "far fa-clock mr-1"
+                        }), e.created_at]
                       })]
-                    })
+                    })]
                   }, e.id) : null;
                 }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
                   className: "text-center py-12 text-gray-400",
@@ -135418,18 +135414,18 @@ function TCRModule(_ref) {
               children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("h2", {
                 className: "text-sm font-bold text-white flex items-center gap-2",
                 children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
-                  className: "fas fa-barcode"
-                }), ubicacionOpcional ? 'Pistoleo · Chequeo de Productos' : 'Pistoleo · Asignación de Ubicaciones']
+                  className: "fas ".concat(pedidosCentral[indexPedidoCentral].estado === 4 && ubicacionOpcional ? 'fa-clipboard-check' : 'fa-barcode')
+                }), pedidosCentral[indexPedidoCentral].estado === 4 ? ubicacionOpcional ? 'Recepción de Productos' : 'Pistoleo · Asignación de Ubicaciones' : 'Revisión de Productos']
               }), pedidosCentral[indexPedidoCentral].estado === 4 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("button", {
                 type: "button",
                 onClick: toggleUbicacionOpcional,
-                className: "inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-bold transition border ".concat(ubicacionOpcional ? 'bg-white text-blue-700 border-white' : 'bg-blue-500/30 text-white border-blue-300'),
-                title: ubicacionOpcional ? 'Ubicación opcional activada: escanear solo chequea el producto. Click para exigir ubicación.' : 'Se exige escanear ubicación tras cada producto. Click para hacerla opcional.',
+                className: "inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-bold transition border ".concat(!ubicacionOpcional ? 'bg-white text-blue-700 border-white' : 'bg-blue-500/30 text-white border-blue-300'),
+                title: !ubicacionOpcional ? 'Asignación de ubicaciones activada: escaneá producto y luego ubicación. Click para desactivar.' : 'Recepción directa sin pistolear. Click para asignar ubicaciones con pistola.',
                 children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
-                  className: "fas ".concat(ubicacionOpcional ? 'fa-toggle-on' : 'fa-toggle-off')
-                }), ubicacionOpcional ? 'Ubicación opcional' : 'Ubicación requerida']
+                  className: "fas ".concat(!ubicacionOpcional ? 'fa-toggle-on' : 'fa-toggle-off')
+                }), !ubicacionOpcional ? 'Asignando ubicaciones' : 'Asignar ubicaciones']
               })]
-            }), pedidosCentral[indexPedidoCentral].estado === 4 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
+            }), pedidosCentral[indexPedidoCentral].estado === 4 && !ubicacionOpcional && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
               className: "sticky top-0 z-50 border-b px-3 py-2 bg-white ".concat(esperandoUbicacion ? 'border-amber-500' : 'border-blue-500'),
               children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
                 className: "flex items-center gap-2",
@@ -135482,7 +135478,7 @@ function TCRModule(_ref) {
                     className: "fas fa-clipboard-list text-blue-500"
                   }), "Lista de Productos", pedidosCentral[indexPedidoCentral].estado === 4 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("span", {
                     className: "text-sm font-normal text-gray-500 ml-2",
-                    children: ubicacionOpcional ? '(Escanea cada producto para chequearlo — ubicación opcional)' : '(Escanea el producto y luego su ubicación)'
+                    children: ubicacionOpcional ? '(Ya revisado — podés recibir directo)' : '(Escanea el producto y luego su ubicación)'
                   })]
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
                   className: "max-h-[600px] overflow-y-auto overflow-x-auto border border-gray-200 rounded-lg",
@@ -135509,10 +135505,10 @@ function TCRModule(_ref) {
                         }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("th", {
                           className: "px-2 py-1.5 text-center w-14",
                           children: "Cant."
-                        }), pedidosCentral[indexPedidoCentral].estado === 4 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("th", {
+                        }), pedidosCentral[indexPedidoCentral].estado === 4 && !ubicacionOpcional && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("th", {
                           className: "px-2 py-1.5 text-left whitespace-nowrap w-28",
                           children: "Ubicaci\xF3n"
-                        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("th", {
+                        }), (pedidosCentral[indexPedidoCentral].estado === 1 || pedidosCentral[indexPedidoCentral].estado === 4 && !ubicacionOpcional) && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("th", {
                           className: "px-2 py-1.5 text-center w-24",
                           children: "Estado"
                         }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("th", {
@@ -135570,7 +135566,7 @@ function TCRModule(_ref) {
                               className: "font-bold text-blue-600",
                               children: e.cantidad
                             })
-                          }), estado === 4 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("td", {
+                          }), estado === 4 && !ubicacionOpcional && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("td", {
                             className: "px-2 py-1.5 align-middle whitespace-nowrap",
                             children: e.warehouse_codigo ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
                               className: "inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 font-mono font-bold rounded border border-emerald-300",
@@ -135586,7 +135582,7 @@ function TCRModule(_ref) {
                               className: "text-amber-500 font-semibold",
                               children: "\u2014 sin ubicar"
                             })
-                          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("td", {
+                          }), (estado === 1 || estado === 4 && !ubicacionOpcional) && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("td", {
                             className: "px-2 py-1.5 text-center align-middle",
                             children: estado === 4 ? listo ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
                               className: "inline-flex items-center gap-1",
@@ -135655,61 +135651,63 @@ function TCRModule(_ref) {
                 })]
               }), pedidosCentral[indexPedidoCentral].estado === 4 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
                 className: "bg-white rounded-lg p-4 shadow space-y-3",
-                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("h3", {
-                  className: "text-sm font-bold text-gray-700 mb-2 flex items-center gap-2",
-                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
-                    className: "fas fa-chart-pie text-blue-500"
-                  }), "Progreso de Recepci\xF3n"]
-                }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
-                  className: "grid grid-cols-3 gap-3 mb-3",
-                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
-                    className: "bg-emerald-50 rounded-lg p-4 border border-emerald-200",
-                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
-                      className: "text-2xl font-bold text-emerald-600 mb-2",
-                      children: pedidosCentral[indexPedidoCentral].items.filter(itemListo).length
-                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
-                      className: "text-xs font-semibold text-emerald-700 uppercase flex items-center gap-1",
-                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
-                        className: "fas fa-check-circle"
-                      }), "Chequeados"]
-                    })]
+                children: [!ubicacionOpcional && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.Fragment, {
+                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("h3", {
+                    className: "text-sm font-bold text-gray-700 mb-2 flex items-center gap-2",
+                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                      className: "fas fa-chart-pie text-blue-500"
+                    }), "Progreso de Recepci\xF3n"]
                   }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
-                    className: "bg-amber-50 rounded-lg p-4 border border-amber-200",
-                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
-                      className: "text-2xl font-bold text-amber-600 mb-2",
-                      children: pedidosCentral[indexPedidoCentral].items.filter(function (e) {
-                        return !itemListo(e);
-                      }).length
+                    className: "grid grid-cols-3 gap-3 mb-3",
+                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
+                      className: "bg-emerald-50 rounded-lg p-4 border border-emerald-200",
+                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
+                        className: "text-2xl font-bold text-emerald-600 mb-2",
+                        children: pedidosCentral[indexPedidoCentral].items.filter(itemListo).length
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
+                        className: "text-xs font-semibold text-emerald-700 uppercase flex items-center gap-1",
+                        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                          className: "fas fa-check-circle"
+                        }), "Chequeados"]
+                      })]
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
-                      className: "text-xs font-semibold text-amber-700 uppercase flex items-center gap-1",
-                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
-                        className: "fas fa-clock"
-                      }), "Pendientes"]
-                    })]
-                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
-                    className: "bg-blue-50 rounded-lg p-4 border border-blue-200",
-                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
-                      className: "text-2xl font-bold text-blue-600 mb-2",
-                      children: pedidosCentral[indexPedidoCentral].items.length
+                      className: "bg-amber-50 rounded-lg p-4 border border-amber-200",
+                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
+                        className: "text-2xl font-bold text-amber-600 mb-2",
+                        children: pedidosCentral[indexPedidoCentral].items.filter(function (e) {
+                          return !itemListo(e);
+                        }).length
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
+                        className: "text-xs font-semibold text-amber-700 uppercase flex items-center gap-1",
+                        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                          className: "fas fa-clock"
+                        }), "Pendientes"]
+                      })]
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
-                      className: "text-xs font-semibold text-blue-700 uppercase flex items-center gap-1",
-                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
-                        className: "fas fa-boxes"
-                      }), "Total"]
+                      className: "bg-blue-50 rounded-lg p-4 border border-blue-200",
+                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
+                        className: "text-2xl font-bold text-blue-600 mb-2",
+                        children: pedidosCentral[indexPedidoCentral].items.length
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
+                        className: "text-xs font-semibold text-blue-700 uppercase flex items-center gap-1",
+                        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                          className: "fas fa-boxes"
+                        }), "Total"]
+                      })]
                     })]
-                  })]
-                }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
-                  className: "relative h-8 bg-gray-100 rounded-full overflow-hidden shadow-inner",
-                  children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
-                    className: "absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500 ease-out flex items-center justify-center",
-                    style: {
-                      width: "".concat(pedidosCentral[indexPedidoCentral].items.filter(itemListo).length / pedidosCentral[indexPedidoCentral].items.length * 100, "%")
-                    },
-                    children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
-                      className: "text-white font-bold text-sm",
-                      children: [Math.round(pedidosCentral[indexPedidoCentral].items.filter(itemListo).length / pedidosCentral[indexPedidoCentral].items.length * 100), "%"]
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
+                    className: "relative h-8 bg-gray-100 rounded-full overflow-hidden shadow-inner",
+                    children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
+                      className: "absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500 ease-out flex items-center justify-center",
+                      style: {
+                        width: "".concat(pedidosCentral[indexPedidoCentral].items.filter(itemListo).length / pedidosCentral[indexPedidoCentral].items.length * 100, "%")
+                      },
+                      children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
+                        className: "text-white font-bold text-sm",
+                        children: [Math.round(pedidosCentral[indexPedidoCentral].items.filter(itemListo).length / pedidosCentral[indexPedidoCentral].items.length * 100), "%"]
+                      })
                     })
-                  })
+                  })]
                 }), pedidosCentral[indexPedidoCentral].items.length > 0 && function () {
                   var items = pedidosCentral[indexPedidoCentral].items;
                   var pendientes = items.filter(function (e) {
@@ -135719,8 +135717,8 @@ function TCRModule(_ref) {
                     return item.warehouse_codigo;
                   });
                   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
-                    className: "pt-3 border-t border-gray-200",
-                    children: [pendientes > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("p", {
+                    className: ubicacionOpcional ? '' : 'pt-3 border-t border-gray-200',
+                    children: [!ubicacionOpcional && pendientes > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("p", {
                       className: "text-xs text-gray-500 mb-2 text-center",
                       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
                         className: "fas fa-circle-info mr-1"
