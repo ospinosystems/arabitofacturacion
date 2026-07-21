@@ -97,10 +97,15 @@ class TransferenciaDespachoController extends Controller
                 transferencias_inventario_items::where('id_transferencia', $orden->id)->delete();
                 $orden->id_destino = $req->id_destino;
                 $orden->observacion = $req->observaciones;
+                // preservar el vínculo con la redistribución si ya lo tenía; solo setear si viene
+                if ($req->filled('id_orden_distribucion')) {
+                    $orden->id_orden_distribucion = (int) $req->id_orden_distribucion;
+                }
                 $orden->save();
             } else {
                 $orden = transferencias_inventario::create([
                     'id_transferencia_central' => null,
+                    'id_orden_distribucion' => $req->filled('id_orden_distribucion') ? (int) $req->id_orden_distribucion : null,
                     'id_destino' => $req->id_destino,
                     'id_usuario' => $this->uid(),
                     'estado' => 0,
@@ -185,6 +190,7 @@ class TransferenciaDespachoController extends Controller
             'estado' => (int) $orden->estado,
             'id_destino' => $orden->id_destino,
             'id_transferencia_central' => $orden->id_transferencia_central,
+            'id_orden_distribucion' => $orden->id_orden_distribucion,
             'observacion' => $orden->observacion,
             'created_at' => (string) $orden->created_at,
             'items' => $items,
@@ -681,6 +687,126 @@ class TransferenciaDespachoController extends Controller
             return Response::json(['estado' => false, 'msj' => 'Central no aceptó el despacho. La mercancía ya salió; reintentá. Detalle: ' . json_encode($res)]);
         } catch (\Throwable $e) {
             return Response::json(['estado' => false, 'msj' => 'Mercancía ya despachada localmente; falló el envío a central (reintentá): ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * SALIDA SIMPLE (Plan B, sin bultos): da salida a TODA la orden en preparación de una vez.
+     * Descuenta el inventario de forma atómica (todo-o-nada) y crea el espejo en central con las
+     * cantidades que quedaron en la orden (el DICI ya las editó/ajustó a lo que consiguió). Si la
+     * orden nació de una redistribución, reenvía id_orden_distribucion para que central la marque
+     * "En Tránsito" y ancle el pedido.
+     *
+     * Idempotente/recuperable:
+     *   estado 0                       → descuenta + notifica central.
+     *   estado 1 sin central           → NO vuelve a descontar; solo reintenta el envío a central.
+     *   estado 1 con central           → ya despachada, no hace nada.
+     */
+    public function darSalidaSimple(Request $req)
+    {
+        if (!$this->esDici()) {
+            return Response::json(['estado' => false, 'msj' => 'Solo el checkeador (DICI) da salida.']);
+        }
+
+        $orden = transferencias_inventario::with('items.producto')->find($req->id_transferencia ?? $req->id);
+        if (!$orden) {
+            return Response::json(['estado' => false, 'msj' => 'Orden no encontrada.']);
+        }
+        if ((int) $orden->estado === 1 && $orden->id_transferencia_central) {
+            return Response::json(['estado' => false, 'msj' => 'La orden ya fue despachada a central.']);
+        }
+
+        // Ítems con cantidad > 0 (lo que el DICI dejó confirmado en la orden).
+        $itemsValidos = $orden->items->filter(fn ($it) => (float) $it->cantidad > 0)->values();
+        if ($itemsValidos->isEmpty()) {
+            return Response::json(['estado' => false, 'msj' => 'La orden no tiene ítems con cantidad para despachar.']);
+        }
+
+        // ── Fase A: descontar inventario (solo si aún no se descontó: estado 0) ──
+        if ((int) $orden->estado === 0) {
+            DB::beginTransaction();
+            try {
+                // reclamar la orden dentro de la misma transacción para bloquear dobles salidas
+                $lock = transferencias_inventario::lockForUpdate()->find($orden->id);
+                if (!$lock || (int) $lock->estado !== 0) {
+                    DB::rollBack();
+                    return Response::json(['estado' => false, 'msj' => 'La orden ya no está en preparación (otra salida en curso).']);
+                }
+
+                $inv = new InventarioController();
+                // ordenar por id_producto → locks en orden consistente (sin deadlock bajo concurrencia)
+                foreach ($itemsValidos->sortBy('id_producto') as $it) {
+                    $producto = inventario::find($it->id_producto);
+                    if (!$producto) {
+                        throw new \Exception('Producto #' . $it->id_producto . ' ya no existe.');
+                    }
+                    $actual = (float) $producto->cantidad;
+                    $ok = $inv->descontarInventario(
+                        $producto->id,
+                        $actual - (float) $it->cantidad,
+                        $actual,
+                        $orden->id,
+                        'TRANS.SAL ORDEN'
+                    );
+                    if (!$ok) {
+                        throw new \Exception('No se pudo descontar el producto #' . $it->id_producto . '.');
+                    }
+                }
+
+                $lock->estado = 1; // DESPACHADA localmente (inventario ya salió)
+                $lock->save();
+                DB::commit();
+                $orden->estado = 1;
+            } catch (\Throwable $e) {
+                DB::rollBack();
+                return Response::json(['estado' => false, 'msj' => 'No se dio salida (no se descontó nada): ' . $e->getMessage()]);
+            }
+        }
+
+        // ── Fase B: notificar a central (crear el espejo). El inventario ya salió; si falla, se
+        //    puede reintentar esta misma llamada (entra por estado=1 sin central, sin re-descontar). ──
+        $itemsClean = [];
+        foreach ($itemsValidos as $it) {
+            $producto = $it->producto ?: inventario::find($it->id_producto);
+            if (!$producto) {
+                continue;
+            }
+            $itemsClean[] = [
+                'producto' => $producto,
+                'descuento' => 0,
+                'monto' => (float) $producto->precio_base * (float) $it->cantidad,
+                'cantidad' => (float) $it->cantidad,
+            ];
+        }
+
+        try {
+            $sc = new sendCentral();
+            $resp = $sc->requestToCentral('post', '/setPedidoInCentralFromMasters', [
+                'codigo_origen' => $sc->getOrigen(),
+                'id_sucursal' => $orden->id_destino,
+                'observaciones' => $orden->observacion,
+                'type' => 'add',
+                'id_transferencia_central' => null,
+                'id_orden_distribucion' => $orden->id_orden_distribucion,
+                'pedidos' => [[
+                    'id' => $orden->id,
+                    'items' => $itemsClean,
+                ]],
+            ]);
+            $res = $resp->json();
+            if (isset($res['estado']) && $res['estado'] === true) {
+                $orden->id_transferencia_central = $res['id'];
+                $orden->estado = 1;
+                $orden->save();
+                return Response::json([
+                    'estado' => true,
+                    'msj' => 'Salida dada. Inventario descontado y enviado a central.',
+                    'orden' => $this->ordenConDetalle($orden->id),
+                ]);
+            }
+            return Response::json(['estado' => false, 'msj' => 'La mercancía ya salió, pero central no aceptó el envío. Reintentá "Dar salida". Detalle: ' . json_encode($res)]);
+        } catch (\Throwable $e) {
+            return Response::json(['estado' => false, 'msj' => 'La mercancía ya salió localmente; falló el envío a central (reintentá "Dar salida"): ' . $e->getMessage()]);
         }
     }
 

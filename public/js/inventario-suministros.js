@@ -34541,6 +34541,9 @@ var db = {
   tdEliminarOrden: function tdEliminarOrden(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/eliminar-orden", data);
   },
+  tdDarSalidaSimple: function tdDarSalidaSimple(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/dar-salida-simple", data);
+  },
   tdGetPasilleros: function tdGetPasilleros(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/get-pasilleros", data);
   },

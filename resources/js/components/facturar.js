@@ -8619,6 +8619,12 @@ export default function Facturar({
                 pedidosCentral_copy[indexPedidoCentral].items[
                     index
                 ].warehouse_codigo = e.currentTarget.value;
+            } else if (tipo == "setcheck") {
+                // Chequeo del producto SIN ubicación (modo ubicación opcional del TCR).
+                const val = e.currentTarget.value;
+                pedidosCentral_copy[indexPedidoCentral].items[
+                    index
+                ].chequeado = (val === "true" || val === true);
             }
 
             setpedidoCentral(pedidosCentral_copy);

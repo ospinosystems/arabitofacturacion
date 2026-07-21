@@ -134876,6 +134876,51 @@ function TCRModule(_ref) {
     _useState6 = _slicedToArray(_useState5, 2),
     esperandoUbicacion = _useState6[0],
     setEsperandoUbicacion = _useState6[1];
+  // Ubicación opcional (por defecto ON): al escanear un producto solo se CHEQUEA, sin pedir
+  // el segundo escaneo de ubicación. Se recuerda entre sesiones.
+  var _useState7 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(function () {
+      var v = typeof window !== 'undefined' ? window.localStorage.getItem('tcr_ubicacion_opcional') : null;
+      return v === null ? true : v === '1';
+    }),
+    _useState8 = _slicedToArray(_useState7, 2),
+    ubicacionOpcional = _useState8[0],
+    setUbicacionOpcional = _useState8[1];
+  var toggleUbicacionOpcional = function toggleUbicacionOpcional() {
+    setUbicacionOpcional(function (prev) {
+      var next = !prev;
+      try {
+        window.localStorage.setItem('tcr_ubicacion_opcional', next ? '1' : '0');
+      } catch (e) {/* noop */}
+      // Al activar "opcional" se cancela cualquier espera de ubicación en curso.
+      if (next) {
+        setEsperandoUbicacion(false);
+        setProductoSeleccionado(null);
+      }
+      return next;
+    });
+  };
+
+  // Un ítem está "listo" si tiene ubicación asignada o fue chequeado (modo opcional).
+  var itemListo = function itemListo(item) {
+    return !!(item && (item.warehouse_codigo || item.chequeado));
+  };
+
+  // Marca (o desmarca) un producto como chequeado sin ubicación, vía selectPedidosCentral.
+  var marcarChequeado = function marcarChequeado(index, valor) {
+    selectPedidosCentral({
+      currentTarget: {
+        attributes: {
+          'data-index': {
+            value: index
+          },
+          'data-tipo': {
+            value: 'setcheck'
+          }
+        },
+        value: valor ? 'true' : 'false'
+      }
+    });
+  };
 
   // Función para buscar producto por código de barras y seleccionarlo
   var handleBuscarProducto = function handleBuscarProducto(e) {
@@ -134912,7 +134957,31 @@ function TCRModule(_ref) {
           return;
         }
 
-        // Seleccionar el producto y esperar ubicación
+        // ── Modo ubicación OPCIONAL: solo chequear el producto, sin segundo escaneo ──
+        if (ubicacionOpcional) {
+          if (producto.chequeado) {
+            setBusquedaMensaje("\u26A0\uFE0F Producto ya chequeado: ".concat(producto.producto.descripcion.substring(0, 45), "..."));
+          } else {
+            marcarChequeado(productoIndex, true);
+            setBusquedaMensaje("\u2705 Chequeado: ".concat(producto.producto.descripcion.substring(0, 50), "..."));
+          }
+          e.target.value = '';
+          // Refocar para el siguiente escaneo y hacer scroll al producto
+          setTimeout(function () {
+            var productoElement = document.querySelector("[data-producto-card=\"".concat(productoIndex, "\"]"));
+            if (productoElement) productoElement.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            });
+            if (inputGenericoRef.current) inputGenericoRef.current.focus();
+          }, 100);
+          setTimeout(function () {
+            return setBusquedaMensaje('');
+          }, 2500);
+          return;
+        }
+
+        // ── Modo con ubicación: seleccionar el producto y esperar el segundo escaneo ──
         setProductoSeleccionado(productoIndex);
         setEsperandoUbicacion(true);
         setBusquedaMensaje("\u2713 Producto seleccionado: ".concat(producto.producto.descripcion.substring(0, 50), "... | \uD83D\uDD35 ESCANEA LA UBICACI\xD3N"));
@@ -135344,14 +135413,22 @@ function TCRModule(_ref) {
             })
           }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
             className: "bg-white rounded-lg shadow overflow-hidden border border-gray-200",
-            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
-              className: "bg-blue-600 px-3 py-2 border-b border-blue-700",
-              children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("h2", {
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
+              className: "bg-blue-600 px-3 py-2 border-b border-blue-700 flex items-center justify-between gap-2 flex-wrap",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("h2", {
                 className: "text-sm font-bold text-white flex items-center gap-2",
                 children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
                   className: "fas fa-barcode"
-                }), "Pistoleo \xB7 Asignaci\xF3n de Ubicaciones"]
-              })
+                }), ubicacionOpcional ? 'Pistoleo · Chequeo de Productos' : 'Pistoleo · Asignación de Ubicaciones']
+              }), pedidosCentral[indexPedidoCentral].estado === 4 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("button", {
+                type: "button",
+                onClick: toggleUbicacionOpcional,
+                className: "inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-bold transition border ".concat(ubicacionOpcional ? 'bg-white text-blue-700 border-white' : 'bg-blue-500/30 text-white border-blue-300'),
+                title: ubicacionOpcional ? 'Ubicación opcional activada: escanear solo chequea el producto. Click para exigir ubicación.' : 'Se exige escanear ubicación tras cada producto. Click para hacerla opcional.',
+                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                  className: "fas ".concat(ubicacionOpcional ? 'fa-toggle-on' : 'fa-toggle-off')
+                }), ubicacionOpcional ? 'Ubicación opcional' : 'Ubicación requerida']
+              })]
             }), pedidosCentral[indexPedidoCentral].estado === 4 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
               className: "sticky top-0 z-50 border-b px-3 py-2 bg-white ".concat(esperandoUbicacion ? 'border-amber-500' : 'border-blue-500'),
               children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
@@ -135360,7 +135437,7 @@ function TCRModule(_ref) {
                   className: "flex items-center gap-1 text-xs font-bold whitespace-nowrap ".concat(esperandoUbicacion ? 'text-amber-700' : 'text-blue-700'),
                   children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
                     className: "fas ".concat(esperandoUbicacion ? 'fa-map-marker-alt' : 'fa-barcode')
-                  }), esperandoUbicacion ? 'Escanea ubicación' : 'Busca producto']
+                  }), esperandoUbicacion ? 'Escanea ubicación' : ubicacionOpcional ? 'Escanea para chequear' : 'Busca producto']
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("input", {
                   ref: inputGenericoRef,
                   type: "text",
@@ -135405,7 +135482,7 @@ function TCRModule(_ref) {
                     className: "fas fa-clipboard-list text-blue-500"
                   }), "Lista de Productos", pedidosCentral[indexPedidoCentral].estado === 4 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("span", {
                     className: "text-sm font-normal text-gray-500 ml-2",
-                    children: "(Escanea la ubicaci\xF3n directamente en cada producto)"
+                    children: ubicacionOpcional ? '(Escanea cada producto para chequearlo — ubicación opcional)' : '(Escanea el producto y luego su ubicación)'
                   })]
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
                   className: "max-h-[600px] overflow-y-auto overflow-x-auto border border-gray-200 rounded-lg",
@@ -135447,8 +135524,9 @@ function TCRModule(_ref) {
                       children: pedidosCentral[indexPedidoCentral].items.map(function (e, i) {
                         var estado = pedidosCentral[indexPedidoCentral].estado;
                         var seleccionado = estado === 4 && productoSeleccionado === i;
-                        var rowBg = estado === 4 ? e.warehouse_codigo ? 'bg-emerald-50' : seleccionado ? 'bg-blue-100 ring-2 ring-inset ring-blue-400' : 'bg-amber-50/60 hover:bg-amber-50' : estado === 1 ? e.aprobado === true ? 'bg-emerald-50' : e.aprobado === false ? 'bg-red-50' : 'bg-white hover:bg-gray-50' : 'bg-white';
-                        var numBadge = estado === 4 ? e.warehouse_codigo ? 'bg-emerald-500' : 'bg-amber-500' : estado === 1 ? e.aprobado === true ? 'bg-emerald-500' : e.aprobado === false ? 'bg-red-500' : 'bg-gray-400' : 'bg-gray-400';
+                        var listo = itemListo(e);
+                        var rowBg = estado === 4 ? listo ? 'bg-emerald-50' : seleccionado ? 'bg-blue-100 ring-2 ring-inset ring-blue-400' : 'bg-amber-50/60 hover:bg-amber-50' : estado === 1 ? e.aprobado === true ? 'bg-emerald-50' : e.aprobado === false ? 'bg-red-50' : 'bg-white hover:bg-gray-50' : 'bg-white';
+                        var numBadge = estado === 4 ? listo ? 'bg-emerald-500' : 'bg-amber-500' : estado === 1 ? e.aprobado === true ? 'bg-emerald-500' : e.aprobado === false ? 'bg-red-500' : 'bg-gray-400' : 'bg-gray-400';
                         return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("tr", {
                           "data-producto-card": i,
                           className: "transition-colors ".concat(rowBg),
@@ -135499,17 +135577,43 @@ function TCRModule(_ref) {
                               children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
                                 className: "fas fa-map-marker-alt"
                               }), e.warehouse_codigo]
+                            }) : e.chequeado ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
+                              className: "inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 font-bold rounded border border-emerald-300",
+                              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                                className: "fas fa-check"
+                              }), " Chequeado"]
                             }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("span", {
                               className: "text-amber-500 font-semibold",
                               children: "\u2014 sin ubicar"
                             })
                           }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("td", {
                             className: "px-2 py-1.5 text-center align-middle",
-                            children: estado === 4 ? e.warehouse_codigo ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
-                              className: "inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500 text-white font-bold rounded-full",
+                            children: estado === 4 ? listo ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
+                              className: "inline-flex items-center gap-1",
+                              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
+                                className: "inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500 text-white font-bold rounded-full",
+                                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                                  className: "fas fa-check-circle"
+                                }), " COMPLETADO"]
+                              }), !e.warehouse_codigo && e.chequeado && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("button", {
+                                onClick: function onClick() {
+                                  return marcarChequeado(i, false);
+                                },
+                                className: "text-gray-400 hover:text-red-500",
+                                title: "Deshacer chequeo",
+                                children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                                  className: "fas fa-rotate-left"
+                                })
+                              })]
+                            }) : ubicacionOpcional ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("button", {
+                              onClick: function onClick() {
+                                return marcarChequeado(i, true);
+                              },
+                              className: "inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-full transition",
+                              title: "Chequear producto (sin ubicaci\xF3n)",
                               children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
-                                className: "fas fa-check-circle"
-                              }), " COMPLETADO"]
+                                className: "fas fa-check"
+                              }), " Chequear"]
                             }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
                               className: "inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500 text-white font-bold rounded-full",
                               children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
@@ -135562,21 +135666,19 @@ function TCRModule(_ref) {
                     className: "bg-emerald-50 rounded-lg p-4 border border-emerald-200",
                     children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
                       className: "text-2xl font-bold text-emerald-600 mb-2",
-                      children: pedidosCentral[indexPedidoCentral].items.filter(function (e) {
-                        return e.warehouse_codigo;
-                      }).length
+                      children: pedidosCentral[indexPedidoCentral].items.filter(itemListo).length
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
                       className: "text-xs font-semibold text-emerald-700 uppercase flex items-center gap-1",
                       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
                         className: "fas fa-check-circle"
-                      }), "Con Ubicaci\xF3n"]
+                      }), "Chequeados"]
                     })]
                   }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
                     className: "bg-amber-50 rounded-lg p-4 border border-amber-200",
                     children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
                       className: "text-2xl font-bold text-amber-600 mb-2",
                       children: pedidosCentral[indexPedidoCentral].items.filter(function (e) {
-                        return !e.warehouse_codigo;
+                        return !itemListo(e);
                       }).length
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
                       className: "text-xs font-semibold text-amber-700 uppercase flex items-center gap-1",
@@ -135601,27 +135703,23 @@ function TCRModule(_ref) {
                   children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
                     className: "absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500 ease-out flex items-center justify-center",
                     style: {
-                      width: "".concat(pedidosCentral[indexPedidoCentral].items.filter(function (e) {
-                        return e.warehouse_codigo;
-                      }).length / pedidosCentral[indexPedidoCentral].items.length * 100, "%")
+                      width: "".concat(pedidosCentral[indexPedidoCentral].items.filter(itemListo).length / pedidosCentral[indexPedidoCentral].items.length * 100, "%")
                     },
                     children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("span", {
                       className: "text-white font-bold text-sm",
-                      children: [Math.round(pedidosCentral[indexPedidoCentral].items.filter(function (e) {
-                        return e.warehouse_codigo;
-                      }).length / pedidosCentral[indexPedidoCentral].items.length * 100), "%"]
+                      children: [Math.round(pedidosCentral[indexPedidoCentral].items.filter(itemListo).length / pedidosCentral[indexPedidoCentral].items.length * 100), "%"]
                     })
                   })
-                }), pedidosCentral[indexPedidoCentral].items.length > 0 && pedidosCentral[indexPedidoCentral].items.every(function (item) {
-                  return item.warehouse_codigo;
-                }) && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
+                }), pedidosCentral[indexPedidoCentral].items.length > 0 && pedidosCentral[indexPedidoCentral].items.every(itemListo) && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
                   className: "pt-3 border-t border-gray-200",
                   children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("button", {
                     onClick: checkPedidosCentral,
                     className: "w-full px-3 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow transition flex items-center justify-center gap-2",
                     children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
                       className: "fas fa-save"
-                    }), "Guardar Recepci\xF3n con Ubicaciones"]
+                    }), pedidosCentral[indexPedidoCentral].items.every(function (item) {
+                      return item.warehouse_codigo;
+                    }) ? 'Guardar Recepción con Ubicaciones' : 'Guardar Recepción']
                   })
                 })]
               })]
@@ -136413,11 +136511,17 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
     _ref5$transferenciaTo = _ref5.transferenciaToEdit,
     transferenciaToEdit = _ref5$transferenciaTo === void 0 ? null : _ref5$transferenciaTo,
     sucursales = _ref5.sucursales,
-    cargarTransferencias = _ref5.cargarTransferencias;
+    cargarTransferencias = _ref5.cargarTransferencias,
+    _ref5$modoBorrador = _ref5.modoBorrador,
+    modoBorrador = _ref5$modoBorrador === void 0 ? false : _ref5$modoBorrador,
+    onGuardarBorrador = _ref5.onGuardarBorrador;
   // Una premonta (orden de redistribución traída de central) se arma como transferencia NUEVA,
   // no como edición de una transferencia local existente.
   var esPremonta = !!(transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.es_premontada);
-  var esEdicion = !!transferenciaToEdit && !esPremonta;
+  // Modo borrador (Plan B): la orden vive como "en preparación" local; guardar NO descuenta
+  // inventario. La salida (descuento + espejo en central) se hace aparte con "Dar salida".
+  var esBorrador = !!modoBorrador;
+  var esEdicion = !!transferenciaToEdit && !esPremonta && !esBorrador;
   var idSucursalOrigen = sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER;
   var _useState13 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((transferenciaToEdit === null || transferenciaToEdit === void 0 ? void 0 : transferenciaToEdit.id_destino) || ''),
     _useState14 = _slicedToArray(_useState13, 2),
@@ -136448,8 +136552,9 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
     mostrarObservaciones = _useState26[0],
     setMostrarObservaciones = _useState26[1];
 
-  // Destino: bloqueado por defecto al editar (evita cambios sin querer); buscador al desbloquear.
-  var _useState27 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(esEdicion),
+  // Destino: bloqueado por defecto cuando ya trae un destino (edición o borrador de
+  // redistribución); en un borrador nuevo/manual sin destino queda el buscador abierto.
+  var _useState27 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((esEdicion || esBorrador) && !!(transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_destino)),
     _useState28 = _slicedToArray(_useState27, 2),
     destinoBloqueado = _useState28[0],
     setDestinoBloqueado = _useState28[1];
@@ -136473,34 +136578,41 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
     if (transferenciaToEdit && transferenciaToEdit.items) {
       // Mapear items de la transferencia a editar, obteniendo stock original del inventario
       var itemsMapeados = transferenciaToEdit.items.map(function (itemAPI) {
-        // Buscar el producto en el inventario usando el id_producto_insucursal
-        var productoInventario = mockInventarioData.find(function (pInv) {
-          return pInv.id === itemAPI.id_producto_insucursal;
-        });
+        var _prod$precio_base, _prod$precio;
+        // El producto puede venir anidado (premonta/edición) o plano (borrador de tdGetOrdenes).
+        var prod = itemAPI.producto || {
+          id: itemAPI.id_producto_insucursal || itemAPI.id_producto,
+          precio_base: itemAPI.base || 0,
+          precio: itemAPI.venta || 0,
+          codigo_barras: itemAPI.codigo_barras,
+          codigo_proveedor: itemAPI.codigo_proveedor,
+          descripcion: itemAPI.descripcion
+        };
+        var precioVenta = parseFloat(prod.precio) || 0;
 
         // Crear un objeto con la estructura correcta para el formulario
         return {
           id: itemAPI.id,
           // ID del item de transferencia
-          id_producto: itemAPI.producto.id,
+          id_producto: prod.id,
           // ID del producto global
           id_pedido: transferenciaToEdit.id,
           // ID de la transferencia
-          id_producto_insucursal: itemAPI.producto.id,
+          id_producto_insucursal: prod.id,
           // ID del producto en inventario
           cantidad: String(itemAPI.cantidad),
           // Convertir a string para consistencia
-          base: String(itemAPI.producto.precio_base),
+          base: String((_prod$precio_base = prod.precio_base) !== null && _prod$precio_base !== void 0 ? _prod$precio_base : 0),
           // Precio base del producto
-          venta: String(itemAPI.producto.precio),
+          venta: String((_prod$precio = prod.precio) !== null && _prod$precio !== void 0 ? _prod$precio : 0),
           // Precio venta del producto
           descuento: String(itemAPI.descuento || "0.00"),
-          monto: String((parseFloat(itemAPI.cantidad) * parseFloat(itemAPI.producto.precio)).toFixed(2)),
+          monto: String((parseFloat(itemAPI.cantidad) * precioVenta).toFixed(2)),
           ct_real: parseFloat(itemAPI.cantidad),
-          barras_real: itemAPI.producto.codigo_barras,
-          alterno_real: itemAPI.producto.codigo_proveedor,
-          descripcion_real: itemAPI.producto.descripcion,
-          vinculo_real: itemAPI.id_producto_insucursal,
+          barras_real: prod.codigo_barras,
+          alterno_real: prod.codigo_proveedor,
+          descripcion_real: prod.descripcion,
+          vinculo_real: itemAPI.id_producto_insucursal || prod.id,
           created_at: itemAPI.created_at,
           updated_at: itemAPI.updated_at,
           cantidad_original_stock_inventario: (itemAPI === null || itemAPI === void 0 ? void 0 : itemAPI.cantidad) || 0,
@@ -136582,7 +136694,7 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
   };
   var handleSubmit = /*#__PURE__*/function () {
     var _ref6 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee2(e) {
-      var validSubmission, datosTransferencia, res;
+      var validSubmission, datosTransferencia, res, _res;
       return _regeneratorRuntime().wrap(function _callee2$(_context2) {
         while (1) switch (_context2.prev = _context2.next) {
           case 0:
@@ -136647,23 +136759,63 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
 
             // Si nace de una premonta (orden de redistribución aprobada), reenviamos su id para que
             // central marque la orden "En Tránsito" y ancle el pedido.
-            if (esPremonta && transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_orden_distribucion) {
+            if ((esPremonta || esBorrador) && transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_orden_distribucion) {
               datosTransferencia.id_orden_distribucion = transferenciaToEdit.id_orden_distribucion;
             }
+
+            // ── Modo borrador (Plan B): guardar la orden "en preparación" SIN descontar inventario ──
+            if (!esBorrador) {
+              _context2.next = 39;
+              break;
+            }
+            if (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id) datosTransferencia.id = transferenciaToEdit.id;
             setEstaCargando(true);
-            _context2.prev = 17;
-            _context2.next = 20;
-            return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].settransferenciaDici(datosTransferencia);
-          case 20:
+            _context2.prev = 19;
+            _context2.next = 22;
+            return onGuardarBorrador(datosTransferencia);
+          case 22:
             res = _context2.sent;
-            if (!res.data.estado) {
-              _context2.next = 30;
+            if (!(res !== null && res !== void 0 && res.estado)) {
+              _context2.next = 29;
+              break;
+            }
+            setMensajeExito('Borrador guardado (no se descontó inventario).');
+            onSave(res);
+            setTimeout(function () {
+              return setMensajeExito('');
+            }, 4000);
+            _context2.next = 30;
+            break;
+          case 29:
+            throw new Error((res === null || res === void 0 ? void 0 : res.msj) || 'No se pudo guardar el borrador.');
+          case 30:
+            _context2.next = 35;
+            break;
+          case 32:
+            _context2.prev = 32;
+            _context2.t0 = _context2["catch"](19);
+            setError(_context2.t0.message || 'Error al guardar el borrador.');
+          case 35:
+            _context2.prev = 35;
+            setEstaCargando(false);
+            return _context2.finish(35);
+          case 38:
+            return _context2.abrupt("return");
+          case 39:
+            setEstaCargando(true);
+            _context2.prev = 40;
+            _context2.next = 43;
+            return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].settransferenciaDici(datosTransferencia);
+          case 43:
+            _res = _context2.sent;
+            if (!_res.data.estado) {
+              _context2.next = 53;
               break;
             }
             setMensajeExito("Transferencia ".concat(esEdicion ? 'actualizada' : 'creada', " exitosamente."));
-            _context2.next = 25;
+            _context2.next = 48;
             return cargarTransferencias();
-          case 25:
+          case 48:
             // Recargar la lista
 
             if (!esEdicion) {
@@ -136674,32 +136826,32 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
             }
 
             // Notificar al componente padre
-            onSave(res.data);
+            onSave(_res.data);
 
             // Limpiar mensaje de éxito después de 5 segundos
             setTimeout(function () {
               return setMensajeExito('');
             }, 5000);
-            _context2.next = 31;
+            _context2.next = 54;
             break;
-          case 30:
-            throw new Error(res.data.mensaje || 'Error al procesar la transferencia');
-          case 31:
-            _context2.next = 36;
+          case 53:
+            throw new Error(_res.data.mensaje || 'Error al procesar la transferencia');
+          case 54:
+            _context2.next = 59;
             break;
-          case 33:
-            _context2.prev = 33;
-            _context2.t0 = _context2["catch"](17);
-            setError(_context2.t0.message || "Error al ".concat(esEdicion ? 'actualizar' : 'crear', " transferencia."));
-          case 36:
-            _context2.prev = 36;
+          case 56:
+            _context2.prev = 56;
+            _context2.t1 = _context2["catch"](40);
+            setError(_context2.t1.message || "Error al ".concat(esEdicion ? 'actualizar' : 'crear', " transferencia."));
+          case 59:
+            _context2.prev = 59;
             setEstaCargando(false);
-            return _context2.finish(36);
-          case 39:
+            return _context2.finish(59);
+          case 62:
           case "end":
             return _context2.stop();
         }
-      }, _callee2, null, [[17, 33, 36, 39]]);
+      }, _callee2, null, [[19, 32, 35, 38], [40, 56, 59, 62]]);
     }));
     return function handleSubmit(_x2) {
       return _ref6.apply(this, arguments);
@@ -136712,7 +136864,7 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
       className: "flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-gray-200",
       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("h2", {
         className: "text-sm font-semibold text-gray-800 uppercase tracking-wide",
-        children: esEdicion ? "Editando Transferencia #".concat(transferenciaToEdit.id) : 'Nueva Transferencia'
+        children: esBorrador ? transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id ? "Orden en preparaci\xF3n #".concat(transferenciaToEdit.id) : 'Nueva orden en preparación' : esEdicion ? "Editando Transferencia #".concat(transferenciaToEdit.id) : 'Nueva Transferencia'
       }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
         className: "flex items-center gap-2",
         children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
@@ -136788,6 +136940,23 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
       children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
         children: mensajeExito
       })
+    }), esBorrador && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+      className: "bg-blue-50 border-l-4 border-blue-500 text-blue-800 px-3 py-2 text-sm flex items-start gap-2",
+      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+        className: "fas fa-info-circle mt-0.5"
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+        children: ["Est\xE1s ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("b", {
+          children: "preparando"
+        }), " la orden", transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_orden_distribucion ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
+          children: [" de la redistribuci\xF3n ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("b", {
+            children: ["#", transferenciaToEdit.id_orden_distribucion]
+          })]
+        }) : '', ". Ajust\xE1 las cantidades a lo que vayas consiguiendo y quit\xE1 lo que no. Guardar ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("b", {
+          children: "no descuenta inventario"
+        }), "; el inventario sale reci\xE9n cuando le das ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("b", {
+          children: "\u201CDar salida\u201D"
+        }), " desde el listado."]
+      })]
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
       className: "relative",
       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
@@ -136884,7 +137053,7 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
         type: "submit",
         disabled: estaCargando || itemsTransferencia.length === 0,
         className: "w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border-transparent rounded-md shadow-sm text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition",
-        children: estaCargando ? 'Guardando...' : esEdicion ? 'Actualizar Transferencia' : 'Crear Transferencia'
+        children: estaCargando ? 'Guardando...' : esBorrador ? transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id ? 'Guardar cambios' : 'Guardar borrador' : esEdicion ? 'Actualizar Transferencia' : 'Crear Transferencia'
       })]
     })]
   });
@@ -137611,6 +137780,24 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
     _useState56 = _slicedToArray(_useState55, 2),
     premontas = _useState56[0],
     setPremontas = _useState56[1];
+  var _useState57 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    _useState58 = _slicedToArray(_useState57, 2),
+    qPremonta = _useState58[0],
+    setQPremonta = _useState58[1];
+  // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
+  var _useState59 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    _useState60 = _slicedToArray(_useState59, 2),
+    borradores = _useState60[0],
+    setBorradores = _useState60[1];
+  var _useState61 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState62 = _slicedToArray(_useState61, 2),
+    borradorEnEdicion = _useState62[0],
+    setBorradorEnEdicion = _useState62[1];
+  var _useState63 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState64 = _slicedToArray(_useState63, 2),
+    procesando = _useState64[0],
+    setProcesando = _useState64[1]; // id ocupado (crear/salida/eliminar)
+
   var cargarTransferencias = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
     var _ref1 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee4(filtros) {
       var response;
@@ -137715,47 +137902,73 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
     cargarSucursales();
   }, []);
 
-  // Cargar premontas (órdenes de redistribución aprobadas para esta sucursal origen).
+  // Cargar borradores (órdenes locales en preparación, estado 0).
+  var cargarBorradores = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/_asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee7() {
+    var _res$data, res;
+    return _regeneratorRuntime().wrap(function _callee7$(_context7) {
+      while (1) switch (_context7.prev = _context7.next) {
+        case 0:
+          _context7.prev = 0;
+          _context7.next = 3;
+          return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGetOrdenes({
+            estado: 0,
+            limit: 100
+          });
+        case 3:
+          res = _context7.sent;
+          setBorradores(((_res$data = res.data) === null || _res$data === void 0 ? void 0 : _res$data.ordenes) || []);
+          _context7.next = 10;
+          break;
+        case 7:
+          _context7.prev = 7;
+          _context7.t0 = _context7["catch"](0);
+          setBorradores([]);
+        case 10:
+        case "end":
+          return _context7.stop();
+      }
+    }, _callee7, null, [[0, 7]]);
+  })), []);
+
+  // Cargar premontas (redistribuciones aprobadas para esta sucursal origen) + borradores.
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].getPremontadas({
       limit: 50
     }).then(function (res) {
-      var _res$data;
-      return setPremontas(((_res$data = res.data) === null || _res$data === void 0 ? void 0 : _res$data.premontadas) || []);
+      var _res$data2;
+      return setPremontas(((_res$data2 = res.data) === null || _res$data2 === void 0 ? void 0 : _res$data2.premontadas) || []);
     })["catch"](function () {
       return setPremontas([]);
     });
-  }, [refreshListKey]);
+    cargarBorradores();
+  }, [refreshListKey, cargarBorradores]);
 
-  // Abre una premonta en el formulario como transferencia nueva, mapeando cada producto
-  // al inventario local por código de barras, y llevando el id de la orden de redistribución.
-  var abrirPremonta = /*#__PURE__*/function () {
-    var _ref12 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee7(prem) {
-      var _prem$sucursal_destin, items, noEncontrados, _iterator, _step, _loop;
-      return _regeneratorRuntime().wrap(function _callee7$(_context8) {
-        while (1) switch (_context8.prev = _context8.next) {
+  // Mapea los productos de una redistribución al inventario local por código de barras.
+  var mapearItemsPremonta = /*#__PURE__*/function () {
+    var _ref13 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee8(prem) {
+      var items, noEncontrados, _iterator, _step, _loop;
+      return _regeneratorRuntime().wrap(function _callee8$(_context9) {
+        while (1) switch (_context9.prev = _context9.next) {
           case 0:
-            setEstaCargando(true);
-            _context8.prev = 1;
             items = [];
             noEncontrados = [];
             _iterator = _createForOfIteratorHelper(prem.items || []);
-            _context8.prev = 5;
+            _context9.prev = 3;
             _loop = /*#__PURE__*/_regeneratorRuntime().mark(function _loop() {
               var _it$producto;
               var it, barras, local, r, arr, _it$producto2;
-              return _regeneratorRuntime().wrap(function _loop$(_context7) {
-                while (1) switch (_context7.prev = _context7.next) {
+              return _regeneratorRuntime().wrap(function _loop$(_context8) {
+                while (1) switch (_context8.prev = _context8.next) {
                   case 0:
                     it = _step.value;
                     barras = (_it$producto = it.producto) === null || _it$producto === void 0 ? void 0 : _it$producto.codigo_barras;
                     local = null;
                     if (!barras) {
-                      _context7.next = 14;
+                      _context8.next = 14;
                       break;
                     }
-                    _context7.prev = 4;
-                    _context7.next = 7;
+                    _context8.prev = 4;
+                    _context8.next = 7;
                     return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].getinventario({
                       vendedor: null,
                       num: 5,
@@ -137765,102 +137978,301 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
                       orderBy: 'asc'
                     });
                   case 7:
-                    r = _context7.sent;
+                    r = _context8.sent;
                     arr = r.data || [];
                     local = arr.find(function (p) {
                       return String(p.codigo_barras) === String(barras);
                     }) || null;
-                    _context7.next = 14;
+                    _context8.next = 14;
                     break;
                   case 12:
-                    _context7.prev = 12;
-                    _context7.t0 = _context7["catch"](4);
+                    _context8.prev = 12;
+                    _context8.t0 = _context8["catch"](4);
                   case 14:
                     if (local) {
                       items.push({
-                        id: it.id,
                         id_producto_insucursal: local.id,
-                        cantidad: it.cantidad,
-                        descuento: 0,
-                        producto: {
-                          id: local.id,
-                          precio_base: local.precio_base,
-                          precio: local.precio,
-                          codigo_barras: local.codigo_barras,
-                          codigo_proveedor: local.codigo_proveedor,
-                          descripcion: local.descripcion
-                        },
-                        created_at: null,
-                        updated_at: null
+                        cantidad: it.cantidad
                       });
                     } else {
                       noEncontrados.push(((_it$producto2 = it.producto) === null || _it$producto2 === void 0 ? void 0 : _it$producto2.descripcion) || barras || '#' + (it.producto_id_master || it.id));
                     }
                   case 15:
                   case "end":
-                    return _context7.stop();
+                    return _context8.stop();
                 }
               }, _loop, null, [[4, 12]]);
             });
             _iterator.s();
-          case 8:
+          case 6:
             if ((_step = _iterator.n()).done) {
-              _context8.next = 12;
+              _context9.next = 10;
               break;
             }
-            return _context8.delegateYield(_loop(), "t0", 10);
+            return _context9.delegateYield(_loop(), "t0", 8);
+          case 8:
+            _context9.next = 6;
+            break;
           case 10:
-            _context8.next = 8;
+            _context9.next = 15;
             break;
           case 12:
-            _context8.next = 17;
-            break;
-          case 14:
-            _context8.prev = 14;
-            _context8.t1 = _context8["catch"](5);
-            _iterator.e(_context8.t1);
-          case 17:
-            _context8.prev = 17;
+            _context9.prev = 12;
+            _context9.t1 = _context9["catch"](3);
+            _iterator.e(_context9.t1);
+          case 15:
+            _context9.prev = 15;
             _iterator.f();
-            return _context8.finish(17);
-          case 20:
+            return _context9.finish(15);
+          case 18:
+            return _context9.abrupt("return", {
+              items: items,
+              noEncontrados: noEncontrados
+            });
+          case 19:
+          case "end":
+            return _context9.stop();
+        }
+      }, _callee8, null, [[3, 12, 15, 18]]);
+    }));
+    return function mapearItemsPremonta(_x5) {
+      return _ref13.apply(this, arguments);
+    };
+  }();
+
+  // "Crear orden" desde una redistribución: genera una COPIA editable local (orden en
+  // preparación, estado 0, SIN descontar), ligada a la redistribución. La original queda intacta.
+  var crearOrdenDesdePremonta = /*#__PURE__*/function () {
+    var _ref14 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee9(prem) {
+      var _prem$sucursal_destin, _res$data3, _yield$mapearItemsPre, items, noEncontrados, res, _res$data4;
+      return _regeneratorRuntime().wrap(function _callee9$(_context0) {
+        while (1) switch (_context0.prev = _context0.next) {
+          case 0:
+            setProcesando('prem-' + prem.id_orden_distribucion);
+            _context0.prev = 1;
+            _context0.next = 4;
+            return mapearItemsPremonta(prem);
+          case 4:
+            _yield$mapearItemsPre = _context0.sent;
+            items = _yield$mapearItemsPre.items;
+            noEncontrados = _yield$mapearItemsPre.noEncontrados;
             if (noEncontrados.length) {
-              alert('Estos productos de la orden no están en tu inventario local y no se cargaron:\n- ' + noEncontrados.join('\n- '));
+              alert('Estos productos de la redistribución no están en tu inventario local y no se incluyeron (podés agregarlos manualmente en la orden):\n- ' + noEncontrados.join('\n- '));
             }
             if (items.length) {
-              _context8.next = 24;
+              _context0.next = 11;
               break;
             }
-            alert('Ningún producto de la orden se pudo mapear a tu inventario local.');
-            return _context8.abrupt("return");
-          case 24:
-            setTransferenciaSeleccionada({
-              id: null,
-              es_premontada: true,
-              id_orden_distribucion: prem.id_orden_distribucion,
+            alert('Ningún producto de la redistribución se pudo mapear a tu inventario local.');
+            return _context0.abrupt("return");
+          case 11:
+            _context0.next = 13;
+            return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGuardarOrden({
               id_destino: ((_prem$sucursal_destin = prem.sucursal_destino) === null || _prem$sucursal_destin === void 0 ? void 0 : _prem$sucursal_destin.id) || '',
-              observaciones: '',
+              id_orden_distribucion: prem.id_orden_distribucion,
+              observaciones: 'Redistribución #' + prem.id_orden_distribucion,
               items: items
             });
-            setVistaActual('form');
+          case 13:
+            res = _context0.sent;
+            if (!((_res$data3 = res.data) !== null && _res$data3 !== void 0 && _res$data3.estado)) {
+              _context0.next = 20;
+              break;
+            }
+            _context0.next = 17;
+            return cargarBorradores();
+          case 17:
+            setPremontas(function (prev) {
+              return prev.filter(function (p) {
+                return p.id_orden_distribucion !== prem.id_orden_distribucion;
+              });
+            });
+            _context0.next = 21;
+            break;
+          case 20:
+            alert(((_res$data4 = res.data) === null || _res$data4 === void 0 ? void 0 : _res$data4.msj) || 'No se pudo crear la orden.');
+          case 21:
+            _context0.next = 26;
+            break;
+          case 23:
+            _context0.prev = 23;
+            _context0.t0 = _context0["catch"](1);
+            alert('Error al crear la orden: ' + (_context0.t0.message || _context0.t0));
           case 26:
-            _context8.prev = 26;
-            setEstaCargando(false);
-            return _context8.finish(26);
+            _context0.prev = 26;
+            setProcesando(null);
+            return _context0.finish(26);
           case 29:
           case "end":
-            return _context8.stop();
+            return _context0.stop();
         }
-      }, _callee7, null, [[1,, 26, 29], [5, 14, 17, 20]]);
+      }, _callee9, null, [[1, 23, 26, 29]]);
     }));
-    return function abrirPremonta(_x5) {
-      return _ref12.apply(this, arguments);
+    return function crearOrdenDesdePremonta(_x6) {
+      return _ref14.apply(this, arguments);
+    };
+  }();
+
+  // Editar un borrador: abre el formulario en modo borrador con sus ítems.
+  var editarBorrador = function editarBorrador(borrador) {
+    setBorradorEnEdicion(borrador);
+    setTransferenciaSeleccionada({
+      id: borrador.id,
+      id_orden_distribucion: borrador.id_orden_distribucion,
+      id_destino: borrador.id_destino,
+      observaciones: borrador.observacion || '',
+      items: borrador.items || []
+    });
+    setVistaActual('form');
+  };
+
+  // Guarda el borrador (crear/actualizar) sin descontar. Devuelve {estado, msj, orden}.
+  var guardarBorrador = /*#__PURE__*/function () {
+    var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(datos) {
+      var res;
+      return _regeneratorRuntime().wrap(function _callee0$(_context1) {
+        while (1) switch (_context1.prev = _context1.next) {
+          case 0:
+            _context1.next = 2;
+            return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGuardarOrden(datos);
+          case 2:
+            res = _context1.sent;
+            _context1.next = 5;
+            return cargarBorradores();
+          case 5:
+            return _context1.abrupt("return", res.data);
+          case 6:
+          case "end":
+            return _context1.stop();
+        }
+      }, _callee0);
+    }));
+    return function guardarBorrador(_x7) {
+      return _ref15.apply(this, arguments);
+    };
+  }();
+
+  // Dar salida a un borrador: descuenta inventario + crea el espejo en central.
+  var darSalida = /*#__PURE__*/function () {
+    var _ref16 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(borrador) {
+      var nItems, _res$data5, res, _res$data6;
+      return _regeneratorRuntime().wrap(function _callee1$(_context10) {
+        while (1) switch (_context10.prev = _context10.next) {
+          case 0:
+            nItems = (borrador.items || []).filter(function (i) {
+              return parseFloat(i.cantidad) > 0;
+            }).length;
+            if (window.confirm("\xBFDar salida a la orden #".concat(borrador.id, "? Se descontar\xE1n ").concat(nItems, " producto(s) del inventario y se enviar\xE1 a central. Esta acci\xF3n s\xED mueve inventario."))) {
+              _context10.next = 3;
+              break;
+            }
+            return _context10.abrupt("return");
+          case 3:
+            setProcesando('salida-' + borrador.id);
+            _context10.prev = 4;
+            _context10.next = 7;
+            return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdDarSalidaSimple({
+              id_transferencia: borrador.id
+            });
+          case 7:
+            res = _context10.sent;
+            if (!((_res$data5 = res.data) !== null && _res$data5 !== void 0 && _res$data5.estado)) {
+              _context10.next = 15;
+              break;
+            }
+            _context10.next = 11;
+            return cargarBorradores();
+          case 11:
+            setRefreshListKey(function (k) {
+              return k + 1;
+            }); // refrescar histórico central
+            alert(res.data.msj || 'Salida dada.');
+            _context10.next = 16;
+            break;
+          case 15:
+            alert(((_res$data6 = res.data) === null || _res$data6 === void 0 ? void 0 : _res$data6.msj) || 'No se pudo dar salida.');
+          case 16:
+            _context10.next = 21;
+            break;
+          case 18:
+            _context10.prev = 18;
+            _context10.t0 = _context10["catch"](4);
+            alert('Error al dar salida: ' + (_context10.t0.message || _context10.t0));
+          case 21:
+            _context10.prev = 21;
+            setProcesando(null);
+            return _context10.finish(21);
+          case 24:
+          case "end":
+            return _context10.stop();
+        }
+      }, _callee1, null, [[4, 18, 21, 24]]);
+    }));
+    return function darSalida(_x8) {
+      return _ref16.apply(this, arguments);
+    };
+  }();
+
+  // Eliminar un borrador (no tocó inventario).
+  var eliminarBorrador = /*#__PURE__*/function () {
+    var _ref17 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(borrador) {
+      var _res$data7, res, _res$data8;
+      return _regeneratorRuntime().wrap(function _callee10$(_context11) {
+        while (1) switch (_context11.prev = _context11.next) {
+          case 0:
+            if (window.confirm("\xBFEliminar la orden en preparaci\xF3n #".concat(borrador.id, "? No descont\xF3 inventario, solo se borra el borrador."))) {
+              _context11.next = 2;
+              break;
+            }
+            return _context11.abrupt("return");
+          case 2:
+            setProcesando('del-' + borrador.id);
+            _context11.prev = 3;
+            _context11.next = 6;
+            return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdEliminarOrden({
+              id: borrador.id
+            });
+          case 6:
+            res = _context11.sent;
+            if (!((_res$data7 = res.data) !== null && _res$data7 !== void 0 && _res$data7.estado)) {
+              _context11.next = 13;
+              break;
+            }
+            _context11.next = 10;
+            return cargarBorradores();
+          case 10:
+            setRefreshListKey(function (k) {
+              return k + 1;
+            }); // por si vuelve a aparecer la premonta
+            _context11.next = 14;
+            break;
+          case 13:
+            alert(((_res$data8 = res.data) === null || _res$data8 === void 0 ? void 0 : _res$data8.msj) || 'No se pudo eliminar.');
+          case 14:
+            _context11.next = 19;
+            break;
+          case 16:
+            _context11.prev = 16;
+            _context11.t0 = _context11["catch"](3);
+            alert('Error al eliminar: ' + (_context11.t0.message || _context11.t0));
+          case 19:
+            _context11.prev = 19;
+            setProcesando(null);
+            return _context11.finish(19);
+          case 22:
+          case "end":
+            return _context11.stop();
+        }
+      }, _callee10, null, [[3, 16, 19, 22]]);
+    }));
+    return function eliminarBorrador(_x9) {
+      return _ref17.apply(this, arguments);
     };
   }();
   var handleSaveTransfer = function handleSaveTransfer(transferenciaGuardada) {
-    console.log("Transferencia guardada:", transferenciaGuardada);
     setVistaActual('list');
     setTransferenciaSeleccionada(null);
+    setBorradorEnEdicion(null);
     setRefreshListKey(function (prevKey) {
       return prevKey + 1;
     });
@@ -137868,13 +138280,20 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
   var handleCancelForm = function handleCancelForm() {
     setVistaActual('list');
     setTransferenciaSeleccionada(null);
+    setBorradorEnEdicion(null);
   };
   var handleGoToCreate = function handleGoToCreate() {
+    // Una transferencia nueva se arma como BORRADOR (orden en preparación): no descuenta
+    // inventario hasta "Dar salida". Sentinel {id:null} activa el modo borrador con form vacío.
     setTransferenciaSeleccionada(null);
+    setBorradorEnEdicion({
+      id: null
+    });
     setVistaActual('form');
   };
   var handleEditTransfer = function handleEditTransfer(transferencia) {
     setTransferenciaSeleccionada(transferencia);
+    setBorradorEnEdicion(null);
     setVistaActual('form');
   };
   var handleViewDetails = function handleViewDetails(transferencia) {
@@ -137882,6 +138301,40 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
     setVistaActual('detail');
   };
   var idOrigenReal = sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER;
+
+  // Resolver etiqueta de sucursal destino (badge con color de central).
+  var sucById = {};
+  (sucursales || []).forEach(function (s) {
+    sucById[s.id] = s;
+  });
+  var badgeDestinoPorId = function badgeDestinoPorId(id) {
+    var s = sucById[id];
+    var codigo = s && s.codigo || (id != null ? 'ID ' + id : '—');
+    return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+      className: "inline-block px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap",
+      style: {
+        backgroundColor: s && s.background || '#e5e7eb',
+        color: s && s.color || '#374151'
+      },
+      children: codigo
+    });
+  };
+
+  // Redistribuciones que ya tienen un borrador local en preparación (para no crear duplicados:
+  // central solo las excluye cuando ya existe el pedido, que nace recién en la salida).
+  var odsConBorrador = new Set(borradores.map(function (b) {
+    return b.id_orden_distribucion;
+  }).filter(Boolean).map(Number));
+
+  // Premontas: sin borrador aún + filtradas por buscador (id de redistribución o destino).
+  var premontasFiltradas = premontas.filter(function (p) {
+    var _p$sucursal_destino, _p$sucursal_destino2;
+    if (odsConBorrador.has(Number(p.id_orden_distribucion))) return false;
+    var q = qPremonta.trim().toLowerCase();
+    if (!q) return true;
+    var destino = (((_p$sucursal_destino = p.sucursal_destino) === null || _p$sucursal_destino === void 0 ? void 0 : _p$sucursal_destino.codigo) || ((_p$sucursal_destino2 = p.sucursal_destino) === null || _p$sucursal_destino2 === void 0 ? void 0 : _p$sucursal_destino2.nombre) || '').toLowerCase();
+    return String(p.id_orden_distribucion).includes(q) || destino.includes(q);
+  });
   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
     className: "mx-auto px-2 pt-1 pb-2 sm:px-4 md:px-6",
     children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("header", {
@@ -137903,41 +138356,216 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
       })
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("main", {
       children: [vistaActual === 'list' && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
-        children: [premontas.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-          className: "mb-3 border border-amber-300 bg-amber-50 rounded-lg p-3",
-          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h4", {
-            className: "text-sm font-bold text-amber-800 mb-2",
-            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
-              className: "fas fa-inbox mr-1"
-            }), "\xD3rdenes de redistribuci\xF3n para despachar (", premontas.length, ")"]
+        children: [(premontasFiltradas.length > 0 || qPremonta && premontas.length > 0) && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "mb-3 border border-amber-300 rounded-lg overflow-hidden",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+            className: "flex items-center justify-between gap-2 bg-amber-50 px-3 py-2 flex-wrap",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h4", {
+              className: "text-sm font-bold text-amber-800",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                className: "fas fa-inbox mr-1"
+              }), "Redistribuciones por despachar (", premontasFiltradas.length, ")"]
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+              type: "text",
+              value: qPremonta,
+              onChange: function onChange(e) {
+                return setQPremonta(e.target.value);
+              },
+              placeholder: "Filtrar por # o destino...",
+              className: "w-48 px-2 py-1 text-sm border border-amber-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-400"
+            })]
           }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
-            className: "space-y-2",
-            children: premontas.map(function (prem) {
-              var _prem$sucursal_destin2, _prem$sucursal_destin3, _prem$sucursal_destin4, _prem$sucursal_destin5;
-              return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-                className: "flex items-center justify-between gap-3 bg-white border border-amber-200 rounded-md px-3 py-2 flex-wrap",
-                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-                  className: "text-sm",
-                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
-                    className: "font-bold text-amber-800",
-                    children: ["Redistribuci\xF3n #", prem.id_orden_distribucion]
-                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
-                    className: "text-gray-500 ml-2",
-                    children: ["\u2192 ", ((_prem$sucursal_destin2 = prem.sucursal_destino) === null || _prem$sucursal_destin2 === void 0 ? void 0 : _prem$sucursal_destin2.nombre) || ((_prem$sucursal_destin3 = prem.sucursal_destino) === null || _prem$sucursal_destin3 === void 0 ? void 0 : _prem$sucursal_destin3.codigo) || 'Destino ' + ((_prem$sucursal_destin4 = (_prem$sucursal_destin5 = prem.sucursal_destino) === null || _prem$sucursal_destin5 === void 0 ? void 0 : _prem$sucursal_destin5.id) !== null && _prem$sucursal_destin4 !== void 0 ? _prem$sucursal_destin4 : '—')]
-                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
-                    className: "text-gray-400 ml-2",
-                    children: ["\xB7 ", (prem.items || []).length, " producto(s)"]
+            className: "overflow-x-auto",
+            children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("table", {
+              className: "min-w-full text-sm divide-y divide-amber-100",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("thead", {
+                className: "bg-amber-50/60 text-xs uppercase tracking-wide text-amber-700",
+                children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
+                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-left font-semibold",
+                    children: "Origen"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-left font-semibold",
+                    children: "Redistribuci\xF3n"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-left font-semibold",
+                    children: "Destino"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-center font-semibold",
+                    children: "Productos"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-center font-semibold",
+                    children: "Acci\xF3n"
                   })]
-                }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
-                  onClick: function onClick() {
-                    return abrirPremonta(prem);
-                  },
-                  className: "px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-md",
-                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
-                    className: "fas fa-truck-arrow-right mr-1"
-                  }), "Despachar"]
-                })]
-              }, prem.id_orden_distribucion);
+                })
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("tbody", {
+                className: "bg-white divide-y divide-gray-100",
+                children: premontasFiltradas.length === 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("tr", {
+                  children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                    colSpan: 5,
+                    className: "px-3 py-4 text-center text-gray-400",
+                    children: "Sin coincidencias"
+                  })
+                }) : premontasFiltradas.map(function (prem) {
+                  var _prem$sucursal_destin2;
+                  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
+                    className: "hover:bg-amber-50/40",
+                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2",
+                      children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+                        className: "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800",
+                        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas fa-random"
+                        }), "REDISTRIBUCI\xD3N"]
+                      })
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
+                      className: "px-3 py-2 font-semibold text-gray-800 whitespace-nowrap",
+                      children: ["#", prem.id_orden_distribucion]
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2",
+                      children: badgeDestinoPorId((_prem$sucursal_destin2 = prem.sucursal_destino) === null || _prem$sucursal_destin2 === void 0 ? void 0 : _prem$sucursal_destin2.id)
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2 text-center text-gray-600",
+                      children: (prem.items || []).length
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2 text-center whitespace-nowrap",
+                      children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                        onClick: function onClick() {
+                          return crearOrdenDesdePremonta(prem);
+                        },
+                        disabled: procesando === 'prem-' + prem.id_orden_distribucion,
+                        className: "px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold rounded-md",
+                        title: "Crear una orden editable a partir de esta redistribuci\xF3n",
+                        children: procesando === 'prem-' + prem.id_orden_distribucion ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
+                          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                            className: "fas fa-spinner fa-spin mr-1"
+                          }), "Creando..."]
+                        }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
+                          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                            className: "fas fa-file-circle-plus mr-1"
+                          }), "Crear orden"]
+                        })
+                      })
+                    })]
+                  }, prem.id_orden_distribucion);
+                })
+              })]
+            })
+          })]
+        }), borradores.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "mb-3 border border-blue-200 rounded-lg overflow-hidden",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+            className: "bg-blue-50 px-3 py-2",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h4", {
+              className: "text-sm font-bold text-blue-800",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                className: "fas fa-pen-to-square mr-1"
+              }), "\xD3rdenes en preparaci\xF3n (", borradores.length, ")"]
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
+              className: "text-xs text-blue-600",
+              children: "Ajust\xE1 cantidades a lo que consigas. El inventario sale reci\xE9n al \u201CDar salida\u201D."
+            })]
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+            className: "overflow-x-auto",
+            children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("table", {
+              className: "min-w-full text-sm divide-y divide-blue-100",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("thead", {
+                className: "bg-blue-50/60 text-xs uppercase tracking-wide text-blue-700",
+                children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
+                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-left font-semibold",
+                    children: "Orden"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-left font-semibold",
+                    children: "Origen"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-left font-semibold",
+                    children: "Destino"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-center font-semibold",
+                    children: "Productos"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-center font-semibold",
+                    children: "Acciones"
+                  })]
+                })
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("tbody", {
+                className: "bg-white divide-y divide-gray-100",
+                children: borradores.map(function (b) {
+                  var nItems = (b.items || []).filter(function (i) {
+                    return parseFloat(i.cantidad) > 0;
+                  }).length;
+                  var ocupado = procesando === 'salida-' + b.id || procesando === 'del-' + b.id;
+                  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
+                    className: "hover:bg-blue-50/40",
+                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
+                      className: "px-3 py-2 font-semibold text-gray-800 whitespace-nowrap",
+                      children: ["#", b.id]
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2",
+                      children: b.id_orden_distribucion ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+                        className: "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800",
+                        title: 'Redistribución #' + b.id_orden_distribucion,
+                        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas fa-random"
+                        }), "REDIST. #", b.id_orden_distribucion]
+                      }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+                        className: "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-600",
+                        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas fa-user"
+                        }), "MANUAL"]
+                      })
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2",
+                      children: badgeDestinoPorId(b.id_destino)
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2 text-center text-gray-600",
+                      children: nItems
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
+                      className: "px-3 py-2 text-center whitespace-nowrap",
+                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+                        onClick: function onClick() {
+                          return editarBorrador(b);
+                        },
+                        disabled: ocupado,
+                        className: "px-2 py-1 text-xs font-semibold text-blue-700 border border-blue-300 rounded hover:bg-blue-50 disabled:opacity-50",
+                        title: "Editar cantidades / \xEDtems",
+                        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas fa-edit mr-1"
+                        }), "Editar"]
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                        onClick: function onClick() {
+                          return darSalida(b);
+                        },
+                        disabled: ocupado || nItems === 0,
+                        className: "ml-1 px-2 py-1 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded disabled:opacity-50",
+                        title: "Descontar inventario y enviar a central",
+                        children: procesando === 'salida-' + b.id ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
+                          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                            className: "fas fa-spinner fa-spin mr-1"
+                          }), "Saliendo..."]
+                        }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
+                          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                            className: "fas fa-truck-arrow-right mr-1"
+                          }), "Dar salida"]
+                        })
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                        onClick: function onClick() {
+                          return eliminarBorrador(b);
+                        },
+                        disabled: ocupado,
+                        className: "ml-1 px-2 py-1 text-xs font-semibold text-red-600 border border-red-200 rounded hover:bg-red-50 disabled:opacity-50",
+                        title: "Eliminar borrador",
+                        children: procesando === 'del-' + b.id ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas fa-spinner fa-spin"
+                        }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas fa-trash"
+                        })
+                      })]
+                    })]
+                  }, b.id);
+                })
+              })]
             })
           })]
         }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(TransferenciaList, {
@@ -137970,7 +138598,9 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
         sucursalActualId: idOrigenReal,
         transferenciaToEdit: transferenciaSeleccionada,
         sucursales: sucursales,
-        cargarTransferencias: cargarTransferencias
+        cargarTransferencias: cargarTransferencias,
+        modoBorrador: !!borradorEnEdicion,
+        onGuardarBorrador: guardarBorrador
       }), vistaActual === 'detail' && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(TransferenciaDetailView, {
         transferencia: transferenciaSeleccionada,
         onBack: handleCancelForm,
@@ -144398,7 +145028,8 @@ return{id_producto:id_producto,id_pedido:id_pedido,base:base,venta:venta,cantida
 setpedidoCentral(pedidosCentral.concat(import_pedido));setshowaddpedidocentral(false);}}else{alert(obj.msj);}}catch(err){alert(err);}});}}}}}catch(err){alert(err);}});}else{throw"Error: Cabezera incorrecta!";}}catch(err){alert(err);}};var selectPedidosCentral=function selectPedidosCentral(e){try{var index=e.currentTarget.attributes["data-index"].value;var tipo=e.currentTarget.attributes["data-tipo"].value;var pedidosCentral_copy=(0,lodash__WEBPACK_IMPORTED_MODULE_5__.cloneDeep)(pedidosCentral);if(tipo=="select"){if(pedidosCentral_copy[indexPedidoCentral].items[index].aprobado===true){delete pedidosCentral_copy[indexPedidoCentral].items[index].aprobado;}else if(pedidosCentral_copy[indexPedidoCentral].items[index].aprobado===false){pedidosCentral_copy[indexPedidoCentral].items[index].aprobado=true;}else if(typeof pedidosCentral_copy[indexPedidoCentral].items[index].aprobado==="undefined"){pedidosCentral_copy[indexPedidoCentral].items[index].aprobado=true;}}else if(tipo=="selectall"){// Verificar si todos están aprobados
 var todosAprobados=pedidosCentral_copy[indexPedidoCentral].items.every(function(item){return item.aprobado===true;});// Si todos están aprobados, deseleccionar todos
 // Si no, aprobar todos
-pedidosCentral_copy[indexPedidoCentral].items.forEach(function(item,idx){if(todosAprobados){delete pedidosCentral_copy[indexPedidoCentral].items[idx].aprobado;}else{pedidosCentral_copy[indexPedidoCentral].items[idx].aprobado=true;}});}else if(tipo=="changect_real"){pedidosCentral_copy[indexPedidoCentral].items[index].ct_real=(0,_assets__WEBPACK_IMPORTED_MODULE_9__.number)(e.currentTarget.value,6);}else if(tipo=="changebarras_real"){pedidosCentral_copy[indexPedidoCentral].items[index].barras_real=e.currentTarget.value;}else if(tipo=="changealterno_real"){pedidosCentral_copy[indexPedidoCentral].items[index].alterno_real=e.currentTarget.value;}else if(tipo=="changedescripcion_real"){pedidosCentral_copy[indexPedidoCentral].items[index].descripcion_real=e.currentTarget.value;}else if(tipo=="changevinculo_real"){pedidosCentral_copy[indexPedidoCentral].items[index].vinculo_real=e.currentTarget.value;}else if(tipo=="changewarehouse"){pedidosCentral_copy[indexPedidoCentral].items[index].warehouse_codigo=e.currentTarget.value;}setpedidoCentral(pedidosCentral_copy);// console.log(pedidosCentral_copy)
+pedidosCentral_copy[indexPedidoCentral].items.forEach(function(item,idx){if(todosAprobados){delete pedidosCentral_copy[indexPedidoCentral].items[idx].aprobado;}else{pedidosCentral_copy[indexPedidoCentral].items[idx].aprobado=true;}});}else if(tipo=="changect_real"){pedidosCentral_copy[indexPedidoCentral].items[index].ct_real=(0,_assets__WEBPACK_IMPORTED_MODULE_9__.number)(e.currentTarget.value,6);}else if(tipo=="changebarras_real"){pedidosCentral_copy[indexPedidoCentral].items[index].barras_real=e.currentTarget.value;}else if(tipo=="changealterno_real"){pedidosCentral_copy[indexPedidoCentral].items[index].alterno_real=e.currentTarget.value;}else if(tipo=="changedescripcion_real"){pedidosCentral_copy[indexPedidoCentral].items[index].descripcion_real=e.currentTarget.value;}else if(tipo=="changevinculo_real"){pedidosCentral_copy[indexPedidoCentral].items[index].vinculo_real=e.currentTarget.value;}else if(tipo=="changewarehouse"){pedidosCentral_copy[indexPedidoCentral].items[index].warehouse_codigo=e.currentTarget.value;}else if(tipo=="setcheck"){// Chequeo del producto SIN ubicación (modo ubicación opcional del TCR).
+var val=e.currentTarget.value;pedidosCentral_copy[indexPedidoCentral].items[index].chequeado=val==="true"||val===true;}setpedidoCentral(pedidosCentral_copy);// console.log(pedidosCentral_copy)
 }catch(err){console.log(err);}};var removeVinculoCentral=function removeVinculoCentral(id){_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].removeVinculoCentral({id:id}).then(function(res){if(res.data){if(res.data.estado===true){var id_pedido=res.data.id_pedido;var id_item=res.data.id_item;var clone=(0,lodash__WEBPACK_IMPORTED_MODULE_5__.cloneDeep)(pedidosCentral);clone=clone.map(function(e){if(e.id==id_pedido){e.items=e.items.map(function(eitem){if(eitem.id==id_item){eitem.idinsucursal_vinculo=null;eitem.idinsucursal_producto=null;eitem.match=null;}return eitem;});}return e;});setpedidoCentral(clone);}else{console.log("ESTADO NOT TRUE removeVinculoCentral",res.data);}}});};var checkPedidosCentral=function checkPedidosCentral(){if(indexPedidoCentral!==null&&pedidosCentral){if(pedidosCentral[indexPedidoCentral]){setSavingPedidoVerificado(true);setLoading(true);_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].checkPedidosCentral({pathcentral:pathcentral,pedido:pedidosCentral[indexPedidoCentral]}).then(function(res){setLoading(false);setSavingPedidoVerificado(false);notificar(res,false);if(res.data.estado){getPedidosCentral();}if(res.data.proceso==="enrevision"){getPedidosCentral();}if(res.data){if(res.data.estado===false){if(res.data.id_item){removeVinculoCentral(res.data.id_item);}}}})["catch"](function(){setLoading(false);setSavingPedidoVerificado(false);});}}};var verDetallesFactura=function verDetallesFactura(){var e=arguments.length>0&&arguments[0]!==undefined?arguments[0]:null;var id=facturas[factSelectIndex];if(e){id=e;}if(id){_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].openVerFactura({id:facturas[factSelectIndex].id});}};var verDetallesImagenFactura=function verDetallesImagenFactura(){_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].openverDetallesImagenFactura({id:facturas[factSelectIndex].id}).then(function(res){window.open(res.data,"targed=blank");console.log(res.data);});};var getVentas=function getVentas(){setLoading(true);// Usar la función rápida para reportes
 _database_database__WEBPACK_IMPORTED_MODULE_6__["default"].getVentasRapido({fechaventas:fechaventas}).then(function(res){setventasData(res.data);setLoading(false);})["catch"](function(error){console.error("Error obteniendo ventas:",error);setLoading(false);});};var getVentasClick=function getVentasClick(){getVentas();};var setBilletes=function setBilletes(){var total=0;total=parseInt(!billete1?0:billete1)*1+parseInt(!billete5?0:billete5)*5+parseInt(!billete10?0:billete10)*10+parseInt(!billete20?0:billete20)*20+parseInt(!billete50?0:billete50)*50+parseInt(!billete100?0:billete100)*100;setCaja_usd(total);};var addNewUsuario=function addNewUsuario(e){e.preventDefault();var id=null;if(indexSelectUsuarios){id=usuariosData[indexSelectUsuarios].id;}if(usuarioRole&&usuarioNombre&&usuarioUsuario){setLoading(true);_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].setUsuario({id:id,role:usuarioRole,nombres:usuarioNombre,usuario:usuarioUsuario,clave:usuarioClave,ip_pinpad:usuarioIpPinpad}).then(function(res){notificar(res);setLoading(false);getUsuarios();});}else{console.log("Err: addNewUsuario"+usuarioRole+" "+usuarioNombre+" "+usuarioUsuario);}};var setInputsUsuarios=function setInputsUsuarios(){if(indexSelectUsuarios){var obj=usuariosData[indexSelectUsuarios];if(obj){setusuarioNombre(obj.nombre);setusuarioUsuario(obj.usuario);setusuarioRole(obj.tipo_usuario);setusuarioClave(obj.clave);setusuarioIpPinpad(obj.ip_pinpad);console.log(obj);}}};var getUsuarios=function getUsuarios(){setLoading(true);_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].getUsuarios({q:qBuscarUsuario}).then(function(res){setLoading(false);setusuariosData(res.data);});};var delUsuario=function delUsuario(){setLoading(true);var id=null;if(indexSelectUsuarios){id=usuariosData[indexSelectUsuarios].id;}_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].delUsuario({id:id}).then(function(res){setLoading(false);getUsuarios();notificar(res);});};var selectProductoFast=function selectProductoFast(e){var id=e.currentTarget.attributes["data-id"].value;var val=e.currentTarget.attributes["data-val"].value;setQBuscarInventario(val);setfactSelectIndex("ninguna");setView("inventario");setsubViewInventario("inventario");};var addNewLote=function addNewLote(e){var addObj={lote:"",creacion:"",vence:"",cantidad:"",type:"new",id:null};setinpInvLotes(inpInvLotes.concat(addObj));};var changeModLote=function changeModLote(val,i,id,type){var name=arguments.length>4&&arguments[4]!==undefined?arguments[4]:null;var lote=(0,lodash__WEBPACK_IMPORTED_MODULE_5__.cloneDeep)(inpInvLotes);switch(type){case"update":if(lote[i].type!="new"){lote[i].type="update";}break;case"delModeUpdateDelete":delete lote[i].type;break;case"delNew":lote=lote.filter(function(e,ii){return ii!==i;});break;case"changeInput":lote[i][name]=val;break;case"delMode":lote[i].type="delete";var id_replace=0;lote[i].id_replace=id_replace;break;}setinpInvLotes(lote);};var reporteInventario=function reporteInventario(){_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].openReporteInventario();};var _useState829=(0,react__WEBPACK_IMPORTED_MODULE_3__.useState)([]),_useState830=_slicedToArray(_useState829,2),personalNomina=_useState830[0],setpersonalNomina=_useState830[1];var _useState831=(0,react__WEBPACK_IMPORTED_MODULE_3__.useState)([]),_useState832=_slicedToArray(_useState831,2),alquileresData=_useState832[0],setalquileresData=_useState832[1];var getNomina=function getNomina(){_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].getNomina({}).then(function(res){if(res.data.length){if(res.data[0].nominacargo){setpersonalNomina(res.data);}}});};var getAlquileres=function getAlquileres(){_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].getAlquileres({}).then(function(res){if(res.data.length){if(res.data[0].descripcion){setalquileresData(res.data);}}});};var guardarNuevoProductoLote=function guardarNuevoProductoLote(e){if(!user.iscentral){alert("No tiene permisos para gestionar Inventario");return;}// e.preventDefault()
 var id_factura=null;if(factSelectIndex!=null){if(facturas[factSelectIndex]){id_factura=facturas[factSelectIndex].id;}}var lotesFil=productosInventario.filter(function(e){return e.type;});var checkempty=lotesFil.filter(function(e){return e.codigo_barras==""||e.descripcion==""||e.unidad=="";});if(lotesFil.length&&!checkempty.length){setLoading(true);var motivo=null;_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].guardarNuevoProductoLote({lotes:lotesFil,id_factura:id_factura,motivo:motivo}).then(function(res){var data=res.data;if(data.msj){notificar(data.msj);}else{notificar(data);}if(data.estado){getFacturas(null);buscarInventario();}setLoading(false);});}else{alert("¡Error con los campos! Algunos pueden estar vacíos "+JSON.stringify(checkempty));}};var guardarNuevoProductoLoteFact=function guardarNuevoProductoLoteFact(e){if(!user.iscentral){alert("No tiene permisos para gestionar Inventario");return;}if(factSelectIndex!=null){if(facturas[factSelectIndex]){var id_factura=facturas[factSelectIndex].id;var items=facturas[factSelectIndex].items;var itemsFilter=items.filter(function(e){return e.producto.type;});var sumTotal=0;items.map(function(item){sumTotal+=parseFloat(item.producto.precio3)*parseFloat(item.cantidad);});if(sumTotal<parseFloat(facturas[factSelectIndex].monto)){if(itemsFilter.length){setLoading(true);_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].guardarNuevoProductoLoteFact({items:itemsFilter,id_factura:id_factura}).then(function(res){var data=res.data;notificar(data.msj);if(data.estado){getFacturas(null);}setLoading(false);});}}else{alert("BASE FACT o CANTIDADES incorrectas");}console.log(sumTotal,"sumTotal");console.log(facturas[factSelectIndex].monto,"facturas[factSelectIndex].monto");}}};var delPagoProveedor=function delPagoProveedor(e){var id=e.target.attributes["data-id"].value;if(confirm("¿Seguro de eliminar?")){_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].delPagoProveedor({id:id}).then(function(res){getPagoProveedor();notificar(res);});}};var getPagoProveedor=function getPagoProveedor(){if(proveedoresList[indexSelectProveedores]){setLoading(true);_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].getPagoProveedor({id_proveedor:proveedoresList[indexSelectProveedores].id}).then(function(res){setLoading(false);setpagosproveedor(res.data);});}};var setPagoProveedor=function setPagoProveedor(e){e.preventDefault();if(tipopagoproveedor&&montopagoproveedor){if(proveedoresList[indexSelectProveedores]){_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].setPagoProveedor({tipo:tipopagoproveedor,monto:montopagoproveedor,id_proveedor:proveedoresList[indexSelectProveedores].id}).then(function(res){getPagoProveedor();notificar(res);});}}};var setCtxBulto=function setCtxBulto(e){var id=e.currentTarget.attributes["data-id"].value;var bulto=window.prompt("Cantidad por bulto");if(bulto){_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].setCtxBulto({id:id,bulto:bulto}).then(function(res){buscarInventario();notificar(res);});}};var setStockMin=function setStockMin(e){var id=e.currentTarget.attributes["data-id"].value;var min=window.prompt("Cantidad Mínima");if(min){_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].setStockMin({id:id,min:min}).then(function(res){buscarInventario();notificar(res);});}};var setPrecioAlterno=function setPrecioAlterno(e){var id=e.currentTarget.attributes["data-id"].value;var type=e.currentTarget.attributes["data-type"].value;var precio=window.prompt("PRECIO "+type);if(precio){_database_database__WEBPACK_IMPORTED_MODULE_6__["default"].setPrecioAlterno({id:id,type:type,precio:precio}).then(function(res){buscarInventario();notificar(res);});}};var changeInventario=function changeInventario(val,i,id,type){var name=arguments.length>4&&arguments[4]!==undefined?arguments[4]:null;var obj=(0,lodash__WEBPACK_IMPORTED_MODULE_5__.cloneDeep)(productosInventario);switch(type){case"update":var isupd=false;if(obj[i].type=="update"){delete obj[i].type;isupd=true;}if(obj.filter(function(e){return e.type;}).length!=0){return;}if(obj[i].type!="new"){if(!isupd){obj[i].type="update";}}break;case"delModeUpdateDelete":delete obj[i].type;break;case"delNew":obj=obj.filter(function(e,ii){return ii!==i;});break;case"changeInput":obj[i][name]=val;break;case"add":var pro="";if(facturas[factSelectIndex]){pro=facturas[factSelectIndex].proveedor.id;}else{pro=sameProValue;}var newObj=[{id:null,codigo_proveedor:"",codigo_barras:"",descripcion:"",id_categoria:sameCatValue,id_marca:"",unidad:"UND",id_proveedor:pro,cantidad:"",precio_base:"",precio3:"",precio:"",iva:"0",type:"new"}];obj=newObj.concat(obj);break;case"delMode":obj[i].type="delete";var id_replace=0;obj[i].id_replace=id_replace;break;}setProductosInventario(obj);};var changeInventarioNewFact=function changeInventarioNewFact(val,i,id,type){var name=arguments.length>4&&arguments[4]!==undefined?arguments[4]:null;var id_factura=null;if(factSelectIndex!=null){if(facturas[factSelectIndex]){id_factura=facturas[factSelectIndex].id;var obj=(0,lodash__WEBPACK_IMPORTED_MODULE_5__.cloneDeep)(facturas);switch(type){case"update":if(obj[factSelectIndex].items[i].producto.type!="new"){obj[factSelectIndex].items[i].producto.type="update";}break;case"delModeUpdateDelete":delete obj[factSelectIndex].items[i].producto.type;break;case"changeInput":obj[factSelectIndex].items[i].producto[name]=val;break;}setfacturas(obj);}}};var changeInventarioFromSucursalCentral=function changeInventarioFromSucursalCentral(val,i,id,type){var name=arguments.length>4&&arguments[4]!==undefined?arguments[4]:null;var obj=(0,lodash__WEBPACK_IMPORTED_MODULE_5__.cloneDeep)(inventarioSucursalFromCentral);switch(type){case"update":if(obj[i].type!="new"){obj[i].type="update";obj[i]["estatus"]=1;}break;case"delModeUpdateDelete":obj[i]["id_vinculacion"]=null;obj[i]["estatus"]=0;delete obj[i].type;break;case"delNew":obj=obj.filter(function(e,ii){return ii!==i;});break;case"changeInput":if(id===null){var copyproducto=productos.filter(function(e){return e.id==val;})[0];obj[i]={bulto:copyproducto.bulto,cantidad:"0.00",codigo_barras:copyproducto.codigo_barras,codigo_proveedor:copyproducto.codigo_proveedor,descripcion:copyproducto.descripcion,id_categoria:copyproducto.id_categoria,id_deposito:copyproducto.id_deposito,id_marca:copyproducto.id_marca,id_proveedor:copyproducto.id_proveedor,iva:copyproducto.iva,porcentaje_ganancia:copyproducto.porcentaje_ganancia,precio:copyproducto.precio,precio1:copyproducto.precio1,precio2:copyproducto.precio2,precio3:copyproducto.precio3,precio_base:copyproducto.precio_base,stockmax:copyproducto.stockmax,stockmin:copyproducto.stockmin,unidad:copyproducto.unidad,id_vinculacion:val,type:"new",estatus:1};}else if(name=="id_vinculacion"){if(obj[i].type!="new"){obj[i].type="update";obj[i]["estatus"]=1;var productoclone=productos.filter(function(e){return e.id==val;});if(productoclone.length){obj[i]["codigo_barras"]=productoclone[0].codigo_barras;obj[i]["codigo_proveedor"]=productoclone[0].codigo_proveedor;obj[i]["id_proveedor"]=productoclone[0].id_proveedor;obj[i]["id_categoria"]=productoclone[0].id_categoria;obj[i]["id_marca"]=productoclone[0].id_marca;obj[i]["unidad"]=productoclone[0].unidad;obj[i]["id_deposito"]=productoclone[0].id_deposito;obj[i]["descripcion"]=productoclone[0].descripcion;obj[i]["iva"]=productoclone[0].iva;obj[i]["porcentaje_ganancia"]=productoclone[0].porcentaje_ganancia;obj[i]["precio_base"]=productoclone[0].precio_base;obj[i]["precio"]=productoclone[0].precio;obj[i]["precio1"]=productoclone[0].precio1;obj[i]["precio2"]=productoclone[0].precio2;obj[i]["precio3"]=productoclone[0].precio3;obj[i]["bulto"]=productoclone[0].bulto;obj[i]["stockmin"]=productoclone[0].stockmin;obj[i]["stockmax"]=productoclone[0].stockmax;}}}obj[i][name]=val;break;case"add":/*  let pro = ""
@@ -181835,6 +182466,9 @@ var db = {
   },
   tdEliminarOrden: function tdEliminarOrden(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/eliminar-orden", data);
+  },
+  tdDarSalidaSimple: function tdDarSalidaSimple(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/dar-salida-simple", data);
   },
   tdGetPasilleros: function tdGetPasilleros(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/get-pasilleros", data);

@@ -541,11 +541,14 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
     );
 };
 
-const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaToEdit = null, sucursales, cargarTransferencias }) => {
+const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaToEdit = null, sucursales, cargarTransferencias, modoBorrador = false, onGuardarBorrador }) => {
     // Una premonta (orden de redistribución traída de central) se arma como transferencia NUEVA,
     // no como edición de una transferencia local existente.
     const esPremonta = !!transferenciaToEdit?.es_premontada;
-    const esEdicion = !!transferenciaToEdit && !esPremonta;
+    // Modo borrador (Plan B): la orden vive como "en preparación" local; guardar NO descuenta
+    // inventario. La salida (descuento + espejo en central) se hace aparte con "Dar salida".
+    const esBorrador = !!modoBorrador;
+    const esEdicion = !!transferenciaToEdit && !esPremonta && !esBorrador;
     const idSucursalOrigen = sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER;
 
     const [idSucursalDestinoSeleccionada, setIdSucursalDestinoSeleccionada] = useState(transferenciaToEdit?.id_destino || '');
@@ -556,8 +559,9 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
     const [observaciones, setObservaciones] = useState(transferenciaToEdit?.observaciones || '');
     const [mostrarObservaciones, setMostrarObservaciones] = useState(false);
 
-    // Destino: bloqueado por defecto al editar (evita cambios sin querer); buscador al desbloquear.
-    const [destinoBloqueado, setDestinoBloqueado] = useState(esEdicion);
+    // Destino: bloqueado por defecto cuando ya trae un destino (edición o borrador de
+    // redistribución); en un borrador nuevo/manual sin destino queda el buscador abierto.
+    const [destinoBloqueado, setDestinoBloqueado] = useState((esEdicion || esBorrador) && !!transferenciaToEdit?.id_destino);
     const [busquedaDestino, setBusquedaDestino] = useState('');
     const [mostrarListaDestino, setMostrarListaDestino] = useState(false);
     const codigoDestino = (sucursales.find(s => String(s.id) === String(idSucursalDestinoSeleccionada)) || {}).codigo || '';
@@ -571,30 +575,38 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
         if (transferenciaToEdit && transferenciaToEdit.items) {
             // Mapear items de la transferencia a editar, obteniendo stock original del inventario
             const itemsMapeados = transferenciaToEdit.items.map(itemAPI => {
-                // Buscar el producto en el inventario usando el id_producto_insucursal
-                const productoInventario = mockInventarioData.find(pInv => pInv.id === itemAPI.id_producto_insucursal);
-                
+                // El producto puede venir anidado (premonta/edición) o plano (borrador de tdGetOrdenes).
+                const prod = itemAPI.producto || {
+                    id: itemAPI.id_producto_insucursal || itemAPI.id_producto,
+                    precio_base: itemAPI.base || 0,
+                    precio: itemAPI.venta || 0,
+                    codigo_barras: itemAPI.codigo_barras,
+                    codigo_proveedor: itemAPI.codigo_proveedor,
+                    descripcion: itemAPI.descripcion,
+                };
+                const precioVenta = parseFloat(prod.precio) || 0;
+
                 // Crear un objeto con la estructura correcta para el formulario
                 return {
                     id: itemAPI.id, // ID del item de transferencia
-                    id_producto: itemAPI.producto.id, // ID del producto global
+                    id_producto: prod.id, // ID del producto global
                     id_pedido: transferenciaToEdit.id, // ID de la transferencia
-                    id_producto_insucursal: itemAPI.producto.id, // ID del producto en inventario
+                    id_producto_insucursal: prod.id, // ID del producto en inventario
                     cantidad: String(itemAPI.cantidad), // Convertir a string para consistencia
-                    base: String(itemAPI.producto.precio_base), // Precio base del producto
-                    venta: String(itemAPI.producto.precio), // Precio venta del producto
+                    base: String(prod.precio_base ?? 0), // Precio base del producto
+                    venta: String(prod.precio ?? 0), // Precio venta del producto
                     descuento: String(itemAPI.descuento || "0.00"),
-                    monto: String((parseFloat(itemAPI.cantidad) * parseFloat(itemAPI.producto.precio)).toFixed(2)),
+                    monto: String((parseFloat(itemAPI.cantidad) * precioVenta).toFixed(2)),
                     ct_real: parseFloat(itemAPI.cantidad),
-                    barras_real: itemAPI.producto.codigo_barras,
-                    alterno_real: itemAPI.producto.codigo_proveedor,
-                    descripcion_real: itemAPI.producto.descripcion,
-                    vinculo_real: itemAPI.id_producto_insucursal,
+                    barras_real: prod.codigo_barras,
+                    alterno_real: prod.codigo_proveedor,
+                    descripcion_real: prod.descripcion,
+                    vinculo_real: itemAPI.id_producto_insucursal || prod.id,
                     created_at: itemAPI.created_at,
                     updated_at: itemAPI.updated_at,
                     cantidad_original_stock_inventario: itemAPI?.cantidad || 0,
                     modificable: true, // Permitir edición en el formulario,
-                    
+
                 };
             });
             
@@ -714,14 +726,35 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
 
         // Si nace de una premonta (orden de redistribución aprobada), reenviamos su id para que
         // central marque la orden "En Tránsito" y ancle el pedido.
-        if (esPremonta && transferenciaToEdit?.id_orden_distribucion) {
+        if ((esPremonta || esBorrador) && transferenciaToEdit?.id_orden_distribucion) {
             datosTransferencia.id_orden_distribucion = transferenciaToEdit.id_orden_distribucion;
+        }
+
+        // ── Modo borrador (Plan B): guardar la orden "en preparación" SIN descontar inventario ──
+        if (esBorrador) {
+            if (transferenciaToEdit?.id) datosTransferencia.id = transferenciaToEdit.id;
+            setEstaCargando(true);
+            try {
+                const res = await onGuardarBorrador(datosTransferencia);
+                if (res?.estado) {
+                    setMensajeExito('Borrador guardado (no se descontó inventario).');
+                    onSave(res);
+                    setTimeout(() => setMensajeExito(''), 4000);
+                } else {
+                    throw new Error(res?.msj || 'No se pudo guardar el borrador.');
+                }
+            } catch (err) {
+                setError(err.message || 'Error al guardar el borrador.');
+            } finally {
+                setEstaCargando(false);
+            }
+            return;
         }
 
         setEstaCargando(true);
         try {
             const res = await db.settransferenciaDici(datosTransferencia);
-            
+
             if (res.data.estado) {
                 setMensajeExito(`Transferencia ${esEdicion ? 'actualizada' : 'creada'} exitosamente.`);
                 await cargarTransferencias(); // Recargar la lista
@@ -753,7 +786,9 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
             {/* Encabezado compacto + destino, arriba */}
             <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-gray-200">
                 <h2 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">
-                    {esEdicion ? `Editando Transferencia #${transferenciaToEdit.id}` : 'Nueva Transferencia'}
+                    {esBorrador
+                        ? (transferenciaToEdit?.id ? `Orden en preparación #${transferenciaToEdit.id}` : 'Nueva orden en preparación')
+                        : (esEdicion ? `Editando Transferencia #${transferenciaToEdit.id}` : 'Nueva Transferencia')}
                 </h2>
                 <div className="flex items-center gap-2">
                     <span className="text-xs font-medium text-gray-500">Destino:</span>
@@ -806,6 +841,16 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
             </div>
             {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 px-3 py-2 text-sm"><p>{error}</p></div>}
             {mensajeExito && <div className="bg-green-100 border-l-4 border-green-500 text-green-700 px-3 py-2 text-sm"><p>{mensajeExito}</p></div>}
+            {esBorrador && (
+                <div className="bg-blue-50 border-l-4 border-blue-500 text-blue-800 px-3 py-2 text-sm flex items-start gap-2">
+                    <i className="fas fa-info-circle mt-0.5"></i>
+                    <span>
+                        Estás <b>preparando</b> la orden{transferenciaToEdit?.id_orden_distribucion ? <> de la redistribución <b>#{transferenciaToEdit.id_orden_distribucion}</b></> : ''}.
+                        Ajustá las cantidades a lo que vayas consiguiendo y quitá lo que no. Guardar <b>no descuenta inventario</b>;
+                        el inventario sale recién cuando le das <b>“Dar salida”</b> desde el listado.
+                    </span>
+                </div>
+            )}
 
             
 
@@ -885,7 +930,7 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
             <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 pt-2 border-t border-gray-200">
                 <button type="button" onClick={onCancel} disabled={estaCargando} className="w-full sm:w-auto px-4 py-2 border rounded-md shadow-sm text-sm bg-white hover:bg-gray-50 transition">Cancelar</button>
                 <button type="submit" disabled={estaCargando || itemsTransferencia.length === 0} className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border-transparent rounded-md shadow-sm text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition">
-                    {estaCargando ? 'Guardando...' : (esEdicion ? 'Actualizar Transferencia' : 'Crear Transferencia')}
+                    {estaCargando ? 'Guardando...' : (esBorrador ? (transferenciaToEdit?.id ? 'Guardar cambios' : 'Guardar borrador') : (esEdicion ? 'Actualizar Transferencia' : 'Crear Transferencia'))}
                 </button>
             </div>
         </form>
@@ -1339,6 +1384,11 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
     // Premontas = órdenes de redistribución 'Aprobada' de central donde ESTA sucursal es el origen.
     const [premontas, setPremontas] = useState([]);
+    const [qPremonta, setQPremonta] = useState('');
+    // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
+    const [borradores, setBorradores] = useState([]);
+    const [borradorEnEdicion, setBorradorEnEdicion] = useState(null);
+    const [procesando, setProcesando] = useState(null); // id ocupado (crear/salida/eliminar)
 
     const cargarTransferencias = useCallback(async (filtros) => {
         try {
@@ -1382,83 +1432,158 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         cargarSucursales();
     }, []);
 
-    // Cargar premontas (órdenes de redistribución aprobadas para esta sucursal origen).
+    // Cargar borradores (órdenes locales en preparación, estado 0).
+    const cargarBorradores = useCallback(async () => {
+        try {
+            const res = await db.tdGetOrdenes({ estado: 0, limit: 100 });
+            setBorradores(res.data?.ordenes || []);
+        } catch (e) { setBorradores([]); }
+    }, []);
+
+    // Cargar premontas (redistribuciones aprobadas para esta sucursal origen) + borradores.
     useEffect(() => {
         db.getPremontadas({ limit: 50 })
             .then(res => setPremontas(res.data?.premontadas || []))
             .catch(() => setPremontas([]));
-    }, [refreshListKey]);
+        cargarBorradores();
+    }, [refreshListKey, cargarBorradores]);
 
-    // Abre una premonta en el formulario como transferencia nueva, mapeando cada producto
-    // al inventario local por código de barras, y llevando el id de la orden de redistribución.
-    const abrirPremonta = async (prem) => {
-        setEstaCargando(true);
+    // Mapea los productos de una redistribución al inventario local por código de barras.
+    const mapearItemsPremonta = async (prem) => {
+        const items = [];
+        const noEncontrados = [];
+        for (const it of (prem.items || [])) {
+            const barras = it.producto?.codigo_barras;
+            let local = null;
+            if (barras) {
+                try {
+                    const r = await db.getinventario({ vendedor: null, num: 5, itemCero: true, qProductosMain: barras, orderColumn: 'descripcion', orderBy: 'asc' });
+                    const arr = r.data || [];
+                    local = arr.find(p => String(p.codigo_barras) === String(barras)) || null;
+                } catch (e) { /* ignore */ }
+            }
+            if (local) {
+                items.push({ id_producto_insucursal: local.id, cantidad: it.cantidad });
+            } else {
+                noEncontrados.push(it.producto?.descripcion || barras || ('#' + (it.producto_id_master || it.id)));
+            }
+        }
+        return { items, noEncontrados };
+    };
+
+    // "Crear orden" desde una redistribución: genera una COPIA editable local (orden en
+    // preparación, estado 0, SIN descontar), ligada a la redistribución. La original queda intacta.
+    const crearOrdenDesdePremonta = async (prem) => {
+        setProcesando('prem-' + prem.id_orden_distribucion);
         try {
-            const items = [];
-            const noEncontrados = [];
-            for (const it of (prem.items || [])) {
-                const barras = it.producto?.codigo_barras;
-                let local = null;
-                if (barras) {
-                    try {
-                        const r = await db.getinventario({ vendedor: null, num: 5, itemCero: true, qProductosMain: barras, orderColumn: 'descripcion', orderBy: 'asc' });
-                        const arr = r.data || [];
-                        local = arr.find(p => String(p.codigo_barras) === String(barras)) || null;
-                    } catch (e) { /* ignore */ }
-                }
-                if (local) {
-                    items.push({
-                        id: it.id,
-                        id_producto_insucursal: local.id,
-                        cantidad: it.cantidad,
-                        descuento: 0,
-                        producto: {
-                            id: local.id, precio_base: local.precio_base, precio: local.precio,
-                            codigo_barras: local.codigo_barras, codigo_proveedor: local.codigo_proveedor, descripcion: local.descripcion,
-                        },
-                        created_at: null, updated_at: null,
-                    });
-                } else {
-                    noEncontrados.push(it.producto?.descripcion || barras || ('#' + (it.producto_id_master || it.id)));
-                }
-            }
+            const { items, noEncontrados } = await mapearItemsPremonta(prem);
             if (noEncontrados.length) {
-                alert('Estos productos de la orden no están en tu inventario local y no se cargaron:\n- ' + noEncontrados.join('\n- '));
+                alert('Estos productos de la redistribución no están en tu inventario local y no se incluyeron (podés agregarlos manualmente en la orden):\n- ' + noEncontrados.join('\n- '));
             }
-            if (!items.length) { alert('Ningún producto de la orden se pudo mapear a tu inventario local.'); return; }
-            setTransferenciaSeleccionada({
-                id: null,
-                es_premontada: true,
-                id_orden_distribucion: prem.id_orden_distribucion,
+            if (!items.length) { alert('Ningún producto de la redistribución se pudo mapear a tu inventario local.'); return; }
+            const res = await db.tdGuardarOrden({
                 id_destino: prem.sucursal_destino?.id || '',
-                observaciones: '',
+                id_orden_distribucion: prem.id_orden_distribucion,
+                observaciones: 'Redistribución #' + prem.id_orden_distribucion,
                 items,
             });
-            setVistaActual('form');
+            if (res.data?.estado) {
+                await cargarBorradores();
+                setPremontas(prev => prev.filter(p => p.id_orden_distribucion !== prem.id_orden_distribucion));
+            } else {
+                alert(res.data?.msj || 'No se pudo crear la orden.');
+            }
+        } catch (e) {
+            alert('Error al crear la orden: ' + (e.message || e));
         } finally {
-            setEstaCargando(false);
+            setProcesando(null);
+        }
+    };
+
+    // Editar un borrador: abre el formulario en modo borrador con sus ítems.
+    const editarBorrador = (borrador) => {
+        setBorradorEnEdicion(borrador);
+        setTransferenciaSeleccionada({
+            id: borrador.id,
+            id_orden_distribucion: borrador.id_orden_distribucion,
+            id_destino: borrador.id_destino,
+            observaciones: borrador.observacion || '',
+            items: borrador.items || [],
+        });
+        setVistaActual('form');
+    };
+
+    // Guarda el borrador (crear/actualizar) sin descontar. Devuelve {estado, msj, orden}.
+    const guardarBorrador = async (datos) => {
+        const res = await db.tdGuardarOrden(datos);
+        await cargarBorradores();
+        return res.data;
+    };
+
+    // Dar salida a un borrador: descuenta inventario + crea el espejo en central.
+    const darSalida = async (borrador) => {
+        const nItems = (borrador.items || []).filter(i => parseFloat(i.cantidad) > 0).length;
+        if (!window.confirm(`¿Dar salida a la orden #${borrador.id}? Se descontarán ${nItems} producto(s) del inventario y se enviará a central. Esta acción sí mueve inventario.`)) return;
+        setProcesando('salida-' + borrador.id);
+        try {
+            const res = await db.tdDarSalidaSimple({ id_transferencia: borrador.id });
+            if (res.data?.estado) {
+                await cargarBorradores();
+                setRefreshListKey(k => k + 1); // refrescar histórico central
+                alert(res.data.msj || 'Salida dada.');
+            } else {
+                alert(res.data?.msj || 'No se pudo dar salida.');
+            }
+        } catch (e) {
+            alert('Error al dar salida: ' + (e.message || e));
+        } finally {
+            setProcesando(null);
+        }
+    };
+
+    // Eliminar un borrador (no tocó inventario).
+    const eliminarBorrador = async (borrador) => {
+        if (!window.confirm(`¿Eliminar la orden en preparación #${borrador.id}? No descontó inventario, solo se borra el borrador.`)) return;
+        setProcesando('del-' + borrador.id);
+        try {
+            const res = await db.tdEliminarOrden({ id: borrador.id });
+            if (res.data?.estado) {
+                await cargarBorradores();
+                setRefreshListKey(k => k + 1); // por si vuelve a aparecer la premonta
+            } else {
+                alert(res.data?.msj || 'No se pudo eliminar.');
+            }
+        } catch (e) {
+            alert('Error al eliminar: ' + (e.message || e));
+        } finally {
+            setProcesando(null);
         }
     };
 
     const handleSaveTransfer = (transferenciaGuardada) => {
-        console.log("Transferencia guardada:", transferenciaGuardada);
         setVistaActual('list');
         setTransferenciaSeleccionada(null);
+        setBorradorEnEdicion(null);
         setRefreshListKey(prevKey => prevKey + 1);
     };
 
     const handleCancelForm = () => {
         setVistaActual('list');
         setTransferenciaSeleccionada(null);
+        setBorradorEnEdicion(null);
     };
 
     const handleGoToCreate = () => {
+        // Una transferencia nueva se arma como BORRADOR (orden en preparación): no descuenta
+        // inventario hasta "Dar salida". Sentinel {id:null} activa el modo borrador con form vacío.
         setTransferenciaSeleccionada(null);
+        setBorradorEnEdicion({ id: null });
         setVistaActual('form');
     };
 
     const handleEditTransfer = (transferencia) => {
         setTransferenciaSeleccionada(transferencia);
+        setBorradorEnEdicion(null);
         setVistaActual('form');
     };
 
@@ -1468,6 +1593,34 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     };
 
     const idOrigenReal = sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER;
+
+    // Resolver etiqueta de sucursal destino (badge con color de central).
+    const sucById = {};
+    (sucursales || []).forEach(s => { sucById[s.id] = s; });
+    const badgeDestinoPorId = (id) => {
+        const s = sucById[id];
+        const codigo = (s && s.codigo) || (id != null ? ('ID ' + id) : '—');
+        return (
+            <span className="inline-block px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap" style={{ backgroundColor: (s && s.background) || '#e5e7eb', color: (s && s.color) || '#374151' }}>
+                {codigo}
+            </span>
+        );
+    };
+
+    // Redistribuciones que ya tienen un borrador local en preparación (para no crear duplicados:
+    // central solo las excluye cuando ya existe el pedido, que nace recién en la salida).
+    const odsConBorrador = new Set(
+        borradores.map(b => b.id_orden_distribucion).filter(Boolean).map(Number)
+    );
+
+    // Premontas: sin borrador aún + filtradas por buscador (id de redistribución o destino).
+    const premontasFiltradas = premontas.filter(p => {
+        if (odsConBorrador.has(Number(p.id_orden_distribucion))) return false;
+        const q = qPremonta.trim().toLowerCase();
+        if (!q) return true;
+        const destino = (p.sucursal_destino?.codigo || p.sucursal_destino?.nombre || '').toLowerCase();
+        return String(p.id_orden_distribucion).includes(q) || destino.includes(q);
+    });
 
     return (
         <div className="mx-auto px-2 pt-1 pb-2 sm:px-4 md:px-6">
@@ -1481,22 +1634,109 @@ const TransferenciasModule = ({ sucursalActualId }) => {
             <main>
                 {vistaActual === 'list' && (
                     <>
-                    {premontas.length > 0 && (
-                        <div className="mb-3 border border-amber-300 bg-amber-50 rounded-lg p-3">
-                            <h4 className="text-sm font-bold text-amber-800 mb-2"><i className="fas fa-inbox mr-1"></i>Órdenes de redistribución para despachar ({premontas.length})</h4>
-                            <div className="space-y-2">
-                                {premontas.map(prem => (
-                                    <div key={prem.id_orden_distribucion} className="flex items-center justify-between gap-3 bg-white border border-amber-200 rounded-md px-3 py-2 flex-wrap">
-                                        <div className="text-sm">
-                                            <span className="font-bold text-amber-800">Redistribución #{prem.id_orden_distribucion}</span>
-                                            <span className="text-gray-500 ml-2">&rarr; {prem.sucursal_destino?.nombre || prem.sucursal_destino?.codigo || ('Destino ' + (prem.sucursal_destino?.id ?? '—'))}</span>
-                                            <span className="text-gray-400 ml-2">· {(prem.items || []).length} producto(s)</span>
-                                        </div>
-                                        <button onClick={() => abrirPremonta(prem)} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-md">
-                                            <i className="fas fa-truck-arrow-right mr-1"></i>Despachar
-                                        </button>
-                                    </div>
-                                ))}
+                    {/* ── Redistribuciones por despachar (premontas de central) ── */}
+                    {(premontasFiltradas.length > 0 || (qPremonta && premontas.length > 0)) && (
+                        <div className="mb-3 border border-amber-300 rounded-lg overflow-hidden">
+                            <div className="flex items-center justify-between gap-2 bg-amber-50 px-3 py-2 flex-wrap">
+                                <h4 className="text-sm font-bold text-amber-800"><i className="fas fa-inbox mr-1"></i>Redistribuciones por despachar ({premontasFiltradas.length})</h4>
+                                <input
+                                    type="text"
+                                    value={qPremonta}
+                                    onChange={(e) => setQPremonta(e.target.value)}
+                                    placeholder="Filtrar por # o destino..."
+                                    className="w-48 px-2 py-1 text-sm border border-amber-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                />
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-sm divide-y divide-amber-100">
+                                    <thead className="bg-amber-50/60 text-xs uppercase tracking-wide text-amber-700">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left font-semibold">Origen</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Redistribución</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Destino</th>
+                                            <th className="px-3 py-2 text-center font-semibold">Productos</th>
+                                            <th className="px-3 py-2 text-center font-semibold">Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-100">
+                                        {premontasFiltradas.length === 0 ? (
+                                            <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400">Sin coincidencias</td></tr>
+                                        ) : premontasFiltradas.map(prem => (
+                                            <tr key={prem.id_orden_distribucion} className="hover:bg-amber-50/40">
+                                                <td className="px-3 py-2">
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800"><i className="fas fa-random"></i>REDISTRIBUCIÓN</span>
+                                                </td>
+                                                <td className="px-3 py-2 font-semibold text-gray-800 whitespace-nowrap">#{prem.id_orden_distribucion}</td>
+                                                <td className="px-3 py-2">{badgeDestinoPorId(prem.sucursal_destino?.id)}</td>
+                                                <td className="px-3 py-2 text-center text-gray-600">{(prem.items || []).length}</td>
+                                                <td className="px-3 py-2 text-center whitespace-nowrap">
+                                                    <button
+                                                        onClick={() => crearOrdenDesdePremonta(prem)}
+                                                        disabled={procesando === 'prem-' + prem.id_orden_distribucion}
+                                                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold rounded-md"
+                                                        title="Crear una orden editable a partir de esta redistribución"
+                                                    >
+                                                        {procesando === 'prem-' + prem.id_orden_distribucion
+                                                            ? <><i className="fas fa-spinner fa-spin mr-1"></i>Creando...</>
+                                                            : <><i className="fas fa-file-circle-plus mr-1"></i>Crear orden</>}
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Órdenes en preparación (borradores, sin descontar todavía) ── */}
+                    {borradores.length > 0 && (
+                        <div className="mb-3 border border-blue-200 rounded-lg overflow-hidden">
+                            <div className="bg-blue-50 px-3 py-2">
+                                <h4 className="text-sm font-bold text-blue-800"><i className="fas fa-pen-to-square mr-1"></i>Órdenes en preparación ({borradores.length})</h4>
+                                <p className="text-xs text-blue-600">Ajustá cantidades a lo que consigas. El inventario sale recién al “Dar salida”.</p>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-sm divide-y divide-blue-100">
+                                    <thead className="bg-blue-50/60 text-xs uppercase tracking-wide text-blue-700">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left font-semibold">Orden</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Origen</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Destino</th>
+                                            <th className="px-3 py-2 text-center font-semibold">Productos</th>
+                                            <th className="px-3 py-2 text-center font-semibold">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-100">
+                                        {borradores.map(b => {
+                                            const nItems = (b.items || []).filter(i => parseFloat(i.cantidad) > 0).length;
+                                            const ocupado = procesando === 'salida-' + b.id || procesando === 'del-' + b.id;
+                                            return (
+                                                <tr key={b.id} className="hover:bg-blue-50/40">
+                                                    <td className="px-3 py-2 font-semibold text-gray-800 whitespace-nowrap">#{b.id}</td>
+                                                    <td className="px-3 py-2">
+                                                        {b.id_orden_distribucion
+                                                            ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800" title={'Redistribución #' + b.id_orden_distribucion}><i className="fas fa-random"></i>REDIST. #{b.id_orden_distribucion}</span>
+                                                            : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-600"><i className="fas fa-user"></i>MANUAL</span>}
+                                                    </td>
+                                                    <td className="px-3 py-2">{badgeDestinoPorId(b.id_destino)}</td>
+                                                    <td className="px-3 py-2 text-center text-gray-600">{nItems}</td>
+                                                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                                                        <button onClick={() => editarBorrador(b)} disabled={ocupado} className="px-2 py-1 text-xs font-semibold text-blue-700 border border-blue-300 rounded hover:bg-blue-50 disabled:opacity-50" title="Editar cantidades / ítems">
+                                                            <i className="fas fa-edit mr-1"></i>Editar
+                                                        </button>
+                                                        <button onClick={() => darSalida(b)} disabled={ocupado || nItems === 0} className="ml-1 px-2 py-1 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded disabled:opacity-50" title="Descontar inventario y enviar a central">
+                                                            {procesando === 'salida-' + b.id ? <><i className="fas fa-spinner fa-spin mr-1"></i>Saliendo...</> : <><i className="fas fa-truck-arrow-right mr-1"></i>Dar salida</>}
+                                                        </button>
+                                                        <button onClick={() => eliminarBorrador(b)} disabled={ocupado} className="ml-1 px-2 py-1 text-xs font-semibold text-red-600 border border-red-200 rounded hover:bg-red-50 disabled:opacity-50" title="Eliminar borrador">
+                                                            {procesando === 'del-' + b.id ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-trash"></i>}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     )}
@@ -1526,13 +1766,15 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                     </>
                 )}
                 {vistaActual === 'form' && (
-                    <TransferenciaForm 
-                        onSave={handleSaveTransfer} 
-                        onCancel={handleCancelForm} 
-                        sucursalActualId={idOrigenReal} 
+                    <TransferenciaForm
+                        onSave={handleSaveTransfer}
+                        onCancel={handleCancelForm}
+                        sucursalActualId={idOrigenReal}
                         transferenciaToEdit={transferenciaSeleccionada}
                         sucursales={sucursales}
                         cargarTransferencias={cargarTransferencias}
+                        modoBorrador={!!borradorEnEdicion}
+                        onGuardarBorrador={guardarBorrador}
                     />
                 )}
                 {vistaActual === 'detail' && (

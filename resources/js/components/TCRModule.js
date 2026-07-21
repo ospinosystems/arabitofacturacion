@@ -25,6 +25,37 @@ export default function TCRModule({
     const [busquedaMensaje, setBusquedaMensaje] = useState('');
     const inputGenericoRef = useRef(null);
     const [esperandoUbicacion, setEsperandoUbicacion] = useState(false);
+    // Ubicación opcional (por defecto ON): al escanear un producto solo se CHEQUEA, sin pedir
+    // el segundo escaneo de ubicación. Se recuerda entre sesiones.
+    const [ubicacionOpcional, setUbicacionOpcional] = useState(() => {
+        const v = typeof window !== 'undefined' ? window.localStorage.getItem('tcr_ubicacion_opcional') : null;
+        return v === null ? true : v === '1';
+    });
+    const toggleUbicacionOpcional = () => {
+        setUbicacionOpcional(prev => {
+            const next = !prev;
+            try { window.localStorage.setItem('tcr_ubicacion_opcional', next ? '1' : '0'); } catch (e) { /* noop */ }
+            // Al activar "opcional" se cancela cualquier espera de ubicación en curso.
+            if (next) { setEsperandoUbicacion(false); setProductoSeleccionado(null); }
+            return next;
+        });
+    };
+
+    // Un ítem está "listo" si tiene ubicación asignada o fue chequeado (modo opcional).
+    const itemListo = (item) => !!(item && (item.warehouse_codigo || item.chequeado));
+
+    // Marca (o desmarca) un producto como chequeado sin ubicación, vía selectPedidosCentral.
+    const marcarChequeado = (index, valor) => {
+        selectPedidosCentral({
+            currentTarget: {
+                attributes: {
+                    'data-index': { value: index },
+                    'data-tipo': { value: 'setcheck' },
+                },
+                value: valor ? 'true' : 'false',
+            },
+        });
+    };
 
     // Función para buscar producto por código de barras y seleccionarlo
     const handleBuscarProducto = (e) => {
@@ -52,7 +83,7 @@ export default function TCRModule({
 
             if (productoIndex !== -1) {
                 const producto = pedidoActual.items[productoIndex];
-                
+
                 // Si ya tiene ubicación, mostrar mensaje
                 if (producto.warehouse_codigo) {
                     setBusquedaMensaje(`⚠️ Producto ya tiene ubicación: ${producto.warehouse_codigo}`);
@@ -61,12 +92,31 @@ export default function TCRModule({
                     return;
                 }
 
-                // Seleccionar el producto y esperar ubicación
+                // ── Modo ubicación OPCIONAL: solo chequear el producto, sin segundo escaneo ──
+                if (ubicacionOpcional) {
+                    if (producto.chequeado) {
+                        setBusquedaMensaje(`⚠️ Producto ya chequeado: ${producto.producto.descripcion.substring(0, 45)}...`);
+                    } else {
+                        marcarChequeado(productoIndex, true);
+                        setBusquedaMensaje(`✅ Chequeado: ${producto.producto.descripcion.substring(0, 50)}...`);
+                    }
+                    e.target.value = '';
+                    // Refocar para el siguiente escaneo y hacer scroll al producto
+                    setTimeout(() => {
+                        const productoElement = document.querySelector(`[data-producto-card="${productoIndex}"]`);
+                        if (productoElement) productoElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        if (inputGenericoRef.current) inputGenericoRef.current.focus();
+                    }, 100);
+                    setTimeout(() => setBusquedaMensaje(''), 2500);
+                    return;
+                }
+
+                // ── Modo con ubicación: seleccionar el producto y esperar el segundo escaneo ──
                 setProductoSeleccionado(productoIndex);
                 setEsperandoUbicacion(true);
                 setBusquedaMensaje(`✓ Producto seleccionado: ${producto.producto.descripcion.substring(0, 50)}... | 🔵 ESCANEA LA UBICACIÓN`);
                 e.target.value = '';
-                
+
                 // Hacer scroll al producto seleccionado
                 setTimeout(() => {
                     const productoElement = document.querySelector(`[data-producto-card="${productoIndex}"]`);
@@ -431,11 +481,23 @@ export default function TCRModule({
 
                             {/* Panel de Pistoleo Principal */}
                             <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
-                                <div className="bg-blue-600 px-3 py-2 border-b border-blue-700">
+                                <div className="bg-blue-600 px-3 py-2 border-b border-blue-700 flex items-center justify-between gap-2 flex-wrap">
                                     <h2 className="text-sm font-bold text-white flex items-center gap-2">
                                         <i className="fas fa-barcode"></i>
-                                        Pistoleo · Asignación de Ubicaciones
+                                        {ubicacionOpcional ? 'Pistoleo · Chequeo de Productos' : 'Pistoleo · Asignación de Ubicaciones'}
                                     </h2>
+                                    {/* Toggle: ubicación opcional (por defecto ON = solo chequea) */}
+                                    {pedidosCentral[indexPedidoCentral].estado === 4 && (
+                                        <button
+                                            type="button"
+                                            onClick={toggleUbicacionOpcional}
+                                            className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-bold transition border ${ubicacionOpcional ? 'bg-white text-blue-700 border-white' : 'bg-blue-500/30 text-white border-blue-300'}`}
+                                            title={ubicacionOpcional ? 'Ubicación opcional activada: escanear solo chequea el producto. Click para exigir ubicación.' : 'Se exige escanear ubicación tras cada producto. Click para hacerla opcional.'}
+                                        >
+                                            <i className={`fas ${ubicacionOpcional ? 'fa-toggle-on' : 'fa-toggle-off'}`}></i>
+                                            {ubicacionOpcional ? 'Ubicación opcional' : 'Ubicación requerida'}
+                                        </button>
+                                    )}
                                 </div>
 
                                 {/* Input de pistoleo - STICKY - Solo si está REVISADO */}
@@ -444,7 +506,7 @@ export default function TCRModule({
                                         <div className="flex items-center gap-2">
                                             <span className={`flex items-center gap-1 text-xs font-bold whitespace-nowrap ${esperandoUbicacion ? 'text-amber-700' : 'text-blue-700'}`}>
                                                 <i className={`fas ${esperandoUbicacion ? 'fa-map-marker-alt' : 'fa-barcode'}`}></i>
-                                                {esperandoUbicacion ? 'Escanea ubicación' : 'Busca producto'}
+                                                {esperandoUbicacion ? 'Escanea ubicación' : (ubicacionOpcional ? 'Escanea para chequear' : 'Busca producto')}
                                             </span>
                                             <input
                                                 ref={inputGenericoRef}
@@ -501,7 +563,9 @@ export default function TCRModule({
                                             Lista de Productos
                                             {pedidosCentral[indexPedidoCentral].estado === 4 && (
                                                 <span className="text-sm font-normal text-gray-500 ml-2">
-                                                    (Escanea la ubicación directamente en cada producto)
+                                                    {ubicacionOpcional
+                                                        ? '(Escanea cada producto para chequearlo — ubicación opcional)'
+                                                        : '(Escanea el producto y luego su ubicación)'}
                                                 </span>
                                             )}
                                         </h3>
@@ -529,8 +593,9 @@ export default function TCRModule({
                                                     {pedidosCentral[indexPedidoCentral].items.map((e, i) => {
                                                         const estado = pedidosCentral[indexPedidoCentral].estado;
                                                         const seleccionado = estado === 4 && productoSeleccionado === i;
+                                                        const listo = itemListo(e);
                                                         const rowBg = estado === 4
-                                                            ? (e.warehouse_codigo
+                                                            ? (listo
                                                                 ? 'bg-emerald-50'
                                                                 : seleccionado
                                                                 ? 'bg-blue-100 ring-2 ring-inset ring-blue-400'
@@ -543,7 +608,7 @@ export default function TCRModule({
                                                                     : 'bg-white hover:bg-gray-50')
                                                                 : 'bg-white');
                                                         const numBadge = estado === 4
-                                                            ? (e.warehouse_codigo ? 'bg-emerald-500' : 'bg-amber-500')
+                                                            ? (listo ? 'bg-emerald-500' : 'bg-amber-500')
                                                             : (estado === 1
                                                                 ? (e.aprobado === true ? 'bg-emerald-500' : e.aprobado === false ? 'bg-red-500' : 'bg-gray-400')
                                                                 : 'bg-gray-400');
@@ -596,6 +661,10 @@ export default function TCRModule({
                                                                                 <i className="fas fa-map-marker-alt"></i>
                                                                                 {e.warehouse_codigo}
                                                                             </span>
+                                                                        ) : e.chequeado ? (
+                                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 font-bold rounded border border-emerald-300">
+                                                                                <i className="fas fa-check"></i> Chequeado
+                                                                            </span>
                                                                         ) : (
                                                                             <span className="text-amber-500 font-semibold">— sin ubicar</span>
                                                                         )}
@@ -603,10 +672,30 @@ export default function TCRModule({
                                                                 )}
                                                                 <td className="px-2 py-1.5 text-center align-middle">
                                                                     {estado === 4 ? (
-                                                                        e.warehouse_codigo ? (
-                                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500 text-white font-bold rounded-full">
-                                                                                <i className="fas fa-check-circle"></i> COMPLETADO
-                                                                            </span>
+                                                                        listo ? (
+                                                                            <div className="inline-flex items-center gap-1">
+                                                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500 text-white font-bold rounded-full">
+                                                                                    <i className="fas fa-check-circle"></i> COMPLETADO
+                                                                                </span>
+                                                                                {/* Deshacer chequeo (solo si se chequeó sin ubicación) */}
+                                                                                {!e.warehouse_codigo && e.chequeado && (
+                                                                                    <button
+                                                                                        onClick={() => marcarChequeado(i, false)}
+                                                                                        className="text-gray-400 hover:text-red-500"
+                                                                                        title="Deshacer chequeo"
+                                                                                    >
+                                                                                        <i className="fas fa-rotate-left"></i>
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        ) : ubicacionOpcional ? (
+                                                                            <button
+                                                                                onClick={() => marcarChequeado(i, true)}
+                                                                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-full transition"
+                                                                                title="Chequear producto (sin ubicación)"
+                                                                            >
+                                                                                <i className="fas fa-check"></i> Chequear
+                                                                            </button>
                                                                         ) : (
                                                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500 text-white font-bold rounded-full">
                                                                                 <i className="fas fa-barcode"></i> PENDIENTE
@@ -659,24 +748,24 @@ export default function TCRModule({
                                             <div className="grid grid-cols-3 gap-3 mb-3">
                                                 <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
                                                     <div className="text-2xl font-bold text-emerald-600 mb-2">
-                                                        {pedidosCentral[indexPedidoCentral].items.filter(e => e.warehouse_codigo).length}
+                                                        {pedidosCentral[indexPedidoCentral].items.filter(itemListo).length}
                                                     </div>
                                                     <div className="text-xs font-semibold text-emerald-700 uppercase flex items-center gap-1">
                                                         <i className="fas fa-check-circle"></i>
-                                                        Con Ubicación
+                                                        Chequeados
                                                     </div>
                                                 </div>
-                                                
+
                                                 <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
                                                     <div className="text-2xl font-bold text-amber-600 mb-2">
-                                                        {pedidosCentral[indexPedidoCentral].items.filter(e => !e.warehouse_codigo).length}
+                                                        {pedidosCentral[indexPedidoCentral].items.filter(e => !itemListo(e)).length}
                                                     </div>
                                                     <div className="text-xs font-semibold text-amber-700 uppercase flex items-center gap-1">
                                                         <i className="fas fa-clock"></i>
                                                         Pendientes
                                                     </div>
                                                 </div>
-                                                
+
                                                 <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                                                     <div className="text-2xl font-bold text-blue-600 mb-2">
                                                         {pedidosCentral[indexPedidoCentral].items.length}
@@ -687,29 +776,31 @@ export default function TCRModule({
                                                     </div>
                                                 </div>
                                             </div>
-                                            
+
                                             {/* Barra de progreso mejorada */}
                                             <div className="relative h-8 bg-gray-100 rounded-full overflow-hidden shadow-inner">
-                                                <div 
+                                                <div
                                                     className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500 ease-out flex items-center justify-center"
-                                                    style={{width: `${(pedidosCentral[indexPedidoCentral].items.filter(e => e.warehouse_codigo).length / pedidosCentral[indexPedidoCentral].items.length) * 100}%`}}
+                                                    style={{width: `${(pedidosCentral[indexPedidoCentral].items.filter(itemListo).length / pedidosCentral[indexPedidoCentral].items.length) * 100}%`}}
                                                 >
                                                     <span className="text-white font-bold text-sm">
-                                                        {Math.round((pedidosCentral[indexPedidoCentral].items.filter(e => e.warehouse_codigo).length / pedidosCentral[indexPedidoCentral].items.length) * 100)}%
+                                                        {Math.round((pedidosCentral[indexPedidoCentral].items.filter(itemListo).length / pedidosCentral[indexPedidoCentral].items.length) * 100)}%
                                                     </span>
                                                 </div>
                                             </div>
 
-                                            {/* Botón de guardar cuando todos tienen ubicación */}
+                                            {/* Botón de guardar cuando todos los productos están chequeados (con o sin ubicación) */}
                                             {pedidosCentral[indexPedidoCentral].items.length > 0 &&
-                                             pedidosCentral[indexPedidoCentral].items.every(item => item.warehouse_codigo) && (
+                                             pedidosCentral[indexPedidoCentral].items.every(itemListo) && (
                                                 <div className="pt-3 border-t border-gray-200">
                                                     <button
                                                         onClick={checkPedidosCentral}
                                                         className="w-full px-3 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow transition flex items-center justify-center gap-2"
                                                     >
                                                         <i className="fas fa-save"></i>
-                                                        Guardar Recepción con Ubicaciones
+                                                        {pedidosCentral[indexPedidoCentral].items.every(item => item.warehouse_codigo)
+                                                            ? 'Guardar Recepción con Ubicaciones'
+                                                            : 'Guardar Recepción'}
                                                     </button>
                                                 </div>
                                             )}

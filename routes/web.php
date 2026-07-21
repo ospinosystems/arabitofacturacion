@@ -648,6 +648,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('transferencia-despacho/guardar-orden', [TransferenciaDespachoController::class, 'guardarOrden']);
 		Route::post('transferencia-despacho/get-ordenes', [TransferenciaDespachoController::class, 'getOrdenes']);
 		Route::post('transferencia-despacho/eliminar-orden', [TransferenciaDespachoController::class, 'eliminarOrden']);
+		Route::post('transferencia-despacho/dar-salida-simple', [TransferenciaDespachoController::class, 'darSalidaSimple']);
 		Route::post('transferencia-despacho/get-pasilleros', [TransferenciaDespachoController::class, 'getPasilleros']);
 		Route::post('transferencia-despacho/asignar-lineas', [TransferenciaDespachoController::class, 'asignarLineas']);
 		Route::post('transferencia-despacho/get-asignaciones', [TransferenciaDespachoController::class, 'getAsignaciones']);
