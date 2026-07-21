@@ -130181,7 +130181,7 @@ function DiciNav(_ref) {
           className: "fas fa-shield-alt me-1"
         }), "Garant\xEDas"]
       })]
-    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
+    }), (enGestion || enCiclico) && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
       className: "flex-wrap gap-2 pt-2 mt-2 d-flex align-items-center border-top",
       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("small", {
         className: "text-muted me-1",
@@ -136738,7 +136738,6 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
           className: "relative",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
             type: "text",
-            autoFocus: true,
             value: busquedaDestino,
             onChange: function onChange(e) {
               setBusquedaDestino(e.target.value);
@@ -137005,15 +137004,59 @@ var TransferenciaDetailView = function TransferenciaDetailView(_ref7) {
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("h3", {
       className: "text-xl font-semibold text-gray-700 mb-3",
       children: "Items Transferidos:"
-    }), transferencia.items && transferencia.items.length > 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("ul", {
-      className: "border rounded-md divide-y max-h-[50vh] overflow-y-auto",
-      children: transferencia.items.map(function (item, index) {
-        return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(SelectedProductItem, {
-          item: item,
-          onRemove: function onRemove() {},
-          onQuantityChange: function onQuantityChange() {},
-          isEditable: false
-        }, item.id || index);
+    }), transferencia.items && transferencia.items.length > 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+      className: "border rounded-md overflow-x-auto max-h-[50vh] overflow-y-auto",
+      children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("table", {
+        className: "w-full text-sm",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("thead", {
+          className: "bg-gray-50 text-gray-500 text-left text-xs uppercase sticky top-0",
+          children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+              className: "px-3 py-2 w-10",
+              children: "#"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+              className: "px-3 py-2",
+              children: "Descripci\xF3n"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+              className: "px-3 py-2",
+              children: "C\xF3d. Barras"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+              className: "px-3 py-2",
+              children: "C\xF3d. Proveedor"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+              className: "px-3 py-2 text-right",
+              children: "Cantidad"
+            })]
+          })
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("tbody", {
+          className: "divide-y",
+          children: transferencia.items.map(function (item, index) {
+            var p = item.producto || {};
+            var desc = item.descripcion_real || p.descripcion || '—';
+            var barras = item.barras_real || p.codigo_barras || '—';
+            var alterno = item.alterno_real || p.codigo_proveedor || '—';
+            var cant = parseFloat(item.cantidad);
+            return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
+              className: "hover:bg-gray-50",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                className: "px-3 py-2 text-gray-400",
+                children: index + 1
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                className: "px-3 py-2 text-gray-800",
+                children: desc
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                className: "px-3 py-2 font-mono text-xs text-gray-600 whitespace-nowrap",
+                children: barras
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                className: "px-3 py-2 font-mono text-xs text-gray-600 whitespace-nowrap",
+                children: alterno
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                className: "px-3 py-2 text-right font-semibold",
+                children: isNaN(cant) ? '—' : cant.toFixed(2)
+              })]
+            }, item.id || index);
+          })
+        })]
       })
     }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
       className: "text-gray-500",

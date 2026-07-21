@@ -775,7 +775,6 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                         <div className="relative">
                             <input
                                 type="text"
-                                autoFocus
                                 value={busquedaDestino}
                                 onChange={(e) => { setBusquedaDestino(e.target.value); setMostrarListaDestino(true); }}
                                 onFocus={() => setMostrarListaDestino(true)}
@@ -946,11 +945,37 @@ const TransferenciaDetailView = ({ transferencia, onBack, sucursales }) => {
 
             <h3 className="text-xl font-semibold text-gray-700 mb-3">Items Transferidos:</h3>
             {transferencia.items && transferencia.items.length > 0 ? (
-                <ul className="border rounded-md divide-y max-h-[50vh] overflow-y-auto">
-                    {transferencia.items.map((item, index) => (
-                        <SelectedProductItem key={item.id || index} item={item} onRemove={()=>{}} onQuantityChange={()=>{}} isEditable={false} />
-                    ))}
-                </ul>
+                <div className="border rounded-md overflow-x-auto max-h-[50vh] overflow-y-auto">
+                    <table className="w-full text-sm">
+                        <thead className="bg-gray-50 text-gray-500 text-left text-xs uppercase sticky top-0">
+                            <tr>
+                                <th className="px-3 py-2 w-10">#</th>
+                                <th className="px-3 py-2">Descripción</th>
+                                <th className="px-3 py-2">Cód. Barras</th>
+                                <th className="px-3 py-2">Cód. Proveedor</th>
+                                <th className="px-3 py-2 text-right">Cantidad</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {transferencia.items.map((item, index) => {
+                                const p = item.producto || {};
+                                const desc = item.descripcion_real || p.descripcion || '—';
+                                const barras = item.barras_real || p.codigo_barras || '—';
+                                const alterno = item.alterno_real || p.codigo_proveedor || '—';
+                                const cant = parseFloat(item.cantidad);
+                                return (
+                                    <tr key={item.id || index} className="hover:bg-gray-50">
+                                        <td className="px-3 py-2 text-gray-400">{index + 1}</td>
+                                        <td className="px-3 py-2 text-gray-800">{desc}</td>
+                                        <td className="px-3 py-2 font-mono text-xs text-gray-600 whitespace-nowrap">{barras}</td>
+                                        <td className="px-3 py-2 font-mono text-xs text-gray-600 whitespace-nowrap">{alterno}</td>
+                                        <td className="px-3 py-2 text-right font-semibold">{isNaN(cant) ? '—' : cant.toFixed(2)}</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
             ) : (
                 <p className="text-gray-500">No hay items en esta transferencia.</p>
             )}

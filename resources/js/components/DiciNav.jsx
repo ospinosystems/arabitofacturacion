@@ -68,7 +68,8 @@ export default function DiciNav({
                     </button>
                 </div>
 
-                {/* Sub-barra de Gestión: SIEMPRE visible, para que el nav tenga el mismo tamaño en todas las vistas DICI */}
+                {/* Sub-barra de Gestión: solo en la sección Gestión (no en Torre de Transferencia ni Garantías). */}
+                {(enGestion || enCiclico) && (
                 <div className="flex-wrap gap-2 pt-2 mt-2 d-flex align-items-center border-top">
                     <small className="text-muted me-1">Gestión:</small>
                     <button
@@ -107,6 +108,7 @@ export default function DiciNav({
                         Sincronizar
                     </button>
                 </div>
+                )}
         </div>
     );
 }
