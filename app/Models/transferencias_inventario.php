@@ -14,4 +14,14 @@ class transferencias_inventario extends Model
     {
         return $this->hasMany(transferencias_inventario_items::class, 'id_transferencia');
     }
+
+    public function asignaciones()
+    {
+        return $this->hasMany(TransferenciaAsignacion::class, 'id_transferencia');
+    }
+
+    public function bultos()
+    {
+        return $this->hasMany(TransferenciaBulto::class, 'id_transferencia');
+    }
 }

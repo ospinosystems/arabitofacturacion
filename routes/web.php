@@ -27,6 +27,8 @@ use App\Http\Controllers\ItemsFacturaController;
 use App\Http\Controllers\SucursalController;
 use App\Http\Controllers\tickera;
 use App\Http\Controllers\sendCentral;
+use App\Http\Controllers\TransferenciaDespachoController;
+use App\Http\Controllers\InventarioAnalyticsController;
 use App\Http\Controllers\UsuariosController;
 use App\Http\Controllers\PagosReferenciasController;
 use App\Http\Controllers\AutopagoController;
@@ -635,6 +637,35 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('reqpedidos', [sendCentral::class,"reqpedidos"]);
 		Route::post('reqMipedidos', [sendCentral::class,"reqMipedidos"]);
 		Route::post('settransferenciaDici', [sendCentral::class,"settransferenciaDici"]);
+		Route::post('delTransferenciaDici', [sendCentral::class,"delTransferenciaDici"]);
+
+		// ===== Salud de Inventario (analítica de ventas + reposición) =====
+		Route::post('inventario-analytics/resumen', [InventarioAnalyticsController::class, 'resumen']);
+		Route::post('inventario-analytics/categorias', [InventarioAnalyticsController::class, 'categorias']);
+
+		// ===== Despacho con recolección y bultos (TCD) — prefijo transferencia-despacho/ =====
+		Route::post('transferencia-despacho/guardar-orden', [TransferenciaDespachoController::class, 'guardarOrden']);
+		Route::post('transferencia-despacho/get-ordenes', [TransferenciaDespachoController::class, 'getOrdenes']);
+		Route::post('transferencia-despacho/eliminar-orden', [TransferenciaDespachoController::class, 'eliminarOrden']);
+		Route::post('transferencia-despacho/get-pasilleros', [TransferenciaDespachoController::class, 'getPasilleros']);
+		Route::post('transferencia-despacho/asignar-lineas', [TransferenciaDespachoController::class, 'asignarLineas']);
+		Route::post('transferencia-despacho/get-asignaciones', [TransferenciaDespachoController::class, 'getAsignaciones']);
+		Route::post('transferencia-despacho/recolectar-linea', [TransferenciaDespachoController::class, 'recolectarLinea']);
+		Route::post('transferencia-despacho/mis-recolecciones', [TransferenciaDespachoController::class, 'misRecolecciones']);
+		Route::post('transferencia-despacho/crear-bulto', [TransferenciaDespachoController::class, 'crearBulto']);
+		Route::post('transferencia-despacho/agregar-item-bulto', [TransferenciaDespachoController::class, 'agregarItemBulto']);
+		Route::post('transferencia-despacho/quitar-item-bulto', [TransferenciaDespachoController::class, 'quitarItemBulto']);
+		Route::post('transferencia-despacho/cerrar-bulto', [TransferenciaDespachoController::class, 'cerrarBulto']);
+		Route::post('transferencia-despacho/consultar-bulto', [TransferenciaDespachoController::class, 'consultarBulto']);
+		Route::post('transferencia-despacho/get-bultos', [TransferenciaDespachoController::class, 'getBultos']);
+		Route::post('transferencia-despacho/despachar-bulto', [TransferenciaDespachoController::class, 'despacharBulto']);
+		Route::post('transferencia-despacho/finalizar-despacho', [TransferenciaDespachoController::class, 'finalizarDespacho']);
+		Route::post('transferencia-despacho/reporte-excluidos', [TransferenciaDespachoController::class, 'reporteExcluidos']);
+		// Impresión (GET, abren pestaña)
+		Route::get('transferencia-despacho/orden-recoleccion', [TransferenciaDespachoController::class, 'imprimirOrdenRecoleccion']);
+		Route::get('transferencia-despacho/etiqueta-bulto', [TransferenciaDespachoController::class, 'etiquetaBulto']);
+		Route::get('transferencia-despacho/orden-despacho', [TransferenciaDespachoController::class, 'imprimirOrdenDespacho']);
+		Route::get('transferencia-despacho/factura-bultos', [TransferenciaDespachoController::class, 'imprimirFacturaBultos']);
 		
 		Route::post('setInventarioFromSucursal', [sendCentral::class,"setInventarioFromSucursal"]);
 		Route::post('getSucursales', [sendCentral::class,"getSucursales"]);

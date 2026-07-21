@@ -398,7 +398,7 @@ const ProductSearchInput = ({ onProductSelect, sucursalIdOrigen, placeholder = "
             <input 
                 ref={inputRef} 
                 type="text" 
-                className="form-input w-full p-2 border border-gray-300 rounded-md shadow-sm" 
+                className="w-full p-2 border border-gray-300 rounded-md shadow-sm" 
                 placeholder={placeholder} 
                 value={terminoBusqueda} 
                 onChange={(e) => setTerminoBusqueda(e.target.value)} 
@@ -428,13 +428,13 @@ const ProductSearchInput = ({ onProductSelect, sucursalIdOrigen, placeholder = "
 
             {/* Modal de Cantidad */}
             {mostrarModalCantidad && productoSeleccionado && (
-                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-                    <div className="relative top-20 mx-auto p-2 border shadow-lg rounded-md bg-white">
-                        <div className="mt-3">
-                            <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
+                <div className="fixed inset-0 bg-gray-900/50 z-50 flex items-start justify-center p-4 overflow-y-auto">
+                    <div className="relative mt-24 w-full max-w-xs p-4 border shadow-xl rounded-lg bg-white">
+                        <div>
+                            <h3 className="text-base font-semibold leading-6 text-gray-900 mb-3">
                                 Seleccionar Cantidad
                             </h3>
-                            <div className="mt-2 px-7 py-3">
+                            <div className="mt-1">
                                 <div className="mb-4">
                                     <p className="text-sm text-gray-500 mb-1">Producto:</p>
                                     <p className="font-medium">{productoSeleccionado.descripcion}</p>
@@ -454,25 +454,25 @@ const ProductSearchInput = ({ onProductSelect, sucursalIdOrigen, placeholder = "
                                         value={cantidadSeleccionada}
                                         onChange={handleCantidadChange}
                                         onKeyDown={handleKeyDown}
-                                        className="form-input w-full p-4 text-2xl text-center border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                        className="w-full p-2 text-lg text-center border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                                         placeholder=""
                                     />
                                 </div>
                             </div>
-                            <div className="flex justify-end space-x-3 px-4 py-3">
+                            <div className="flex justify-end space-x-2 pt-3">
                                 <button
                                     onClick={() => {
                                         setMostrarModalCantidad(false);
                                         setProductoSeleccionado(null);
                                         setCantidadSeleccionada('');
                                     }}
-                                    className="px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                                    className="px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300"
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     onClick={handleConfirmarCantidad}
-                                    className="px-4 py-2 bg-indigo-600 text-white text-base font-medium rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                 >
                                     Agregar
                                 </button>
@@ -501,48 +501,43 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
     };
 
     return (
-        <li className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 border-b border-gray-200 space-y-2 sm:space-y-0 relative">
-            {/* Índice en la esquina */}
-            <div className="absolute top-2 right-2 bg-gray-100 text-gray-600 text-xs font-medium px-2 py-1 rounded">
-                {index + 1}/{totalItems}
-            </div>
-            
-            <div className="flex-grow">
-                <p className="font-semibold text-gray-800">{item.descripcion_real}</p>
-                <p className="text-sm text-gray-500">
-                    <b>{item.barras_real}</b> | {item.alterno_real}
-                </p>
-            </div>
-            <div className="flex items-center space-x-2">
+        <tr className="border-b border-gray-100 hover:bg-gray-50">
+            <td className="px-2 py-1 text-center text-xs text-gray-400 whitespace-nowrap">{index + 1}</td>
+            <td className="px-2 py-1 text-sm text-gray-800">{item.descripcion_real || item.producto?.descripcion || '—'}</td>
+            <td className="px-2 py-1 text-xs font-mono text-gray-600 whitespace-nowrap">{item.barras_real || item.producto?.codigo_barras || '—'}</td>
+            <td className="px-2 py-1 text-xs font-mono text-gray-600 whitespace-nowrap">{item.alterno_real || item.producto?.codigo_proveedor || '—'}</td>
+            <td className="px-2 py-1 text-center">
                 <input
-                    type="text" 
+                    type="text"
                     inputMode="decimal"
                     value={item.cantidad}
                     onChange={handleCantidadChange}
                     onBlur={(e) => {
-                        // Al perder el foco, asegurar un valor válido
                         const valor = e.target.value;
                         if (valor === '' || isNaN(parseFloat(valor)) || parseFloat(valor) <= 0) {
                             onQuantityChange(item.id_producto_insucursal, '1.00');
                         } else {
-                            // Formatear a 2 decimales
                             onQuantityChange(item.id_producto_insucursal, parseFloat(valor).toFixed(2));
                         }
                     }}
                     readOnly={!isEditable}
-                    className={`form-input w-24 p-2 border border-gray-300 rounded-md text-center ${!isEditable ? 'bg-gray-100' : 'focus:ring-indigo-500 focus:border-indigo-500'}`}
+                    className={`w-20 p-1 text-sm border border-gray-300 rounded text-center ${!isEditable ? 'bg-gray-100' : 'focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500'}`}
                     aria-label={`Cantidad para ${item.descripcion_real}`}
                 />
+            </td>
+            <td className="px-2 py-1 text-center">
                 {isEditable && (
-                    <button 
-                        onClick={() => onRemove(item.id_producto_insucursal)} 
-                        className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-3 rounded-md text-sm transition"
+                    <button
+                        type="button"
+                        onClick={() => onRemove(item.id_producto_insucursal)}
+                        className="text-red-600 hover:text-red-800 p-1"
+                        title="Eliminar"
                     >
-                        Eliminar
+                        <i className="fas fa-trash"></i>
                     </button>
                 )}
-            </div>
-        </li>
+            </td>
+        </tr>
     );
 };
 
@@ -557,6 +552,17 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
     const [mensajeExito, setMensajeExito] = useState('');
     const [observaciones, setObservaciones] = useState(transferenciaToEdit?.observaciones || '');
     const [mostrarObservaciones, setMostrarObservaciones] = useState(false);
+
+    // Destino: bloqueado por defecto al editar (evita cambios sin querer); buscador al desbloquear.
+    const [destinoBloqueado, setDestinoBloqueado] = useState(esEdicion);
+    const [busquedaDestino, setBusquedaDestino] = useState('');
+    const [mostrarListaDestino, setMostrarListaDestino] = useState(false);
+    const codigoDestino = (sucursales.find(s => String(s.id) === String(idSucursalDestinoSeleccionada)) || {}).codigo || '';
+    const sucursalesFiltradas = sucursales.filter(s => {
+        const q = busquedaDestino.trim().toLowerCase();
+        if (!q) return true;
+        return (s.codigo || '').toLowerCase().includes(q) || (s.nombre || '').toLowerCase().includes(q);
+    });
 
     useEffect(() => {
         if (transferenciaToEdit && transferenciaToEdit.items) {
@@ -631,33 +637,22 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
     const handleQuantityChange = (idProductoInsucursal, nuevaCantidadStr) => {
         setItemsTransferencia(prevItems =>
             prevItems.map(item => {
-                if (item.id_producto_insucursal === idProductoInsucursal) {
-                    // Si está vacío, mantener el valor actual
-                    if (nuevaCantidadStr === '') {
-                        return item;
-                    }
+                if (item.id_producto_insucursal !== idProductoInsucursal) return item;
 
-                    const nuevaCantidadNum = parseFloat(nuevaCantidadStr);
-                    const stockOriginalNum = parseFloat(item.cantidad_original_stock_inventario);
-                    
-                    // Validar la cantidad
-                    if (isNaN(nuevaCantidadNum) || nuevaCantidadNum <= 0) {
-                        return item;
-                    }
+                // Guardar SIEMPRE el string crudo (incluido vacío o intermedio como "1." o "0")
+                // para que el input controlado se pueda borrar y reescribir. La normalización
+                // (vacío/0 → 1.00, redondeo a 2 decimales) la hace el onBlur del input.
+                const nuevaCantidadNum = parseFloat(nuevaCantidadStr);
+                const valido = !isNaN(nuevaCantidadNum) && nuevaCantidadNum > 0;
+                const ventaNum = parseFloat(item.venta);
+                const nuevoMonto = valido ? (nuevaCantidadNum * ventaNum).toFixed(2) : item.monto;
 
-
-                    // Calcular el nuevo monto
-                    const ventaNum = parseFloat(item.venta);
-                    const nuevoMonto = (nuevaCantidadNum * ventaNum).toFixed(2);
-
-                    return {
-                        ...item,
-                        cantidad: nuevaCantidadStr, // Mantener el string original
-                        monto: String(nuevoMonto),
-                        ct_real: nuevaCantidadNum
-                    };
-                }
-                return item;
+                return {
+                    ...item,
+                    cantidad: nuevaCantidadStr,
+                    monto: String(nuevoMonto),
+                    ct_real: valido ? nuevaCantidadNum : item.ct_real,
+                };
             })
         );
     };
@@ -745,51 +740,108 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6 p-1 md:p-6 rounded-lg">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-6">{esEdicion ? `Editando Transferencia (Mock) #${transferenciaToEdit.id}` : 'Crear Nueva Transferencia (Mock)'}</h2>
-            {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4"><p>{error}</p></div>}
-            {mensajeExito && <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-4"><p>{mensajeExito}</p></div>}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label htmlFor="id_destino" className="block text-sm font-medium text-gray-700">Sucursal Destino:</label>
-                    <select id="id_destino" value={idSucursalDestinoSeleccionada} onChange={(e) => setIdSucursalDestinoSeleccionada(e.target.value)} required className="mt-1 block w-full p-2 border-gray-300 rounded-md shadow-sm">
-                        <option value="">-- Seleccione Destino --</option>
-                        {sucursales.map(s => <option key={s.id} value={s.id}>{s.codigo}</option>)}
-                    </select>
+        <form onSubmit={handleSubmit} className="space-y-3 p-1 md:p-3 rounded-lg">
+            {/* Encabezado compacto + destino, arriba */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-gray-200">
+                <h2 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">
+                    {esEdicion ? `Editando Transferencia #${transferenciaToEdit.id}` : 'Nueva Transferencia'}
+                </h2>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-gray-500">Destino:</span>
+                    {destinoBloqueado ? (
+                        <>
+                            <span className="px-2 py-1 bg-gray-100 text-gray-800 text-sm font-semibold rounded border border-gray-200">
+                                {codigoDestino || '— sin destino —'}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => { setDestinoBloqueado(false); setMostrarListaDestino(true); }}
+                                className="inline-flex items-center text-xs px-2 py-1 border border-gray-300 rounded text-gray-600 hover:bg-gray-50"
+                                title="Desbloquear para cambiar destino"
+                            >
+                                <i className="fas fa-lock mr-1"></i>Cambiar
+                            </button>
+                        </>
+                    ) : (
+                        <div className="relative">
+                            <input
+                                type="text"
+                                autoFocus
+                                value={busquedaDestino}
+                                onChange={(e) => { setBusquedaDestino(e.target.value); setMostrarListaDestino(true); }}
+                                onFocus={() => setMostrarListaDestino(true)}
+                                onBlur={() => setTimeout(() => setMostrarListaDestino(false), 150)}
+                                placeholder="Buscar sucursal..."
+                                className="w-44 px-2 py-1 text-sm border border-indigo-400 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                            />
+                            {mostrarListaDestino && (
+                                <ul className="absolute right-0 z-20 mt-1 w-56 max-h-56 overflow-y-auto bg-white border border-gray-300 rounded-md shadow-lg">
+                                    {sucursalesFiltradas.length ? sucursalesFiltradas.map(s => (
+                                        <li
+                                            key={s.id}
+                                            onMouseDown={() => {
+                                                setIdSucursalDestinoSeleccionada(String(s.id));
+                                                setBusquedaDestino('');
+                                                setMostrarListaDestino(false);
+                                                setDestinoBloqueado(true);
+                                            }}
+                                            className="px-3 py-1.5 text-sm hover:bg-indigo-50 cursor-pointer"
+                                        >
+                                            <b>{s.codigo}</b> <span className="text-gray-500">{s.nombre}</span>
+                                        </li>
+                                    )) : <li className="px-3 py-1.5 text-sm text-gray-400">Sin coincidencias</li>}
+                                </ul>
+                            )}
+                        </div>
+                    )}
                 </div>
-               
             </div>
+            {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 px-3 py-2 text-sm"><p>{error}</p></div>}
+            {mensajeExito && <div className="bg-green-100 border-l-4 border-green-500 text-green-700 px-3 py-2 text-sm"><p>{mensajeExito}</p></div>}
 
             
 
             {/* Contenedor con posición relativa para el área de búsqueda y lista */}
             <div className="relative">
                 {/* Área de búsqueda fija */}
-                <div className="sticky top-0 z-10 bg-white pb-4 border-b border-gray-200">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Buscar y Agregar Productos:</label>
+                <div className="sticky top-0 z-10 bg-white pb-2 border-b border-gray-200">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Buscar y Agregar Productos:</label>
                     <ProductSearchInput onProductSelect={handleAddProduct} sucursalIdOrigen={idSucursalOrigen} />
                 </div>
 
-                {/* Lista de productos con scroll */}
+                {/* Lista de productos en tabla */}
                 {itemsTransferencia.length > 0 && (
-                    <div className="mt-6">
-                        <h3 className="text-lg font-medium text-gray-800 mb-2">
-                            Productos en Transferencia ({itemsTransferencia.length} items):
+                    <div className="mt-3">
+                        <h3 className="text-sm font-semibold text-gray-700 mb-1">
+                            Productos ({itemsTransferencia.length})
                         </h3>
-                        <ul className="border rounded-md divide-y max-h-[calc(100vh-400px)] overflow-y-auto">
-                            {itemsTransferencia.map((item, index) => (
-                                <SelectedProductItem 
-                                    key={item.id_producto_insucursal} 
-                                    item={item} 
-                                    onRemove={handleRemoveProduct} 
-                                    onQuantityChange={handleQuantityChange} 
-                                    isEditable={true}
-                                    index={index}
-                                    totalItems={itemsTransferencia.length}
-                                />
-                            ))}
-                        </ul>
+                        <div className="border rounded-md max-h-[calc(100vh-340px)] overflow-y-auto">
+                            <table className="min-w-full text-sm">
+                                <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0">
+                                    <tr>
+                                        <th className="px-2 py-1 text-center font-semibold">#</th>
+                                        <th className="px-2 py-1 text-left font-semibold">Descripción</th>
+                                        <th className="px-2 py-1 text-left font-semibold">Cód. Barras</th>
+                                        <th className="px-2 py-1 text-left font-semibold">Cód. Proveedor</th>
+                                        <th className="px-2 py-1 text-center font-semibold">Cantidad</th>
+                                        <th className="px-2 py-1 text-center font-semibold w-10"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {itemsTransferencia.map((item, index) => (
+                                        <SelectedProductItem
+                                            key={item.id_producto_insucursal}
+                                            item={item}
+                                            onRemove={handleRemoveProduct}
+                                            onQuantityChange={handleQuantityChange}
+                                            isEditable={true}
+                                            index={index}
+                                            totalItems={itemsTransferencia.length}
+                                        />
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
             </div>
@@ -822,9 +874,9 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                 </div>
             )}
 
-            <div className="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-4 pt-4">
-                <button type="button" onClick={onCancel} disabled={estaCargando} className="w-full sm:w-auto px-6 py-2.5 border rounded-md shadow-sm text-sm bg-white hover:bg-gray-50 transition">Cancelar</button>
-                <button type="submit" disabled={estaCargando || itemsTransferencia.length === 0} className="w-full sm:w-auto inline-flex justify-center items-center px-6 py-2.5 border-transparent rounded-md shadow-sm text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition">
+            <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 pt-2 border-t border-gray-200">
+                <button type="button" onClick={onCancel} disabled={estaCargando} className="w-full sm:w-auto px-4 py-2 border rounded-md shadow-sm text-sm bg-white hover:bg-gray-50 transition">Cancelar</button>
+                <button type="submit" disabled={estaCargando || itemsTransferencia.length === 0} className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border-transparent rounded-md shadow-sm text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition">
                     {estaCargando ? 'Guardando...' : (esEdicion ? 'Actualizar Transferencia' : 'Crear Transferencia')}
                 </button>
             </div>
@@ -835,8 +887,15 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
 const TransferenciaDetailView = ({ transferencia, onBack, sucursales }) => {
     if (!transferencia) return <p>Cargando detalles...</p>;
 
-    const origen = transferencia.origen || mockSucursalesData.find(s => s.id === transferencia.id_origen);
-    const destino = transferencia.destino || mockSucursalesData.find(s => s.id === transferencia.id_destino);
+    // Resolver la sucursal desde el objeto embebido que manda central (origen/destino con
+    // codigo/nombre/colores) o, si no viene, desde la lista `sucursales` por id. Mismo criterio
+    // que datosSuc en la tabla. Antes se leía `nombre_sucursal` (campo inexistente) → "ID: X".
+    const sucById = {};
+    (sucursales || []).forEach(s => { sucById[s.id] = s; });
+    const resolverSuc = (obj, id) => (obj && (obj.codigo || obj.nombre)) ? obj : (sucById[id] || null);
+    const labelSuc = (s, id) => (s && (s.nombre || s.codigo)) || (id != null ? `ID: ${id}` : '—');
+    const origen = resolverSuc(transferencia.origen, transferencia.id_origen);
+    const destino = resolverSuc(transferencia.destino, transferencia.id_destino);
 
     return (
         <div className="p-4 md:p-6 bg-white rounded-lg shadow-xl">
@@ -850,8 +909,24 @@ const TransferenciaDetailView = ({ transferencia, onBack, sucursales }) => {
                 <div><p className="text-sm text-gray-500">Estado:</p> <StatusBadge estadoNum={transferencia.estado} /></div>
                 <div><p className="text-sm text-gray-500">Fecha Creación:</p> <p className="font-medium">{format(new Date(transferencia.created_at), 'dd/MM/yyyy HH:mm', { locale: es })}</p></div>
                 <div><p className="text-sm text-gray-500">Última Actualización:</p> <p className="font-medium">{format(new Date(transferencia.updated_at), 'dd/MM/yyyy HH:mm', { locale: es })}</p></div>
-                <div><p className="text-sm text-gray-500">Sucursal Origen:</p> <p className="font-medium">{origen?.nombre_sucursal || `ID: ${transferencia.id_origen}`}</p></div>
-                <div><p className="text-sm text-gray-500">Sucursal Destino:</p> <p className="font-medium">{destino?.nombre_sucursal || `ID: ${transferencia.id_destino}`}</p></div>
+                <div>
+                    <p className="text-sm text-gray-500">Sucursal Origen:</p>
+                    <p className="font-medium flex items-center gap-2">
+                        {origen?.codigo && (
+                            <span className="inline-block px-2 py-0.5 rounded text-xs font-bold" style={{ backgroundColor: origen.background || '#e5e7eb', color: origen.color || '#374151' }}>{origen.codigo}</span>
+                        )}
+                        {labelSuc(origen, transferencia.id_origen)}
+                    </p>
+                </div>
+                <div>
+                    <p className="text-sm text-gray-500">Sucursal Destino:</p>
+                    <p className="font-medium flex items-center gap-2">
+                        {destino?.codigo && (
+                            <span className="inline-block px-2 py-0.5 rounded text-xs font-bold" style={{ backgroundColor: destino.background || '#e5e7eb', color: destino.color || '#374151' }}>{destino.codigo}</span>
+                        )}
+                        {labelSuc(destino, transferencia.id_destino)}
+                    </p>
+                </div>
                 {transferencia.observaciones && (
                     <div className="md:col-span-2">
                         <p className="text-sm text-gray-500">Observaciones:</p>
@@ -914,8 +989,50 @@ const TransferenciaList = ({
         cargarTransferencias();
     };
 
+    const handleDelete = async (t) => {
+        if (!window.confirm(`¿Eliminar/anular la transferencia #${t.id}? Se reintegrará el stock al inventario y se quitará el espejo en central.`)) return;
+        try {
+            const res = await db.delTransferenciaDici({ id: t.id });
+            if (res.data && res.data.estado) {
+                setFiltrosActivos({ ...filtrosActivos }); // recargar la lista
+            } else {
+                window.alert((res.data && res.data.msj) || 'No se pudo eliminar la transferencia.');
+            }
+        } catch (e) {
+            window.alert('Error al eliminar la transferencia.');
+        }
+    };
+
     if (estaCargando && transferencias.length === 0) return <div className="text-center p-10">Cargando...</div>;
     if (error) return <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 my-4"><p>{error}</p></div>;
+
+    // Mapa id_sucursal -> sucursal completa (código + colores del label, vienen de sucursals/central).
+    const sucById = {};
+    (sucursales || []).forEach(s => { sucById[s.id] = s; });
+    const datosSuc = (obj, id) => {
+        const s = (obj && obj.codigo) ? obj : (sucById[id] || null);
+        return {
+            codigo: (s && s.codigo) || (id != null ? `ID: ${id}` : '—'),
+            background: (s && s.background) || '#e5e7eb',
+            color: (s && s.color) || '#374151',
+        };
+    };
+    const badgeSuc = (obj, id) => {
+        const d = datosSuc(obj, id);
+        return (
+            <span className="inline-block px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap" style={{ backgroundColor: d.background, color: d.color }}>
+                {d.codigo}
+            </span>
+        );
+    };
+
+    // Filtro cliente por origen/destino (además de lo que devuelve el backend),
+    // para que el filtro siempre aplique sobre lo cargado.
+    const transferenciasMostradas = (transferencias || []).filter(t => {
+        if (filtrosActivos.id_origen && String(t.id_origen) !== String(filtrosActivos.id_origen)) return false;
+        if (filtrosActivos.id_destino && String(t.id_destino) !== String(filtrosActivos.id_destino)) return false;
+        return true;
+    });
 
     return (
         <div className="rounded-lg">
@@ -971,6 +1088,19 @@ const TransferenciaList = ({
                                 <option value="2">Extraído</option>
                                 <option value="3">En Revision</option>
                                 <option value="4">Revisado</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label htmlFor="id_origen_filter" className="block text-xs font-medium text-gray-700">Origen</label>
+                            <select
+                                name="id_origen"
+                                id="id_origen_filter"
+                                value={filtros.id_origen || ''}
+                                onChange={handleFilterChange}
+                                className="mt-1 block w-full pl-3 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
+                            >
+                                <option value="">Todas</option>
+                                {sucursales.map(s => <option key={s.id} value={s.id}>{s.codigo}</option>)}
                             </select>
                         </div>
                         <div>
@@ -1045,26 +1175,42 @@ const TransferenciaList = ({
                             </div>
                         </div>
                     </div>
-                ) : transferencias.length === 0 ? (
+                ) : transferenciasMostradas.length === 0 ? (
                     <div className="text-center py-12">
                         <i className="fas fa-box-open text-gray-400 text-4xl mb-3"></i>
                         <p className="text-gray-500">No se encontraron transferencias</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {transferencias.map(t => (
-                            <div key={t.id} className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200">
-                                {/* Header de la tarjeta */}
-                                <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 rounded-t-lg">
-                                    <div className="flex justify-between items-center">
-                                        <div className="flex items-center space-x-2">
-                                            <span className="text-sm font-medium text-gray-900">#{t.id}</span>
-                                            <StatusBadge estadoNum={t.estado} />
-                                        </div>
-                                        <div className="flex space-x-2">
+                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                        <table className="min-w-full text-sm divide-y divide-gray-200">
+                            <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                                <tr>
+                                    <th className="px-3 py-2 text-left font-semibold">#</th>
+                                    <th className="px-3 py-2 text-left font-semibold">Estado</th>
+                                    <th className="px-3 py-2 text-left font-semibold">Fecha</th>
+                                    <th className="px-3 py-2 text-left font-semibold">Origen</th>
+                                    <th className="px-3 py-2 text-left font-semibold">Destino</th>
+                                    <th className="px-3 py-2 text-center font-semibold">Prod.</th>
+                                    <th className="px-3 py-2 text-right font-semibold">Base</th>
+                                    <th className="px-3 py-2 text-right font-semibold">Venta</th>
+                                    <th className="px-3 py-2 text-center font-semibold">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-100">
+                                {transferenciasMostradas.map(t => (
+                                    <tr key={t.id} className="hover:bg-gray-50">
+                                        <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">#{t.id}</td>
+                                        <td className="px-3 py-2 whitespace-nowrap"><StatusBadge estadoNum={t.estado} /></td>
+                                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{format(new Date(t.created_at), 'dd/MM/yy HH:mm', { locale: es })}</td>
+                                        <td className="px-3 py-2">{badgeSuc(t.origen, t.id_origen)}</td>
+                                        <td className="px-3 py-2">{badgeSuc(t.destino, t.id_destino)}</td>
+                                        <td className="px-3 py-2 text-center text-gray-600">{t.items?.length || 0}</td>
+                                        <td className="px-3 py-2 text-right text-gray-900">${parseFloat(t.base || 0).toFixed(2)}</td>
+                                        <td className="px-3 py-2 text-right text-gray-900">${parseFloat(t.venta || 0).toFixed(2)}</td>
+                                        <td className="px-3 py-2 whitespace-nowrap text-center">
                                             <button
                                                 onClick={() => onViewDetails(t)}
-                                                className="text-indigo-600 hover:text-indigo-900 p-1 rounded-full hover:bg-indigo-50"
+                                                className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50"
                                                 title="Ver detalles"
                                             >
                                                 <i className="fas fa-eye"></i>
@@ -1072,53 +1218,26 @@ const TransferenciaList = ({
                                             {t.estado === ESTADO_STRING_A_NUMERICO['PENDIENTE'] && (
                                                 <button
                                                     onClick={() => onEdit(t)}
-                                                    className="text-blue-600 hover:text-blue-900 p-1 rounded-full hover:bg-blue-50"
+                                                    className="ml-1 text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
                                                     title="Editar"
                                                 >
                                                     <i className="fas fa-edit"></i>
                                                 </button>
                                             )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Contenido de la tarjeta */}
-                                <div className="p-4">
-                                    <div className="space-y-3">
-                                        <div className="flex items-center text-sm text-gray-500">
-                                            <i className="far fa-clock w-5"></i>
-                                            <span className="ml-2">{format(new Date(t.created_at), 'dd/MM/yy HH:mm', { locale: es })}</span>
-                                        </div>
-                                        
-                                        <div className="flex items-center text-sm text-gray-500">
-                                            <i className="fas fa-warehouse w-5"></i>
-                                            <span className="ml-2">{t.origen?.nombre_sucursal || `ID: ${t.id_origen}`}</span>
-                                        </div>
-                                        
-                                        <div className="flex items-center text-sm text-gray-500">
-                                            <i className="fas fa-truck w-5"></i>
-                                            <span className="ml-2">{t.destino?.nombre_sucursal || `ID: ${t.id_destino}`}</span>
-                                        </div>
-                                        
-                                        <div className="flex items-center text-sm text-gray-500">
-                                            <i className="fas fa-boxes w-5"></i>
-                                            <span className="ml-2">{t.items?.length || 0} productos</span>
-                                        </div>
-
-                                        <div className="pt-2 border-t border-gray-100">
-                                            <div className="flex justify-between text-sm">
-                                                <span className="text-gray-500">Total Base:</span>
-                                                <span className="font-medium text-gray-900">${parseFloat(t.base || 0).toFixed(2)}</span>
-                                            </div>
-                                            <div className="flex justify-between text-sm mt-1">
-                                                <span className="text-gray-500">Total Venta:</span>
-                                                <span className="font-medium text-gray-900">${parseFloat(t.venta || 0).toFixed(2)}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                                            {t.estado !== ESTADO_STRING_A_NUMERICO['PROCESADO'] && (
+                                                <button
+                                                    onClick={() => handleDelete(t)}
+                                                    className="ml-1 text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50"
+                                                    title="Eliminar / anular"
+                                                >
+                                                    <i className="fas fa-trash"></i>
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 )}
             </div>
@@ -1180,8 +1299,8 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const [transferencias, setTransferencias] = useState([]);
     const [estaCargando, setEstaCargando] = useState(true);
     const [error, setError] = useState('');
-    const [filtros, setFiltros] = useState({ q: '', estatus_string: '', id_destino: '', limit: 10 });
-    const [filtrosActivos, setFiltrosActivos] = useState({ q: '', estatus_string: '', id_destino: '', limit: 10 });
+    const [filtros, setFiltros] = useState({ q: '', estatus_string: '', id_origen: '', id_destino: '', limit: 10 });
+    const [filtrosActivos, setFiltrosActivos] = useState({ q: '', estatus_string: '', id_origen: '', id_destino: '', limit: 10 });
     const [paginacion, setPaginacion] = useState({});
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
 
@@ -1257,10 +1376,10 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const idOrigenReal = sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER;
 
     return (
-        <div className="mx-auto px-2 py-4 sm:px-4 md:px-6">
-            <header className="mb-6 pb-4 border-b border-gray-200">
+        <div className="mx-auto px-2 pt-1 pb-2 sm:px-4 md:px-6">
+            <header className="mb-3 pb-2 border-b border-gray-200">
                 <div className="flex flex-col sm:flex-row justify-between items-center">
-                    <h3 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestión de Transferencias</h3>
+                    <h3 className="text-lg sm:text-xl font-bold text-gray-800">Gestión de Transferencias</h3>
                     {vistaActual === 'list' && (<button onClick={handleGoToCreate} className="mt-3 sm:mt-0 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">+ Nueva Transferencia</button>)}
                     {(vistaActual === 'form' || vistaActual === 'detail') && (<button onClick={handleCancelForm} className="mt-3 sm:mt-0 bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">&larr; Volver al Listado</button>)}
                 </div>

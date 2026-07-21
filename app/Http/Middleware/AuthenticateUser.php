@@ -36,6 +36,12 @@ class AuthenticateUser
         'reqpedidos',
         'reqMipedidos',
         'settransferenciaDici',
+        'delTransferenciaDici',
+        // Despacho con recolección y bultos (TCD): el patrón {accion} cubre todas las sub-rutas
+        // de un solo segmento (guardar-orden, crear-bulto, despachar-bulto, etc.).
+        'transferencia-despacho/{accion}',
+        // Salud de Inventario (analítica) — visible para DICI y gerente.
+        'inventario-analytics/{accion}',
         
         // Sucursales
         'getSucursales',
@@ -328,6 +334,9 @@ class AuthenticateUser
                 'warehouse-inventory/tcd/mis-asignaciones',
                 'warehouse-inventory/tcd/procesar-asignacion',
                 'warehouse-inventory/tcd/buscar-ubicacion',
+                // Despacho con bultos (TCD React) — pasillero
+                'transferencia-despacho/mis-recolecciones',
+                'transferencia-despacho/recolectar-linea',
                 // Ruta para imprimir ticket de producto
                 'warehouse-inventory/imprimir-ticket-producto',
                 // Ruta para buscar producto (para obtener ubicaciones)

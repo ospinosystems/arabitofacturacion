@@ -67,8 +67,15 @@ export default function InventarioForzado({
     cleanInventario,
 
     openBarcodeScan,
-    
+
+    // Navegación DICI
+    setView,
+    sincInventario,
+    modViewInventario,
+    setmodViewInventario,
+
 }){
+    const modInv = modViewInventario || "list";
     useHotkeys(
         "esc",
         () => {
@@ -426,6 +433,8 @@ export default function InventarioForzado({
                 </div>
             :null} */}
 
+            {modInv !== "historico" && (
+            <>
             <div className="py-3 mb-4 bg-white shadow-sm toolbar sticky-top">
                 <div className="row g-3">
                     <div className="col-12 col-md-6">
@@ -1084,6 +1093,8 @@ export default function InventarioForzado({
                     ))}
                 </div>
             </form>
-        </div>    
+            </>
+            )}
+        </div>
     )
 }

@@ -5,7 +5,6 @@ import Fallas from '../components/fallas';
 
 import InventarioForzado from '../components/inventarioForzado';
 import EstadisticaInventario from '../components/estadisticainventario';
-import InventarioNovedades from '../components/inventarionovedades';
 
 import ControlEfectivo from '../components/controlefectivo';
 import Garantias from '../components/garantias';
@@ -391,82 +390,7 @@ function Inventario({
   return (
     <div className="inventario-container">
       <div className="container-fluid px-4">
-          {user.tipo_usuario==1?
-            <div className="row mb-3">
-              <div className="col-12">
-                <div className="d-flex flex-wrap align-items-center gap-2">
-                  {/* Navegación principal */}
-                  <div className="d-flex flex-wrap gap-1 me-3">
-                    <button
-                      className={`btn ${subViewInventario === "inventario" ? "btn-primary" : "btn-outline-primary"}`}
-                      onClick={() => setsubViewInventario("inventario")}
-                    >
-                      <i className="fas fa-boxes me-1"></i>
-                      Inventario
-                    </button>
-                    <button
-                      className={`btn ${subViewInventario === "efectivo" ? "btn-primary" : "btn-outline-primary"}`}
-                      onClick={() => setsubViewInventario("efectivo")}
-                    >
-                      <i className="fas fa-money-bill-wave me-1"></i>
-                      Control de Efectivo
-                    </button>
-                    <button
-                      className={`btn ${subViewInventario === "estadisticas" ? "btn-primary" : "btn-outline-primary"}`}
-                      onClick={() => setsubViewInventario("estadisticas")}
-                    >
-                      <i className="fas fa-chart-bar me-1"></i>
-                      Estadísticas
-                    </button>
-                    <button
-                      className={`btn ${subViewInventario === "suministros" ? "btn-primary" : "btn-outline-primary"}`}
-                      onClick={() => setsubViewInventario("suministros")}
-                    >
-                      <i className="fas fa-box-open me-1"></i>
-                      Suministros
-                    </button>
-                    <button
-                      className={`btn ${subViewInventario === "facturasItems" ? "btn-primary" : "btn-outline-primary"}`}
-                      onClick={() => setsubViewInventario("facturasItems")}
-                    >
-                      <i className="fas fa-file-invoice me-1"></i>
-                      Facturas e ítems
-                    </button>
-                  </div>
-                  {/* Reportes fiscales */}
-                  <div className="d-flex flex-wrap align-items-center gap-2 ms-auto">
-                    <button
-                      className="btn btn-outline-primary"
-                      onClick={() => reportefiscal("x")}
-                    >
-                      <i className="fas fa-file-invoice me-1"></i>
-                      Reporte X
-                    </button>
-                    <button
-                      className="btn btn-outline-primary"
-                      onClick={() => reportefiscal("z")}
-                    >
-                      <i className="fas fa-file-invoice-dollar me-1"></i>
-                      Reporte Z
-                    </button>
-                    <div className="input-group" style={{ maxWidth: "12rem" }}>
-                      <span className="input-group-text">
-                        <i className="fas fa-hashtag"></i>
-                      </span>
-                      <input
-                        className="form-control"
-                        type="number"
-                        value={numReporteZ}
-                        onChange={e => setnumReporteZ(e.target.value)}
-                        placeholder="Nº Reporte Z"
-                        aria-label="Número de Reporte Z"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          :null}
+          {/* La navegación del gerente la provee <GerenteNav> (en facturar.js), consistente en todas sus vistas. */}
 
         <div className="row">
           <div className="col-12 p-0">
@@ -618,26 +542,75 @@ function Inventario({
               )}
               {subViewInventario === "inventario" && (
                 <>
-                  <div className="container-fluid">
-                    <div className="d-flex justify-content-between align-items-center">
-                      <div className="container-fluid">
-                        <div className="row">
-                          <div className="col d-flex justify-content-center">
-                            <button className="btn btn-sinapsis ms-2" onClick={()=>setmodViewInventario("list")}>Gestión <i className="fa fa-paper-plane"></i></button>
-                            <button className="btn btn-sinapsis ms-2" onClick={()=>setmodViewInventario("historico")}>Histórico <i className="fa fa-refresh"></i></button>
-                            <button className="btn btn-sinapsis ms-2" onClick={()=>setmodViewInventario("inventarionovedades")}>Novedades <i className="fa fa-exclamation-circle"></i></button>
-                            <button className={("btn ")+("btn-sinapsis ms-2")} onClick={()=>sincInventario()}>Sincronizar Inventario <i className="fa fa-reload"></i></button>
+                  <InventarioForzado
+                    openBarcodeScan={openBarcodeScan}
+                    exportPendientes={exportPendientes}
+                    getPorcentajeInventario={getPorcentajeInventario}
+                    cleanInventario={cleanInventario}
+                    selectRepleceProducto={selectRepleceProducto}
+                    replaceProducto={replaceProducto}
+                    setreplaceProducto={setreplaceProducto}
+                    saveReplaceProducto={saveReplaceProducto}
+                    user={user}
+                    setStockMin={setStockMin}
+                    getmovientoinventariounitario={getmovientoinventariounitario}
+                    datamodalhistoricoproducto={datamodalhistoricoproducto}
+                    setdatamodalhistoricoproducto={setdatamodalhistoricoproducto}
+                    usuariosData={usuariosData}
+                    openmodalhistoricoproducto={openmodalhistoricoproducto}
+                    showmodalhistoricoproducto={showmodalhistoricoproducto}
+                    setshowmodalhistoricoproducto={setshowmodalhistoricoproducto}
+                    fecha1modalhistoricoproducto={fecha1modalhistoricoproducto}
+                    setfecha1modalhistoricoproducto={setfecha1modalhistoricoproducto}
+                    fecha2modalhistoricoproducto={fecha2modalhistoricoproducto}
+                    setfecha2modalhistoricoproducto={setfecha2modalhistoricoproducto}
+                    usuariomodalhistoricoproducto={usuariomodalhistoricoproducto}
+                    setusuariomodalhistoricoproducto={setusuariomodalhistoricoproducto}
 
-                          </div>
-                          
-                        </div>
+                    reporteInventario={reporteInventario}
+                    printTickedPrecio={printTickedPrecio}
+                    sameCatValue={sameCatValue}
+                    sameProValue={sameProValue}
+                    setCtxBulto={setCtxBulto}
+                    setPrecioAlterno={setPrecioAlterno}
+                    busqAvanzInputsFun={busqAvanzInputsFun}
+                    busqAvanzInputs={busqAvanzInputs}
+                    buscarInvAvanz={buscarInvAvanz}
 
-                        
-                      </div>
-                    </div>
-                    <hr/>
-                  </div>
-                  
+                    busquedaAvanazadaInv={busquedaAvanazadaInv}
+                    setbusquedaAvanazadaInv={setbusquedaAvanazadaInv}
+                    setSameCat={setSameCat}
+                    setSamePro={setSamePro}
+                    setSameGanancia={setSameGanancia}
+
+                    categorias={categorias}
+                    setporcenganancia={setporcenganancia}
+
+                    refsInpInvList={refsInpInvList}
+                    proveedoresList={proveedoresList}
+                    guardarNuevoProductoLote={guardarNuevoProductoLote}
+                    inputBuscarInventario={inputBuscarInventario}
+                    type={type}
+                    number={number}
+                    productosInventario={productosInventario}
+                    qBuscarInventario={qBuscarInventario}
+                    setQBuscarInventario={setQBuscarInventario}
+
+                    changeInventario={changeInventario}
+
+                    Invnum={Invnum}
+                    setInvnum={setInvnum}
+                    InvorderColumn={InvorderColumn}
+                    setInvorderColumn={setInvorderColumn}
+                    InvorderBy={InvorderBy}
+                    setInvorderBy={setInvorderBy}
+
+                    modViewInventario={modViewInventario}
+                    setmodViewInventario={setmodViewInventario}
+                    setView={setView}
+                    sincInventario={sincInventario}
+                  />
+
                   {modViewInventario === "historico" && (
                   <>
                     <div className="container">
@@ -726,84 +699,6 @@ function Inventario({
                       </table>
                     </div>
                   </>
-                  )} 
-
-                  {modViewInventario === "list" && (
-                    <InventarioForzado
-                      openBarcodeScan={openBarcodeScan}
-                      exportPendientes={exportPendientes}
-                      getPorcentajeInventario={getPorcentajeInventario}
-                      cleanInventario={cleanInventario}
-                      selectRepleceProducto={selectRepleceProducto}
-                      replaceProducto={replaceProducto}
-                      setreplaceProducto={setreplaceProducto}
-                      saveReplaceProducto={saveReplaceProducto}
-                      user={user}
-                      setStockMin={setStockMin}
-                      getmovientoinventariounitario={getmovientoinventariounitario}
-                      datamodalhistoricoproducto={datamodalhistoricoproducto}
-                      setdatamodalhistoricoproducto={setdatamodalhistoricoproducto}
-                      usuariosData={usuariosData}
-                      openmodalhistoricoproducto={openmodalhistoricoproducto}
-                      showmodalhistoricoproducto={showmodalhistoricoproducto}
-                      setshowmodalhistoricoproducto={setshowmodalhistoricoproducto}
-                      fecha1modalhistoricoproducto={fecha1modalhistoricoproducto}
-                      setfecha1modalhistoricoproducto={setfecha1modalhistoricoproducto}
-                      fecha2modalhistoricoproducto={fecha2modalhistoricoproducto}
-                      setfecha2modalhistoricoproducto={setfecha2modalhistoricoproducto}
-                      usuariomodalhistoricoproducto={usuariomodalhistoricoproducto}
-                      setusuariomodalhistoricoproducto={setusuariomodalhistoricoproducto}
-
-                      reporteInventario={reporteInventario}
-                      printTickedPrecio={printTickedPrecio}
-                      sameCatValue={sameCatValue}
-                      sameProValue={sameProValue}
-                      setCtxBulto={setCtxBulto}
-                      setPrecioAlterno={setPrecioAlterno}
-                      busqAvanzInputsFun={busqAvanzInputsFun}
-                      busqAvanzInputs={busqAvanzInputs}
-                      buscarInvAvanz={buscarInvAvanz}
-
-                      busquedaAvanazadaInv={busquedaAvanazadaInv}
-                      setbusquedaAvanazadaInv={setbusquedaAvanazadaInv}
-                      setSameCat={setSameCat}
-                      setSamePro={setSamePro}
-                      setSameGanancia={setSameGanancia}
-
-                      categorias={categorias}
-                      setporcenganancia={setporcenganancia}
-
-                      refsInpInvList={refsInpInvList}
-                      proveedoresList={proveedoresList}
-                      guardarNuevoProductoLote={guardarNuevoProductoLote}
-                      inputBuscarInventario={inputBuscarInventario}
-                      type={type}
-                      number={number}
-                      productosInventario={productosInventario}
-                      qBuscarInventario={qBuscarInventario}
-                      setQBuscarInventario={setQBuscarInventario}
-
-                      changeInventario={changeInventario}
-
-                      Invnum={Invnum}
-                      setInvnum={setInvnum}
-                      InvorderColumn={InvorderColumn}
-                      setInvorderColumn={setInvorderColumn}
-                      InvorderBy={InvorderBy}
-                      setInvorderBy={setInvorderBy}
-                    />
-                  )}
-
-                  {modViewInventario === "inventarionovedades" && (
-                    <InventarioNovedades
-                      inventarioNovedadesData={inventarioNovedadesData}
-                      setinventarioNovedadesData={setinventarioNovedadesData}
-                      getInventarioNovedades={getInventarioNovedades}
-                      resolveInventarioNovedades={resolveInventarioNovedades}
-                      sendInventarioNovedades={sendInventarioNovedades}
-                      delInventarioNovedades={delInventarioNovedades}
-                      number={number}
-                    />
                   )}
                 </>
               )}

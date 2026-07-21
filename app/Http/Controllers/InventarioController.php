@@ -644,40 +644,54 @@ class InventarioController extends Controller
 
     public function descontarInventario($id_producto, $cantidad, $ct1, $id_pedido, $origen)
     {
-        $inv = inventario::find($id_producto);
-        if (!$inv) {
-            return false;
-        }
+        // ATÓMICO — antes esto hacía read-modify-write sin lock: bajo concurrencia (varias
+        // ventas/transferencias del mismo producto a la vez) los procesos se pisaban y se
+        // perdían descuentos (lost updates, verificado con prueba:transferencia-ciclo --race).
+        // Ahora bloqueamos la fila (lockForUpdate) y aplicamos el DELTA que esta operación
+        // quiere mover (delta = lo que el llamador vio - lo nuevo que quiere) sobre la cantidad
+        // REAL y fresca; así los procesos concurrentes se serializan y el stock nunca descuadra.
+        return DB::transaction(function () use ($id_producto, $cantidad, $ct1, $id_pedido, $origen) {
+            $inv = inventario::lockForUpdate()->find($id_producto);
+            if (!$inv) {
+                return false;
+            }
 
-        if ($cantidad < 0) {
-            $nombre = $inv->descripcion ?? 'ID ' . $id_producto;
-            $solicitado = $ct1 - $cantidad; // cantidad que se intentó descontar
-            $disponible = max(0, (float) $ct1);
-            throw new \Exception(
-                'No hay disponible la cantidad solicitada. Producto: ' . $nombre .
-                '. Solicitado: ' . $solicitado .
-                '. Disponible: ' . $disponible . '.',
-                1
-            );
-        }
-        $pendingTransfers = (new TransferenciasInventarioController)->sumPendingTransfers($id_producto);
-        if ($cantidad < $pendingTransfers) {
-            throw new \Exception('No puede descontar la cantidad solicitada. Esta bloqueada por transferencias pendientes', 1);
-        }
-        $inv->cantidad = $cantidad;
-        if ($inv->save()) {
-            // Construir origen: si id_pedido es null, usar solo origen; si no, agregar el prefijo
-            $origenFinal = $id_pedido !== null ? ($origen . ' #' . $id_pedido) : $origen;
-            
-            (new MovimientosInventariounitarioController)->setNewCtMov([
-                'id_producto' => $id_producto,
-                'cantidadafter' => $cantidad,
-                'ct1' => $ct1,
-                'id_pedido' => $id_pedido,
-                'origen' => $origenFinal,
-            ]);
-            return true;
-        };
+            // delta > 0 descuenta, delta < 0 reintegra. Se deriva del par (anterior, nuevo) que
+            // mandó el llamador, NO de un valor absoluto (que puede venir de una lectura stale).
+            $delta = (float) $ct1 - (float) $cantidad;
+            $antesReal = (float) $inv->cantidad;
+            $nuevaReal = $antesReal - $delta;
+
+            if ($nuevaReal < 0) {
+                $nombre = $inv->descripcion ?? 'ID ' . $id_producto;
+                throw new \Exception(
+                    'No hay disponible la cantidad solicitada. Producto: ' . $nombre .
+                    '. Solicitado: ' . $delta .
+                    '. Disponible: ' . max(0, $antesReal) . '.',
+                    1
+                );
+            }
+            $pendingTransfers = (new TransferenciasInventarioController)->sumPendingTransfers($id_producto);
+            if ($nuevaReal < $pendingTransfers) {
+                throw new \Exception('No puede descontar la cantidad solicitada. Esta bloqueada por transferencias pendientes', 1);
+            }
+
+            $inv->cantidad = $nuevaReal;
+            if ($inv->save()) {
+                // Construir origen: si id_pedido es null, usar solo origen; si no, agregar el prefijo
+                $origenFinal = $id_pedido !== null ? ($origen . ' #' . $id_pedido) : $origen;
+
+                (new MovimientosInventariounitarioController)->setNewCtMov([
+                    'id_producto' => $id_producto,
+                    'cantidadafter' => $nuevaReal,
+                    'ct1' => $antesReal,
+                    'id_pedido' => $id_pedido,
+                    'origen' => $origenFinal,
+                ]);
+                return true;
+            }
+            return false;
+        });
     }
 
     public function getProductosSerial(Request $req)
@@ -873,8 +887,17 @@ class InventarioController extends Controller
                             $id_factura = $fact->id;
 
                             $num = 0;
-                            foreach ($pedido['items'] as $i => $item) {
-                                $producto_vinculado = inventario::find($item['id_producto']);
+                            // Importar SIEMPRE en orden ascendente de id_producto: bajo recepciones
+                            // concurrentes que comparten productos, garantiza que todas adquieran los
+                            // locks en el mismo orden (sin deadlock) y suma sin lost updates.
+                            $itemsImport = collect($pedido['items'])
+                                ->sortBy(fn ($it) => (int) ($it['id_producto'] ?? 0))->values()->all();
+                            foreach ($itemsImport as $i => $item) {
+                                // lockForUpdate: leer la cantidad actual BAJO lock para que la suma
+                                // (match_ct + ctNew) sea atómica frente a otra recepción del mismo producto.
+                                $producto_vinculado = $item['id_producto']
+                                    ? inventario::where('id', $item['id_producto'])->lockForUpdate()->first()
+                                    : null;
 
                                 $match_ct = 0;
                                 $id_producto = null;
@@ -1009,39 +1032,55 @@ class InventarioController extends Controller
                                 \Log::warning('checkPedidosCentral: Solo ' . $num . ' de ' . $totalEsperado . ' productos procesados. Pedido #' . $id_pedido);
                             }
 
-                            $tareaSend = (new sendCentral)->sendTareasPendientesCentral($tareaspendientescentralArr);
-                            if (isset($tareaSend['estado'])) {
-                                if ($tareaSend['estado'] === false) {
-                                    \Log::error('checkPedidosCentral: Error al enviar tareas a central. Pedido #' . $id_pedido . ': ' . json_encode($tareaSend));
-                                    throw new \Exception('Error al notificar a Central: ' . ($tareaSend['msj'] ?? 'Sin detalle'), 1);
-                                } else if ($tareaSend['estado'] === true) {
-                                    $this->setCsvInventario($ids_to_csv);
+                            $this->setCsvInventario($ids_to_csv);
 
-                                    \DB::statement('UPDATE `inventarios` SET iva=1');
-                                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MACHETE%'");
-                                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'PEINILLA%'");
-                                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOBOMBA%'");
-                                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'ELECTROBOMBA%'");
-                                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'DESMALEZADORA%'");
-                                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MOTOSIERRA%'");
-                                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'CUCHILLA%'");
-                                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'FUMIGADORA%'");
-                                    \DB::statement("UPDATE `inventarios` SET iva=0 WHERE descripcion LIKE 'MANGUERA%'");
-
-                                    $verificacionFinal = inventario::whereIn('id', $ids_to_csv)->count();
-                                    if ($verificacionFinal !== $num) {
-                                        \Log::error('checkPedidosCentral: Verificación final FALLÓ. Esperados: ' . $num . ', encontrados: ' . $verificacionFinal . '. Pedido #' . $id_pedido);
-                                        throw new \Exception('Verificación final falló: se esperaban ' . $num . ' productos pero solo existen ' . $verificacionFinal . ' en BD', 1);
-                                    }
-
-                                    DB::commit();
-                                    \Log::info('checkPedidosCentral: ÉXITO VERIFICADO. ' . $num . ' productos procesados. Pedido #' . $id_pedido . '. IDs: ' . implode(',', $ids_to_csv));
-                                    return Response::json(['msj' => '¡Éxito ' . $num . ' productos procesados!', 'estado' => true]);
-                                }
-                            } else {
-                                \Log::error('checkPedidosCentral: Respuesta inesperada de Central: ' . json_encode($tareaSend));
-                                throw new \Exception('Respuesta inesperada de Central al notificar', 1);
+                            // IVA por defecto de los productos RECIÉN importados. Antes esto era un
+                            // UPDATE sobre TODA la tabla `inventarios` en cada recepción: bloqueaba
+                            // todas las filas y, bajo recepciones concurrentes, producía deadlocks
+                            // (1213) + cascada "SAVEPOINT trans2 does not exist". Acotado a los ids
+                            // importados: mismo resultado para estos productos, sin lock global.
+                            if (!empty($ids_to_csv)) {
+                                \DB::table('inventarios')->whereIn('id', $ids_to_csv)->update(['iva' => 1]);
+                                \DB::table('inventarios')->whereIn('id', $ids_to_csv)
+                                    ->where(function ($q) {
+                                        foreach (['MACHETE', 'PEINILLA', 'MOTOBOMBA', 'ELECTROBOMBA', 'DESMALEZADORA',
+                                                  'MOTOSIERRA', 'CUCHILLA', 'FUMIGADORA', 'MANGUERA'] as $desc) {
+                                            $q->orWhere('descripcion', 'LIKE', $desc . '%');
+                                        }
+                                    })
+                                    ->update(['iva' => 0]);
                             }
+
+                            $verificacionFinal = inventario::whereIn('id', $ids_to_csv)->count();
+                            if ($verificacionFinal !== $num) {
+                                \Log::error('checkPedidosCentral: Verificación final FALLÓ. Esperados: ' . $num . ', encontrados: ' . $verificacionFinal . '. Pedido #' . $id_pedido);
+                                throw new \Exception('Verificación final falló: se esperaban ' . $num . ' productos pero solo existen ' . $verificacionFinal . ' en BD', 1);
+                            }
+
+                            // ── COMMIT LOCAL PRIMERO, luego notificar a central ──
+                            // Antes se notificaba a central (4→2) ANTES del commit local: si algo fallaba
+                            // entre medias (deadlock del iva, verificación), central quedaba "recibido"
+                            // pero la sucursal sin mercancía (split-brain irrecuperable). Ahora la
+                            // mercancía se asienta en sucursal primero; si la notificación a central
+                            // falla, la sucursal YA tiene la mercancía y el camino de recuperación
+                            // ("factura ya existe → re-notificar central") la re-sincroniza en el próximo
+                            // intento. El peor caso pasa a ser recuperable (central en 4, no en 2 huérfano).
+                            DB::commit();
+                            \Log::info('checkPedidosCentral: ÉXITO VERIFICADO. ' . $num . ' productos procesados. Pedido #' . $id_pedido . '. IDs: ' . implode(',', $ids_to_csv));
+
+                            // Post-commit: la transacción local ya está cerrada, así que un fallo aquí
+                            // (central caído, etc.) NO debe disparar el rollback del catch externo.
+                            try {
+                                $tareaSend = (new sendCentral)->sendTareasPendientesCentral($tareaspendientescentralArr);
+                            } catch (\Throwable $eNotify) {
+                                $tareaSend = ['estado' => false, 'msj' => $eNotify->getMessage()];
+                            }
+                            if (!isset($tareaSend['estado']) || $tareaSend['estado'] !== true) {
+                                \Log::warning('checkPedidosCentral: mercancía recibida en sucursal (pedido #' . $id_pedido . ') pero central NO confirmó (4→2). Quedará para re-sincronización: ' . json_encode($tareaSend));
+                                return Response::json(['msj' => '¡Recibido en sucursal (' . $num . ' productos)! Falta confirmar a central; se re-sincronizará al reintentar.', 'estado' => true]);
+                            }
+
+                            return Response::json(['msj' => '¡Éxito ' . $num . ' productos procesados!', 'estado' => true]);
 
                             /* } */
                         }

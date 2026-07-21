@@ -34518,6 +34518,68 @@ var db = {
   settransferenciaDici: function settransferenciaDici(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "settransferenciaDici", data);
   },
+  delTransferenciaDici: function delTransferenciaDici(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "delTransferenciaDici", data);
+  },
+  // ===== Salud de Inventario (analítica) =====
+  getInventarioAnalytics: function getInventarioAnalytics(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "inventario-analytics/resumen", data);
+  },
+  getCategoriasAnalytics: function getCategoriasAnalytics(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "inventario-analytics/categorias", data);
+  },
+  // ===== Despacho con recolección y bultos (TCD) =====
+  tdGuardarOrden: function tdGuardarOrden(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/guardar-orden", data);
+  },
+  tdGetOrdenes: function tdGetOrdenes(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/get-ordenes", data);
+  },
+  tdEliminarOrden: function tdEliminarOrden(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/eliminar-orden", data);
+  },
+  tdGetPasilleros: function tdGetPasilleros(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/get-pasilleros", data);
+  },
+  tdAsignarLineas: function tdAsignarLineas(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/asignar-lineas", data);
+  },
+  tdGetAsignaciones: function tdGetAsignaciones(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/get-asignaciones", data);
+  },
+  tdRecolectarLinea: function tdRecolectarLinea(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/recolectar-linea", data);
+  },
+  tdMisRecolecciones: function tdMisRecolecciones(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/mis-recolecciones", data);
+  },
+  tdCrearBulto: function tdCrearBulto(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/crear-bulto", data);
+  },
+  tdAgregarItemBulto: function tdAgregarItemBulto(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/agregar-item-bulto", data);
+  },
+  tdQuitarItemBulto: function tdQuitarItemBulto(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/quitar-item-bulto", data);
+  },
+  tdCerrarBulto: function tdCerrarBulto(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/cerrar-bulto", data);
+  },
+  tdConsultarBulto: function tdConsultarBulto(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/consultar-bulto", data);
+  },
+  tdGetBultos: function tdGetBultos(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/get-bultos", data);
+  },
+  tdDespacharBulto: function tdDespacharBulto(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/despachar-bulto", data);
+  },
+  tdFinalizarDespacho: function tdFinalizarDespacho(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/finalizar-despacho", data);
+  },
+  tdReporteExcluidos: function tdReporteExcluidos(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/reporte-excluidos", data);
+  },
   resetPrintingState: function resetPrintingState(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().get(host + "resetPrintingState", {
       params: data

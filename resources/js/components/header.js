@@ -26,6 +26,9 @@ function Header({
     abrirModuloCierre,
     setsubViewInventario,
     subViewInventario,
+    setmodViewInventario,
+    sincInventario,
+    reportefiscal,
     // Props para pedidos
     pedidosFast,
     pedidosFrontPendientesList = [],
@@ -37,6 +40,25 @@ function Header({
 }) {
     const [updatingDollar, setUpdatingDollar] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    // Grupos colapsables del sidebar reorganizado por rol
+    const [openDici, setOpenDici] = useState(false);
+    const [openAdmin, setOpenAdmin] = useState(false);
+
+    // Separación estricta por rol: el DICI (tipo 7) ve SOLO el Módulo DICI; el gerente/superadmin
+    // (tipo 1/6) ve SOLO el Módulo Administración. Ninguno ve el módulo del otro.
+    const verModuloDici = user.tipo_usuario == 7;
+    const verModuloAdmin = user.tipo_usuario == 1 || user.tipo_usuario == 6;
+
+    // Helpers de navegación del sidebar (centralizan setView + subvistas y cierran el panel).
+    const irInventario = (sub = "inventario", mod = null) => {
+        setView("inventario");
+        if (typeof setsubViewInventario === "function") setsubViewInventario(sub);
+        if (mod !== null && typeof setmodViewInventario === "function") setmodViewInventario(mod);
+        setSidebarOpen(false);
+    };
+    const irVista = (v) => { setView(v); setSidebarOpen(false); };
+    const itemCls = (activo) =>
+        `w-full flex items-center px-3 py-1.5 rounded text-sm font-medium transition-colors text-left ${activo ? "bg-orange-50 text-orange-800" : "text-gray-600 hover:bg-gray-50"}`;
 
     const handleUpdateDollar = async (e) => {
         const tipo = e.currentTarget.attributes["data-type"].value;
@@ -144,120 +166,61 @@ function Header({
                                     TCR Pasillero
                                 </button>
                             </>
-                        ) : user.tipo_usuario == 7 ? (
-                            /* Navegación para DICI (tipo 7) */
-                            <>
-                                <button
-                                    className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
-                                        view === "inventario"
-                                            ? "bg-orange-100 text-orange-800 border-l-4 border-orange-800"
-                                            : "text-gray-700 hover:bg-gray-100"
-                                    }`}
-                                    onClick={() => {
-                                        setView("inventario");
-                                        setsubViewInventario("inventario");
-                                        setSidebarOpen(false);
-                                    }}
-                                >
-                                    <i className="w-4 mr-2 fa fa-boxes"></i>
-                                    Inventario
-                                </button>
-
-                                <button
-                                    className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
-                                        view === "pedidosCentral"
-                                            ? "bg-orange-100 text-orange-800 border-l-4 border-orange-800"
-                                            : "text-gray-700 hover:bg-gray-100"
-                                    }`}
-                                    onClick={() => {
-                                        setView("pedidosCentral");
-                                        setSidebarOpen(false);
-                                    }}
-                                >
-                                    <i className="w-4 mr-2 fa fa-truck"></i>
-                                    Recibir de Sucursal
-                                </button>
-
-                                <button
-                                    className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
-                                        view === "garantias"
-                                            ? "bg-orange-100 text-orange-800 border-l-4 border-orange-800"
-                                            : "text-gray-700 hover:bg-gray-100"
-                                    }`}
-                                    onClick={() => {
-                                        setView("garantias");
-                                        setSidebarOpen(false);
-                                    }}
-                                >
-                                    <i className="w-4 mr-2 fa fa-shield-alt"></i>
-                                    Garantías
-                                </button>
-
-                                <button
-                                    className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
-                                        view === "inventario-ciclico"
-                                            ? "bg-orange-100 text-orange-800 border-l-4 border-orange-800"
-                                            : "text-gray-700 hover:bg-gray-100"
-                                    }`}
-                                    onClick={() => {
-                                        setView("inventario-ciclico");
-                                        setSidebarOpen(false);
-                                    }}
-                                >
-                                    <i className="w-4 mr-2 fa fa-clipboard-list"></i>
-                                    Inventario Cíclico
-                                </button>
-
-                                {user.sucursal === "galponvalencia1" && (
-                                    <>
-                                    <button
-                                        className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
-                                            view === "warehouse-inventory"
-                                                ? "bg-green-100 text-green-800 border-l-4 border-green-800"
-                                                : "text-gray-700 hover:bg-gray-100"
-                                        }`}
-                                        onClick={() => {
-                                            window.open("/warehouse-inventory", "_blank");
-                                        }}
-                                    >
-                                        <i className="w-4 mr-2 fa fa-warehouse"></i>
-                                        Gestión de Almacén
-                                    </button>
-
-                                    <button
-                                        className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
-                                            view === "warehouse-inventory"
-                                                ? "bg-green-100 text-green-800 border-l-4 border-green-800"
-                                                : "text-gray-700 hover:bg-gray-100"
-                                        }`}
-                                        onClick={() => {
-                                            window.open("/warehouse-inventory/tcd/pasillero", "_blank");
-                                        }}
-                                    >
-                                        <i className="w-4 mr-2 fa fa-warehouse"></i>
-                                        TCD Pasillero
-                                    </button>
-
-                                    <button
-                                        className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
-                                            view === "warehouse-inventory"
-                                                ? "bg-green-100 text-green-800 border-l-4 border-green-800"
-                                                : "text-gray-700 hover:bg-gray-100"
-                                        }`}
-                                        onClick={() => {
-                                            window.open("/warehouse-inventory/tcr/pasillero", "_blank");
-                                        }}
-                                    >
-                                        <i className="w-4 mr-2 fa fa-warehouse"></i>
-                                        TCR Pasillero
-                                    </button>
-                                    </>
-                                )}
-                            </>
                         ) : (
-                            /* Navegación para Usuarios Regulares - TODO */
+                            /* Navegación reorganizada por rol (no pasillero) */
                             <>
-                                {auth(1) && (
+                                {/* 1 · Módulo DICI */}
+                                {verModuloDici && (
+                                    <div className="space-y-1">
+                                        <button
+                                            className={`w-full flex items-center justify-between px-3 py-2 rounded text-sm font-semibold transition-colors text-left ${openDici ? "bg-orange-100 text-orange-800" : "text-gray-700 hover:bg-gray-100"}`}
+                                            onClick={() => setOpenDici(!openDici)}
+                                        >
+                                            <span className="flex items-center"><i className="w-4 mr-2 fa fa-boxes"></i>Módulo DICI</span>
+                                            <i className={`fa fa-chevron-${openDici ? "up" : "down"} text-xs`}></i>
+                                        </button>
+                                        {openDici && (
+                                            <div className="pl-2 ml-3 space-y-1 border-l border-gray-200">
+                                                <div className="px-3 pt-1 text-[10px] font-semibold tracking-wide text-gray-400 uppercase">Gestión</div>
+                                                <button className={itemCls(view === "inventario" && subViewInventario === "inventario")} onClick={() => irInventario("inventario", "list")}><i className="w-4 mr-2 fa fa-list"></i>Inventario</button>
+                                                <button className={itemCls(view === "inventario-ciclico")} onClick={() => irVista("inventario-ciclico")}><i className="w-4 mr-2 fa fa-clipboard-list"></i>Inventario Cíclico</button>
+                                                <button className={itemCls(false)} onClick={() => irInventario("inventario", "historico")}><i className="w-4 mr-2 fa fa-history"></i>Histórico</button>
+                                                <button className={itemCls(false)} onClick={() => { sincInventario && sincInventario(); setSidebarOpen(false); }}><i className="w-4 mr-2 fa fa-sync"></i>Sincronizar</button>
+                                                <button className={itemCls(view === "inventario" && subViewInventario === "facturasItems")} onClick={() => irInventario("facturasItems")}><i className="w-4 mr-2 fa fa-file-invoice"></i>Facturas e Items</button>
+                                                <div className="my-1 border-t border-gray-100"></div>
+                                                <button className={itemCls(view === "pedidosCentral")} onClick={() => irVista("pedidosCentral")}><i className="w-4 mr-2 fa fa-tower-broadcast"></i>Torre de transferencias</button>
+                                                <button className={itemCls(view === "garantias")} onClick={() => irVista("garantias")}><i className="w-4 mr-2 fa fa-shield-alt"></i>Garantías</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* 2 · Módulo Administración (Gerente) */}
+                                {verModuloAdmin && (
+                                    <div className="space-y-1">
+                                        <button
+                                            className={`w-full flex items-center justify-between px-3 py-2 rounded text-sm font-semibold transition-colors text-left ${openAdmin ? "bg-orange-100 text-orange-800" : "text-gray-700 hover:bg-gray-100"}`}
+                                            onClick={() => setOpenAdmin(!openAdmin)}
+                                        >
+                                            <span className="flex items-center"><i className="w-4 mr-2 fa fa-user-tie"></i>Administración (Gerente)</span>
+                                            <i className={`fa fa-chevron-${openAdmin ? "up" : "down"} text-xs`}></i>
+                                        </button>
+                                        {openAdmin && (
+                                            <div className="pl-2 ml-3 space-y-1 border-l border-gray-200">
+                                                <button className={itemCls(view === "historialVentasCierre")} onClick={() => irVista("historialVentasCierre")}><i className="w-4 mr-2 fa fa-history"></i>Historial ventas por cierre</button>
+                                                <button className={itemCls(view === "inventario" && subViewInventario === "efectivo")} onClick={() => irInventario("efectivo")}><i className="w-4 mr-2 fa fa-money-bill-wave"></i>Control de Efectivo</button>
+                                                <button className={itemCls(view === "inventario" && subViewInventario === "estadisticas")} onClick={() => irInventario("estadisticas")}><i className="w-4 mr-2 fa fa-chart-bar"></i>Estadísticas</button>
+                                                <button className={itemCls(view === "inventario" && subViewInventario === "suministros")} onClick={() => irInventario("suministros")}><i className="w-4 mr-2 fa fa-box-open"></i>Suministros</button>
+                                                <button className={itemCls(false)} onClick={() => { reportefiscal && reportefiscal("x"); setSidebarOpen(false); }}><i className="w-4 mr-2 fa fa-file-invoice"></i>Reporte X</button>
+                                                <button className={itemCls(false)} onClick={() => { reportefiscal && reportefiscal("z"); setSidebarOpen(false); }}><i className="w-4 mr-2 fa fa-file-invoice-dollar"></i>Reporte Z</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {(verModuloDici || verModuloAdmin) && <div className="my-2 border-t border-gray-200"></div>}
+
+                                {!verModuloDici && auth(1) && (
                                     <button
                                         className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
                                             view === "ventas"
@@ -275,7 +238,7 @@ function Header({
                                     </button>
                                 )}
 
-                                {auth(3) && (
+                                {!verModuloDici && auth(3) && (
                                     <button
                                         className={`w-full flex items-center px-3  py-2 rounded text-sm font-medium transition-colors text-left ${
                                             view === "pedidos"
@@ -292,7 +255,25 @@ function Header({
                                     </button>
                                 )}
 
-                                {auth(3) && (
+                                {/* Fallas — visible para DICI y gerente. Color distintivo (rojo) para que resalte. */}
+                                {(verModuloDici || verModuloAdmin) && (
+                                    <button
+                                        className={`w-full flex items-center px-3 py-2 rounded text-sm font-bold transition-colors text-left border-l-4 ${
+                                            view === "inventario-analytics"
+                                                ? "bg-red-600 text-white border-red-800"
+                                                : "bg-red-50 text-red-700 border-red-500 hover:bg-red-100"
+                                        }`}
+                                        onClick={() => {
+                                            setView("inventario-analytics");
+                                            setSidebarOpen(false);
+                                        }}
+                                    >
+                                        <i className="w-4 mr-2 fa fa-triangle-exclamation"></i>
+                                        Fallas
+                                    </button>
+                                )}
+
+                                {!verModuloDici && auth(3) && (
                                     <button
                                         className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
                                             view === "presupuestos"
@@ -309,7 +290,7 @@ function Header({
                                     </button>
                                 )}
 
-                                {auth(2) && (
+                                {!verModuloDici && auth(2) && (
                                     <div className="space-y-1">
                                         <button
                                             className={`w-full flex items-center justify-between px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
@@ -379,105 +360,23 @@ function Header({
                                     </div>
                                 )}
 
-                                <button
-                                    className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
-                                        view === "cierres"
-                                            ? "bg-orange-100 text-orange-800 border-l-4 border-orange-800"
-                                            : "text-gray-700 hover:bg-gray-100"
-                                    }`}
-                                    onClick={() => {
-                                        abrirModuloCierre();
-                                        setSidebarOpen(false);
-                                    }}
-                                >
-                                    <i className="w-4 mr-2 fa fa-lock"></i>
-                                    Cierre
-                                </button>
-
-                                {(auth("super") || user.tipo_usuario == 1) && (
+                                {!verModuloDici && (
                                     <button
                                         className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
-                                            view === "historialVentasCierre"
+                                            view === "cierres"
                                                 ? "bg-orange-100 text-orange-800 border-l-4 border-orange-800"
                                                 : "text-gray-700 hover:bg-gray-100"
                                         }`}
                                         onClick={() => {
-                                            setView("historialVentasCierre");
+                                            abrirModuloCierre();
                                             setSidebarOpen(false);
                                         }}
                                     >
-                                        <i className="w-4 mr-2 fa fa-history"></i>
-                                        Historial ventas por cierre
+                                        <i className="w-4 mr-2 fa fa-lock"></i>
+                                        Cierre
                                     </button>
                                 )}
 
-                                {auth(1) && (
-                                    <button
-                                        className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
-                                            view === "inventario"
-                                                ? "bg-orange-100 text-orange-800 border-l-4 border-orange-800"
-                                                : "text-gray-700 hover:bg-gray-100"
-                                        }`}
-                                        onClick={() => {
-                                            setView("inventario");
-                                            setSidebarOpen(false);
-                                        }}
-                                    >
-                                        <i className="w-4 mr-2 fa fa-cogs"></i>
-                                        Administración
-                                    </button>
-                                )}
-                               
-                                {auth(1) && user.iscentral && (
-                                    <button
-                                        className={`w-full flex items-center px-3 py-2 rounded text-sm font-medium transition-colors text-left ${
-                                            view === "pedidosCentral"
-                                                ? "bg-orange-100 text-orange-800 border-l-4 border-orange-800"
-                                                : "text-gray-700 hover:bg-gray-100"
-                                        }`}
-                                        onClick={() => {
-                                            setView("pedidosCentral");
-                                            setSidebarOpen(false);
-                                        }}
-                                    >
-                                        <i className="w-4 mr-2 fa fa-truck"></i>
-                                        Recibir de Sucursal
-                                    </button>
-                                )}
-
-                                {/* Separador */}
-                                <div className="my-3 border-t border-gray-200"></div>
-
-                                {/* Tasas de cambio */}
-                                <div className="space-y-1">
-                                    <h3 className="px-3 text-xs font-semibold tracking-wide text-gray-500 uppercase">
-                                        Tasas
-                                    </h3>
-                                    <button
-                                        className="flex items-center w-full px-3 py-2 text-sm font-medium text-left text-gray-700 transition-colors rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        onClick={handleUpdateDollar}
-                                        data-type="1"
-                                        disabled={updatingDollar}
-                                    >
-                                        <i className="w-4 mr-2 fa fa-dollar-sign"></i>
-                                        {updatingDollar ? (
-                                            <>
-                                                <span className="w-3 h-3 mr-2 border-2 border-orange-600 rounded-full animate-spin border-t-transparent"></span>
-                                                Actualizando USD...
-                                            </>
-                                        ) : (
-                                            <>USD {dolar}</>
-                                        )}
-                                    </button>
-                                    <button
-                                        className="flex items-center w-full px-3 py-2 text-sm font-medium text-left text-gray-700 transition-colors rounded hover:bg-gray-100"
-                                        onClick={handleUpdateDollar}
-                                        data-type="2"
-                                    >
-                                        <i className="w-4 mr-2 fa fa-coins"></i>
-                                        COP {parseFloat(peso).toFixed(2)}
-                                    </button>
-                                </div>
                             </>
                         )}
 

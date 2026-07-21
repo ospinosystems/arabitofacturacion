@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 import Modalmovil from "./modalmovil";
+import DespachoBultosModule from "./DespachoBultosModule";
 import TransferenciasModule from "./TransferenciasModule";
 import TCRModule from "./TCRModule";
 
@@ -71,7 +72,8 @@ export default function PedidosCentralComponent({
 	permitirPaste = false
 }){
 
-	const [subviewcentral, setsubviewcentral] = useState("pedidos")
+	const [subviewcentral, setsubviewcentral] = useState("tcr")
+	const [modoDespacho, setModoDespacho] = useState("simple") // simple = crear transferencia directa; avanzado = pasilleros+bultos
 	const [showdetailsPEdido, setshowdetailsPEdido] = useState(true)
 	const [showCorregirDatos, setshowCorregirDatos] = useState(null)
 	const [ismovil, setismovil] = useState(window.innerWidth <= 768)
@@ -170,54 +172,44 @@ export default function PedidosCentralComponent({
                 />
             ) : null}
 
-				<nav className="flex flex-wrap gap-2 mb-4">
-					<button
-						className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm
-							${subviewcentral === "pedidos"
+				<nav className="mb-4">
+					{/* Áreas principales de la Torre de Transferencia */}
+					<div className="flex flex-wrap gap-2">
+						<button
+							className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm
+								${subviewcentral === "pedidos_send"
 								? "bg-sinapsis text-white shadow border border-sinapsis"
 								: "bg-white text-gray-700 hover:bg-sinapsis border border-gray-300"
-							}`}
-						onClick={() => { getPedidosCentral(); setsubviewcentral("pedidos"); }}>
-						Recibir Pedidos
-					</button>
-					<button
-						className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm
-							${subviewcentral === "pedidos_send"
+								}`}
+							title="Torre Control de Despacho"
+							onClick={() => { setsubviewcentral("pedidos_send"); }}>
+							<i className="fas fa-truck-arrow-right mr-1"></i>
+							TCD · Despacho
+						</button>
+						<button
+							className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm
+								${subviewcentral === "tcr"
 								? "bg-sinapsis text-white shadow border border-sinapsis"
 								: "bg-white text-gray-700 hover:bg-sinapsis border border-gray-300"
-							}`}
-						onClick={() => { setsubviewcentral("pedidos_send"); }}>
-						Enviar Pedidos
-					</button>
-					<button
-						className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm
-							${subviewcentral === "tcr"
+								}`}
+							title="Torre Control de Recepción"
+							onClick={() => { getPedidosCentral(); setsubviewcentral("tcr"); }}>
+							<i className="fas fa-truck-ramp-box mr-1"></i>
+							TCR · Recepción
+						</button>
+						<button
+							className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm
+								${subviewcentral === "tareas"
 								? "bg-sinapsis text-white shadow border border-sinapsis"
 								: "bg-white text-gray-700 hover:bg-sinapsis border border-gray-300"
-							}`}
-						onClick={() => { setsubviewcentral("tcr"); }}>
-						TCR
-					</button>
-					<button
-						className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm
-							${subviewcentral === "tareas"
-								? "bg-sinapsis text-white shadow border border-sinapsis"
-								: "bg-white text-gray-700 hover:bg-sinapsis border border-gray-300"
-							}`}
-						onClick={() => { setsubviewcentral("tareas"); }}>
-						Tareas
-					</button>
-					{/* 
-					<button
-						className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-sm
-							${subviewcentral === "inventario"
-								? "bg-sinapsis text-white shadow border border-sinapsis"
-								: "bg-white text-gray-700 hover:bg-sinapsis hover:text-white border border-gray-300"
-							}`}
-						onClick={() => { getInventarioFromSucursal(); setsubviewcentral("inventario"); }}>
-						Actualizar Inventario
-					</button>
-					*/}
+								}`}
+							title="Tareas de central"
+							onClick={() => { setsubviewcentral("tareas"); }}>
+							<i className="fas fa-list-check mr-1"></i>
+							Tareas
+						</button>
+					</div>
+
 				</nav>
 				{subviewcentral == "tareas" ?
 					<>
@@ -882,7 +874,33 @@ export default function PedidosCentralComponent({
 					</div>
 					: null}
 				
-				{subviewcentral == "pedidos_send" ? (<TransferenciasModule/>) : null}
+				{subviewcentral == "pedidos_send" ? (
+					<>
+						{/* Selector de modo: Simple (crear transferencia directa) vs Avanzado (pasilleros + bultos) */}
+						<div className="flex items-center gap-2 mb-3 px-1">
+							<span className="text-xs font-semibold text-gray-500">Modo de despacho:</span>
+							<div className="inline-flex rounded-lg border border-gray-300 overflow-hidden">
+								<button
+									className={`px-3 py-1.5 text-sm font-semibold transition ${modoDespacho === "simple" ? "bg-sinapsis text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+									onClick={() => setModoDespacho("simple")}
+									title="Crear transferencia directa, simple"
+								>
+									<i className="fas fa-bolt mr-1"></i>Simple
+								</button>
+								<button
+									className={`px-3 py-1.5 text-sm font-semibold transition ${modoDespacho === "avanzado" ? "bg-sinapsis text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+									onClick={() => setModoDespacho("avanzado")}
+									title="Recolección con pasilleros y empaque en bultos"
+								>
+									<i className="fas fa-boxes-packing mr-1"></i>Avanzado (pasilleros + bultos)
+								</button>
+							</div>
+						</div>
+						{modoDespacho === "avanzado"
+							? <DespachoBultosModule sucursales={sucursalesCentral} />
+							: <TransferenciasModule />}
+					</>
+				) : null}
 
 				{subviewcentral == "tcr" ? (
 					<TCRModule
@@ -895,6 +913,8 @@ export default function PedidosCentralComponent({
 						setqpedidocentrallimit={setqpedidocentrallimit}
 						qpedidocentralemisor={qpedidocentralemisor}
 						setqpedidocentralemisor={setqpedidocentralemisor}
+						qpedidocentralestado={qpedidocentralestado}
+						setqpedidocentralestado={setqpedidocentralestado}
 						sucursalesCentral={sucursalesCentral}
 						getPedidosCentral={getPedidosCentral}
 						getSucursales={getSucursales}

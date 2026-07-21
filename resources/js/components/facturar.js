@@ -53,6 +53,9 @@ import ModalFormatoGarantia from "./modalFormatoGarantia";
 
 import GarantiaModule from "./GarantiaModule";
 import InventarioCiclicoModule from "./InventarioCiclicoModule";
+import DiciNav from "./DiciNav";
+import GerenteNav from "./GerenteNav";
+import InventarioAnalyticsModule from "./InventarioAnalyticsModule";
 import PresupuestoMain from "./presupuestoMain";
 
 export default function Facturar({
@@ -9533,6 +9536,9 @@ export default function Facturar({
                     abrirModuloCierre={abrirModuloCierre}
                     setsubViewInventario={setsubViewInventario}
                     subViewInventario={subViewInventario}
+                    setmodViewInventario={setmodViewInventario}
+                    sincInventario={sincInventario}
+                    reportefiscal={reportefiscal}
                     showHeaderAndMenu={showHeaderAndMenu}
                     setShowHeaderAndMenu={setShowHeaderAndMenu}
                 />
@@ -9550,6 +9556,32 @@ export default function Facturar({
                 />
             ) : (
                 <>
+                    {/* Nav DICI único y consistente para todas sus vistas (se auto-oculta si no es tipo 7) */}
+                    {["pedidosCentral", "inventario", "inventario-ciclico", "garantias"].includes(view) && (
+                        <DiciNav
+                            view={view}
+                            setView={setView}
+                            modViewInventario={modViewInventario}
+                            setmodViewInventario={setmodViewInventario}
+                            subViewInventario={subViewInventario}
+                            setsubViewInventario={setsubViewInventario}
+                            sincInventario={sincInventario}
+                            user={user}
+                        />
+                    )}
+                    {/* Nav del gerente, único y consistente para sus vistas (se auto-oculta si no es tipo 1/6) */}
+                    {["inventario", "historialVentasCierre"].includes(view) && (
+                        <GerenteNav
+                            view={view}
+                            setView={setView}
+                            subViewInventario={subViewInventario}
+                            setsubViewInventario={setsubViewInventario}
+                            reportefiscal={reportefiscal}
+                            numReporteZ={numReporteZ}
+                            setnumReporteZ={setnumReporteZ}
+                            user={user}
+                        />
+                    )}
                     {view == "tareas" ? (
                         <div className="px-2 container-fluid">
                             <div className="mb-3 row">
@@ -9851,6 +9883,7 @@ export default function Facturar({
                     )}
 
                     {view == "pedidosCentral" ? (
+                        <>
                         <PedidosCentralComponent
                             permitirPaste={permitirPasteCentral}
                             openBarcodeScan={openBarcodeScan}
@@ -9931,6 +9964,7 @@ export default function Facturar({
                                 idselectproductoinsucursalforvicular
                             }
                         />
+                        </>
                     ) : null}
                     {view == "ventas" ? (
                         <Ventas
@@ -10230,6 +10264,7 @@ export default function Facturar({
                     ) : null}
 
                     {view == "inventario" ? (
+                        <>
                         <Inventario
                             buscarInventario={buscarInventario}
                             getFacturas={getFacturas}
@@ -10604,6 +10639,7 @@ export default function Facturar({
                             setorderByColumEstaInv={setorderByColumEstaInv}
                             dataEstaInven={dataEstaInven}
                         />
+                        </>
                     ) : null}
                     {view == "SelectFacturasInventario" ? (
                         <ModalSelectFactura
@@ -11341,18 +11377,26 @@ export default function Facturar({
                     ) : null}
 
                     {view == "garantias" ? (
-                        <GarantiaModule
-                            user={user}
-                            notificar={notificar}
-                            setLoading={setLoading}
-                        />
+                        <>
+                            <GarantiaModule
+                                user={user}
+                                notificar={notificar}
+                                setLoading={setLoading}
+                            />
+                        </>
                     ) : null}
                     {view == "inventario-ciclico" ? (
-                        <InventarioCiclicoModule
-                            user={user}
-                            notificar={notificar}
-                            setLoading={setLoading}
-                        />
+                        <>
+                            <InventarioCiclicoModule
+                                user={user}
+                                notificar={notificar}
+                                setLoading={setLoading}
+                            />
+                        </>
+                    ) : null}
+
+                    {view == "inventario-analytics" ? (
+                        <InventarioAnalyticsModule moneda={moneda} user={user} />
                     ) : null}
 
                     {view == "presupuestos" ? (

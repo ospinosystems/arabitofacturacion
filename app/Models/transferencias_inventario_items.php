@@ -14,4 +14,9 @@ class transferencias_inventario_items extends Model
     {
         return $this->belongsTo(transferencias_inventario::class, 'id_transferencia');
     }
+
+    public function producto()
+    {
+        return $this->belongsTo(inventario::class, 'id_producto');
+    }
 }

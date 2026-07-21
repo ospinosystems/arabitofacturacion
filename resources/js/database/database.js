@@ -239,6 +239,30 @@ const db = {
   reqpedidos: data => axios.post(host + "reqpedidos", data),
   reqMipedidos: data => axios.post(host + "reqMipedidos", data),
   settransferenciaDici: data => axios.post(host + "settransferenciaDici", data),
+  delTransferenciaDici: data => axios.post(host + "delTransferenciaDici", data),
+
+  // ===== Salud de Inventario (analítica) =====
+  getInventarioAnalytics: data => axios.post(host + "inventario-analytics/resumen", data),
+  getCategoriasAnalytics: data => axios.post(host + "inventario-analytics/categorias", data),
+
+  // ===== Despacho con recolección y bultos (TCD) =====
+  tdGuardarOrden: data => axios.post(host + "transferencia-despacho/guardar-orden", data),
+  tdGetOrdenes: data => axios.post(host + "transferencia-despacho/get-ordenes", data),
+  tdEliminarOrden: data => axios.post(host + "transferencia-despacho/eliminar-orden", data),
+  tdGetPasilleros: data => axios.post(host + "transferencia-despacho/get-pasilleros", data),
+  tdAsignarLineas: data => axios.post(host + "transferencia-despacho/asignar-lineas", data),
+  tdGetAsignaciones: data => axios.post(host + "transferencia-despacho/get-asignaciones", data),
+  tdRecolectarLinea: data => axios.post(host + "transferencia-despacho/recolectar-linea", data),
+  tdMisRecolecciones: data => axios.post(host + "transferencia-despacho/mis-recolecciones", data),
+  tdCrearBulto: data => axios.post(host + "transferencia-despacho/crear-bulto", data),
+  tdAgregarItemBulto: data => axios.post(host + "transferencia-despacho/agregar-item-bulto", data),
+  tdQuitarItemBulto: data => axios.post(host + "transferencia-despacho/quitar-item-bulto", data),
+  tdCerrarBulto: data => axios.post(host + "transferencia-despacho/cerrar-bulto", data),
+  tdConsultarBulto: data => axios.post(host + "transferencia-despacho/consultar-bulto", data),
+  tdGetBultos: data => axios.post(host + "transferencia-despacho/get-bultos", data),
+  tdDespacharBulto: data => axios.post(host + "transferencia-despacho/despachar-bulto", data),
+  tdFinalizarDespacho: data => axios.post(host + "transferencia-despacho/finalizar-despacho", data),
+  tdReporteExcluidos: data => axios.post(host + "transferencia-despacho/reporte-excluidos", data),
   resetPrintingState: data => axios.get(host + "resetPrintingState", { params: data }),
   changeIdVinculacionCentral: data => axios.post(host + "changeIdVinculacionCentral", data),
   

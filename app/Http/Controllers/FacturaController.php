@@ -44,10 +44,8 @@ class FacturaController extends Controller
         $factOrderDescAsc = $req->factOrderDescAsc;
        
         $fa = factura::with(["proveedor","items"=>function($q){
-            $q->with(["producto"=>function($q){
-                $q->with(["categoria","proveedor"]);
-            }])
-            ->orderBy("id","asc");
+            // inventario no tiene relaciones categoria/proveedor → cargar solo el producto.
+            $q->with(["producto"])->orderBy("id","asc");
         }])
         ->where(function($q) use ($factqBuscar) {
             $q->orWhere("descripcion","LIKE","%$factqBuscar%")
@@ -60,11 +58,19 @@ class FacturaController extends Controller
         ->limit(100)
         ->get()
         ->map(function($q){
-            $sub = $q->items->map(function($q){   
+            $sub = $q->items->map(function($q){
+                // Guardar contra producto nulo (producto borrado): antes esto lanzaba 500 y el
+                // front recibía una respuesta no-array → "facturas.map is not a function".
+                if (!$q->producto) {
+                    $q->basefact = 0;
+                    $q->subtotal_base_clean = 0;
+                    $q->subtotal_clean = 0;
+                    return $q;
+                }
                 $q->producto->cantidadfact = $q->cantidad;
-                $q->basefact = $q->producto->precio3*$q->cantidad;
-                $q->subtotal_base_clean = $q->producto->precio_base*$q->cantidad;
-                $q->subtotal_clean = $q->producto->precio*$q->cantidad;
+                $q->basefact = ($q->producto->precio3 ?? 0) * $q->cantidad;
+                $q->subtotal_base_clean = ($q->producto->precio_base ?? 0) * $q->cantidad;
+                $q->subtotal_clean = ($q->producto->precio ?? 0) * $q->cantidad;
                 return $q;
             });
 
