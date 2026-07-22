@@ -53,8 +53,10 @@ class WarehouseInventory extends Model
     }
     
     /**
-     * Mapa producto_id => "COD1, COD2" con los códigos de ubicación (warehouses.codigo)
-     * donde cada producto tiene stock (cantidad > 0). Una sola consulta para muchos productos.
+     * Mapa producto_id => "COD1, COD2" con los códigos de ubicación (warehouses.codigo) asignadas
+     * a cada producto. Una sola consulta para muchos productos. Usa la relación `warehouse` (igual
+     * que el resto de la app) y muestra la ubicación asignada AUNQUE la cantidad actual sea 0
+     * (la ubicación primaria con más stock queda primera, por orden desc de cantidad).
      */
     public static function ubicacionesPorProductos(array $ids): array
     {
@@ -62,15 +64,25 @@ class WarehouseInventory extends Model
         if (empty($ids)) {
             return [];
         }
-        return static::query()
-            ->join('warehouses', 'warehouses.id', '=', 'warehouse_inventory.warehouse_id')
-            ->whereIn('warehouse_inventory.inventario_id', $ids)
-            ->where('warehouse_inventory.cantidad', '>', 0)
-            ->orderBy('warehouses.codigo')
-            ->get(['warehouse_inventory.inventario_id as pid', 'warehouses.codigo as codigo'])
-            ->groupBy('pid')
-            ->map(fn ($g) => $g->pluck('codigo')->filter()->unique()->implode(', '))
-            ->toArray();
+        $rows = static::whereIn('inventario_id', $ids)
+            ->with('warehouse:id,codigo')
+            ->orderByDesc('cantidad')
+            ->get(['id', 'inventario_id', 'warehouse_id', 'cantidad']);
+
+        $map = [];
+        foreach ($rows as $wi) {
+            $cod = optional($wi->warehouse)->codigo;
+            if (!$cod) {
+                continue;
+            }
+            if (!isset($map[$wi->inventario_id])) {
+                $map[$wi->inventario_id] = [];
+            }
+            if (!in_array($cod, $map[$wi->inventario_id], true)) {
+                $map[$wi->inventario_id][] = $cod;
+            }
+        }
+        return array_map(fn ($codes) => implode(', ', $codes), $map);
     }
 
     /**
