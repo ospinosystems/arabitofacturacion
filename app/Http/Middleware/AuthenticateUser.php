@@ -42,6 +42,8 @@ class AuthenticateUser
         // Despacho con recolección y bultos (TCD): el patrón {accion} cubre todas las sub-rutas
         // de un solo segmento (guardar-orden, crear-bulto, despachar-bulto, etc.).
         'transferencia-despacho/{accion}',
+        'transferencia-despacho/dar-salida-simple',
+        'transferencia-despacho/reversar-salida',
         // Salud de Inventario (analítica) — visible para DICI y gerente.
         'inventario-analytics/{accion}',
         

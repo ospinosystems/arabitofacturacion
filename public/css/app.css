@@ -24579,6 +24579,9 @@ body{
 .min-w-\[120px\]{
   min-width: 120px;
 }
+.min-w-\[12rem\]{
+  min-width: 12rem;
+}
 .min-w-\[140px\]{
   min-width: 140px;
 }

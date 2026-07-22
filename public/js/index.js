@@ -135844,7 +135844,8 @@ var imprimirListaPicking = function imprimirListaPicking(_ref) {
   var titulo = _ref.titulo,
     subtitulo = _ref.subtitulo,
     filas = _ref.filas,
-    grupos = _ref.grupos;
+    grupos = _ref.grupos,
+    destino = _ref.destino;
   var esc = function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>]/g, function (c) {
       return {
@@ -135858,6 +135859,7 @@ var imprimirListaPicking = function imprimirListaPicking(_ref) {
     titulo: null,
     filas: filas || []
   }];
+  var destinoHtml = destino ? "<div class=\"destino\"><span class=\"lbl\">DESTINO</span> ".concat(esc(destino), "</div>") : '';
   var thead = "<thead><tr>\n        <th>#</th><th>C\xF3d. Barras</th><th>C\xF3d. Prov.</th><th>Descripci\xF3n</th>\n        <th>Cant.</th><th>Ubicaci\xF3n</th><th>\u2714</th>\n      </tr></thead>";
   var bloques = secciones.map(function (g, gi) {
     var rows = (g.filas || []).map(function (f, i) {
@@ -135866,9 +135868,10 @@ var imprimirListaPicking = function imprimirListaPicking(_ref) {
     var uni = (g.filas || []).reduce(function (a, f) {
       return a + (parseFloat(f.cantidad) || 0);
     }, 0);
-    return "<section class=\"".concat(gi > 0 ? 'brk' : '', "\">\n            ").concat(g.titulo ? "<h2>".concat(esc(g.titulo), "</h2>") : '', "\n            <table>").concat(thead, "<tbody>").concat(rows, "</tbody></table>\n            <div class=\"pie\">L\xEDneas: ").concat((g.filas || []).length, " \xB7 Unidades: ").concat(uni).concat(g.titulo ? '' : '', "</div>\n          </section>");
+    // La sucursal destino se repite grande en cada sublista (cada una va en su hoja).
+    return "<section class=\"".concat(gi > 0 ? 'brk' : '', "\">\n            <div class=\"hoja\">Hoja ").concat(gi + 1, " de ").concat(secciones.length, "</div>\n            ").concat(destinoHtml, "\n            ").concat(g.titulo ? "<h2>".concat(esc(g.titulo), "</h2>") : '', "\n            <table>").concat(thead, "<tbody>").concat(rows, "</tbody></table>\n            <div class=\"pie\">L\xEDneas: ").concat((g.filas || []).length, " \xB7 Unidades: ").concat(uni, "</div>\n          </section>");
   }).join('');
-  var html = "<!doctype html><html><head><meta charset=\"utf-8\"><title>".concat(esc(titulo), "</title>\n      <style>\n        @page { size: letter portrait; margin: 12mm; }\n        * { font-family: Arial, sans-serif; }\n        body { color:#111; font-size:12px; }\n        h1 { font-size:16px; margin:0 0 2px; }\n        h2 { font-size:13px; margin:0 0 6px; padding:4px 8px; background:#eef2ff; border-left:4px solid #1e3a8a; }\n        .sub { color:#555; margin-bottom:10px; font-size:11px; }\n        section.brk { page-break-before: always; }\n        table { width:100%; border-collapse:collapse; }\n        th,td { border:1px solid #cbd5e1; padding:5px 6px; text-align:left; font-size:11px; vertical-align:top; }\n        th { background:#1e3a8a; color:#fff; }\n        td.c { text-align:center; } td.b { font-weight:bold; } .mono { font-family:monospace; }\n        td.ub { width:90px; } td.chk { width:30px; text-align:center; }\n        .box { display:inline-block; width:15px; height:15px; border:2px solid #334155; }\n        .pie { margin:8px 0 14px; font-size:10px; color:#444; }\n      </style></head><body>\n      <h1>").concat(esc(titulo), "</h1>\n      <div class=\"sub\">").concat(esc(subtitulo || ''), "</div>\n      ").concat(bloques, "\n      <script>window.onload=function(){setTimeout(function(){window.print();},300);}</script>\n      </body></html>");
+  var html = "<!doctype html><html><head><meta charset=\"utf-8\"><title>".concat(esc(titulo), "</title>\n      <style>\n        @page { size: letter portrait; margin: 12mm; }\n        * { font-family: Arial, sans-serif; }\n        body { color:#111; font-size:12px; }\n        h1 { font-size:16px; margin:0 0 2px; }\n        h2 { font-size:13px; margin:0 0 6px; padding:4px 8px; background:#eef2ff; border-left:4px solid #1e3a8a; }\n        .sub { color:#555; margin-bottom:8px; font-size:11px; }\n        .hoja { text-align:right; font-size:11px; font-weight:700; color:#64748b; margin-bottom:2px; }\n        .destino { font-size:30px; font-weight:800; text-align:center; letter-spacing:1px; color:#1e3a8a; border:3px solid #1e3a8a; border-radius:8px; padding:8px 6px; margin:4px 0 10px; text-transform:uppercase; }\n        .destino .lbl { display:block; font-size:11px; font-weight:600; letter-spacing:2px; color:#64748b; }\n        section.brk { page-break-before: always; }\n        table { width:100%; border-collapse:collapse; }\n        th,td { border:1px solid #cbd5e1; padding:5px 6px; text-align:left; font-size:11px; vertical-align:top; }\n        th { background:#1e3a8a; color:#fff; }\n        td.c { text-align:center; } td.b { font-weight:bold; } .mono { font-family:monospace; }\n        td.ub { width:90px; } td.chk { width:30px; text-align:center; }\n        .box { display:inline-block; width:15px; height:15px; border:2px solid #334155; }\n        .pie { margin:8px 0 14px; font-size:10px; color:#444; }\n      </style></head><body>\n      <h1>").concat(esc(titulo), "</h1>\n      <div class=\"sub\">").concat(esc(subtitulo || ''), "</div>\n      ").concat(bloques, "\n      <script>window.onload=function(){setTimeout(function(){window.print();},300);}</script>\n      </body></html>");
   var w = window.open('', '_blank');
   if (!w) {
     alert('Habilitá las ventanas emergentes para poder imprimir la lista.');
@@ -136357,8 +136360,110 @@ var crearOActualizarTransferenciaMock = function crearOActualizarTransferenciaMo
 // #                            INICIO: COMPONENTES REACT                            #
 // ###################################################################################
 
-var StatusBadge = function StatusBadge(_ref3) {
-  var estadoNum = _ref3.estadoNum;
+// Combobox compacto de sucursal con buscador (reemplaza los <select> planos en los filtros).
+var SucursalCombo = function SucursalCombo(_ref3) {
+  var value = _ref3.value,
+    onChange = _ref3.onChange,
+    _ref3$sucursales = _ref3.sucursales,
+    sucursales = _ref3$sucursales === void 0 ? [] : _ref3$sucursales,
+    _ref3$placeholder = _ref3.placeholder,
+    placeholder = _ref3$placeholder === void 0 ? 'Todas' : _ref3$placeholder;
+  var _useState = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    _useState2 = _slicedToArray(_useState, 2),
+    open = _useState2[0],
+    setOpen = _useState2[1];
+  var _useState3 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    _useState4 = _slicedToArray(_useState3, 2),
+    q = _useState4[0],
+    setQ = _useState4[1];
+  var ref = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
+  var sel = (sucursales || []).find(function (s) {
+    return String(s.id) === String(value);
+  });
+  var filtered = (sucursales || []).filter(function (s) {
+    var t = q.trim().toLowerCase();
+    if (!t) return true;
+    return (s.codigo || '').toLowerCase().includes(t) || (s.nombre || '').toLowerCase().includes(t);
+  });
+  (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
+    var h = function h(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', h);
+    return function () {
+      return document.removeEventListener('mousedown', h);
+    };
+  }, []);
+  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+    className: "relative",
+    ref: ref,
+    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+      type: "button",
+      onClick: function onClick() {
+        setOpen(function (o) {
+          return !o;
+        });
+        setQ('');
+      },
+      className: "w-full flex items-center justify-between gap-1 px-2 py-1.5 text-sm border border-gray-300 rounded bg-white text-left focus:outline-none focus:ring-1 focus:ring-indigo-400",
+      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+        className: "truncate ".concat(sel ? 'text-gray-800' : 'text-gray-400'),
+        children: sel ? sel.codigo + (sel.nombre ? ' · ' + sel.nombre : '') : placeholder
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+        className: "flex items-center gap-1 shrink-0",
+        children: [sel && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+          className: "fas fa-times text-gray-400 hover:text-red-500",
+          onClick: function onClick(e) {
+            e.stopPropagation();
+            onChange('');
+          }
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+          className: "fas fa-chevron-down text-gray-400 text-[10px]"
+        })]
+      })]
+    }), open && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+      className: "absolute z-30 mt-1 w-full min-w-[12rem] bg-white border border-gray-300 rounded-md shadow-lg",
+      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+        autoFocus: true,
+        value: q,
+        onChange: function onChange(e) {
+          return setQ(e.target.value);
+        },
+        placeholder: "Buscar c\xF3digo o nombre\u2026",
+        className: "w-full px-2 py-1.5 text-sm border-b border-gray-200 focus:outline-none"
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("ul", {
+        className: "max-h-56 overflow-y-auto",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("li", {
+          onClick: function onClick() {
+            onChange('');
+            setOpen(false);
+          },
+          className: "px-2 py-1.5 text-sm text-gray-500 hover:bg-indigo-50 cursor-pointer",
+          children: placeholder
+        }), filtered.map(function (s) {
+          return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("li", {
+            onClick: function onClick() {
+              onChange(String(s.id));
+              setOpen(false);
+            },
+            className: "px-2 py-1.5 text-sm hover:bg-indigo-50 cursor-pointer ".concat(String(s.id) === String(value) ? 'bg-indigo-50 font-semibold' : ''),
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("b", {
+              children: s.codigo
+            }), s.nombre ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+              className: "text-gray-500 ml-1",
+              children: s.nombre
+            }) : null]
+          }, s.id);
+        }), !filtered.length && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("li", {
+          className: "px-2 py-1.5 text-sm text-gray-400",
+          children: "Sin coincidencias"
+        })]
+      })]
+    })]
+  });
+};
+var StatusBadge = function StatusBadge(_ref4) {
+  var estadoNum = _ref4.estadoNum;
   var estatusString = ESTADO_NUMERICO_A_STRING[estadoNum] || 'DESCONOCIDO';
   var statusColors = {
     'PENDIENTE': 'bg-red-500 text-white',
@@ -136372,44 +136477,44 @@ var StatusBadge = function StatusBadge(_ref3) {
     children: estatusString
   });
 };
-var ProductSearchInput = function ProductSearchInput(_ref4) {
-  var onProductSelect = _ref4.onProductSelect,
-    sucursalIdOrigen = _ref4.sucursalIdOrigen,
-    _ref4$placeholder = _ref4.placeholder,
-    placeholder = _ref4$placeholder === void 0 ? "Buscar producto..." : _ref4$placeholder;
-  var _useState = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
-    _useState2 = _slicedToArray(_useState, 2),
-    terminoBusqueda = _useState2[0],
-    setTerminoBusqueda = _useState2[1];
-  var _useState3 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState4 = _slicedToArray(_useState3, 2),
-    resultados = _useState4[0],
-    setResultados = _useState4[1];
-  var _useState5 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+var ProductSearchInput = function ProductSearchInput(_ref5) {
+  var onProductSelect = _ref5.onProductSelect,
+    sucursalIdOrigen = _ref5.sucursalIdOrigen,
+    _ref5$placeholder = _ref5.placeholder,
+    placeholder = _ref5$placeholder === void 0 ? "Buscar producto..." : _ref5$placeholder;
+  var _useState5 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState6 = _slicedToArray(_useState5, 2),
-    estaCargando = _useState6[0],
-    setEstaCargando = _useState6[1];
-  var _useState7 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    terminoBusqueda = _useState6[0],
+    setTerminoBusqueda = _useState6[1];
+  var _useState7 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState8 = _slicedToArray(_useState7, 2),
-    mostrarResultados = _useState8[0],
-    setMostrarResultados = _useState8[1];
-  var _useState9 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    resultados = _useState8[0],
+    setResultados = _useState8[1];
+  var _useState9 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState0 = _slicedToArray(_useState9, 2),
-    productoSeleccionado = _useState0[0],
-    setProductoSeleccionado = _useState0[1];
+    estaCargando = _useState0[0],
+    setEstaCargando = _useState0[1];
   var _useState1 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState10 = _slicedToArray(_useState1, 2),
-    mostrarModalCantidad = _useState10[0],
-    setMostrarModalCantidad = _useState10[1];
-  var _useState11 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    mostrarResultados = _useState10[0],
+    setMostrarResultados = _useState10[1];
+  var _useState11 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState12 = _slicedToArray(_useState11, 2),
-    cantidadSeleccionada = _useState12[0],
-    setCantidadSeleccionada = _useState12[1];
+    productoSeleccionado = _useState12[0],
+    setProductoSeleccionado = _useState12[1];
+  var _useState13 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    _useState14 = _slicedToArray(_useState13, 2),
+    mostrarModalCantidad = _useState14[0],
+    setMostrarModalCantidad = _useState14[1];
+  var _useState15 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    _useState16 = _slicedToArray(_useState15, 2),
+    cantidadSeleccionada = _useState16[0],
+    setCantidadSeleccionada = _useState16[1];
   var inputRef = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var cantidadInputRef = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var debounceTimeoutRef = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var realizarBusqueda = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
-    var _ref5 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee2(termino) {
+    var _ref6 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee2(termino) {
       var response;
       return _regeneratorRuntime().wrap(function _callee2$(_context2) {
         while (1) switch (_context2.prev = _context2.next) {
@@ -136456,7 +136561,7 @@ var ProductSearchInput = function ProductSearchInput(_ref4) {
       }, _callee2, null, [[5, 14, 18, 21]]);
     }));
     return function (_x2) {
-      return _ref5.apply(this, arguments);
+      return _ref6.apply(this, arguments);
     };
   }(), [sucursalIdOrigen]);
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
@@ -136636,17 +136741,17 @@ var ProductSearchInput = function ProductSearchInput(_ref4) {
     })]
   });
 };
-var SelectedProductItem = function SelectedProductItem(_ref6) {
+var SelectedProductItem = function SelectedProductItem(_ref7) {
   var _item$producto, _item$producto2, _item$producto3;
-  var item = _ref6.item,
-    onRemove = _ref6.onRemove,
-    onQuantityChange = _ref6.onQuantityChange,
-    isEditable = _ref6.isEditable,
-    index = _ref6.index,
-    totalItems = _ref6.totalItems,
-    _ref6$mostrarRevisado = _ref6.mostrarRevisado,
-    mostrarRevisado = _ref6$mostrarRevisado === void 0 ? false : _ref6$mostrarRevisado,
-    onToggleRevisado = _ref6.onToggleRevisado;
+  var item = _ref7.item,
+    onRemove = _ref7.onRemove,
+    onQuantityChange = _ref7.onQuantityChange,
+    isEditable = _ref7.isEditable,
+    index = _ref7.index,
+    totalItems = _ref7.totalItems,
+    _ref7$mostrarRevisado = _ref7.mostrarRevisado,
+    mostrarRevisado = _ref7$mostrarRevisado === void 0 ? false : _ref7$mostrarRevisado,
+    onToggleRevisado = _ref7.onToggleRevisado;
   var handleCantidadChange = function handleCantidadChange(e) {
     var valor = e.target.value;
     // Permitir valores vacíos temporalmente para mejor UX
@@ -136667,14 +136772,16 @@ var SelectedProductItem = function SelectedProductItem(_ref6) {
     className: "border-b border-gray-100 ".concat(rowCls),
     children: [mostrarRevisado && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
       className: "px-2 py-1 text-center",
-      children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
-        type: "checkbox",
-        checked: !!item.revisado,
-        onChange: function onChange() {
+      children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+        type: "button",
+        onClick: function onClick() {
           return onToggleRevisado && onToggleRevisado(item.id_producto_insucursal);
         },
-        className: "w-5 h-5 text-emerald-600 rounded cursor-pointer align-middle",
-        title: item.revisado ? 'Revisado — click para desmarcar' : 'Marcar como revisado'
+        className: "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition ".concat(item.revisado ? 'bg-emerald-500 text-white' : 'bg-white border-2 border-amber-400 text-amber-600 hover:bg-amber-50'),
+        title: item.revisado ? 'Revisado — click para desmarcar' : 'Marcar como revisado',
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+          className: "fas ".concat(item.revisado ? 'fa-check' : 'fa-circle', " ").concat(item.revisado ? '' : 'text-[8px]')
+        }), item.revisado ? 'Revisado' : 'Falta']
       })
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
       className: "px-2 py-1 text-center text-xs text-gray-400 whitespace-nowrap",
@@ -136695,6 +136802,9 @@ var SelectedProductItem = function SelectedProductItem(_ref6) {
         inputMode: "decimal",
         value: item.cantidad,
         onChange: handleCantidadChange,
+        onFocus: function onFocus(e) {
+          return e.target.select();
+        },
         onBlur: function onBlur(e) {
           var valor = e.target.value;
           if (valor === '' || isNaN(parseFloat(valor)) || parseFloat(valor) <= 0) {
@@ -136723,18 +136833,18 @@ var SelectedProductItem = function SelectedProductItem(_ref6) {
     })]
   });
 };
-var TransferenciaForm = function TransferenciaForm(_ref7) {
-  var onSave = _ref7.onSave,
-    onCancel = _ref7.onCancel,
-    sucursalActualId = _ref7.sucursalActualId,
-    _ref7$transferenciaTo = _ref7.transferenciaToEdit,
-    transferenciaToEdit = _ref7$transferenciaTo === void 0 ? null : _ref7$transferenciaTo,
-    sucursales = _ref7.sucursales,
-    cargarTransferencias = _ref7.cargarTransferencias,
-    _ref7$modoBorrador = _ref7.modoBorrador,
-    modoBorrador = _ref7$modoBorrador === void 0 ? false : _ref7$modoBorrador,
-    onGuardarBorrador = _ref7.onGuardarBorrador,
-    onImprimir = _ref7.onImprimir;
+var TransferenciaForm = function TransferenciaForm(_ref8) {
+  var onSave = _ref8.onSave,
+    onCancel = _ref8.onCancel,
+    sucursalActualId = _ref8.sucursalActualId,
+    _ref8$transferenciaTo = _ref8.transferenciaToEdit,
+    transferenciaToEdit = _ref8$transferenciaTo === void 0 ? null : _ref8$transferenciaTo,
+    sucursales = _ref8.sucursales,
+    cargarTransferencias = _ref8.cargarTransferencias,
+    _ref8$modoBorrador = _ref8.modoBorrador,
+    modoBorrador = _ref8$modoBorrador === void 0 ? false : _ref8$modoBorrador,
+    onGuardarBorrador = _ref8.onGuardarBorrador,
+    onImprimir = _ref8.onImprimir;
   // Una premonta (orden de redistribución traída de central) se arma como transferencia NUEVA,
   // no como edición de una transferencia local existente.
   var esPremonta = !!(transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.es_premontada);
@@ -136743,49 +136853,59 @@ var TransferenciaForm = function TransferenciaForm(_ref7) {
   var esBorrador = !!modoBorrador;
   var esEdicion = !!transferenciaToEdit && !esPremonta && !esBorrador;
   var idSucursalOrigen = sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER;
-  var _useState13 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((transferenciaToEdit === null || transferenciaToEdit === void 0 ? void 0 : transferenciaToEdit.id_destino) || ''),
-    _useState14 = _slicedToArray(_useState13, 2),
-    idSucursalDestinoSeleccionada = _useState14[0],
-    setIdSucursalDestinoSeleccionada = _useState14[1];
-  var _useState15 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState16 = _slicedToArray(_useState15, 2),
-    itemsTransferencia = _useState16[0],
-    setItemsTransferencia = _useState16[1];
-  var _useState17 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+  var _useState17 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((transferenciaToEdit === null || transferenciaToEdit === void 0 ? void 0 : transferenciaToEdit.id_destino) || ''),
     _useState18 = _slicedToArray(_useState17, 2),
-    error = _useState18[0],
-    setError = _useState18[1];
-  var _useState19 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    idSucursalDestinoSeleccionada = _useState18[0],
+    setIdSucursalDestinoSeleccionada = _useState18[1];
+  var _useState19 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState20 = _slicedToArray(_useState19, 2),
-    estaCargando = _useState20[0],
-    setEstaCargando = _useState20[1];
+    itemsTransferencia = _useState20[0],
+    setItemsTransferencia = _useState20[1];
   var _useState21 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState22 = _slicedToArray(_useState21, 2),
-    mensajeExito = _useState22[0],
-    setMensajeExito = _useState22[1];
-  var _useState23 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((transferenciaToEdit === null || transferenciaToEdit === void 0 ? void 0 : transferenciaToEdit.observaciones) || ''),
+    error = _useState22[0],
+    setError = _useState22[1];
+  var _useState23 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState24 = _slicedToArray(_useState23, 2),
-    observaciones = _useState24[0],
-    setObservaciones = _useState24[1];
-  var _useState25 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    estaCargando = _useState24[0],
+    setEstaCargando = _useState24[1];
+  var _useState25 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState26 = _slicedToArray(_useState25, 2),
-    mostrarObservaciones = _useState26[0],
-    setMostrarObservaciones = _useState26[1];
+    mensajeExito = _useState26[0],
+    setMensajeExito = _useState26[1];
+  var _useState27 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((transferenciaToEdit === null || transferenciaToEdit === void 0 ? void 0 : transferenciaToEdit.observaciones) || ''),
+    _useState28 = _slicedToArray(_useState27, 2),
+    observaciones = _useState28[0],
+    setObservaciones = _useState28[1];
+  var _useState29 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    _useState30 = _slicedToArray(_useState29, 2),
+    mostrarObservaciones = _useState30[0],
+    setMostrarObservaciones = _useState30[1];
+  // Marca si el usuario tocó algo (para confirmar el descarte al cancelar). Los cambios viven
+  // en estado local: cancelar (sin guardar) siempre los descarta y la orden vuelve a como estaba.
+  var _useState31 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    _useState32 = _slicedToArray(_useState31, 2),
+    dirty = _useState32[0],
+    setDirty = _useState32[1];
+  var handleCancelClick = function handleCancelClick() {
+    if (dirty && !window.confirm('¿Descartar los cambios? La orden volverá a como estaba (no se guardó nada).')) return;
+    onCancel();
+  };
 
   // Destino: bloqueado por defecto cuando ya trae un destino (edición o borrador de
   // redistribución); en un borrador nuevo/manual sin destino queda el buscador abierto.
-  var _useState27 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((esEdicion || esBorrador) && !!(transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_destino)),
-    _useState28 = _slicedToArray(_useState27, 2),
-    destinoBloqueado = _useState28[0],
-    setDestinoBloqueado = _useState28[1];
-  var _useState29 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
-    _useState30 = _slicedToArray(_useState29, 2),
-    busquedaDestino = _useState30[0],
-    setBusquedaDestino = _useState30[1];
-  var _useState31 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
-    _useState32 = _slicedToArray(_useState31, 2),
-    mostrarListaDestino = _useState32[0],
-    setMostrarListaDestino = _useState32[1];
+  var _useState33 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((esEdicion || esBorrador) && !!(transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_destino)),
+    _useState34 = _slicedToArray(_useState33, 2),
+    destinoBloqueado = _useState34[0],
+    setDestinoBloqueado = _useState34[1];
+  var _useState35 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    _useState36 = _slicedToArray(_useState35, 2),
+    busquedaDestino = _useState36[0],
+    setBusquedaDestino = _useState36[1];
+  var _useState37 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    _useState38 = _slicedToArray(_useState37, 2),
+    mostrarListaDestino = _useState38[0],
+    setMostrarListaDestino = _useState38[1];
   var codigoDestino = (sucursales.find(function (s) {
     return String(s.id) === String(idSucursalDestinoSeleccionada);
   }) || {}).codigo || '';
@@ -136856,6 +136976,7 @@ var TransferenciaForm = function TransferenciaForm(_ref7) {
       alert("Este producto ya ha sido agregado.");
       return;
     }
+    setDirty(true);
     // Crear un nuevo item con la estructura del JSON de la API
     var nuevoItem = {
       id: nextDetalleId++,
@@ -136892,6 +137013,7 @@ var TransferenciaForm = function TransferenciaForm(_ref7) {
     });
   };
   var handleRemoveProduct = function handleRemoveProduct(idProductoInsucursal) {
+    setDirty(true);
     setItemsTransferencia(function (prev) {
       return prev.filter(function (item) {
         return item.id_producto_insucursal !== idProductoInsucursal;
@@ -136899,6 +137021,7 @@ var TransferenciaForm = function TransferenciaForm(_ref7) {
     });
   };
   var handleQuantityChange = function handleQuantityChange(idProductoInsucursal, nuevaCantidadStr) {
+    setDirty(true);
     setItemsTransferencia(function (prevItems) {
       return prevItems.map(function (item) {
         if (item.id_producto_insucursal !== idProductoInsucursal) return item;
@@ -136923,6 +137046,7 @@ var TransferenciaForm = function TransferenciaForm(_ref7) {
 
   // Alterna la marca de "revisado" de un producto (picking Plan B).
   var toggleRevisado = function toggleRevisado(idProductoInsucursal) {
+    setDirty(true);
     setItemsTransferencia(function (prev) {
       return prev.map(function (item) {
         return item.id_producto_insucursal === idProductoInsucursal ? _objectSpread(_objectSpread({}, item), {}, {
@@ -136932,7 +137056,7 @@ var TransferenciaForm = function TransferenciaForm(_ref7) {
     });
   };
   var handleSubmit = /*#__PURE__*/function () {
-    var _ref8 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee3(e) {
+    var _ref9 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee3(e) {
       var validSubmission, datosTransferencia, res, _res;
       return _regeneratorRuntime().wrap(function _callee3$(_context3) {
         while (1) switch (_context3.prev = _context3.next) {
@@ -137094,7 +137218,7 @@ var TransferenciaForm = function TransferenciaForm(_ref7) {
       }, _callee3, null, [[19, 32, 35, 38], [40, 56, 59, 62]]);
     }));
     return function handleSubmit(_x3) {
-      return _ref8.apply(this, arguments);
+      return _ref9.apply(this, arguments);
     };
   }();
   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("form", {
@@ -137201,9 +137325,11 @@ var TransferenciaForm = function TransferenciaForm(_ref7) {
       className: "relative",
       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
         className: "sticky top-0 z-10 bg-white pb-2 border-b border-gray-200",
-        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("label", {
           className: "block text-xs font-medium text-gray-700 mb-1",
-          children: "Buscar y Agregar Productos:"
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-plus-circle text-indigo-500 mr-1"
+          }), esBorrador ? 'Agregar producto (fuera de la redistribución original)' : 'Buscar y Agregar Productos:']
         }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(ProductSearchInput, {
           onProductSelect: handleAddProduct,
           sucursalIdOrigen: idSucursalOrigen
@@ -137232,7 +137358,8 @@ var TransferenciaForm = function TransferenciaForm(_ref7) {
             onClick: function onClick() {
               return onImprimir && onImprimir({
                 titulo: 'Lista de picking' + (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id ? ' · Orden #' + transferenciaToEdit.id : ''),
-                subtitulo: (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_orden_distribucion ? 'Redistribución #' + transferenciaToEdit.id_orden_distribucion + ' · ' : '') + 'Destino ' + (codigoDestino || '—') + ' · ' + itemsTransferencia.length + ' producto(s)',
+                subtitulo: (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_orden_distribucion ? 'Redistribución #' + transferenciaToEdit.id_orden_distribucion + ' · ' : '') + itemsTransferencia.length + ' producto(s)',
+                destino: codigoDestino || '—',
                 filas: itemsTransferencia.map(function (i) {
                   return {
                     barras: i.barras_real,
@@ -137258,9 +137385,8 @@ var TransferenciaForm = function TransferenciaForm(_ref7) {
               className: "bg-gray-50 text-xs uppercase text-gray-500 sticky top-0",
               children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
                 children: [esBorrador && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
-                  className: "px-2 py-1 text-center font-semibold w-10",
-                  title: "Revisado",
-                  children: "\u2714"
+                  className: "px-2 py-1 text-center font-semibold w-24",
+                  children: "Revisado"
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
                   className: "px-2 py-1 text-center font-semibold",
                   children: "#"
@@ -137328,7 +137454,7 @@ var TransferenciaForm = function TransferenciaForm(_ref7) {
       className: "flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 pt-2 border-t border-gray-200",
       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
         type: "button",
-        onClick: onCancel,
+        onClick: handleCancelClick,
         disabled: estaCargando,
         className: "w-full sm:w-auto px-4 py-2 border rounded-md shadow-sm text-sm bg-white hover:bg-gray-50 transition",
         children: "Cancelar"
@@ -137341,10 +137467,10 @@ var TransferenciaForm = function TransferenciaForm(_ref7) {
     })]
   });
 };
-var TransferenciaDetailView = function TransferenciaDetailView(_ref9) {
-  var transferencia = _ref9.transferencia,
-    onBack = _ref9.onBack,
-    sucursales = _ref9.sucursales;
+var TransferenciaDetailView = function TransferenciaDetailView(_ref0) {
+  var transferencia = _ref0.transferencia,
+    onBack = _ref0.onBack,
+    sucursales = _ref0.sucursales;
   if (!transferencia) return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
     children: "Cargando detalles..."
   });
@@ -137531,27 +137657,27 @@ var TransferenciaDetailView = function TransferenciaDetailView(_ref9) {
     })]
   });
 };
-var TransferenciaList = function TransferenciaList(_ref0) {
-  var sucursalActualId = _ref0.sucursalActualId,
-    onRequireRefresh = _ref0.onRequireRefresh,
-    onEdit = _ref0.onEdit,
-    onViewDetails = _ref0.onViewDetails,
-    sucursales = _ref0.sucursales,
-    cargarTransferencias = _ref0.cargarTransferencias,
-    transferencias = _ref0.transferencias,
-    setTransferencias = _ref0.setTransferencias,
-    estaCargando = _ref0.estaCargando,
-    setEstaCargando = _ref0.setEstaCargando,
-    error = _ref0.error,
-    setError = _ref0.setError,
-    filtros = _ref0.filtros,
-    setFiltros = _ref0.setFiltros,
-    filtrosActivos = _ref0.filtrosActivos,
-    setFiltrosActivos = _ref0.setFiltrosActivos,
-    paginacion = _ref0.paginacion,
-    setPaginacion = _ref0.setPaginacion,
-    mostrarFiltros = _ref0.mostrarFiltros,
-    setMostrarFiltros = _ref0.setMostrarFiltros;
+var TransferenciaList = function TransferenciaList(_ref1) {
+  var sucursalActualId = _ref1.sucursalActualId,
+    onRequireRefresh = _ref1.onRequireRefresh,
+    onEdit = _ref1.onEdit,
+    onViewDetails = _ref1.onViewDetails,
+    sucursales = _ref1.sucursales,
+    cargarTransferencias = _ref1.cargarTransferencias,
+    transferencias = _ref1.transferencias,
+    setTransferencias = _ref1.setTransferencias,
+    estaCargando = _ref1.estaCargando,
+    setEstaCargando = _ref1.setEstaCargando,
+    error = _ref1.error,
+    setError = _ref1.setError,
+    filtros = _ref1.filtros,
+    setFiltros = _ref1.setFiltros,
+    filtrosActivos = _ref1.filtrosActivos,
+    setFiltrosActivos = _ref1.setFiltrosActivos,
+    paginacion = _ref1.paginacion,
+    setPaginacion = _ref1.setPaginacion,
+    mostrarFiltros = _ref1.mostrarFiltros,
+    setMostrarFiltros = _ref1.setMostrarFiltros;
   // Eliminamos el useEffect de carga de datos ya que ahora está en el componente padre
 
   var handleFilterChange = function handleFilterChange(e) {
@@ -137564,7 +137690,7 @@ var TransferenciaList = function TransferenciaList(_ref0) {
     cargarTransferencias();
   };
   var handleDelete = /*#__PURE__*/function () {
-    var _ref1 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee4(t) {
+    var _ref10 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee4(t) {
       var res;
       return _regeneratorRuntime().wrap(function _callee4$(_context4) {
         while (1) switch (_context4.prev = _context4.next) {
@@ -137600,7 +137726,7 @@ var TransferenciaList = function TransferenciaList(_ref0) {
       }, _callee4, null, [[2, 9]]);
     }));
     return function handleDelete(_x4) {
-      return _ref1.apply(this, arguments);
+      return _ref10.apply(this, arguments);
     };
   }();
   if (estaCargando && transferencias.length === 0) return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
@@ -137649,149 +137775,131 @@ var TransferenciaList = function TransferenciaList(_ref0) {
   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
     className: "rounded-lg",
     children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
-      className: "px-4 py-3 border-b border-gray-200 sm:px-6",
+      className: "px-3 py-2 border-b border-gray-200 sm:px-4",
       children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-        className: "flex items-center justify-between",
+        className: "flex flex-wrap items-end gap-2",
         children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("h2", {
-          className: "text-lg font-medium text-gray-900",
+          className: "text-base font-medium text-gray-900 mr-1 self-center",
           children: "Transferencias"
         }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-          className: "flex space-x-2",
-          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
-            onClick: function onClick() {
-              return setMostrarFiltros(!mostrarFiltros);
-            },
-            className: "inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500",
-            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
-              className: "fas fa-filter mr-2 ".concat(mostrarFiltros ? 'text-indigo-600' : 'text-gray-400')
-            }), "Filtros"]
-          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
-            onClick: handleSearch,
-            className: "inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500",
-            children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
-              className: "fas fa-search mr-2"
+          className: "w-28",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
+            className: "block text-[11px] font-medium text-gray-500",
+            children: "ID"
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+            name: "q",
+            placeholder: "ID",
+            value: filtros.q,
+            onChange: handleFilterChange,
+            className: "mt-0.5 block w-full px-2 py-1.5 text-sm border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 rounded"
+          })]
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "w-36",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
+            className: "block text-[11px] font-medium text-gray-500",
+            children: "Estado"
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("select", {
+            name: "estatus_string",
+            value: filtros.estatus_string,
+            onChange: handleFilterChange,
+            className: "mt-0.5 block w-full px-2 py-1.5 text-sm border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 rounded",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "",
+              children: "Todos"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "0",
+              children: "Pendiente"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "1",
+              children: "Procesado"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "2",
+              children: "Extra\xEDdo"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "3",
+              children: "En Revision"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "4",
+              children: "Revisado"
+            })]
+          })]
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "w-44",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
+            className: "block text-[11px] font-medium text-gray-500",
+            children: "Origen"
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+            className: "mt-0.5",
+            children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(SucursalCombo, {
+              value: filtros.id_origen || '',
+              onChange: function onChange(val) {
+                return setFiltros(function (prev) {
+                  return _objectSpread(_objectSpread({}, prev), {}, {
+                    id_origen: val
+                  });
+                });
+              },
+              sucursales: sucursales
             })
           })]
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "w-44",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
+            className: "block text-[11px] font-medium text-gray-500",
+            children: "Destino"
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+            className: "mt-0.5",
+            children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(SucursalCombo, {
+              value: filtros.id_destino || '',
+              onChange: function onChange(val) {
+                return setFiltros(function (prev) {
+                  return _objectSpread(_objectSpread({}, prev), {}, {
+                    id_destino: val
+                  });
+                });
+              },
+              sucursales: sucursales
+            })
+          })]
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "w-20",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
+            className: "block text-[11px] font-medium text-gray-500",
+            children: "Result."
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("select", {
+            name: "limit",
+            value: filtros.limit,
+            onChange: handleFilterChange,
+            className: "mt-0.5 block w-full px-2 py-1.5 text-sm border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 rounded",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "10",
+              children: "10"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "25",
+              children: "25"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "50",
+              children: "50"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "100",
+              children: "100"
+            })]
+          })]
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+          onClick: handleSearch,
+          className: "px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700",
+          title: "Buscar",
+          children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-search"
+          })
         })]
       })
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
-      className: "border-b border-gray-200 transition-all duration-200 ".concat(mostrarFiltros ? 'block' : 'hidden'),
+      className: "hidden",
       children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
         className: "px-4 py-3 sm:px-6",
-        children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-          className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3",
-          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
-              htmlFor: "estatus_string_filter",
-              className: "block text-xs font-medium text-gray-700",
-              children: "ID"
-            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
-              name: "q",
-              id: "q_filter",
-              placeholder: "Buscar por ID",
-              value: filtros.q,
-              onChange: handleFilterChange,
-              className: "mt-1 block w-full pl-3 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
-            })]
-          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
-              htmlFor: "estatus_string_filter",
-              className: "block text-xs font-medium text-gray-700",
-              children: "Estado"
-            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("select", {
-              name: "estatus_string",
-              id: "estatus_string_filter",
-              value: filtros.estatus_string,
-              onChange: handleFilterChange,
-              className: "mt-1 block w-full pl-3 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md",
-              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                value: "",
-                children: "Todos"
-              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                value: "0",
-                children: "Pendiente"
-              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                value: "1",
-                children: "Procesado"
-              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                value: "2",
-                children: "Extra\xEDdo"
-              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                value: "3",
-                children: "En Revision"
-              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                value: "4",
-                children: "Revisado"
-              })]
-            })]
-          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
-              htmlFor: "id_origen_filter",
-              className: "block text-xs font-medium text-gray-700",
-              children: "Origen"
-            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("select", {
-              name: "id_origen",
-              id: "id_origen_filter",
-              value: filtros.id_origen || '',
-              onChange: handleFilterChange,
-              className: "mt-1 block w-full pl-3 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md",
-              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                value: "",
-                children: "Todas"
-              }), sucursales.map(function (s) {
-                return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                  value: s.id,
-                  children: s.codigo
-                }, s.id);
-              })]
-            })]
-          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
-              htmlFor: "id_destino_filter",
-              className: "block text-xs font-medium text-gray-700",
-              children: "Destino"
-            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("select", {
-              name: "id_destino",
-              id: "id_destino_filter",
-              value: filtros.id_destino,
-              onChange: handleFilterChange,
-              className: "mt-1 block w-full pl-3 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md",
-              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                value: "",
-                children: "Todas"
-              }), sucursales.map(function (s) {
-                return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                  value: s.id,
-                  children: s.codigo
-                }, s.id);
-              })]
-            })]
-          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
-              htmlFor: "limit_filter",
-              className: "block text-xs font-medium text-gray-700",
-              children: "Resultados"
-            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("select", {
-              name: "limit",
-              id: "limit_filter",
-              value: filtros.limit,
-              onChange: handleFilterChange,
-              className: "mt-1 block w-full pl-3 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md",
-              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                value: "10",
-                children: "10"
-              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                value: "25",
-                children: "25"
-              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                value: "50",
-                children: "50"
-              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                value: "100",
-                children: "100"
-              })]
-            })]
-          })]
+        children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+          className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"
         })
       })
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
@@ -138004,18 +138112,18 @@ var TransferenciaList = function TransferenciaList(_ref0) {
 //   • no existe localmente → se excluye (no se puede enviar lo que no tenés en sistema)
 //   • existe pero la cantidad no alcanza → se avisa y el usuario ajusta la cantidad
 // El usuario ajusta/excluye y recién ahí se crea la orden en preparación (sin descontar).
-var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref10) {
-  var prem = _ref10.prem,
-    filas = _ref10.filas,
-    destinoBadge = _ref10.destinoBadge,
-    onConfirmar = _ref10.onConfirmar,
-    onCancelar = _ref10.onCancelar,
-    onImprimir = _ref10.onImprimir,
-    procesando = _ref10.procesando;
-  var _useState33 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState34 = _slicedToArray(_useState33, 2),
-    rows = _useState34[0],
-    setRows = _useState34[1];
+var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref11) {
+  var prem = _ref11.prem,
+    filas = _ref11.filas,
+    destinoBadge = _ref11.destinoBadge,
+    onConfirmar = _ref11.onConfirmar,
+    onCancelar = _ref11.onCancelar,
+    onImprimir = _ref11.onImprimir,
+    procesando = _ref11.procesando;
+  var _useState39 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    _useState40 = _slicedToArray(_useState39, 2),
+    rows = _useState40[0],
+    setRows = _useState40[1];
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     setRows((filas || []).map(function (f) {
       return _objectSpread(_objectSpread({}, f), {}, {
@@ -138099,10 +138207,11 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref10) {
         children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
           type: "button",
           onClick: function onClick() {
-            var _prem$id_orden_distri;
+            var _prem$id_orden_distri, _prem$sucursal_destin, _prem$sucursal_destin2, _prem$sucursal_destin3, _prem$sucursal_destin4;
             return onImprimir({
               titulo: 'Lista de picking · Redistribución #' + ((_prem$id_orden_distri = prem === null || prem === void 0 ? void 0 : prem.id_orden_distribucion) !== null && _prem$id_orden_distri !== void 0 ? _prem$id_orden_distri : ''),
               subtitulo: 'Búsqueda física en almacén — ' + rows.length + ' producto(s)',
+              destino: (prem === null || prem === void 0 || (_prem$sucursal_destin = prem.sucursal_destino) === null || _prem$sucursal_destin === void 0 ? void 0 : _prem$sucursal_destin.codigo) || (prem === null || prem === void 0 || (_prem$sucursal_destin2 = prem.sucursal_destino) === null || _prem$sucursal_destin2 === void 0 ? void 0 : _prem$sucursal_destin2.nombre) || 'Destino ' + ((_prem$sucursal_destin3 = prem === null || prem === void 0 || (_prem$sucursal_destin4 = prem.sucursal_destino) === null || _prem$sucursal_destin4 === void 0 ? void 0 : _prem$sucursal_destin4.id) !== null && _prem$sucursal_destin3 !== void 0 ? _prem$sucursal_destin3 : '—'),
               filas: rows.map(function (r) {
                 return {
                   barras: r.barras,
@@ -138343,29 +138452,29 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref10) {
 };
 
 // Modal de opciones para imprimir la lista de picking: ordenar y dividir en varias sublistas.
-var PrintPickingModal = function PrintPickingModal(_ref11) {
-  var payload = _ref11.payload,
-    onClose = _ref11.onClose;
-  var _useState35 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('descripcion'),
-    _useState36 = _slicedToArray(_useState35, 2),
-    campo = _useState36[0],
-    setCampo = _useState36[1];
-  var _useState37 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('asc'),
-    _useState38 = _slicedToArray(_useState37, 2),
-    dir = _useState38[0],
-    setDir = _useState38[1];
-  var _useState39 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('ninguno'),
-    _useState40 = _slicedToArray(_useState39, 2),
-    modo = _useState40[0],
-    setModo = _useState40[1]; // 'ninguno' | 'partes' | 'porLista'
-  var _useState41 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(2),
+var PrintPickingModal = function PrintPickingModal(_ref12) {
+  var payload = _ref12.payload,
+    onClose = _ref12.onClose;
+  var _useState41 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('descripcion'),
     _useState42 = _slicedToArray(_useState41, 2),
-    nPartes = _useState42[0],
-    setNPartes = _useState42[1];
-  var _useState43 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(50),
+    campo = _useState42[0],
+    setCampo = _useState42[1];
+  var _useState43 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('asc'),
     _useState44 = _slicedToArray(_useState43, 2),
-    porLista = _useState44[0],
-    setPorLista = _useState44[1];
+    dir = _useState44[0],
+    setDir = _useState44[1];
+  var _useState45 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('ninguno'),
+    _useState46 = _slicedToArray(_useState45, 2),
+    modo = _useState46[0],
+    setModo = _useState46[1]; // 'ninguno' | 'partes' | 'porLista'
+  var _useState47 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(2),
+    _useState48 = _slicedToArray(_useState47, 2),
+    nPartes = _useState48[0],
+    setNPartes = _useState48[1];
+  var _useState49 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(50),
+    _useState50 = _slicedToArray(_useState49, 2),
+    porLista = _useState50[0],
+    setPorLista = _useState50[1];
   if (!payload) return null;
   var total = (payload.filas || []).length;
   var valor = modo === 'partes' ? parseInt(nPartes) || 2 : modo === 'porLista' ? parseInt(porLista) || 1 : 0;
@@ -138383,22 +138492,39 @@ var PrintPickingModal = function PrintPickingModal(_ref11) {
     imprimirListaPicking({
       titulo: payload.titulo,
       subtitulo: payload.subtitulo,
+      destino: payload.destino,
       grupos: grupos
     });
     onClose();
   };
+  var totalUnidades = (payload.filas || []).reduce(function (a, f) {
+    return a + (parseFloat(f.cantidad) || 0);
+  }, 0);
   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
     className: "fixed inset-0 bg-gray-900/50 z-[60] flex items-start justify-center p-4 overflow-y-auto",
     children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
       className: "relative mt-16 w-full max-w-md bg-white rounded-lg shadow-xl p-4",
       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h3", {
-        className: "text-base font-bold text-gray-800 mb-1",
+        className: "text-base font-bold text-gray-800 mb-2",
         children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
           className: "fas fa-print mr-1 text-indigo-600"
         }), "Imprimir lista de picking"]
-      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("p", {
-        className: "text-xs text-gray-500 mb-3",
-        children: [total, " producto(s)", payload.subtitulo ? ' · ' + payload.subtitulo : '']
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        className: "flex items-center gap-2 mb-3 flex-wrap",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+          className: "inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700 text-sm font-bold",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-boxes-stacked"
+          }), total, " producto(s)"]
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+          className: "inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold",
+          children: [totalUnidades, " unidad(es)"]
+        }), payload.destino && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+          className: "inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-bold",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-location-dot"
+          }), payload.destino]
+        })]
       }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
         className: "mb-3",
         children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
@@ -138530,82 +138656,82 @@ var PrintPickingModal = function PrintPickingModal(_ref11) {
     })
   });
 };
-var TransferenciasModule = function TransferenciasModule(_ref12) {
+var TransferenciasModule = function TransferenciasModule(_ref13) {
   var _conflictosPremonta$p;
-  var sucursalActualId = _ref12.sucursalActualId;
-  var _useState45 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('list'),
-    _useState46 = _slicedToArray(_useState45, 2),
-    vistaActual = _useState46[0],
-    setVistaActual = _useState46[1]; // 'list', 'form', 'detail'
-  var _useState47 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
-    _useState48 = _slicedToArray(_useState47, 2),
-    transferenciaSeleccionada = _useState48[0],
-    setTransferenciaSeleccionada = _useState48[1];
-  var _useState49 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(0),
-    _useState50 = _slicedToArray(_useState49, 2),
-    refreshListKey = _useState50[0],
-    setRefreshListKey = _useState50[1];
-  var _useState51 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+  var sucursalActualId = _ref13.sucursalActualId;
+  var _useState51 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('list'),
     _useState52 = _slicedToArray(_useState51, 2),
-    sucursales = _useState52[0],
-    setSucursales = _useState52[1];
+    vistaActual = _useState52[0],
+    setVistaActual = _useState52[1]; // 'list', 'form', 'detail'
+  var _useState53 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState54 = _slicedToArray(_useState53, 2),
+    transferenciaSeleccionada = _useState54[0],
+    setTransferenciaSeleccionada = _useState54[1];
+  var _useState55 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(0),
+    _useState56 = _slicedToArray(_useState55, 2),
+    refreshListKey = _useState56[0],
+    setRefreshListKey = _useState56[1];
+  var _useState57 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    _useState58 = _slicedToArray(_useState57, 2),
+    sucursales = _useState58[0],
+    setSucursales = _useState58[1];
 
   // Estados movidos desde TransferenciaList
-  var _useState53 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState54 = _slicedToArray(_useState53, 2),
-    transferencias = _useState54[0],
-    setTransferencias = _useState54[1];
-  var _useState55 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
-    _useState56 = _slicedToArray(_useState55, 2),
-    estaCargando = _useState56[0],
-    setEstaCargando = _useState56[1];
-  var _useState57 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
-    _useState58 = _slicedToArray(_useState57, 2),
-    error = _useState58[0],
-    setError = _useState58[1];
-  var _useState59 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
-      q: '',
-      estatus_string: '',
-      id_origen: '',
-      id_destino: '',
-      limit: 10
-    }),
+  var _useState59 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState60 = _slicedToArray(_useState59, 2),
-    filtros = _useState60[0],
-    setFiltros = _useState60[1];
-  var _useState61 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+    transferencias = _useState60[0],
+    setTransferencias = _useState60[1];
+  var _useState61 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
+    _useState62 = _slicedToArray(_useState61, 2),
+    estaCargando = _useState62[0],
+    setEstaCargando = _useState62[1];
+  var _useState63 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    _useState64 = _slicedToArray(_useState63, 2),
+    error = _useState64[0],
+    setError = _useState64[1];
+  var _useState65 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
       q: '',
       estatus_string: '',
       id_origen: '',
       id_destino: '',
       limit: 10
     }),
-    _useState62 = _slicedToArray(_useState61, 2),
-    filtrosActivos = _useState62[0],
-    setFiltrosActivos = _useState62[1];
-  var _useState63 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({}),
-    _useState64 = _slicedToArray(_useState63, 2),
-    paginacion = _useState64[0],
-    setPaginacion = _useState64[1];
-  var _useState65 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState66 = _slicedToArray(_useState65, 2),
-    mostrarFiltros = _useState66[0],
-    setMostrarFiltros = _useState66[1];
-  // Premontas = órdenes de redistribución 'Aprobada' de central donde ESTA sucursal es el origen.
-  var _useState67 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    filtros = _useState66[0],
+    setFiltros = _useState66[1];
+  var _useState67 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+      q: '',
+      estatus_string: '',
+      id_origen: '',
+      id_destino: '',
+      limit: 10
+    }),
     _useState68 = _slicedToArray(_useState67, 2),
-    premontas = _useState68[0],
-    setPremontas = _useState68[1];
+    filtrosActivos = _useState68[0],
+    setFiltrosActivos = _useState68[1];
+  var _useState69 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({}),
+    _useState70 = _slicedToArray(_useState69, 2),
+    paginacion = _useState70[0],
+    setPaginacion = _useState70[1];
+  var _useState71 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    _useState72 = _slicedToArray(_useState71, 2),
+    mostrarFiltros = _useState72[0],
+    setMostrarFiltros = _useState72[1];
+  // Premontas = órdenes de redistribución 'Aprobada' de central donde ESTA sucursal es el origen.
+  var _useState73 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    _useState74 = _slicedToArray(_useState73, 2),
+    premontas = _useState74[0],
+    setPremontas = _useState74[1];
   // Filtro común para las órdenes (premontas / borradores / despachadas).
-  var _useState69 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+  var _useState75 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
       q: '',
       destino: '',
       desde: '',
       hasta: ''
     }),
-    _useState70 = _slicedToArray(_useState69, 2),
-    filtroOrdenes = _useState70[0],
-    setFiltroOrdenes = _useState70[1];
+    _useState76 = _slicedToArray(_useState75, 2),
+    filtroOrdenes = _useState76[0],
+    setFiltroOrdenes = _useState76[1];
   var setFiltro = function setFiltro(campo, val) {
     return setFiltroOrdenes(function (prev) {
       return _objectSpread(_objectSpread({}, prev), {}, _defineProperty({}, campo, val));
@@ -138620,52 +138746,52 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
     });
   };
   // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
-  var _useState71 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState72 = _slicedToArray(_useState71, 2),
-    borradores = _useState72[0],
-    setBorradores = _useState72[1];
-  var _useState73 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
-    _useState74 = _slicedToArray(_useState73, 2),
-    borradorEnEdicion = _useState74[0],
-    setBorradorEnEdicion = _useState74[1];
-  var _useState75 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
-    _useState76 = _slicedToArray(_useState75, 2),
-    procesando = _useState76[0],
-    setProcesando = _useState76[1]; // id ocupado (crear/salida/eliminar)
-  // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
-  var _useState77 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+  var _useState77 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState78 = _slicedToArray(_useState77, 2),
-    conflictosPremonta = _useState78[0],
-    setConflictosPremonta = _useState78[1];
-  // Modal de opciones de impresión de la lista de picking: { titulo, subtitulo, filas } | null.
+    borradores = _useState78[0],
+    setBorradores = _useState78[1];
   var _useState79 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState80 = _slicedToArray(_useState79, 2),
-    printModal = _useState80[0],
-    setPrintModal = _useState80[1];
+    borradorEnEdicion = _useState80[0],
+    setBorradorEnEdicion = _useState80[1];
+  var _useState81 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState82 = _slicedToArray(_useState81, 2),
+    procesando = _useState82[0],
+    setProcesando = _useState82[1]; // id ocupado (crear/salida/eliminar)
+  // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
+  var _useState83 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState84 = _slicedToArray(_useState83, 2),
+    conflictosPremonta = _useState84[0],
+    setConflictosPremonta = _useState84[1];
+  // Modal de opciones de impresión de la lista de picking: { titulo, subtitulo, filas } | null.
+  var _useState85 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState86 = _slicedToArray(_useState85, 2),
+    printModal = _useState86[0],
+    setPrintModal = _useState86[1];
   var abrirPrintModal = function abrirPrintModal(payload) {
     return setPrintModal(payload);
   };
   // Órdenes ya despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
-  var _useState81 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState82 = _slicedToArray(_useState81, 2),
-    despachadas = _useState82[0],
-    setDespachadas = _useState82[1];
-  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
-  var _useState83 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
-    _useState84 = _slicedToArray(_useState83, 2),
-    bultosOrden = _useState84[0],
-    setBultosOrden = _useState84[1];
-  var _useState85 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
-    _useState86 = _slicedToArray(_useState85, 2),
-    numBultosInput = _useState86[0],
-    setNumBultosInput = _useState86[1];
-  var _useState87 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+  var _useState87 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState88 = _slicedToArray(_useState87, 2),
-    bultosIframeUrl = _useState88[0],
-    setBultosIframeUrl = _useState88[1];
+    despachadas = _useState88[0],
+    setDespachadas = _useState88[1];
+  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
+  var _useState89 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState90 = _slicedToArray(_useState89, 2),
+    bultosOrden = _useState90[0],
+    setBultosOrden = _useState90[1];
+  var _useState91 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    _useState92 = _slicedToArray(_useState91, 2),
+    numBultosInput = _useState92[0],
+    setNumBultosInput = _useState92[1];
+  var _useState93 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState94 = _slicedToArray(_useState93, 2),
+    bultosIframeUrl = _useState94[0],
+    setBultosIframeUrl = _useState94[1];
   var refIframeBultos = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var cargarTransferencias = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
-    var _ref13 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5(filtros) {
+    var _ref14 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5(filtros) {
       var response;
       return _regeneratorRuntime().wrap(function _callee5$(_context5) {
         while (1) switch (_context5.prev = _context5.next) {
@@ -138690,14 +138816,14 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
       }, _callee5, null, [[0, 7]]);
     }));
     return function (_x5) {
-      return _ref13.apply(this, arguments);
+      return _ref14.apply(this, arguments);
     };
   }(), []);
 
   // useEffect movido desde TransferenciaList
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     var fetchData = /*#__PURE__*/function () {
-      var _ref14 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee6() {
+      var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee6() {
         var _yield$cargarTransfer, nuevasTransferencias, nuevaPaginacion;
         return _regeneratorRuntime().wrap(function _callee6$(_context6) {
           while (1) switch (_context6.prev = _context6.next) {
@@ -138731,14 +138857,14 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
         }, _callee6, null, [[2, 12, 16, 19]]);
       }));
       return function fetchData() {
-        return _ref14.apply(this, arguments);
+        return _ref15.apply(this, arguments);
       };
     }();
     fetchData();
   }, [cargarTransferencias, filtrosActivos, refreshListKey]);
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     var cargarSucursales = /*#__PURE__*/function () {
-      var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee7() {
+      var _ref16 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee7() {
         var res;
         return _regeneratorRuntime().wrap(function _callee7$(_context7) {
           while (1) switch (_context7.prev = _context7.next) {
@@ -138762,7 +138888,7 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
         }, _callee7, null, [[0, 7]]);
       }));
       return function cargarSucursales() {
-        return _ref15.apply(this, arguments);
+        return _ref16.apply(this, arguments);
       };
     }();
     cargarSucursales();
@@ -138842,7 +138968,7 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
   // (antes se hacía 1 request por producto → lentísimo con cientos de ítems). Arma las filas de
   // conflicto: existe/no existe, stock local, cantidad solicitada.
   var construirFilasConflicto = /*#__PURE__*/function () {
-    var _ref18 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(prem) {
+    var _ref19 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(prem) {
       var items, _yield$resolverLocale, porId, porBarras, porProveedor;
       return _regeneratorRuntime().wrap(function _callee0$(_context0) {
         while (1) switch (_context0.prev = _context0.next) {
@@ -138879,14 +139005,14 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
       }, _callee0);
     }));
     return function construirFilasConflicto(_x6) {
-      return _ref18.apply(this, arguments);
+      return _ref19.apply(this, arguments);
     };
   }();
 
   // Imprime la lista de picking de una premonta resolviendo la ubicación de almacén (1 petición).
   var imprimirPremonta = /*#__PURE__*/function () {
-    var _ref19 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(prem) {
-      var items, res, porId, porBarras, porProveedor, filas, conUbic, detalle;
+    var _ref20 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(prem) {
+      var _d$id, items, res, porId, porBarras, porProveedor, filas, conUbic, detalle, d;
       return _regeneratorRuntime().wrap(function _callee1$(_context1) {
         while (1) switch (_context1.prev = _context1.next) {
           case 0:
@@ -138916,30 +139042,32 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
               detalle = res.error ? 'El endpoint de inventario falló: ' + res.error + '.\n\nProbablemente el backend del galpón está cacheado (opcache) o la ruta no está actualizada. Corré en el galpón:\n  php artisan optimize:clear' : 'El endpoint respondió pero sin ubicaciones.\nProductos devueltos: ' + res.productosCount + ' · con ubicación: ' + res.conUbicacion + ' · debug_ubicaciones: ' + res.debug + '.\n\nSi debug_ubicaciones NO aparece (undefined) → el backend es viejo (opcache): php artisan optimize:clear';
               alert('No se pudo resolver la ubicación de ningún producto.\n\n' + detalle);
             }
+            d = prem.sucursal_destino || {};
             abrirPrintModal({
               titulo: 'Lista de picking · Redistribución #' + prem.id_orden_distribucion,
               subtitulo: 'Búsqueda física en almacén · ' + items.length + ' producto(s)',
+              destino: d.codigo || d.nombre || 'Destino ' + ((_d$id = d.id) !== null && _d$id !== void 0 ? _d$id : '—'),
               filas: filas
             });
-          case 11:
-            _context1.prev = 11;
+          case 12:
+            _context1.prev = 12;
             setProcesando(null);
-            return _context1.finish(11);
-          case 14:
+            return _context1.finish(12);
+          case 15:
           case "end":
             return _context1.stop();
         }
-      }, _callee1, null, [[1,, 11, 14]]);
+      }, _callee1, null, [[1,, 12, 15]]);
     }));
     return function imprimirPremonta(_x7) {
-      return _ref19.apply(this, arguments);
+      return _ref20.apply(this, arguments);
     };
   }();
 
   // "Crear orden" desde una redistribución: primero abre el paso de resolución de conflictos
   // (ajustar cantidades / excluir inexistentes). La creación real ocurre en confirmarOrdenConflictos.
   var abrirResolucionPremonta = /*#__PURE__*/function () {
-    var _ref20 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(prem) {
+    var _ref21 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(prem) {
       var filas;
       return _regeneratorRuntime().wrap(function _callee10$(_context10) {
         while (1) switch (_context10.prev = _context10.next) {
@@ -138972,15 +139100,15 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
       }, _callee10, null, [[1, 9, 12, 15]]);
     }));
     return function abrirResolucionPremonta(_x8) {
-      return _ref20.apply(this, arguments);
+      return _ref21.apply(this, arguments);
     };
   }();
 
   // Crea la orden en preparación (estado 0, SIN descontar) con los ítems ya resueltos por el
   // usuario, ligada a la redistribución. La redistribución original de central queda intacta.
   var confirmarOrdenConflictos = /*#__PURE__*/function () {
-    var _ref21 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(items) {
-      var prem, _prem$sucursal_destin, _res$data4, res, _res$data5;
+    var _ref22 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(items) {
+      var prem, _prem$sucursal_destin5, _res$data4, res, _res$data5;
       return _regeneratorRuntime().wrap(function _callee11$(_context11) {
         while (1) switch (_context11.prev = _context11.next) {
           case 0:
@@ -139002,7 +139130,7 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
             _context11.prev = 7;
             _context11.next = 10;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGuardarOrden({
-              id_destino: ((_prem$sucursal_destin = prem.sucursal_destino) === null || _prem$sucursal_destin === void 0 ? void 0 : _prem$sucursal_destin.id) || '',
+              id_destino: ((_prem$sucursal_destin5 = prem.sucursal_destino) === null || _prem$sucursal_destin5 === void 0 ? void 0 : _prem$sucursal_destin5.id) || '',
               id_orden_distribucion: prem.id_orden_distribucion,
               observaciones: 'Redistribución #' + prem.id_orden_distribucion,
               items: items
@@ -139045,7 +139173,7 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
       }, _callee11, null, [[7, 22, 25, 28]]);
     }));
     return function confirmarOrdenConflictos(_x9) {
-      return _ref21.apply(this, arguments);
+      return _ref22.apply(this, arguments);
     };
   }();
 
@@ -139064,7 +139192,7 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
 
   // Guarda el borrador (crear/actualizar) sin descontar. Devuelve {estado, msj, orden}.
   var guardarBorrador = /*#__PURE__*/function () {
-    var _ref22 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee12(datos) {
+    var _ref23 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee12(datos) {
       var res;
       return _regeneratorRuntime().wrap(function _callee12$(_context12) {
         while (1) switch (_context12.prev = _context12.next) {
@@ -139084,13 +139212,13 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
       }, _callee12);
     }));
     return function guardarBorrador(_x0) {
-      return _ref22.apply(this, arguments);
+      return _ref23.apply(this, arguments);
     };
   }();
 
   // Dar salida a un borrador: descuenta inventario + crea el espejo en central.
   var darSalida = /*#__PURE__*/function () {
-    var _ref23 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee13(borrador) {
+    var _ref24 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee13(borrador) {
       var nItems, _res$data6, res, _res$data7;
       return _regeneratorRuntime().wrap(function _callee13$(_context13) {
         while (1) switch (_context13.prev = _context13.next) {
@@ -139145,13 +139273,13 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
       }, _callee13, null, [[4, 18, 21, 24]]);
     }));
     return function darSalida(_x1) {
-      return _ref23.apply(this, arguments);
+      return _ref24.apply(this, arguments);
     };
   }();
 
   // Eliminar un borrador (no tocó inventario).
   var eliminarBorrador = /*#__PURE__*/function () {
-    var _ref24 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee14(borrador) {
+    var _ref25 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee14(borrador) {
       var _res$data8, res, _res$data9;
       return _regeneratorRuntime().wrap(function _callee14$(_context14) {
         while (1) switch (_context14.prev = _context14.next) {
@@ -139202,7 +139330,66 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
       }, _callee14, null, [[3, 16, 19, 22]]);
     }));
     return function eliminarBorrador(_x10) {
-      return _ref24.apply(this, arguments);
+      return _ref25.apply(this, arguments);
+    };
+  }();
+
+  // Reversar una orden despachada: reintegra inventario, quita el espejo en central y la vuelve
+  // a "en preparación" (estado 0) para corregir y volver a dar salida.
+  var reversarSalida = /*#__PURE__*/function () {
+    var _ref26 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee15(d) {
+      var _res$data0, res, _res$data1;
+      return _regeneratorRuntime().wrap(function _callee15$(_context15) {
+        while (1) switch (_context15.prev = _context15.next) {
+          case 0:
+            if (window.confirm("\xBFReversar la orden #".concat(d.id, "?\n\nSe REINTEGRA el inventario, se quita el env\xEDo de central y la orden vuelve a \"en preparaci\xF3n\" para corregir. No se puede si el destino ya la recibi\xF3."))) {
+              _context15.next = 2;
+              break;
+            }
+            return _context15.abrupt("return");
+          case 2:
+            setProcesando('rev-' + d.id);
+            _context15.prev = 3;
+            _context15.next = 6;
+            return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdReversarSalida({
+              id_transferencia: d.id
+            });
+          case 6:
+            res = _context15.sent;
+            if (!((_res$data0 = res.data) !== null && _res$data0 !== void 0 && _res$data0.estado)) {
+              _context15.next = 14;
+              break;
+            }
+            _context15.next = 10;
+            return cargarBorradores();
+          case 10:
+            setRefreshListKey(function (k) {
+              return k + 1;
+            }); // refresca despachadas + histórico
+            alert(res.data.msj || 'Salida reversada.');
+            _context15.next = 15;
+            break;
+          case 14:
+            alert(((_res$data1 = res.data) === null || _res$data1 === void 0 ? void 0 : _res$data1.msj) || 'No se pudo reversar.');
+          case 15:
+            _context15.next = 20;
+            break;
+          case 17:
+            _context15.prev = 17;
+            _context15.t0 = _context15["catch"](3);
+            alert('Error al reversar: ' + (_context15.t0.message || _context15.t0));
+          case 20:
+            _context15.prev = 20;
+            setProcesando(null);
+            return _context15.finish(20);
+          case 23:
+          case "end":
+            return _context15.stop();
+        }
+      }, _callee15, null, [[3, 17, 20, 23]]);
+    }));
+    return function reversarSalida(_x11) {
+      return _ref26.apply(this, arguments);
     };
   }();
 
@@ -139214,7 +139401,12 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
     (sucursales || []).forEach(function (s) {
       sucByIdLocal[s.id] = s;
     });
-    var id = String(orden.id_transferencia_central || orden.id).padStart(8, '0');
+    // Nº de Guía = id del pedido en CENTRAL (pedidos.id). Si aún no hay, no imprime número inventado.
+    if (!orden.id_transferencia_central) {
+      alert('Esta orden todavía no tiene número de pedido en central (el envío no se confirmó). Reintentá "Dar salida" antes de imprimir la guía.');
+      return;
+    }
+    var id = String(orden.id_transferencia_central).padStart(8, '0');
     var destino = sucByIdLocal[orden.id_destino] || {};
     var origenSuc = sucByIdLocal[sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER] || {};
     var clienteRazon = destino.nombre || destino.codigo || 'Sucursal ' + ((_orden$id_destino = orden.id_destino) !== null && _orden$id_destino !== void 0 ? _orden$id_destino : '—');
@@ -139343,11 +139535,12 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
   var hayFiltros = !!(filtroOrdenes.q || filtroOrdenes.destino || filtroOrdenes.desde || filtroOrdenes.hasta);
   var enRangoFecha = function enRangoFecha(fechaStr) {
     if (!filtroOrdenes.desde && !filtroOrdenes.hasta) return true;
-    if (!fechaStr) return true;
-    var f = new Date(fechaStr);
-    if (isNaN(f)) return true;
-    if (filtroOrdenes.desde && f < new Date(filtroOrdenes.desde + 'T00:00:00')) return false;
-    if (filtroOrdenes.hasta && f > new Date(filtroOrdenes.hasta + 'T23:59:59')) return false;
+    // Comparar por DÍA (YYYY-MM-DD) como texto: robusto tanto a ISO ("2026-07-22T10:30:00Z")
+    // como al formato MySQL con espacio ("2026-07-22 10:30:00"), sin depender de new Date().
+    var dia = String(fechaStr || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) return false; // sin fecha válida → fuera del rango
+    if (filtroOrdenes.desde && dia < filtroOrdenes.desde) return false;
+    if (filtroOrdenes.hasta && dia > filtroOrdenes.hasta) return false;
     return true;
   };
   var matchTexto = function matchTexto(campos) {
@@ -139426,21 +139619,12 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
               children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
                 className: "block text-xs font-medium text-gray-600 mb-1",
                 children: "Destino"
-              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("select", {
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(SucursalCombo, {
                 value: filtroOrdenes.destino,
-                onChange: function onChange(e) {
-                  return setFiltro('destino', e.target.value);
+                onChange: function onChange(val) {
+                  return setFiltro('destino', val);
                 },
-                className: "w-full px-2 py-1.5 text-sm border border-gray-300 rounded",
-                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
-                  value: "",
-                  children: "Todos"
-                }), (sucursales || []).map(function (s) {
-                  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("option", {
-                    value: s.id,
-                    children: [s.codigo, s.nombre ? ' · ' + s.nombre : '']
-                  }, s.id);
-                })]
+                sucursales: sucursales
               })]
             }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
               children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
@@ -139535,7 +139719,7 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
                     children: "Sin coincidencias"
                   })
                 }) : premontasFiltradas.map(function (prem) {
-                  var _prem$sucursal_destin2;
+                  var _prem$sucursal_destin6;
                   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
                     className: "hover:bg-amber-50/40",
                     children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
@@ -139551,7 +139735,7 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
                       children: ["#", prem.id_orden_distribucion]
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
                       className: "px-3 py-2",
-                      children: badgeDestinoPorId((_prem$sucursal_destin2 = prem.sucursal_destino) === null || _prem$sucursal_destin2 === void 0 ? void 0 : _prem$sucursal_destin2.id)
+                      children: badgeDestinoPorId((_prem$sucursal_destin6 = prem.sucursal_destino) === null || _prem$sucursal_destin6 === void 0 ? void 0 : _prem$sucursal_destin6.id)
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
                       className: "px-3 py-2 text-center text-gray-600",
                       children: (prem.items || []).length
@@ -139676,9 +139860,11 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
                       className: "px-3 py-2 text-center whitespace-nowrap",
                       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
                         onClick: function onClick() {
+                          var _sucById$b$id_destino, _sucById$b$id_destino2, _b$id_destino;
                           return abrirPrintModal({
                             titulo: 'Lista de picking · Orden #' + b.id,
                             subtitulo: (b.id_orden_distribucion ? 'Redistribución #' + b.id_orden_distribucion + ' · ' : '') + totalItems + ' producto(s)',
+                            destino: ((_sucById$b$id_destino = sucById[b.id_destino]) === null || _sucById$b$id_destino === void 0 ? void 0 : _sucById$b$id_destino.codigo) || ((_sucById$b$id_destino2 = sucById[b.id_destino]) === null || _sucById$b$id_destino2 === void 0 ? void 0 : _sucById$b$id_destino2.nombre) || 'Destino ' + ((_b$id_destino = b.id_destino) !== null && _b$id_destino !== void 0 ? _b$id_destino : '—'),
                             filas: (b.items || []).map(function (i) {
                               return {
                                 barras: i.codigo_barras,
@@ -139781,7 +139967,8 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
                 className: "bg-white divide-y divide-gray-100",
                 children: despachadasFiltradas.map(function (d) {
                   var nItems = (d.items || []).length;
-                  var guia = String(d.id_transferencia_central || d.id).padStart(8, '0');
+                  // El Nº de Guía es el id del pedido en CENTRAL (pedidos.id). Sin fallback al id local.
+                  var guia = d.id_transferencia_central ? String(d.id_transferencia_central).padStart(8, '0') : '—';
                   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
                     className: "hover:bg-emerald-50/40",
                     children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
@@ -139789,7 +139976,11 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
                       children: ["#", d.id]
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
                       className: "px-3 py-2 font-mono text-gray-700 whitespace-nowrap",
-                      children: guia
+                      children: d.id_transferencia_central ? guia : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+                        className: "text-amber-500",
+                        title: "Sin pedido en central (reintent\xE1 dar salida)",
+                        children: "\u2014 sin n\xBA \u2014"
+                      })
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
                       className: "px-3 py-2",
                       children: badgeDestinoPorId(d.id_destino)
@@ -139816,6 +140007,22 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
                         children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
                           className: "fas fa-box mr-1"
                         }), "Bultos"]
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                        onClick: function onClick() {
+                          return reversarSalida(d);
+                        },
+                        disabled: procesando === 'rev-' + d.id,
+                        className: "ml-1 px-2 py-1 text-xs font-semibold text-red-700 border border-red-300 rounded hover:bg-red-50 disabled:opacity-50",
+                        title: "Reintegrar inventario y volver a preparaci\xF3n para corregir",
+                        children: procesando === 'rev-' + d.id ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
+                          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                            className: "fas fa-spinner fa-spin mr-1"
+                          }), "Reversando..."]
+                        }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
+                          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                            className: "fas fa-rotate-left mr-1"
+                          }), "Reversar"]
+                        })
                       })]
                     })]
                   }, d.id);
@@ -183810,6 +184017,9 @@ var db = {
   },
   tdDarSalidaSimple: function tdDarSalidaSimple(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/dar-salida-simple", data);
+  },
+  tdReversarSalida: function tdReversarSalida(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/reversar-salida", data);
   },
   resolverInventarioPorCodigos: function resolverInventarioPorCodigos(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "inventario-resolver-codigos", data);

@@ -6,9 +6,10 @@ import db from '../database/database';
 // Imprime una lista de picking en HOJA CARTA (para buscar físicamente los productos en almacén).
 // Acepta `grupos` = [{titulo, filas}] para dividir en varias sublistas (una por sección, con salto
 // de página), o `filas` sueltas (una sola lista). filas: [{ barras, codigo_proveedor, descripcion, ubicacion, cantidad }]
-const imprimirListaPicking = ({ titulo, subtitulo, filas, grupos }) => {
+const imprimirListaPicking = ({ titulo, subtitulo, filas, grupos, destino }) => {
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
     const secciones = (grupos && grupos.length) ? grupos : [{ titulo: null, filas: filas || [] }];
+    const destinoHtml = destino ? `<div class="destino"><span class="lbl">DESTINO</span> ${esc(destino)}</div>` : '';
     const thead = `<thead><tr>
         <th>#</th><th>Cód. Barras</th><th>Cód. Prov.</th><th>Descripción</th>
         <th>Cant.</th><th>Ubicación</th><th>✔</th>
@@ -25,10 +26,13 @@ const imprimirListaPicking = ({ titulo, subtitulo, filas, grupos }) => {
           <td class="chk"><span class="box"></span></td>
         </tr>`).join('');
         const uni = (g.filas || []).reduce((a, f) => a + (parseFloat(f.cantidad) || 0), 0);
+        // La sucursal destino se repite grande en cada sublista (cada una va en su hoja).
         return `<section class="${gi > 0 ? 'brk' : ''}">
+            <div class="hoja">Hoja ${gi + 1} de ${secciones.length}</div>
+            ${destinoHtml}
             ${g.titulo ? `<h2>${esc(g.titulo)}</h2>` : ''}
             <table>${thead}<tbody>${rows}</tbody></table>
-            <div class="pie">Líneas: ${(g.filas || []).length} · Unidades: ${uni}${g.titulo ? '' : ''}</div>
+            <div class="pie">Líneas: ${(g.filas || []).length} · Unidades: ${uni}</div>
           </section>`;
     }).join('');
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(titulo)}</title>
@@ -38,7 +42,10 @@ const imprimirListaPicking = ({ titulo, subtitulo, filas, grupos }) => {
         body { color:#111; font-size:12px; }
         h1 { font-size:16px; margin:0 0 2px; }
         h2 { font-size:13px; margin:0 0 6px; padding:4px 8px; background:#eef2ff; border-left:4px solid #1e3a8a; }
-        .sub { color:#555; margin-bottom:10px; font-size:11px; }
+        .sub { color:#555; margin-bottom:8px; font-size:11px; }
+        .hoja { text-align:right; font-size:11px; font-weight:700; color:#64748b; margin-bottom:2px; }
+        .destino { font-size:30px; font-weight:800; text-align:center; letter-spacing:1px; color:#1e3a8a; border:3px solid #1e3a8a; border-radius:8px; padding:8px 6px; margin:4px 0 10px; text-transform:uppercase; }
+        .destino .lbl { display:block; font-size:11px; font-weight:600; letter-spacing:2px; color:#64748b; }
         section.brk { page-break-before: always; }
         table { width:100%; border-collapse:collapse; }
         th,td { border:1px solid #cbd5e1; padding:5px 6px; text-align:left; font-size:11px; vertical-align:top; }
@@ -417,6 +424,63 @@ const crearOActualizarTransferenciaMock = (datosTransferencia, esEdicion = false
 // #                            INICIO: COMPONENTES REACT                            #
 // ###################################################################################
 
+// Combobox compacto de sucursal con buscador (reemplaza los <select> planos en los filtros).
+const SucursalCombo = ({ value, onChange, sucursales = [], placeholder = 'Todas' }) => {
+    const [open, setOpen] = useState(false);
+    const [q, setQ] = useState('');
+    const ref = useRef(null);
+    const sel = (sucursales || []).find(s => String(s.id) === String(value));
+    const filtered = (sucursales || []).filter(s => {
+        const t = q.trim().toLowerCase();
+        if (!t) return true;
+        return (s.codigo || '').toLowerCase().includes(t) || (s.nombre || '').toLowerCase().includes(t);
+    });
+    useEffect(() => {
+        const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener('mousedown', h);
+        return () => document.removeEventListener('mousedown', h);
+    }, []);
+    return (
+        <div className="relative" ref={ref}>
+            <button
+                type="button"
+                onClick={() => { setOpen(o => !o); setQ(''); }}
+                className="w-full flex items-center justify-between gap-1 px-2 py-1.5 text-sm border border-gray-300 rounded bg-white text-left focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            >
+                <span className={`truncate ${sel ? 'text-gray-800' : 'text-gray-400'}`}>{sel ? (sel.codigo + (sel.nombre ? ' · ' + sel.nombre : '')) : placeholder}</span>
+                <span className="flex items-center gap-1 shrink-0">
+                    {sel && <i className="fas fa-times text-gray-400 hover:text-red-500" onClick={(e) => { e.stopPropagation(); onChange(''); }}></i>}
+                    <i className="fas fa-chevron-down text-gray-400 text-[10px]"></i>
+                </span>
+            </button>
+            {open && (
+                <div className="absolute z-30 mt-1 w-full min-w-[12rem] bg-white border border-gray-300 rounded-md shadow-lg">
+                    <input
+                        autoFocus
+                        value={q}
+                        onChange={e => setQ(e.target.value)}
+                        placeholder="Buscar código o nombre…"
+                        className="w-full px-2 py-1.5 text-sm border-b border-gray-200 focus:outline-none"
+                    />
+                    <ul className="max-h-56 overflow-y-auto">
+                        <li onClick={() => { onChange(''); setOpen(false); }} className="px-2 py-1.5 text-sm text-gray-500 hover:bg-indigo-50 cursor-pointer">{placeholder}</li>
+                        {filtered.map(s => (
+                            <li
+                                key={s.id}
+                                onClick={() => { onChange(String(s.id)); setOpen(false); }}
+                                className={`px-2 py-1.5 text-sm hover:bg-indigo-50 cursor-pointer ${String(s.id) === String(value) ? 'bg-indigo-50 font-semibold' : ''}`}
+                            >
+                                <b>{s.codigo}</b>{s.nombre ? <span className="text-gray-500 ml-1">{s.nombre}</span> : null}
+                            </li>
+                        ))}
+                        {!filtered.length && <li className="px-2 py-1.5 text-sm text-gray-400">Sin coincidencias</li>}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const StatusBadge = ({ estadoNum }) => {
     const estatusString = ESTADO_NUMERICO_A_STRING[estadoNum] || 'DESCONOCIDO';
     const statusColors = {
@@ -642,13 +706,15 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
         <tr className={`border-b border-gray-100 ${rowCls}`}>
             {mostrarRevisado && (
                 <td className="px-2 py-1 text-center">
-                    <input
-                        type="checkbox"
-                        checked={!!item.revisado}
-                        onChange={() => onToggleRevisado && onToggleRevisado(item.id_producto_insucursal)}
-                        className="w-5 h-5 text-emerald-600 rounded cursor-pointer align-middle"
+                    <button
+                        type="button"
+                        onClick={() => onToggleRevisado && onToggleRevisado(item.id_producto_insucursal)}
+                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition ${item.revisado ? 'bg-emerald-500 text-white' : 'bg-white border-2 border-amber-400 text-amber-600 hover:bg-amber-50'}`}
                         title={item.revisado ? 'Revisado — click para desmarcar' : 'Marcar como revisado'}
-                    />
+                    >
+                        <i className={`fas ${item.revisado ? 'fa-check' : 'fa-circle'} ${item.revisado ? '' : 'text-[8px]'}`}></i>
+                        {item.revisado ? 'Revisado' : 'Falta'}
+                    </button>
                 </td>
             )}
             <td className="px-2 py-1 text-center text-xs text-gray-400 whitespace-nowrap">{index + 1}</td>
@@ -661,6 +727,7 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
                     inputMode="decimal"
                     value={item.cantidad}
                     onChange={handleCantidadChange}
+                    onFocus={(e) => e.target.select()}
                     onBlur={(e) => {
                         const valor = e.target.value;
                         if (valor === '' || isNaN(parseFloat(valor)) || parseFloat(valor) <= 0) {
@@ -707,6 +774,13 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
     const [mensajeExito, setMensajeExito] = useState('');
     const [observaciones, setObservaciones] = useState(transferenciaToEdit?.observaciones || '');
     const [mostrarObservaciones, setMostrarObservaciones] = useState(false);
+    // Marca si el usuario tocó algo (para confirmar el descarte al cancelar). Los cambios viven
+    // en estado local: cancelar (sin guardar) siempre los descarta y la orden vuelve a como estaba.
+    const [dirty, setDirty] = useState(false);
+    const handleCancelClick = () => {
+        if (dirty && !window.confirm('¿Descartar los cambios? La orden volverá a como estaba (no se guardó nada).')) return;
+        onCancel();
+    };
 
     // Destino: bloqueado por defecto cuando ya trae un destino (edición o borrador de
     // redistribución); en un borrador nuevo/manual sin destino queda el buscador abierto.
@@ -772,6 +846,7 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
         if (itemsTransferencia.find(item => item.id_producto_insucursal === productoDeInventario.id)) {
             alert("Este producto ya ha sido agregado."); return;
         }
+        setDirty(true);
         // Crear un nuevo item con la estructura del JSON de la API
         const nuevoItem = {
             id: nextDetalleId++, // ID del item de transferencia (temporal para el mock)
@@ -798,10 +873,12 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
     };
 
     const handleRemoveProduct = (idProductoInsucursal) => {
+        setDirty(true);
         setItemsTransferencia(prev => prev.filter(item => item.id_producto_insucursal !== idProductoInsucursal));
     };
 
     const handleQuantityChange = (idProductoInsucursal, nuevaCantidadStr) => {
+        setDirty(true);
         setItemsTransferencia(prevItems =>
             prevItems.map(item => {
                 if (item.id_producto_insucursal !== idProductoInsucursal) return item;
@@ -828,6 +905,7 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
 
     // Alterna la marca de "revisado" de un producto (picking Plan B).
     const toggleRevisado = (idProductoInsucursal) => {
+        setDirty(true);
         setItemsTransferencia(prev => prev.map(item =>
             item.id_producto_insucursal === idProductoInsucursal ? { ...item, revisado: !item.revisado } : item
         ));
@@ -1020,7 +1098,10 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
             <div className="relative">
                 {/* Área de búsqueda fija */}
                 <div className="sticky top-0 z-10 bg-white pb-2 border-b border-gray-200">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Buscar y Agregar Productos:</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                        <i className="fas fa-plus-circle text-indigo-500 mr-1"></i>
+                        {esBorrador ? 'Agregar producto (fuera de la redistribución original)' : 'Buscar y Agregar Productos:'}
+                    </label>
                     <ProductSearchInput onProductSelect={handleAddProduct} sucursalIdOrigen={idSucursalOrigen} />
                 </div>
 
@@ -1046,7 +1127,8 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                                 type="button"
                                 onClick={() => onImprimir && onImprimir({
                                     titulo: 'Lista de picking' + (transferenciaToEdit?.id ? ' · Orden #' + transferenciaToEdit.id : ''),
-                                    subtitulo: (transferenciaToEdit?.id_orden_distribucion ? 'Redistribución #' + transferenciaToEdit.id_orden_distribucion + ' · ' : '') + 'Destino ' + (codigoDestino || '—') + ' · ' + itemsTransferencia.length + ' producto(s)',
+                                    subtitulo: (transferenciaToEdit?.id_orden_distribucion ? 'Redistribución #' + transferenciaToEdit.id_orden_distribucion + ' · ' : '') + itemsTransferencia.length + ' producto(s)',
+                                    destino: codigoDestino || '—',
                                     filas: itemsTransferencia.map(i => ({ barras: i.barras_real, codigo_proveedor: i.alterno_real, descripcion: i.descripcion_real, ubicacion: i.ubicacion, cantidad: i.cantidad })),
                                 })}
                                 className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
@@ -1059,7 +1141,7 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                             <table className="min-w-full text-sm">
                                 <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0">
                                     <tr>
-                                        {esBorrador && <th className="px-2 py-1 text-center font-semibold w-10" title="Revisado">✔</th>}
+                                        {esBorrador && <th className="px-2 py-1 text-center font-semibold w-24">Revisado</th>}
                                         <th className="px-2 py-1 text-center font-semibold">#</th>
                                         <th className="px-2 py-1 text-left font-semibold">Descripción</th>
                                         <th className="px-2 py-1 text-left font-semibold">Cód. Barras</th>
@@ -1118,7 +1200,7 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
             )}
 
             <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 pt-2 border-t border-gray-200">
-                <button type="button" onClick={onCancel} disabled={estaCargando} className="w-full sm:w-auto px-4 py-2 border rounded-md shadow-sm text-sm bg-white hover:bg-gray-50 transition">Cancelar</button>
+                <button type="button" onClick={handleCancelClick} disabled={estaCargando} className="w-full sm:w-auto px-4 py-2 border rounded-md shadow-sm text-sm bg-white hover:bg-gray-50 transition">Cancelar</button>
                 <button type="submit" disabled={estaCargando || itemsTransferencia.length === 0} className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border-transparent rounded-md shadow-sm text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition">
                     {estaCargando ? 'Guardando...' : (esBorrador ? (transferenciaToEdit?.id ? 'Guardar cambios' : 'Guardar borrador') : (esEdicion ? 'Actualizar Transferencia' : 'Crear Transferencia'))}
                 </button>
@@ -1305,101 +1387,76 @@ const TransferenciaList = ({
 
     return (
         <div className="rounded-lg">
-            {/* Header con botón de filtros */}
-            <div className="px-4 py-3 border-b border-gray-200 sm:px-6">
-                <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-medium text-gray-900">Transferencias</h2>
-                    <div className="flex space-x-2">
-                        <button
-                            onClick={() => setMostrarFiltros(!mostrarFiltros)}
-                            className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                        >
-                            <i className={`fas fa-filter mr-2 ${mostrarFiltros ? 'text-indigo-600' : 'text-gray-400'}`}></i>
-                            Filtros
-                        </button>
-                        <button
-                            onClick={handleSearch}
-                            className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                        >
-                            <i className="fas fa-search mr-2"></i>
-                        </button>
+            {/* Header + filtros compactos, siempre visibles */}
+            <div className="px-3 py-2 border-b border-gray-200 sm:px-4">
+                <div className="flex flex-wrap items-end gap-2">
+                    <h2 className="text-base font-medium text-gray-900 mr-1 self-center">Transferencias</h2>
+                    <div className="w-28">
+                        <label className="block text-[11px] font-medium text-gray-500">ID</label>
+                        <input
+                            name="q"
+                            placeholder="ID"
+                            value={filtros.q}
+                            onChange={handleFilterChange}
+                            className="mt-0.5 block w-full px-2 py-1.5 text-sm border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 rounded"
+                        />
                     </div>
+                    <div className="w-36">
+                        <label className="block text-[11px] font-medium text-gray-500">Estado</label>
+                        <select
+                            name="estatus_string"
+                            value={filtros.estatus_string}
+                            onChange={handleFilterChange}
+                            className="mt-0.5 block w-full px-2 py-1.5 text-sm border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 rounded"
+                        >
+                            <option value="">Todos</option>
+                            <option value="0">Pendiente</option>
+                            <option value="1">Procesado</option>
+                            <option value="2">Extraído</option>
+                            <option value="3">En Revision</option>
+                            <option value="4">Revisado</option>
+                        </select>
+                    </div>
+                    <div className="w-44">
+                        <label className="block text-[11px] font-medium text-gray-500">Origen</label>
+                        <div className="mt-0.5">
+                            <SucursalCombo value={filtros.id_origen || ''} onChange={(val) => setFiltros(prev => ({ ...prev, id_origen: val }))} sucursales={sucursales} />
+                        </div>
+                    </div>
+                    <div className="w-44">
+                        <label className="block text-[11px] font-medium text-gray-500">Destino</label>
+                        <div className="mt-0.5">
+                            <SucursalCombo value={filtros.id_destino || ''} onChange={(val) => setFiltros(prev => ({ ...prev, id_destino: val }))} sucursales={sucursales} />
+                        </div>
+                    </div>
+                    <div className="w-20">
+                        <label className="block text-[11px] font-medium text-gray-500">Result.</label>
+                        <select
+                            name="limit"
+                            value={filtros.limit}
+                            onChange={handleFilterChange}
+                            className="mt-0.5 block w-full px-2 py-1.5 text-sm border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 rounded"
+                        >
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                    <button
+                        onClick={handleSearch}
+                        className="px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+                        title="Buscar"
+                    >
+                        <i className="fas fa-search"></i>
+                    </button>
                 </div>
             </div>
 
-            {/* Filtros colapsables */}
-            <div className={`border-b border-gray-200 transition-all duration-200 ${mostrarFiltros ? 'block' : 'hidden'}`}>
+            {/* (filtros extra ocultos, sin uso) */}
+            <div className="hidden">
                 <div className="px-4 py-3 sm:px-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                        <div>
-                            <label htmlFor="estatus_string_filter" className="block text-xs font-medium text-gray-700">ID</label>
-                            <input
-                                name="q"
-                                id="q_filter"
-                                placeholder="Buscar por ID"
-                                value={filtros.q}
-                                onChange={handleFilterChange}
-                                className="mt-1 block w-full pl-3 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="estatus_string_filter" className="block text-xs font-medium text-gray-700">Estado</label>
-                            <select
-                                name="estatus_string"
-                                id="estatus_string_filter"
-                                value={filtros.estatus_string}
-                                onChange={handleFilterChange}
-                                className="mt-1 block w-full pl-3 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
-                            >
-                                <option value="">Todos</option>
-                                <option value="0">Pendiente</option>
-                                <option value="1">Procesado</option>
-                                <option value="2">Extraído</option>
-                                <option value="3">En Revision</option>
-                                <option value="4">Revisado</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="id_origen_filter" className="block text-xs font-medium text-gray-700">Origen</label>
-                            <select
-                                name="id_origen"
-                                id="id_origen_filter"
-                                value={filtros.id_origen || ''}
-                                onChange={handleFilterChange}
-                                className="mt-1 block w-full pl-3 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
-                            >
-                                <option value="">Todas</option>
-                                {sucursales.map(s => <option key={s.id} value={s.id}>{s.codigo}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="id_destino_filter" className="block text-xs font-medium text-gray-700">Destino</label>
-                            <select
-                                name="id_destino"
-                                id="id_destino_filter"
-                                value={filtros.id_destino}
-                                onChange={handleFilterChange}
-                                className="mt-1 block w-full pl-3 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
-                            >
-                                <option value="">Todas</option>
-                                {sucursales.map(s => <option key={s.id} value={s.id}>{s.codigo}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="limit_filter" className="block text-xs font-medium text-gray-700">Resultados</label>
-                            <select
-                                name="limit"
-                                id="limit_filter"
-                                value={filtros.limit}
-                                onChange={handleFilterChange}
-                                className="mt-1 block w-full pl-3 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
-                            >
-                                <option value="10">10</option>
-                                <option value="25">25</option>
-                                <option value="50">50</option>
-                                <option value="100">100</option>
-                            </select>
-                        </div>
                         {/* <div>
                             <label htmlFor="fecha_desde_filter" className="block text-xs font-medium text-gray-700">Desde</label>
                             <input
@@ -1607,6 +1664,7 @@ const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, on
                         onClick={() => onImprimir({
                             titulo: 'Lista de picking · Redistribución #' + (prem?.id_orden_distribucion ?? ''),
                             subtitulo: 'Búsqueda física en almacén — ' + (rows.length) + ' producto(s)',
+                            destino: (prem?.sucursal_destino?.codigo || prem?.sucursal_destino?.nombre || ('Destino ' + (prem?.sucursal_destino?.id ?? '—'))),
                             filas: rows.map(r => ({ barras: r.barras, codigo_proveedor: r.codigo_proveedor, descripcion: r.descripcion, ubicacion: r.ubicacion, cantidad: parseFloat(r.cantidadSolicitada || 0).toFixed(0) })),
                         })}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold"
@@ -1757,15 +1815,29 @@ const PrintPickingModal = ({ payload, onClose }) => {
             titulo: partes.length > 1 ? `Lista ${i + 1} de ${partes.length} · ${filas.length} producto(s)` : null,
             filas,
         }));
-        imprimirListaPicking({ titulo: payload.titulo, subtitulo: payload.subtitulo, grupos });
+        imprimirListaPicking({ titulo: payload.titulo, subtitulo: payload.subtitulo, destino: payload.destino, grupos });
         onClose();
     };
+
+    const totalUnidades = (payload.filas || []).reduce((a, f) => a + (parseFloat(f.cantidad) || 0), 0);
 
     return (
         <div className="fixed inset-0 bg-gray-900/50 z-[60] flex items-start justify-center p-4 overflow-y-auto">
             <div className="relative mt-16 w-full max-w-md bg-white rounded-lg shadow-xl p-4">
-                <h3 className="text-base font-bold text-gray-800 mb-1"><i className="fas fa-print mr-1 text-indigo-600"></i>Imprimir lista de picking</h3>
-                <p className="text-xs text-gray-500 mb-3">{total} producto(s){payload.subtitulo ? ' · ' + payload.subtitulo : ''}</p>
+                <h3 className="text-base font-bold text-gray-800 mb-2"><i className="fas fa-print mr-1 text-indigo-600"></i>Imprimir lista de picking</h3>
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700 text-sm font-bold">
+                        <i className="fas fa-boxes-stacked"></i>{total} producto(s)
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">
+                        {totalUnidades} unidad(es)
+                    </span>
+                    {payload.destino && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-bold">
+                            <i className="fas fa-location-dot"></i>{payload.destino}
+                        </span>
+                    )}
+                </div>
 
                 {/* Orden */}
                 <div className="mb-3">
@@ -1969,9 +2041,11 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                     : ('El endpoint respondió pero sin ubicaciones.\nProductos devueltos: ' + res.productosCount + ' · con ubicación: ' + res.conUbicacion + ' · debug_ubicaciones: ' + res.debug + '.\n\nSi debug_ubicaciones NO aparece (undefined) → el backend es viejo (opcache): php artisan optimize:clear');
                 alert('No se pudo resolver la ubicación de ningún producto.\n\n' + detalle);
             }
+            const d = prem.sucursal_destino || {};
             abrirPrintModal({
                 titulo: 'Lista de picking · Redistribución #' + prem.id_orden_distribucion,
                 subtitulo: 'Búsqueda física en almacén · ' + items.length + ' producto(s)',
+                destino: d.codigo || d.nombre || ('Destino ' + (d.id ?? '—')),
                 filas,
             });
         } finally {
@@ -2083,12 +2157,38 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         }
     };
 
+    // Reversar una orden despachada: reintegra inventario, quita el espejo en central y la vuelve
+    // a "en preparación" (estado 0) para corregir y volver a dar salida.
+    const reversarSalida = async (d) => {
+        if (!window.confirm(`¿Reversar la orden #${d.id}?\n\nSe REINTEGRA el inventario, se quita el envío de central y la orden vuelve a "en preparación" para corregir. No se puede si el destino ya la recibió.`)) return;
+        setProcesando('rev-' + d.id);
+        try {
+            const res = await db.tdReversarSalida({ id_transferencia: d.id });
+            if (res.data?.estado) {
+                await cargarBorradores();
+                setRefreshListKey(k => k + 1); // refresca despachadas + histórico
+                alert(res.data.msj || 'Salida reversada.');
+            } else {
+                alert(res.data?.msj || 'No se pudo reversar.');
+            }
+        } catch (e) {
+            alert('Error al reversar: ' + (e.message || e));
+        } finally {
+            setProcesando(null);
+        }
+    };
+
     // Imprime la GUÍA DE DESPACHO de una orden despachada, con el MISMO formato/letras que la F4
     // de pagarMain.js (mismo HTML, estilos y textos). Destino = sucursal receptora; Origen = esta.
     const imprimirGuiaDespacho = (orden) => {
         const sucByIdLocal = {};
         (sucursales || []).forEach(s => { sucByIdLocal[s.id] = s; });
-        const id = String(orden.id_transferencia_central || orden.id).padStart(8, '0');
+        // Nº de Guía = id del pedido en CENTRAL (pedidos.id). Si aún no hay, no imprime número inventado.
+        if (!orden.id_transferencia_central) {
+            alert('Esta orden todavía no tiene número de pedido en central (el envío no se confirmó). Reintentá "Dar salida" antes de imprimir la guía.');
+            return;
+        }
+        const id = String(orden.id_transferencia_central).padStart(8, '0');
         const destino = sucByIdLocal[orden.id_destino] || {};
         const origenSuc = sucByIdLocal[sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER] || {};
         const clienteRazon = destino.nombre || destino.codigo || ('Sucursal ' + (orden.id_destino ?? '—'));
@@ -2218,11 +2318,12 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const hayFiltros = !!(filtroOrdenes.q || filtroOrdenes.destino || filtroOrdenes.desde || filtroOrdenes.hasta);
     const enRangoFecha = (fechaStr) => {
         if (!filtroOrdenes.desde && !filtroOrdenes.hasta) return true;
-        if (!fechaStr) return true;
-        const f = new Date(fechaStr);
-        if (isNaN(f)) return true;
-        if (filtroOrdenes.desde && f < new Date(filtroOrdenes.desde + 'T00:00:00')) return false;
-        if (filtroOrdenes.hasta && f > new Date(filtroOrdenes.hasta + 'T23:59:59')) return false;
+        // Comparar por DÍA (YYYY-MM-DD) como texto: robusto tanto a ISO ("2026-07-22T10:30:00Z")
+        // como al formato MySQL con espacio ("2026-07-22 10:30:00"), sin depender de new Date().
+        const dia = String(fechaStr || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) return false; // sin fecha válida → fuera del rango
+        if (filtroOrdenes.desde && dia < filtroOrdenes.desde) return false;
+        if (filtroOrdenes.hasta && dia > filtroOrdenes.hasta) return false;
         return true;
     };
     const matchTexto = (campos) => {
@@ -2283,10 +2384,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-gray-600 mb-1">Destino</label>
-                                <select value={filtroOrdenes.destino} onChange={e => setFiltro('destino', e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded">
-                                    <option value="">Todos</option>
-                                    {(sucursales || []).map(s => <option key={s.id} value={s.id}>{s.codigo}{s.nombre ? ' · ' + s.nombre : ''}</option>)}
-                                </select>
+                                <SucursalCombo value={filtroOrdenes.destino} onChange={(val) => setFiltro('destino', val)} sucursales={sucursales} />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-gray-600 mb-1">Desde</label>
@@ -2415,6 +2513,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                                             onClick={() => abrirPrintModal({
                                                                 titulo: 'Lista de picking · Orden #' + b.id,
                                                                 subtitulo: (b.id_orden_distribucion ? 'Redistribución #' + b.id_orden_distribucion + ' · ' : '') + totalItems + ' producto(s)',
+                                                                destino: (sucById[b.id_destino]?.codigo || sucById[b.id_destino]?.nombre || ('Destino ' + (b.id_destino ?? '—'))),
                                                                 filas: (b.items || []).map(i => ({ barras: i.codigo_barras, codigo_proveedor: i.codigo_proveedor, descripcion: i.descripcion, ubicacion: i.ubicacion, cantidad: i.cantidad })),
                                                             })}
                                                             className="mr-1 px-2 py-1 text-xs font-semibold text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
@@ -2461,11 +2560,12 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                     <tbody className="bg-white divide-y divide-gray-100">
                                         {despachadasFiltradas.map(d => {
                                             const nItems = (d.items || []).length;
-                                            const guia = String(d.id_transferencia_central || d.id).padStart(8, '0');
+                                            // El Nº de Guía es el id del pedido en CENTRAL (pedidos.id). Sin fallback al id local.
+                                            const guia = d.id_transferencia_central ? String(d.id_transferencia_central).padStart(8, '0') : '—';
                                             return (
                                                 <tr key={d.id} className="hover:bg-emerald-50/40">
                                                     <td className="px-3 py-2 font-semibold text-gray-800 whitespace-nowrap">#{d.id}</td>
-                                                    <td className="px-3 py-2 font-mono text-gray-700 whitespace-nowrap">{guia}</td>
+                                                    <td className="px-3 py-2 font-mono text-gray-700 whitespace-nowrap">{d.id_transferencia_central ? guia : <span className="text-amber-500" title="Sin pedido en central (reintentá dar salida)">— sin nº —</span>}</td>
                                                     <td className="px-3 py-2">{badgeDestinoPorId(d.id_destino)}</td>
                                                     <td className="px-3 py-2 text-center text-gray-600">{nItems}</td>
                                                     <td className="px-3 py-2 text-center whitespace-nowrap">
@@ -2474,6 +2574,9 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                                         </button>
                                                         <button onClick={() => abrirBultosModal(d)} className="ml-1 px-2 py-1 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded" title="Imprimir etiquetas de bultos">
                                                             <i className="fas fa-box mr-1"></i>Bultos
+                                                        </button>
+                                                        <button onClick={() => reversarSalida(d)} disabled={procesando === 'rev-' + d.id} className="ml-1 px-2 py-1 text-xs font-semibold text-red-700 border border-red-300 rounded hover:bg-red-50 disabled:opacity-50" title="Reintegrar inventario y volver a preparación para corregir">
+                                                            {procesando === 'rev-' + d.id ? <><i className="fas fa-spinner fa-spin mr-1"></i>Reversando...</> : <><i className="fas fa-rotate-left mr-1"></i>Reversar</>}
                                                         </button>
                                                     </td>
                                                 </tr>

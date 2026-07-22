@@ -824,6 +824,89 @@ class TransferenciaDespachoController extends Controller
     }
 
     /**
+     * REVERSAR una orden despachada (estado 1): retira el espejo en central (la OD vuelve a estar
+     * disponible), REINTEGRA el inventario descontado, y deja la orden como BORRADOR editable
+     * (estado 0) para corregir cantidades/ítems y volver a "Dar salida". Aborta si la mercancía ya
+     * fue EXTRAÍDA/recibida en el destino (para no descuadrar inventario del otro lado).
+     */
+    public function reversarSalida(Request $req)
+    {
+        if (!$this->esDici()) {
+            return Response::json(['estado' => false, 'msj' => 'Solo el checkeador (DICI) puede reversar.']);
+        }
+
+        $orden = transferencias_inventario::find($req->id_transferencia ?? $req->id);
+        if (!$orden) {
+            return Response::json(['estado' => false, 'msj' => 'Orden no encontrada.']);
+        }
+        if ((int) $orden->estado !== 1) {
+            return Response::json(['estado' => false, 'msj' => 'Solo se puede reversar una orden ya despachada.']);
+        }
+
+        // ── FASE 1 · CENTRAL PRIMERO: retirar el espejo SOLO si sigue PENDIENTE. Todavía NO se toca
+        //    nada local. Si central rechaza (no pendiente / extraído) o no confirma, se aborta sin
+        //    cambios en NINGÚN lado (nada flotando). Si la orden nunca creó pedido en central,
+        //    central responderá "sin espejo" (idempotente) y seguimos igual al reintegro local. ──
+        $sc = new sendCentral();
+        try {
+            $resEspejo = $sc->deletePedidosEspejoCentral([$orden->id], true);
+        } catch (\Throwable $e) {
+            return Response::json(['estado' => false, 'msj' => 'No se pudo contactar a central (no se cambió nada, reintentá): ' . $e->getMessage()]);
+        }
+        if (is_array($resEspejo) && (!empty($resEspejo['no_pendientes']) || !empty($resEspejo['extraidos']))) {
+            return Response::json(['estado' => false, 'msj' => $resEspejo['msj'] ?: 'No se puede reversar: el pedido en central ya no está pendiente.']);
+        }
+        if (!is_array($resEspejo) || empty($resEspejo['estado'])) {
+            // Central no confirmó → el pedido puede seguir intacto allá. NO tocamos local → nada flotando.
+            return Response::json(['estado' => false, 'msj' => 'Central no confirmó el retiro del espejo (no se cambió nada local, reintentá). ' . (is_array($resEspejo) ? ($resEspejo['msj'] ?? '') : '')]);
+        }
+
+        // A partir de acá el espejo en central YA está retirado (o no existía). Si el reintegro local
+        // falla, la orden queda en estado 1 (visible en Despachadas) SIN duplicado en central, y
+        // RE-EJECUTAR "Reversar" la completa: central responderá "sin espejo" (idempotente).
+
+        // ── FASE 2 · LOCAL: reintegrar inventario + volver a borrador. Todo-o-nada, con lock e
+        //    idempotencia (si otro proceso ya la reversó, no vuelve a reintegrar). ──
+        try {
+            DB::transaction(function () use ($orden) {
+                $lock = transferencias_inventario::with('items')->lockForUpdate()->find($orden->id);
+                if (!$lock || (int) $lock->estado !== 1) {
+                    return; // ya reversada (otro request / reintento) → no re-reintegrar
+                }
+                $inv = new InventarioController();
+                foreach ($lock->items->sortBy('id_producto') as $it) {
+                    $prod = inventario::find($it->id_producto);
+                    if (!$prod) {
+                        continue;
+                    }
+                    $actual = (float) $prod->cantidad;
+                    $inv->descontarInventario(
+                        $prod->id,
+                        $actual + (float) $it->cantidad, // suma de vuelta (reintegra)
+                        $actual,
+                        $lock->id,
+                        'TRANS.REVERSA ORDEN'
+                    );
+                }
+                $lock->estado = 0;
+                $lock->id_transferencia_central = null;
+                $lock->save();
+            });
+        } catch (\Throwable $e) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'El espejo se retiró de central, pero falló el reintegro local. Volvé a tocar "Reversar" para completarlo (no se duplicó nada). Detalle: ' . $e->getMessage(),
+            ]);
+        }
+
+        return Response::json([
+            'estado' => true,
+            'msj' => 'Salida reversada. Inventario reintegrado; la orden quedó en preparación para corregir.',
+            'orden' => $this->ordenConDetalle($orden->id),
+        ]);
+    }
+
+    /**
      * Etiquetas de BULTOS de una orden de transferencia ya despachada, con el MISMO formato/vista
      * que las ventas (`reportes.bultos`). El destino (código de sucursal) lo manda el front porque
      * es una sucursal de central; el origen es esta sucursal.

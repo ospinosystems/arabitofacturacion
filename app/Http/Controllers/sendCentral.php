@@ -2103,13 +2103,14 @@ class sendCentral extends Controller
      * sucursal (caso huérfano: payload "pedidos" llega vacío). NO toca estado local;
      * eso lo decide el llamador (pedidos:sanear-exportados) según cada caso.
      */
-    public function deletePedidosEspejoCentral(array $idsLocales)
+    public function deletePedidosEspejoCentral(array $idsLocales, bool $soloPendiente = false)
     {
         try {
             $response = $this->requestToCentral('post', "/setPedidoInCentralFromMasters", [
                 "type" => "delete",
                 "pedidos" => [],
                 "ids_pedido_local" => array_values($idsLocales),
+                "solo_pendiente" => $soloPendiente, // reversar: solo retira si el pedido sigue PENDIENTE
             ]);
             if ($response->ok()) {
                 $res = $this->jsonFromCentral($response);

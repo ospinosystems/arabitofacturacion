@@ -34544,6 +34544,9 @@ var db = {
   tdDarSalidaSimple: function tdDarSalidaSimple(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/dar-salida-simple", data);
   },
+  tdReversarSalida: function tdReversarSalida(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/reversar-salida", data);
+  },
   resolverInventarioPorCodigos: function resolverInventarioPorCodigos(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "inventario-resolver-codigos", data);
   },
