@@ -2157,6 +2157,26 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         }
     };
 
+    // Reenviar a central una despachada cuyo envío no se completó (sin Nº de Guía). Reusa
+    // darSalidaSimple: para estado=1 sin central, solo reintenta el envío (NO re-descuenta).
+    const reenviarACentral = async (d) => {
+        setProcesando('reenv-' + d.id);
+        try {
+            const res = await db.tdDarSalidaSimple({ id_transferencia: d.id });
+            if (res.data?.estado) {
+                await cargarBorradores();
+                setRefreshListKey(k => k + 1);
+                alert(res.data.msj || 'Enviada a central.');
+            } else {
+                alert(res.data?.msj || 'No se pudo enviar a central.');
+            }
+        } catch (e) {
+            alert('Error al enviar a central: ' + (e.message || e));
+        } finally {
+            setProcesando(null);
+        }
+    };
+
     // Reversar una orden despachada: reintegra inventario, quita el espejo en central y la vuelve
     // a "en preparación" (estado 0) para corregir y volver a dar salida.
     const reversarSalida = async (d) => {
@@ -2569,6 +2589,11 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                                     <td className="px-3 py-2">{badgeDestinoPorId(d.id_destino)}</td>
                                                     <td className="px-3 py-2 text-center text-gray-600">{nItems}</td>
                                                     <td className="px-3 py-2 text-center whitespace-nowrap">
+                                                        {!d.id_transferencia_central && (
+                                                            <button onClick={() => reenviarACentral(d)} disabled={procesando === 'reenv-' + d.id} className="mr-1 px-2 py-1 text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded disabled:opacity-50" title="El envío a central no se completó. Reintentar (no re-descuenta inventario).">
+                                                                {procesando === 'reenv-' + d.id ? <><i className="fas fa-spinner fa-spin mr-1"></i>Enviando...</> : <><i className="fas fa-paper-plane mr-1"></i>Enviar a central</>}
+                                                            </button>
+                                                        )}
                                                         <button onClick={() => imprimirGuiaDespacho(d)} className="px-2 py-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded" title="Imprimir Guía de Despacho">
                                                             <i className="fas fa-file-invoice mr-1"></i>Guía de Despacho
                                                         </button>

@@ -139334,62 +139334,115 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
     };
   }();
 
-  // Reversar una orden despachada: reintegra inventario, quita el espejo en central y la vuelve
-  // a "en preparación" (estado 0) para corregir y volver a dar salida.
-  var reversarSalida = /*#__PURE__*/function () {
+  // Reenviar a central una despachada cuyo envío no se completó (sin Nº de Guía). Reusa
+  // darSalidaSimple: para estado=1 sin central, solo reintenta el envío (NO re-descuenta).
+  var reenviarACentral = /*#__PURE__*/function () {
     var _ref26 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee15(d) {
       var _res$data0, res, _res$data1;
       return _regeneratorRuntime().wrap(function _callee15$(_context15) {
         while (1) switch (_context15.prev = _context15.next) {
           case 0:
-            if (window.confirm("\xBFReversar la orden #".concat(d.id, "?\n\nSe REINTEGRA el inventario, se quita el env\xEDo de central y la orden vuelve a \"en preparaci\xF3n\" para corregir. No se puede si el destino ya la recibi\xF3."))) {
-              _context15.next = 2;
+            setProcesando('reenv-' + d.id);
+            _context15.prev = 1;
+            _context15.next = 4;
+            return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdDarSalidaSimple({
+              id_transferencia: d.id
+            });
+          case 4:
+            res = _context15.sent;
+            if (!((_res$data0 = res.data) !== null && _res$data0 !== void 0 && _res$data0.estado)) {
+              _context15.next = 12;
               break;
             }
-            return _context15.abrupt("return");
+            _context15.next = 8;
+            return cargarBorradores();
+          case 8:
+            setRefreshListKey(function (k) {
+              return k + 1;
+            });
+            alert(res.data.msj || 'Enviada a central.');
+            _context15.next = 13;
+            break;
+          case 12:
+            alert(((_res$data1 = res.data) === null || _res$data1 === void 0 ? void 0 : _res$data1.msj) || 'No se pudo enviar a central.');
+          case 13:
+            _context15.next = 18;
+            break;
+          case 15:
+            _context15.prev = 15;
+            _context15.t0 = _context15["catch"](1);
+            alert('Error al enviar a central: ' + (_context15.t0.message || _context15.t0));
+          case 18:
+            _context15.prev = 18;
+            setProcesando(null);
+            return _context15.finish(18);
+          case 21:
+          case "end":
+            return _context15.stop();
+        }
+      }, _callee15, null, [[1, 15, 18, 21]]);
+    }));
+    return function reenviarACentral(_x11) {
+      return _ref26.apply(this, arguments);
+    };
+  }();
+
+  // Reversar una orden despachada: reintegra inventario, quita el espejo en central y la vuelve
+  // a "en preparación" (estado 0) para corregir y volver a dar salida.
+  var reversarSalida = /*#__PURE__*/function () {
+    var _ref27 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee16(d) {
+      var _res$data10, res, _res$data11;
+      return _regeneratorRuntime().wrap(function _callee16$(_context16) {
+        while (1) switch (_context16.prev = _context16.next) {
+          case 0:
+            if (window.confirm("\xBFReversar la orden #".concat(d.id, "?\n\nSe REINTEGRA el inventario, se quita el env\xEDo de central y la orden vuelve a \"en preparaci\xF3n\" para corregir. No se puede si el destino ya la recibi\xF3."))) {
+              _context16.next = 2;
+              break;
+            }
+            return _context16.abrupt("return");
           case 2:
             setProcesando('rev-' + d.id);
-            _context15.prev = 3;
-            _context15.next = 6;
+            _context16.prev = 3;
+            _context16.next = 6;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdReversarSalida({
               id_transferencia: d.id
             });
           case 6:
-            res = _context15.sent;
-            if (!((_res$data0 = res.data) !== null && _res$data0 !== void 0 && _res$data0.estado)) {
-              _context15.next = 14;
+            res = _context16.sent;
+            if (!((_res$data10 = res.data) !== null && _res$data10 !== void 0 && _res$data10.estado)) {
+              _context16.next = 14;
               break;
             }
-            _context15.next = 10;
+            _context16.next = 10;
             return cargarBorradores();
           case 10:
             setRefreshListKey(function (k) {
               return k + 1;
             }); // refresca despachadas + histórico
             alert(res.data.msj || 'Salida reversada.');
-            _context15.next = 15;
+            _context16.next = 15;
             break;
           case 14:
-            alert(((_res$data1 = res.data) === null || _res$data1 === void 0 ? void 0 : _res$data1.msj) || 'No se pudo reversar.');
+            alert(((_res$data11 = res.data) === null || _res$data11 === void 0 ? void 0 : _res$data11.msj) || 'No se pudo reversar.');
           case 15:
-            _context15.next = 20;
+            _context16.next = 20;
             break;
           case 17:
-            _context15.prev = 17;
-            _context15.t0 = _context15["catch"](3);
-            alert('Error al reversar: ' + (_context15.t0.message || _context15.t0));
+            _context16.prev = 17;
+            _context16.t0 = _context16["catch"](3);
+            alert('Error al reversar: ' + (_context16.t0.message || _context16.t0));
           case 20:
-            _context15.prev = 20;
+            _context16.prev = 20;
             setProcesando(null);
-            return _context15.finish(20);
+            return _context16.finish(20);
           case 23:
           case "end":
-            return _context15.stop();
+            return _context16.stop();
         }
-      }, _callee15, null, [[3, 17, 20, 23]]);
+      }, _callee16, null, [[3, 17, 20, 23]]);
     }));
-    return function reversarSalida(_x11) {
-      return _ref26.apply(this, arguments);
+    return function reversarSalida(_x12) {
+      return _ref27.apply(this, arguments);
     };
   }();
 
@@ -139989,7 +140042,23 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
                       children: nItems
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
                       className: "px-3 py-2 text-center whitespace-nowrap",
-                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+                      children: [!d.id_transferencia_central && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                        onClick: function onClick() {
+                          return reenviarACentral(d);
+                        },
+                        disabled: procesando === 'reenv-' + d.id,
+                        className: "mr-1 px-2 py-1 text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded disabled:opacity-50",
+                        title: "El env\xEDo a central no se complet\xF3. Reintentar (no re-descuenta inventario).",
+                        children: procesando === 'reenv-' + d.id ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
+                          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                            className: "fas fa-spinner fa-spin mr-1"
+                          }), "Enviando..."]
+                        }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
+                          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                            className: "fas fa-paper-plane mr-1"
+                          }), "Enviar a central"]
+                        })
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
                         onClick: function onClick() {
                           return imprimirGuiaDespacho(d);
                         },
