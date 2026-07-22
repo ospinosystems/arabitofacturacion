@@ -1390,7 +1390,6 @@ const TransferenciaList = ({
             {/* Header + filtros compactos, siempre visibles */}
             <div className="px-3 py-2 border-b border-gray-200 sm:px-4">
                 <div className="flex flex-wrap items-end gap-2">
-                    <h2 className="text-base font-medium text-gray-900 mr-1 self-center">Transferencias</h2>
                     <div className="w-28">
                         <label className="block text-[11px] font-medium text-gray-500">ID</label>
                         <input
@@ -1937,6 +1936,8 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const abrirPrintModal = (payload) => setPrintModal(payload);
     // Órdenes ya despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
     const [despachadas, setDespachadas] = useState([]);
+    // Loading al cargar las órdenes (premontas + borradores + despachadas).
+    const [cargandoOrdenes, setCargandoOrdenes] = useState(true);
     // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
     const [bultosOrden, setBultosOrden] = useState(null);
     const [numBultosInput, setNumBultosInput] = useState('');
@@ -2016,11 +2017,14 @@ const TransferenciasModule = ({ sucursalActualId }) => {
 
     // Cargar premontas (redistribuciones aprobadas para esta sucursal origen) + borradores.
     useEffect(() => {
-        db.getPremontadas({ limit: 50 })
-            .then(res => setPremontas(res.data?.premontadas || []))
-            .catch(() => setPremontas([]));
-        cargarBorradores();
-        cargarDespachadas();
+        let vivo = true;
+        setCargandoOrdenes(true);
+        const cargarPremontas = db.getPremontadas({ limit: 50 })
+            .then(res => { if (vivo) setPremontas(res.data?.premontadas || []); })
+            .catch(() => { if (vivo) setPremontas([]); });
+        Promise.all([cargarPremontas, cargarBorradores(), cargarDespachadas()])
+            .finally(() => { if (vivo) setCargandoOrdenes(false); });
+        return () => { vivo = false; };
     }, [refreshListKey, cargarBorradores, cargarDespachadas]);
 
     // Coteja los productos de la redistribución contra el inventario local en UNA sola petición
@@ -2482,8 +2486,16 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                         </div>
                     </div>
 
+                    {/* Loading mientras se cargan las órdenes (premontas + borradores + despachadas) */}
+                    {cargandoOrdenes && tabActiva !== 'enviadas' && (
+                        <div className="text-center py-16 text-gray-400">
+                            <i className="fas fa-circle-notch fa-spin text-4xl mb-3 text-indigo-400"></i>
+                            <p className="text-sm font-medium">Cargando órdenes…</p>
+                        </div>
+                    )}
+
                     {/* ── Redistribuciones por despachar (premontas de central) ── */}
-                    {tabActiva === 'redistribuciones' && (
+                    {!cargandoOrdenes && tabActiva === 'redistribuciones' && (
                         premontasFiltradas.length === 0 ? (
                             <div className="text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg">
                                 <i className="fas fa-inbox text-4xl mb-2"></i>
@@ -2550,7 +2562,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                     )}
 
                     {/* ── Órdenes en preparación (borradores, sin descontar todavía) ── */}
-                    {tabActiva === 'preparacion' && (
+                    {!cargandoOrdenes && tabActiva === 'preparacion' && (
                         borradoresFiltrados.length === 0 ? (
                             <div className="text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg">
                                 <i className="fas fa-pen-to-square text-4xl mb-2"></i>
@@ -2632,7 +2644,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                         )
                     )}
                     {/* ── Despachadas (estado 1, inventario ya descontado) — imprimir Guía / Bultos ── */}
-                    {tabActiva === 'despachadas' && (
+                    {!cargandoOrdenes && tabActiva === 'despachadas' && (
                         despachadasFiltradas.length === 0 ? (
                             <div className="text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg">
                                 <i className="fas fa-truck-fast text-4xl mb-2"></i>

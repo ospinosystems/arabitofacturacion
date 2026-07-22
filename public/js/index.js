@@ -137778,10 +137778,7 @@ var TransferenciaList = function TransferenciaList(_ref1) {
       className: "px-3 py-2 border-b border-gray-200 sm:px-4",
       children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
         className: "flex flex-wrap items-end gap-2",
-        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("h2", {
-          className: "text-base font-medium text-gray-900 mr-1 self-center",
-          children: "Transferencias"
-        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "w-28",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
             className: "block text-[11px] font-medium text-gray-500",
@@ -138798,19 +138795,24 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
     _useState90 = _slicedToArray(_useState89, 2),
     despachadas = _useState90[0],
     setDespachadas = _useState90[1];
-  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
-  var _useState91 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+  // Loading al cargar las órdenes (premontas + borradores + despachadas).
+  var _useState91 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
     _useState92 = _slicedToArray(_useState91, 2),
-    bultosOrden = _useState92[0],
-    setBultosOrden = _useState92[1];
-  var _useState93 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    cargandoOrdenes = _useState92[0],
+    setCargandoOrdenes = _useState92[1];
+  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
+  var _useState93 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState94 = _slicedToArray(_useState93, 2),
-    numBultosInput = _useState94[0],
-    setNumBultosInput = _useState94[1];
-  var _useState95 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    bultosOrden = _useState94[0],
+    setBultosOrden = _useState94[1];
+  var _useState95 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState96 = _slicedToArray(_useState95, 2),
-    bultosIframeUrl = _useState96[0],
-    setBultosIframeUrl = _useState96[1];
+    numBultosInput = _useState96[0],
+    setNumBultosInput = _useState96[1];
+  var _useState97 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState98 = _slicedToArray(_useState97, 2),
+    bultosIframeUrl = _useState98[0],
+    setBultosIframeUrl = _useState98[1];
   var refIframeBultos = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var cargarTransferencias = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
     var _ref14 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5(filtros) {
@@ -139005,16 +139007,22 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
 
   // Cargar premontas (redistribuciones aprobadas para esta sucursal origen) + borradores.
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
-    _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].getPremontadas({
+    var vivo = true;
+    setCargandoOrdenes(true);
+    var cargarPremontas = _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].getPremontadas({
       limit: 50
     }).then(function (res) {
       var _res$data3;
-      return setPremontas(((_res$data3 = res.data) === null || _res$data3 === void 0 ? void 0 : _res$data3.premontadas) || []);
+      if (vivo) setPremontas(((_res$data3 = res.data) === null || _res$data3 === void 0 ? void 0 : _res$data3.premontadas) || []);
     })["catch"](function () {
-      return setPremontas([]);
+      if (vivo) setPremontas([]);
     });
-    cargarBorradores();
-    cargarDespachadas();
+    Promise.all([cargarPremontas, cargarBorradores(), cargarDespachadas()])["finally"](function () {
+      if (vivo) setCargandoOrdenes(false);
+    });
+    return function () {
+      vivo = false;
+    };
   }, [refreshListKey, cargarBorradores, cargarDespachadas]);
 
   // Coteja los productos de la redistribución contra el inventario local en UNA sola petición
@@ -139831,7 +139839,15 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
               }, t.key);
             })
           })
-        }), tabActiva === 'redistribuciones' && (premontasFiltradas.length === 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        }), cargandoOrdenes && tabActiva !== 'enviadas' && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "text-center py-16 text-gray-400",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-circle-notch fa-spin text-4xl mb-3 text-indigo-400"
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
+            className: "text-sm font-medium",
+            children: "Cargando \xF3rdenes\u2026"
+          })]
+        }), !cargandoOrdenes && tabActiva === 'redistribuciones' && (premontasFiltradas.length === 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
             className: "fas fa-inbox text-4xl mb-2"
@@ -139947,7 +139963,7 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
               })]
             })
           })]
-        })), tabActiva === 'preparacion' && (borradoresFiltrados.length === 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        })), !cargandoOrdenes && tabActiva === 'preparacion' && (borradoresFiltrados.length === 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
             className: "fas fa-pen-to-square text-4xl mb-2"
@@ -140110,7 +140126,7 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
               })]
             })
           })]
-        })), tabActiva === 'despachadas' && (despachadasFiltradas.length === 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        })), !cargandoOrdenes && tabActiva === 'despachadas' && (despachadasFiltradas.length === 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
             className: "fas fa-truck-fast text-4xl mb-2"
