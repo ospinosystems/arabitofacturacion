@@ -1176,7 +1176,7 @@ class TCDController extends Controller
             
             $orden = TCDOrden::where('id', $request->orden_id)
                 ->where('chequeador_id', $chequeadorId)
-                ->with(['items.inventario.proveedor', 'items.inventario.categoria'])
+                ->with(['items.inventario']) // sin proveedor/categoria (no existen en inventario local)
                 ->firstOrFail();
             
             // Verificar que la orden esté completada y tenga ticket de despacho
