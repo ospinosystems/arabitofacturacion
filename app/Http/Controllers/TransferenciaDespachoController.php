@@ -32,6 +32,23 @@ use Illuminate\Support\Facades\Response;
  */
 class TransferenciaDespachoController extends Controller
 {
+    /**
+     * Base de namespace para el idinsucursal del espejo en central de estas órdenes
+     * (transferencias_inventario). Los ids locales de esta tabla son pequeños (1,2,3…) y
+     * COLISIONAN con los idinsucursal de pedidos front y con el TCD (que usa 9.000.000+id).
+     * Sin offset, el "add idempotente" de central matchea un pedido viejo ajeno, le pisa los
+     * items y devuelve su id → nunca crea el espejo real y corrompe ese pedido. Usamos
+     * 90.000.000 (distinto del 9.000.000 del TCD) para tener un namespace propio y limpio.
+     * DEBE usarse el MISMO valor al crear (darSalida), borrar (reversar) y verificar el espejo.
+     */
+    const ESPEJO_IDINSUCURSAL_BASE = 90000000;
+
+    /** idinsucursal del espejo en central para una orden local de despacho. */
+    private function espejoIdinsucursal($ordenId): int
+    {
+        return self::ESPEJO_IDINSUCURSAL_BASE + (int) $ordenId;
+    }
+
     // ───────────────────────────── helpers ─────────────────────────────
 
     private function uid()
@@ -151,10 +168,28 @@ class TransferenciaDespachoController extends Controller
         if (empty($ids)) {
             return Response::json(['estado' => true, 'espejos' => []]);
         }
-        $res = (new sendCentral())->verificarEspejosCentral($ids);
+        // El espejo en central vive bajo idinsucursal = 90.000.000 + id local. Se consulta con ese
+        // offset y luego se re-mapea la respuesta de vuelta al id local crudo, que es como el
+        // frontend indexa las órdenes.
+        $offsetToRaw = [];
+        $offsetIds = [];
+        foreach ($ids as $rid) {
+            $oid = $this->espejoIdinsucursal($rid);
+            $offsetToRaw[(string) $oid] = $rid;
+            $offsetIds[] = $oid;
+        }
+        $res = (new sendCentral())->verificarEspejosCentral($offsetIds);
+        $espejosCentral = is_array($res) ? ($res['espejos'] ?? []) : [];
+        $espejos = [];
+        foreach ($espejosCentral as $offsetKey => $info) {
+            $raw = $offsetToRaw[(string) $offsetKey] ?? null;
+            if ($raw !== null) {
+                $espejos[(string) $raw] = $info;
+            }
+        }
         return Response::json([
             'estado' => is_array($res) ? (bool) ($res['estado'] ?? false) : false,
-            'espejos' => is_array($res) ? ($res['espejos'] ?? []) : [],
+            'espejos' => $espejos,
         ]);
     }
 
@@ -704,7 +739,8 @@ class TransferenciaDespachoController extends Controller
                 'type' => 'add',
                 'id_transferencia_central' => null,
                 'pedidos' => [[
-                    'id' => $orden->id,
+                    // idinsucursal del espejo = 90.000.000 + id local (mismo namespace que darSalida).
+                    'id' => $this->espejoIdinsucursal($orden->id),
                     'items' => $itemsClean,
                 ]],
             ]);
@@ -743,9 +779,10 @@ class TransferenciaDespachoController extends Controller
         if (!$orden) {
             return Response::json(['estado' => false, 'msj' => 'Orden no encontrada.']);
         }
-        if ((int) $orden->estado === 1 && $orden->id_transferencia_central) {
-            return Response::json(['estado' => false, 'msj' => 'La orden ya fue despachada a central.']);
-        }
+        // Nota: NO se bloquea por estado==1 aquí. Si la orden ya salió localmente pero el espejo en
+        // central no quedó bien (id stale/colisionado del esquema viejo), "Enviar a central" debe poder
+        // reintentar: la Fase A no vuelve a descontar (solo corre en estado 0) y la Fase B es idempotente
+        // por (idinsucursal, id_origen), así que reintentar reutiliza/crea el espejo correcto sin duplicar.
 
         // Ítems con cantidad > 0 (lo que el DICI dejó confirmado en la orden).
         $itemsValidos = $orden->items->filter(fn ($it) => (float) $it->cantidad > 0)->values();
@@ -820,7 +857,8 @@ class TransferenciaDespachoController extends Controller
                 'id_transferencia_central' => null,
                 'id_orden_distribucion' => $orden->id_orden_distribucion,
                 'pedidos' => [[
-                    'id' => $orden->id,
+                    // idinsucursal del espejo = 90.000.000 + id local (namespace propio, sin colisión).
+                    'id' => $this->espejoIdinsucursal($orden->id),
                     'items' => $itemsClean,
                 ]],
             ]);
@@ -867,7 +905,7 @@ class TransferenciaDespachoController extends Controller
         //    central responderá "sin espejo" (idempotente) y seguimos igual al reintegro local. ──
         $sc = new sendCentral();
         try {
-            $resEspejo = $sc->deletePedidosEspejoCentral([$orden->id], true);
+            $resEspejo = $sc->deletePedidosEspejoCentral([$this->espejoIdinsucursal($orden->id)], true);
         } catch (\Throwable $e) {
             return Response::json(['estado' => false, 'msj' => 'No se pudo contactar a central (no se cambió nada, reintentá): ' . $e->getMessage()]);
         }
