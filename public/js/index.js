@@ -139792,7 +139792,6 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       return origenCodigo && String(s.codigo) === String(origenCodigo);
     }) || {};
     var destEmpresa = destino.empresa || {};
-    var origEmpresa = origenSuc.empresa || {};
     // Cliente (Razón Social) = razón social de la empresa + nombre de la sucursal destino.
     var razonEmpresaDest = (destEmpresa.razon_social || '').trim();
     var nombreSucDest = (destino.nombre || destino.codigo || 'Sucursal ' + ((_orden$id_destino = orden.id_destino) !== null && _orden$id_destino !== void 0 ? _orden$id_destino : '—')).trim();
@@ -139801,10 +139800,8 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
     // Dirección = nombre de la sucursal + estado (en Title/Camel case).
     var estadoDest = titleCase(destino.estado);
     var clienteDir = [nombreSucDest, estadoDest].filter(Boolean).join(', ') || '—';
-    // Origen = razón social de su empresa + nombre de la sucursal origen (o solo el nombre).
-    var razonEmpresaOrig = (origEmpresa.razon_social || '').trim();
-    var nombreSucOrig = (origenSuc.nombre || origenSuc.codigo || '—').trim();
-    var origenNombre = razonEmpresaOrig ? "".concat(razonEmpresaOrig, " - ").concat(nombreSucOrig) : nombreSucOrig;
+    // Origen = solo el nombre de la sucursal origen (sin razón social).
+    var origenNombre = (origenSuc.nombre || origenSuc.codigo || '—').trim();
     var items = orden.items || [];
     var sub = items.reduce(function (a, it) {
       return a + (parseFloat(it.cantidad) || 0) * (parseFloat(it.precio) || 0);

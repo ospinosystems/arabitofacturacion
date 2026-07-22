@@ -2425,7 +2425,6 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         const origenSuc = (sucursales || []).find(s => origenCodigo && String(s.codigo) === String(origenCodigo)) || {};
 
         const destEmpresa = destino.empresa || {};
-        const origEmpresa = origenSuc.empresa || {};
         // Cliente (Razón Social) = razón social de la empresa + nombre de la sucursal destino.
         const razonEmpresaDest = (destEmpresa.razon_social || '').trim();
         const nombreSucDest = (destino.nombre || destino.codigo || ('Sucursal ' + (orden.id_destino ?? '—'))).trim();
@@ -2434,10 +2433,8 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         // Dirección = nombre de la sucursal + estado (en Title/Camel case).
         const estadoDest = titleCase(destino.estado);
         const clienteDir = [nombreSucDest, estadoDest].filter(Boolean).join(', ') || '—';
-        // Origen = razón social de su empresa + nombre de la sucursal origen (o solo el nombre).
-        const razonEmpresaOrig = (origEmpresa.razon_social || '').trim();
-        const nombreSucOrig = (origenSuc.nombre || origenSuc.codigo || '—').trim();
-        const origenNombre = razonEmpresaOrig ? `${razonEmpresaOrig} - ${nombreSucOrig}` : nombreSucOrig;
+        // Origen = solo el nombre de la sucursal origen (sin razón social).
+        const origenNombre = (origenSuc.nombre || origenSuc.codigo || '—').trim();
         const items = orden.items || [];
         const sub = items.reduce((a, it) => a + (parseFloat(it.cantidad) || 0) * (parseFloat(it.precio) || 0), 0);
         const exento = 0, gravable = sub, iva = 0;
