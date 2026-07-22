@@ -138728,6 +138728,17 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
     var d = new Date();
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   };
+  // Formatea una fecha (ISO o MySQL) a dd/mm/yyyy tomando solo el día.
+  var fmtFecha = function fmtFecha(s) {
+    var d = String(s || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '—';
+    var _d$split = d.split('-'),
+      _d$split2 = _slicedToArray(_d$split, 3),
+      y = _d$split2[0],
+      m = _d$split2[1],
+      dd = _d$split2[2];
+    return "".concat(dd, "/").concat(m, "/").concat(y);
+  };
   // Por defecto el filtro arranca en HOY (evita mostrar órdenes viejas). Limpiar quita las fechas.
   var _useState75 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
       q: '',
@@ -139625,20 +139636,19 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
   };
 
   // Premontas: sin borrador aún + filtro común (por # redistribución, destino, fecha).
-  // Premontas = trabajo pendiente (redistribuciones por despachar): NO se filtran por fecha
-  // (si no, el default "hoy" ocultaría redistribuciones viejas aún sin despachar). Solo texto/destino.
+  // Premontas (redistribuciones por despachar): se filtran por fecha de emisión + destino + texto.
   var premontasFiltradas = premontas.filter(function (p) {
     if (odsConBorrador.has(Number(p.id_orden_distribucion))) return false;
     var destino = p.sucursal_destino || {};
-    return matchDestino(destino.id) && matchTexto([p.id_orden_distribucion, destino.codigo, destino.nombre]);
+    return matchDestino(destino.id) && enRangoFecha(p.fecha_emision || p.created_at) && matchTexto([p.id_orden_distribucion, destino.codigo, destino.nombre]);
   });
 
-  // Borradores = órdenes en preparación (trabajo activo): tampoco se filtran por fecha. Solo texto/destino.
+  // Borradores (en preparación): filtro por fecha de creación + destino + texto.
   var borradoresFiltrados = borradores.filter(function (b) {
-    return matchDestino(b.id_destino) && matchTexto([b.id, b.id_orden_distribucion].concat(_toConsumableArray(codDestino(b.id_destino))));
+    return matchDestino(b.id_destino) && enRangoFecha(b.created_at) && matchTexto([b.id, b.id_orden_distribucion].concat(_toConsumableArray(codDestino(b.id_destino))));
   });
 
-  // Despachadas: es la lista histórica (se acumula) → SÍ respeta la fecha (default hoy) + texto/destino.
+  // Despachadas: lista histórica → fecha (default hoy) + texto/destino.
   var despachadasFiltradas = despachadas.filter(function (d) {
     return matchDestino(d.id_destino) && enRangoFecha(d.updated_at || d.created_at) && matchTexto([d.id, d.id_transferencia_central, d.id_orden_distribucion].concat(_toConsumableArray(codDestino(d.id_destino))));
   });
@@ -139695,7 +139705,7 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
             }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
               children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("label", {
                 className: "block text-xs font-medium text-gray-600 mb-1",
-                title: "La fecha filtra solo las Despachadas (por defecto, hoy). Premontas y borradores siempre se muestran.",
+                title: "La fecha filtra todos los tabs (por defecto, hoy). Toc\xE1 Limpiar para ver todo.",
                 children: ["Desde ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
                   className: "fas fa-circle-info text-gray-400"
                 })]
@@ -139789,12 +139799,15 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
               }, t.key);
             })
           })
-        }), tabActiva === 'redistribuciones' && (premontasFiltradas.length === 0 && !(hayFiltros && premontas.length > 0) ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        }), tabActiva === 'redistribuciones' && (premontasFiltradas.length === 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
             className: "fas fa-inbox text-4xl mb-2"
-          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
-            children: "No hay redistribuciones por despachar"
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("p", {
+            children: ["No hay redistribuciones por despachar", hayFiltros ? ' con estos filtros' : '', hayFiltros && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+              className: "block text-gray-300 text-xs mt-1",
+              children: "(cambi\xE1 la fecha o toc\xE1 Limpiar para ver m\xE1s)"
+            })]
           })]
         }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "mb-3 border border-amber-300 rounded-lg overflow-hidden",
@@ -139821,6 +139834,9 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
                     children: "Redistribuci\xF3n"
                   }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
                     className: "px-3 py-2 text-left font-semibold",
+                    children: "Fecha"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-left font-semibold",
                     children: "Destino"
                   }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
                     className: "px-3 py-2 text-center font-semibold",
@@ -139834,7 +139850,7 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
                 className: "bg-white divide-y divide-gray-100",
                 children: premontasFiltradas.length === 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("tr", {
                   children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
-                    colSpan: 5,
+                    colSpan: 6,
                     className: "px-3 py-4 text-center text-gray-400",
                     children: "Sin coincidencias"
                   })
@@ -139853,6 +139869,9 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
                       className: "px-3 py-2 font-semibold text-gray-800 whitespace-nowrap",
                       children: ["#", prem.id_orden_distribucion]
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2 text-gray-600 whitespace-nowrap",
+                      children: fmtFecha(prem.fecha_emision || prem.created_at)
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
                       className: "px-3 py-2",
                       children: badgeDestinoPorId((_prem$sucursal_destin6 = prem.sucursal_destino) === null || _prem$sucursal_destin6 === void 0 ? void 0 : _prem$sucursal_destin6.id)

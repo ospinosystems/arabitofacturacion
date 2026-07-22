@@ -1913,6 +1913,13 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         const d = new Date();
         return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     };
+    // Formatea una fecha (ISO o MySQL) a dd/mm/yyyy tomando solo el día.
+    const fmtFecha = (s) => {
+        const d = String(s || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return '—';
+        const [y, m, dd] = d.split('-');
+        return `${dd}/${m}/${y}`;
+    };
     // Por defecto el filtro arranca en HOY (evita mostrar órdenes viejas). Limpiar quita las fechas.
     const [filtroOrdenes, setFiltroOrdenes] = useState({ q: '', destino: '', desde: hoyLocal(), hasta: '' });
     const setFiltro = (campo, val) => setFiltroOrdenes(prev => ({ ...prev, [campo]: val }));
@@ -2363,22 +2370,23 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const codDestino = (id) => { const s = sucById[id]; return s ? [s.codigo, s.nombre] : []; };
 
     // Premontas: sin borrador aún + filtro común (por # redistribución, destino, fecha).
-    // Premontas = trabajo pendiente (redistribuciones por despachar): NO se filtran por fecha
-    // (si no, el default "hoy" ocultaría redistribuciones viejas aún sin despachar). Solo texto/destino.
+    // Premontas (redistribuciones por despachar): se filtran por fecha de emisión + destino + texto.
     const premontasFiltradas = premontas.filter(p => {
         if (odsConBorrador.has(Number(p.id_orden_distribucion))) return false;
         const destino = p.sucursal_destino || {};
         return matchDestino(destino.id)
+            && enRangoFecha(p.fecha_emision || p.created_at)
             && matchTexto([p.id_orden_distribucion, destino.codigo, destino.nombre]);
     });
 
-    // Borradores = órdenes en preparación (trabajo activo): tampoco se filtran por fecha. Solo texto/destino.
+    // Borradores (en preparación): filtro por fecha de creación + destino + texto.
     const borradoresFiltrados = borradores.filter(b =>
         matchDestino(b.id_destino)
+        && enRangoFecha(b.created_at)
         && matchTexto([b.id, b.id_orden_distribucion, ...codDestino(b.id_destino)])
     );
 
-    // Despachadas: es la lista histórica (se acumula) → SÍ respeta la fecha (default hoy) + texto/destino.
+    // Despachadas: lista histórica → fecha (default hoy) + texto/destino.
     const despachadasFiltradas = despachadas.filter(d =>
         matchDestino(d.id_destino)
         && enRangoFecha(d.updated_at || d.created_at)
@@ -2415,7 +2423,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                 <SucursalCombo value={filtroOrdenes.destino} onChange={(val) => setFiltro('destino', val)} sucursales={sucursales} />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1" title="La fecha filtra solo las Despachadas (por defecto, hoy). Premontas y borradores siempre se muestran.">Desde <i className="fas fa-circle-info text-gray-400"></i></label>
+                                <label className="block text-xs font-medium text-gray-600 mb-1" title="La fecha filtra todos los tabs (por defecto, hoy). Tocá Limpiar para ver todo.">Desde <i className="fas fa-circle-info text-gray-400"></i></label>
                                 <input type="date" value={filtroOrdenes.desde} onChange={e => setFiltro('desde', e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded" />
                             </div>
                             <div>
@@ -2462,10 +2470,12 @@ const TransferenciasModule = ({ sucursalActualId }) => {
 
                     {/* ── Redistribuciones por despachar (premontas de central) ── */}
                     {tabActiva === 'redistribuciones' && (
-                        premontasFiltradas.length === 0 && !(hayFiltros && premontas.length > 0) ? (
+                        premontasFiltradas.length === 0 ? (
                             <div className="text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg">
                                 <i className="fas fa-inbox text-4xl mb-2"></i>
-                                <p>No hay redistribuciones por despachar</p>
+                                <p>No hay redistribuciones por despachar{hayFiltros ? ' con estos filtros' : ''}
+                                    {hayFiltros && <span className="block text-gray-300 text-xs mt-1">(cambiá la fecha o tocá Limpiar para ver más)</span>}
+                                </p>
                             </div>
                         ) : (
                         <div className="mb-3 border border-amber-300 rounded-lg overflow-hidden">
@@ -2478,6 +2488,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                         <tr>
                                             <th className="px-3 py-2 text-left font-semibold">Origen</th>
                                             <th className="px-3 py-2 text-left font-semibold">Redistribución</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Fecha</th>
                                             <th className="px-3 py-2 text-left font-semibold">Destino</th>
                                             <th className="px-3 py-2 text-center font-semibold">Productos</th>
                                             <th className="px-3 py-2 text-center font-semibold">Acción</th>
@@ -2485,13 +2496,14 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-100">
                                         {premontasFiltradas.length === 0 ? (
-                                            <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-400">Sin coincidencias</td></tr>
+                                            <tr><td colSpan={6} className="px-3 py-4 text-center text-gray-400">Sin coincidencias</td></tr>
                                         ) : premontasFiltradas.map(prem => (
                                             <tr key={prem.id_orden_distribucion} className="hover:bg-amber-50/40">
                                                 <td className="px-3 py-2">
                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800"><i className="fas fa-random"></i>REDISTRIBUCIÓN</span>
                                                 </td>
                                                 <td className="px-3 py-2 font-semibold text-gray-800 whitespace-nowrap">#{prem.id_orden_distribucion}</td>
+                                                <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{fmtFecha(prem.fecha_emision || prem.created_at)}</td>
                                                 <td className="px-3 py-2">{badgeDestinoPorId(prem.sucursal_destino?.id)}</td>
                                                 <td className="px-3 py-2 text-center text-gray-600">{(prem.items || []).length}</td>
                                                 <td className="px-3 py-2 text-center whitespace-nowrap">
