@@ -137725,48 +137725,323 @@ var TransferenciaList = function TransferenciaList(_ref8) {
     })]
   });
 };
-var TransferenciasModule = function TransferenciasModule(_ref0) {
-  var sucursalActualId = _ref0.sucursalActualId;
-  var _useState33 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('list'),
-    _useState34 = _slicedToArray(_useState33, 2),
-    vistaActual = _useState34[0],
-    setVistaActual = _useState34[1]; // 'list', 'form', 'detail'
-  var _useState35 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
-    _useState36 = _slicedToArray(_useState35, 2),
-    transferenciaSeleccionada = _useState36[0],
-    setTransferenciaSeleccionada = _useState36[1];
-  var _useState37 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(0),
-    _useState38 = _slicedToArray(_useState37, 2),
-    refreshListKey = _useState38[0],
-    setRefreshListKey = _useState38[1];
-  var _useState39 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState40 = _slicedToArray(_useState39, 2),
-    sucursales = _useState40[0],
-    setSucursales = _useState40[1];
 
-  // Estados movidos desde TransferenciaList
+// Paso de resolución de conflictos al crear una orden desde una redistribución de central.
+// Cada producto de la redistribución se coteja contra el inventario local por código de barras:
+//   • no existe localmente → se excluye (no se puede enviar lo que no tenés en sistema)
+//   • existe pero la cantidad no alcanza → se avisa y el usuario ajusta la cantidad
+// El usuario ajusta/excluye y recién ahí se crea la orden en preparación (sin descontar).
+var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref0) {
+  var prem = _ref0.prem,
+    filas = _ref0.filas,
+    destinoBadge = _ref0.destinoBadge,
+    onConfirmar = _ref0.onConfirmar,
+    onCancelar = _ref0.onCancelar,
+    procesando = _ref0.procesando;
+  var _useState33 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    _useState34 = _slicedToArray(_useState33, 2),
+    rows = _useState34[0],
+    setRows = _useState34[1];
+  (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
+    setRows((filas || []).map(function (f) {
+      return _objectSpread(_objectSpread({}, f), {}, {
+        // sugerir de entrada lo factible: mín(solicitado, stock). El usuario lo ajusta.
+        cantidad: f.existe ? String(Math.min(parseFloat(f.cantidadSolicitada) || 0, parseFloat(f.stockLocal) || 0)) : '0',
+        incluir: !!f.existe
+      });
+    }));
+  }, [filas]);
+  var setCantidad = function setCantidad(key, val) {
+    if (val !== '' && !/^\d*\.?\d{0,2}$/.test(val)) return;
+    setRows(function (prev) {
+      return prev.map(function (r) {
+        return r.key === key ? _objectSpread(_objectSpread({}, r), {}, {
+          cantidad: val
+        }) : r;
+      });
+    });
+  };
+  var usarSolicitado = function usarSolicitado(key) {
+    return setRows(function (prev) {
+      return prev.map(function (r) {
+        return r.key === key ? _objectSpread(_objectSpread({}, r), {}, {
+          cantidad: String(r.cantidadSolicitada)
+        }) : r;
+      });
+    });
+  };
+  var usarStock = function usarStock(key) {
+    return setRows(function (prev) {
+      return prev.map(function (r) {
+        return r.key === key ? _objectSpread(_objectSpread({}, r), {}, {
+          cantidad: String(r.stockLocal || 0)
+        }) : r;
+      });
+    });
+  };
+  var toggleIncluir = function toggleIncluir(key) {
+    return setRows(function (prev) {
+      return prev.map(function (r) {
+        return r.key === key ? _objectSpread(_objectSpread({}, r), {}, {
+          incluir: !r.incluir
+        }) : r;
+      });
+    });
+  };
+  var incluidos = rows.filter(function (r) {
+    return r.incluir && r.existe && parseFloat(r.cantidad) > 0;
+  });
+  var noExisten = rows.filter(function (r) {
+    return !r.existe;
+  }).length;
+  var excedenStock = rows.filter(function (r) {
+    return r.existe && r.incluir && parseFloat(r.cantidad) > (parseFloat(r.stockLocal) || 0);
+  }).length;
+  var confirmar = function confirmar() {
+    var items = incluidos.map(function (r) {
+      return {
+        id_producto_insucursal: r.local.id,
+        cantidad: parseFloat(r.cantidad).toFixed(2)
+      };
+    });
+    onConfirmar(items);
+  };
+  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+    className: "bg-white rounded-lg shadow p-3 md:p-4",
+    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+      className: "flex flex-wrap items-center justify-between gap-2 pb-2 mb-3 border-b border-gray-200",
+      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h2", {
+          className: "text-sm font-bold text-gray-800 uppercase tracking-wide",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-triangle-exclamation text-amber-500 mr-1"
+          }), "Resolver conflictos \xB7 Redistribuci\xF3n #", prem === null || prem === void 0 ? void 0 : prem.id_orden_distribucion]
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
+          className: "text-xs text-gray-500 mt-0.5",
+          children: "Ajust\xE1 cantidades y exclu\xED lo que no tengas antes de crear la orden. Todav\xEDa no se descuenta nada."
+        })]
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        className: "flex items-center gap-2 text-xs",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+          className: "text-gray-500",
+          children: "Destino:"
+        }), " ", destinoBadge]
+      })]
+    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+      className: "flex flex-wrap gap-2 mb-3 text-xs",
+      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+        className: "px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+          className: "fas fa-check mr-1"
+        }), incluidos.length, " a enviar"]
+      }), excedenStock > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+        className: "px-2 py-1 rounded bg-amber-50 text-amber-700 border border-amber-200 font-semibold",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+          className: "fas fa-exclamation mr-1"
+        }), excedenStock, " supera(n) stock"]
+      }), noExisten > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+        className: "px-2 py-1 rounded bg-red-50 text-red-700 border border-red-200 font-semibold",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+          className: "fas fa-ban mr-1"
+        }), noExisten, " no existe(n)"]
+      })]
+    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+      className: "border rounded-md overflow-x-auto max-h-[55vh] overflow-y-auto",
+      children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("table", {
+        className: "min-w-full text-sm",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("thead", {
+          className: "bg-gray-50 text-xs uppercase text-gray-500 sticky top-0",
+          children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+              className: "px-2 py-1.5 text-left font-semibold",
+              children: "Producto"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+              className: "px-2 py-1.5 text-left font-semibold",
+              children: "C\xF3d. Barras"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+              className: "px-2 py-1.5 text-center font-semibold",
+              children: "Solicitado"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+              className: "px-2 py-1.5 text-center font-semibold",
+              children: "Stock local"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+              className: "px-2 py-1.5 text-center font-semibold",
+              children: "A enviar"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+              className: "px-2 py-1.5 text-center font-semibold",
+              children: "Estado"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+              className: "px-2 py-1.5 text-center font-semibold w-10"
+            })]
+          })
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("tbody", {
+          className: "divide-y divide-gray-100",
+          children: rows.map(function (r) {
+            var cant = parseFloat(r.cantidad) || 0;
+            var stock = parseFloat(r.stockLocal) || 0;
+            var excede = r.existe && cant > stock;
+            var rowCls = !r.existe ? 'bg-red-50/60' : !r.incluir ? 'bg-gray-50 opacity-60' : excede ? 'bg-amber-50/60' : '';
+            return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
+              className: rowCls,
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                className: "px-2 py-1.5 text-gray-800",
+                children: r.descripcion || '—'
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                className: "px-2 py-1.5 font-mono text-xs text-gray-600 whitespace-nowrap",
+                children: r.barras || '—'
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                className: "px-2 py-1.5 text-center text-gray-600",
+                children: parseFloat(r.cantidadSolicitada || 0).toFixed(2)
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                className: "px-2 py-1.5 text-center",
+                children: r.existe ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+                  className: stock > 0 ? 'text-gray-700' : 'text-red-600 font-semibold',
+                  children: stock.toFixed(2)
+                }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+                  className: "text-red-500",
+                  children: "\u2014"
+                })
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                className: "px-2 py-1.5 text-center",
+                children: r.existe ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+                  className: "flex items-center justify-center gap-1",
+                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+                    type: "text",
+                    inputMode: "decimal",
+                    value: r.cantidad,
+                    disabled: !r.incluir,
+                    onChange: function onChange(e) {
+                      return setCantidad(r.key, e.target.value);
+                    },
+                    className: "w-20 p-1 text-center border rounded ".concat(excede ? 'border-amber-400 text-amber-700' : 'border-gray-300', " ").concat(!r.incluir ? 'bg-gray-100' : '')
+                  }), r.incluir && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+                    className: "flex flex-col leading-none",
+                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                      type: "button",
+                      onClick: function onClick() {
+                        return usarSolicitado(r.key);
+                      },
+                      title: "Usar lo solicitado",
+                      className: "text-[10px] text-indigo-600 hover:underline",
+                      children: "sol."
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                      type: "button",
+                      onClick: function onClick() {
+                        return usarStock(r.key);
+                      },
+                      title: "Usar el stock disponible",
+                      className: "text-[10px] text-indigo-600 hover:underline",
+                      children: "stock"
+                    })]
+                  })]
+                }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+                  className: "text-gray-400",
+                  children: "\u2014"
+                })
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                className: "px-2 py-1.5 text-center whitespace-nowrap",
+                children: !r.existe ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+                  className: "inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold",
+                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                    className: "fas fa-ban"
+                  }), "No existe"]
+                }) : !r.incluir ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+                  className: "inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 text-xs font-bold",
+                  children: "Excluido"
+                }) : excede ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+                  className: "inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold",
+                  title: "Solo hay ".concat(stock, " en stock"),
+                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                    className: "fas fa-exclamation"
+                  }), "Supera stock"]
+                }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+                  className: "inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold",
+                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                    className: "fas fa-check"
+                  }), "OK"]
+                })
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                className: "px-2 py-1.5 text-center",
+                children: r.existe && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                  type: "button",
+                  onClick: function onClick() {
+                    return toggleIncluir(r.key);
+                  },
+                  className: "p-1 rounded ".concat(r.incluir ? 'text-red-500 hover:bg-red-50' : 'text-emerald-600 hover:bg-emerald-50'),
+                  title: r.incluir ? 'Excluir de la orden' : 'Incluir en la orden',
+                  children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                    className: "fas ".concat(r.incluir ? 'fa-trash' : 'fa-plus')
+                  })
+                })
+              })]
+            }, r.key);
+          })
+        })]
+      })
+    }), noExisten > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("p", {
+      className: "mt-2 text-xs text-red-600",
+      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+        className: "fas fa-circle-info mr-1"
+      }), noExisten, " producto(s) de la redistribuci\xF3n no existen en tu inventario local: quedan excluidos. Si deber\xEDan existir, primero cre\xE1 su ficha en el inventario."]
+    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+      className: "flex flex-col sm:flex-row justify-end gap-2 pt-3 mt-2 border-t border-gray-200",
+      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+        type: "button",
+        onClick: onCancelar,
+        disabled: !!procesando,
+        className: "px-4 py-2 border rounded-md text-sm bg-white hover:bg-gray-50",
+        children: "Cancelar"
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+        type: "button",
+        onClick: confirmar,
+        disabled: !!procesando || incluidos.length === 0,
+        className: "inline-flex justify-center items-center px-4 py-2 rounded-md text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50",
+        children: procesando ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-spinner fa-spin mr-1"
+          }), "Creando..."]
+        }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-file-circle-plus mr-1"
+          }), "Crear orden (", incluidos.length, ")"]
+        })
+      })]
+    })]
+  });
+};
+var TransferenciasModule = function TransferenciasModule(_ref1) {
+  var _conflictosPremonta$p;
+  var sucursalActualId = _ref1.sucursalActualId;
+  var _useState35 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('list'),
+    _useState36 = _slicedToArray(_useState35, 2),
+    vistaActual = _useState36[0],
+    setVistaActual = _useState36[1]; // 'list', 'form', 'detail'
+  var _useState37 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState38 = _slicedToArray(_useState37, 2),
+    transferenciaSeleccionada = _useState38[0],
+    setTransferenciaSeleccionada = _useState38[1];
+  var _useState39 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(0),
+    _useState40 = _slicedToArray(_useState39, 2),
+    refreshListKey = _useState40[0],
+    setRefreshListKey = _useState40[1];
   var _useState41 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState42 = _slicedToArray(_useState41, 2),
-    transferencias = _useState42[0],
-    setTransferencias = _useState42[1];
-  var _useState43 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
+    sucursales = _useState42[0],
+    setSucursales = _useState42[1];
+
+  // Estados movidos desde TransferenciaList
+  var _useState43 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState44 = _slicedToArray(_useState43, 2),
-    estaCargando = _useState44[0],
-    setEstaCargando = _useState44[1];
-  var _useState45 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    transferencias = _useState44[0],
+    setTransferencias = _useState44[1];
+  var _useState45 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
     _useState46 = _slicedToArray(_useState45, 2),
-    error = _useState46[0],
-    setError = _useState46[1];
-  var _useState47 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
-      q: '',
-      estatus_string: '',
-      id_origen: '',
-      id_destino: '',
-      limit: 10
-    }),
+    estaCargando = _useState46[0],
+    setEstaCargando = _useState46[1];
+  var _useState47 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState48 = _slicedToArray(_useState47, 2),
-    filtros = _useState48[0],
-    setFiltros = _useState48[1];
+    error = _useState48[0],
+    setError = _useState48[1];
   var _useState49 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
       q: '',
       estatus_string: '',
@@ -137775,41 +138050,55 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
       limit: 10
     }),
     _useState50 = _slicedToArray(_useState49, 2),
-    filtrosActivos = _useState50[0],
-    setFiltrosActivos = _useState50[1];
-  var _useState51 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({}),
+    filtros = _useState50[0],
+    setFiltros = _useState50[1];
+  var _useState51 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+      q: '',
+      estatus_string: '',
+      id_origen: '',
+      id_destino: '',
+      limit: 10
+    }),
     _useState52 = _slicedToArray(_useState51, 2),
-    paginacion = _useState52[0],
-    setPaginacion = _useState52[1];
-  var _useState53 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    filtrosActivos = _useState52[0],
+    setFiltrosActivos = _useState52[1];
+  var _useState53 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({}),
     _useState54 = _slicedToArray(_useState53, 2),
-    mostrarFiltros = _useState54[0],
-    setMostrarFiltros = _useState54[1];
-  // Premontas = órdenes de redistribución 'Aprobada' de central donde ESTA sucursal es el origen.
-  var _useState55 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    paginacion = _useState54[0],
+    setPaginacion = _useState54[1];
+  var _useState55 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState56 = _slicedToArray(_useState55, 2),
-    premontas = _useState56[0],
-    setPremontas = _useState56[1];
-  var _useState57 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    mostrarFiltros = _useState56[0],
+    setMostrarFiltros = _useState56[1];
+  // Premontas = órdenes de redistribución 'Aprobada' de central donde ESTA sucursal es el origen.
+  var _useState57 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState58 = _slicedToArray(_useState57, 2),
-    qPremonta = _useState58[0],
-    setQPremonta = _useState58[1];
-  // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
-  var _useState59 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    premontas = _useState58[0],
+    setPremontas = _useState58[1];
+  var _useState59 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState60 = _slicedToArray(_useState59, 2),
-    borradores = _useState60[0],
-    setBorradores = _useState60[1];
-  var _useState61 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    qPremonta = _useState60[0],
+    setQPremonta = _useState60[1];
+  // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
+  var _useState61 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState62 = _slicedToArray(_useState61, 2),
-    borradorEnEdicion = _useState62[0],
-    setBorradorEnEdicion = _useState62[1];
+    borradores = _useState62[0],
+    setBorradores = _useState62[1];
   var _useState63 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState64 = _slicedToArray(_useState63, 2),
-    procesando = _useState64[0],
-    setProcesando = _useState64[1]; // id ocupado (crear/salida/eliminar)
-
+    borradorEnEdicion = _useState64[0],
+    setBorradorEnEdicion = _useState64[1];
+  var _useState65 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState66 = _slicedToArray(_useState65, 2),
+    procesando = _useState66[0],
+    setProcesando = _useState66[1]; // id ocupado (crear/salida/eliminar)
+  // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
+  var _useState67 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState68 = _slicedToArray(_useState67, 2),
+    conflictosPremonta = _useState68[0],
+    setConflictosPremonta = _useState68[1];
   var cargarTransferencias = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
-    var _ref1 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee4(filtros) {
+    var _ref10 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee4(filtros) {
       var response;
       return _regeneratorRuntime().wrap(function _callee4$(_context4) {
         while (1) switch (_context4.prev = _context4.next) {
@@ -137834,14 +138123,14 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
       }, _callee4, null, [[0, 7]]);
     }));
     return function (_x4) {
-      return _ref1.apply(this, arguments);
+      return _ref10.apply(this, arguments);
     };
   }(), []);
 
   // useEffect movido desde TransferenciaList
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     var fetchData = /*#__PURE__*/function () {
-      var _ref10 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5() {
+      var _ref11 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5() {
         var _yield$cargarTransfer, nuevasTransferencias, nuevaPaginacion;
         return _regeneratorRuntime().wrap(function _callee5$(_context5) {
           while (1) switch (_context5.prev = _context5.next) {
@@ -137875,14 +138164,14 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
         }, _callee5, null, [[2, 12, 16, 19]]);
       }));
       return function fetchData() {
-        return _ref10.apply(this, arguments);
+        return _ref11.apply(this, arguments);
       };
     }();
     fetchData();
   }, [cargarTransferencias, filtrosActivos, refreshListKey]);
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     var cargarSucursales = /*#__PURE__*/function () {
-      var _ref11 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee6() {
+      var _ref12 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee6() {
         var res;
         return _regeneratorRuntime().wrap(function _callee6$(_context6) {
           while (1) switch (_context6.prev = _context6.next) {
@@ -137906,7 +138195,7 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
         }, _callee6, null, [[0, 7]]);
       }));
       return function cargarSucursales() {
-        return _ref11.apply(this, arguments);
+        return _ref12.apply(this, arguments);
       };
     }();
     cargarSucursales();
@@ -137953,32 +138242,32 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
     cargarBorradores();
   }, [refreshListKey, cargarBorradores]);
 
-  // Mapea los productos de una redistribución al inventario local por código de barras.
-  var mapearItemsPremonta = /*#__PURE__*/function () {
-    var _ref13 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee8(prem) {
-      var items, noEncontrados, _iterator, _step, _loop;
+  // Coteja cada producto de la redistribución contra el inventario local (por código de barras)
+  // y arma las filas de conflicto: existe/no existe, stock local, cantidad solicitada.
+  var construirFilasConflicto = /*#__PURE__*/function () {
+    var _ref14 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee8(prem) {
+      var filas, _iterator, _step, _loop;
       return _regeneratorRuntime().wrap(function _callee8$(_context9) {
         while (1) switch (_context9.prev = _context9.next) {
           case 0:
-            items = [];
-            noEncontrados = [];
-            _iterator = _createForOfIteratorHelper(prem.items || []);
-            _context9.prev = 3;
+            filas = [];
+            _iterator = _createForOfIteratorHelper((prem.items || []).entries());
+            _context9.prev = 2;
             _loop = /*#__PURE__*/_regeneratorRuntime().mark(function _loop() {
-              var _it$producto;
-              var it, barras, local, r, arr, _it$producto2;
+              var _step$value, idx, it, snap, barras, local, r, arr;
               return _regeneratorRuntime().wrap(function _loop$(_context8) {
                 while (1) switch (_context8.prev = _context8.next) {
                   case 0:
-                    it = _step.value;
-                    barras = (_it$producto = it.producto) === null || _it$producto === void 0 ? void 0 : _it$producto.codigo_barras;
+                    _step$value = _slicedToArray(_step.value, 2), idx = _step$value[0], it = _step$value[1];
+                    snap = it.producto || {};
+                    barras = snap.codigo_barras;
                     local = null;
                     if (!barras) {
-                      _context8.next = 14;
+                      _context8.next = 15;
                       break;
                     }
-                    _context8.prev = 4;
-                    _context8.next = 7;
+                    _context8.prev = 5;
+                    _context8.next = 8;
                     return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].getinventario({
                       vendedor: null,
                       num: 5,
@@ -137987,139 +138276,178 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
                       orderColumn: 'descripcion',
                       orderBy: 'asc'
                     });
-                  case 7:
+                  case 8:
                     r = _context8.sent;
                     arr = r.data || [];
                     local = arr.find(function (p) {
                       return String(p.codigo_barras) === String(barras);
                     }) || null;
-                    _context8.next = 14;
+                    _context8.next = 15;
                     break;
-                  case 12:
-                    _context8.prev = 12;
-                    _context8.t0 = _context8["catch"](4);
-                  case 14:
-                    if (local) {
-                      items.push({
-                        id_producto_insucursal: local.id,
-                        cantidad: it.cantidad
-                      });
-                    } else {
-                      noEncontrados.push(((_it$producto2 = it.producto) === null || _it$producto2 === void 0 ? void 0 : _it$producto2.descripcion) || barras || '#' + (it.producto_id_master || it.id));
-                    }
+                  case 13:
+                    _context8.prev = 13;
+                    _context8.t0 = _context8["catch"](5);
                   case 15:
+                    filas.push({
+                      key: 'f' + idx + '-' + (barras || it.id || idx),
+                      descripcion: snap.descripcion || local && local.descripcion || null,
+                      barras: barras || local && local.codigo_barras || null,
+                      codigo_proveedor: snap.codigo_proveedor || local && local.codigo_proveedor || null,
+                      cantidadSolicitada: it.cantidad,
+                      local: local,
+                      existe: !!local,
+                      stockLocal: local ? local.cantidad : null
+                    });
+                  case 16:
                   case "end":
                     return _context8.stop();
                 }
-              }, _loop, null, [[4, 12]]);
+              }, _loop, null, [[5, 13]]);
             });
             _iterator.s();
-          case 6:
+          case 5:
             if ((_step = _iterator.n()).done) {
-              _context9.next = 10;
+              _context9.next = 9;
               break;
             }
-            return _context9.delegateYield(_loop(), "t0", 8);
-          case 8:
-            _context9.next = 6;
+            return _context9.delegateYield(_loop(), "t0", 7);
+          case 7:
+            _context9.next = 5;
             break;
-          case 10:
-            _context9.next = 15;
+          case 9:
+            _context9.next = 14;
             break;
-          case 12:
-            _context9.prev = 12;
-            _context9.t1 = _context9["catch"](3);
+          case 11:
+            _context9.prev = 11;
+            _context9.t1 = _context9["catch"](2);
             _iterator.e(_context9.t1);
-          case 15:
-            _context9.prev = 15;
+          case 14:
+            _context9.prev = 14;
             _iterator.f();
-            return _context9.finish(15);
+            return _context9.finish(14);
+          case 17:
+            return _context9.abrupt("return", filas);
           case 18:
-            return _context9.abrupt("return", {
-              items: items,
-              noEncontrados: noEncontrados
-            });
-          case 19:
           case "end":
             return _context9.stop();
         }
-      }, _callee8, null, [[3, 12, 15, 18]]);
+      }, _callee8, null, [[2, 11, 14, 17]]);
     }));
-    return function mapearItemsPremonta(_x5) {
-      return _ref13.apply(this, arguments);
+    return function construirFilasConflicto(_x5) {
+      return _ref14.apply(this, arguments);
     };
   }();
 
-  // "Crear orden" desde una redistribución: genera una COPIA editable local (orden en
-  // preparación, estado 0, SIN descontar), ligada a la redistribución. La original queda intacta.
-  var crearOrdenDesdePremonta = /*#__PURE__*/function () {
-    var _ref14 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee9(prem) {
-      var _prem$sucursal_destin, _res$data3, _yield$mapearItemsPre, items, noEncontrados, res, _res$data4;
+  // "Crear orden" desde una redistribución: primero abre el paso de resolución de conflictos
+  // (ajustar cantidades / excluir inexistentes). La creación real ocurre en confirmarOrdenConflictos.
+  var abrirResolucionPremonta = /*#__PURE__*/function () {
+    var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee9(prem) {
+      var filas;
       return _regeneratorRuntime().wrap(function _callee9$(_context0) {
         while (1) switch (_context0.prev = _context0.next) {
           case 0:
             setProcesando('prem-' + prem.id_orden_distribucion);
             _context0.prev = 1;
             _context0.next = 4;
-            return mapearItemsPremonta(prem);
+            return construirFilasConflicto(prem);
           case 4:
-            _yield$mapearItemsPre = _context0.sent;
-            items = _yield$mapearItemsPre.items;
-            noEncontrados = _yield$mapearItemsPre.noEncontrados;
-            if (noEncontrados.length) {
-              alert('Estos productos de la redistribución no están en tu inventario local y no se incluyeron (podés agregarlos manualmente en la orden):\n- ' + noEncontrados.join('\n- '));
-            }
-            if (items.length) {
-              _context0.next = 11;
+            filas = _context0.sent;
+            setConflictosPremonta({
+              prem: prem,
+              filas: filas
+            });
+            setVistaActual('conflictos');
+            _context0.next = 12;
+            break;
+          case 9:
+            _context0.prev = 9;
+            _context0.t0 = _context0["catch"](1);
+            alert('Error al cotejar la redistribución: ' + (_context0.t0.message || _context0.t0));
+          case 12:
+            _context0.prev = 12;
+            setProcesando(null);
+            return _context0.finish(12);
+          case 15:
+          case "end":
+            return _context0.stop();
+        }
+      }, _callee9, null, [[1, 9, 12, 15]]);
+    }));
+    return function abrirResolucionPremonta(_x6) {
+      return _ref15.apply(this, arguments);
+    };
+  }();
+
+  // Crea la orden en preparación (estado 0, SIN descontar) con los ítems ya resueltos por el
+  // usuario, ligada a la redistribución. La redistribución original de central queda intacta.
+  var confirmarOrdenConflictos = /*#__PURE__*/function () {
+    var _ref16 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(items) {
+      var prem, _prem$sucursal_destin, _res$data3, res, _res$data4;
+      return _regeneratorRuntime().wrap(function _callee0$(_context1) {
+        while (1) switch (_context1.prev = _context1.next) {
+          case 0:
+            prem = conflictosPremonta === null || conflictosPremonta === void 0 ? void 0 : conflictosPremonta.prem;
+            if (prem) {
+              _context1.next = 3;
               break;
             }
-            alert('Ningún producto de la redistribución se pudo mapear a tu inventario local.');
-            return _context0.abrupt("return");
-          case 11:
-            _context0.next = 13;
+            return _context1.abrupt("return");
+          case 3:
+            if (items.length) {
+              _context1.next = 6;
+              break;
+            }
+            alert('No hay productos válidos para crear la orden.');
+            return _context1.abrupt("return");
+          case 6:
+            setProcesando('crear-conflictos');
+            _context1.prev = 7;
+            _context1.next = 10;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGuardarOrden({
               id_destino: ((_prem$sucursal_destin = prem.sucursal_destino) === null || _prem$sucursal_destin === void 0 ? void 0 : _prem$sucursal_destin.id) || '',
               id_orden_distribucion: prem.id_orden_distribucion,
               observaciones: 'Redistribución #' + prem.id_orden_distribucion,
               items: items
             });
-          case 13:
-            res = _context0.sent;
+          case 10:
+            res = _context1.sent;
             if (!((_res$data3 = res.data) !== null && _res$data3 !== void 0 && _res$data3.estado)) {
-              _context0.next = 20;
+              _context1.next = 19;
               break;
             }
-            _context0.next = 17;
+            _context1.next = 14;
             return cargarBorradores();
-          case 17:
+          case 14:
             setPremontas(function (prev) {
               return prev.filter(function (p) {
                 return p.id_orden_distribucion !== prem.id_orden_distribucion;
               });
             });
-            _context0.next = 21;
+            setConflictosPremonta(null);
+            setVistaActual('list');
+            _context1.next = 20;
             break;
-          case 20:
+          case 19:
             alert(((_res$data4 = res.data) === null || _res$data4 === void 0 ? void 0 : _res$data4.msj) || 'No se pudo crear la orden.');
-          case 21:
-            _context0.next = 26;
+          case 20:
+            _context1.next = 25;
             break;
-          case 23:
-            _context0.prev = 23;
-            _context0.t0 = _context0["catch"](1);
-            alert('Error al crear la orden: ' + (_context0.t0.message || _context0.t0));
-          case 26:
-            _context0.prev = 26;
+          case 22:
+            _context1.prev = 22;
+            _context1.t0 = _context1["catch"](7);
+            alert('Error al crear la orden: ' + (_context1.t0.message || _context1.t0));
+          case 25:
+            _context1.prev = 25;
             setProcesando(null);
-            return _context0.finish(26);
-          case 29:
+            return _context1.finish(25);
+          case 28:
           case "end":
-            return _context0.stop();
+            return _context1.stop();
         }
-      }, _callee9, null, [[1, 23, 26, 29]]);
+      }, _callee0, null, [[7, 22, 25, 28]]);
     }));
-    return function crearOrdenDesdePremonta(_x6) {
-      return _ref14.apply(this, arguments);
+    return function confirmarOrdenConflictos(_x7) {
+      return _ref16.apply(this, arguments);
     };
   }();
 
@@ -138138,145 +138466,145 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
 
   // Guarda el borrador (crear/actualizar) sin descontar. Devuelve {estado, msj, orden}.
   var guardarBorrador = /*#__PURE__*/function () {
-    var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(datos) {
+    var _ref17 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(datos) {
       var res;
-      return _regeneratorRuntime().wrap(function _callee0$(_context1) {
-        while (1) switch (_context1.prev = _context1.next) {
+      return _regeneratorRuntime().wrap(function _callee1$(_context10) {
+        while (1) switch (_context10.prev = _context10.next) {
           case 0:
-            _context1.next = 2;
+            _context10.next = 2;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGuardarOrden(datos);
           case 2:
-            res = _context1.sent;
-            _context1.next = 5;
+            res = _context10.sent;
+            _context10.next = 5;
             return cargarBorradores();
           case 5:
-            return _context1.abrupt("return", res.data);
+            return _context10.abrupt("return", res.data);
           case 6:
           case "end":
-            return _context1.stop();
+            return _context10.stop();
         }
-      }, _callee0);
+      }, _callee1);
     }));
-    return function guardarBorrador(_x7) {
-      return _ref15.apply(this, arguments);
+    return function guardarBorrador(_x8) {
+      return _ref17.apply(this, arguments);
     };
   }();
 
   // Dar salida a un borrador: descuenta inventario + crea el espejo en central.
   var darSalida = /*#__PURE__*/function () {
-    var _ref16 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(borrador) {
+    var _ref18 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(borrador) {
       var nItems, _res$data5, res, _res$data6;
-      return _regeneratorRuntime().wrap(function _callee1$(_context10) {
-        while (1) switch (_context10.prev = _context10.next) {
+      return _regeneratorRuntime().wrap(function _callee10$(_context11) {
+        while (1) switch (_context11.prev = _context11.next) {
           case 0:
             nItems = (borrador.items || []).filter(function (i) {
               return parseFloat(i.cantidad) > 0;
             }).length;
             if (window.confirm("\xBFDar salida a la orden #".concat(borrador.id, "? Se descontar\xE1n ").concat(nItems, " producto(s) del inventario y se enviar\xE1 a central. Esta acci\xF3n s\xED mueve inventario."))) {
-              _context10.next = 3;
+              _context11.next = 3;
               break;
             }
-            return _context10.abrupt("return");
+            return _context11.abrupt("return");
           case 3:
             setProcesando('salida-' + borrador.id);
-            _context10.prev = 4;
-            _context10.next = 7;
+            _context11.prev = 4;
+            _context11.next = 7;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdDarSalidaSimple({
               id_transferencia: borrador.id
             });
           case 7:
-            res = _context10.sent;
+            res = _context11.sent;
             if (!((_res$data5 = res.data) !== null && _res$data5 !== void 0 && _res$data5.estado)) {
-              _context10.next = 15;
+              _context11.next = 15;
               break;
             }
-            _context10.next = 11;
+            _context11.next = 11;
             return cargarBorradores();
           case 11:
             setRefreshListKey(function (k) {
               return k + 1;
             }); // refrescar histórico central
             alert(res.data.msj || 'Salida dada.');
-            _context10.next = 16;
+            _context11.next = 16;
             break;
           case 15:
             alert(((_res$data6 = res.data) === null || _res$data6 === void 0 ? void 0 : _res$data6.msj) || 'No se pudo dar salida.');
           case 16:
-            _context10.next = 21;
+            _context11.next = 21;
             break;
           case 18:
-            _context10.prev = 18;
-            _context10.t0 = _context10["catch"](4);
-            alert('Error al dar salida: ' + (_context10.t0.message || _context10.t0));
+            _context11.prev = 18;
+            _context11.t0 = _context11["catch"](4);
+            alert('Error al dar salida: ' + (_context11.t0.message || _context11.t0));
           case 21:
-            _context10.prev = 21;
+            _context11.prev = 21;
             setProcesando(null);
-            return _context10.finish(21);
+            return _context11.finish(21);
           case 24:
           case "end":
-            return _context10.stop();
+            return _context11.stop();
         }
-      }, _callee1, null, [[4, 18, 21, 24]]);
+      }, _callee10, null, [[4, 18, 21, 24]]);
     }));
-    return function darSalida(_x8) {
-      return _ref16.apply(this, arguments);
+    return function darSalida(_x9) {
+      return _ref18.apply(this, arguments);
     };
   }();
 
   // Eliminar un borrador (no tocó inventario).
   var eliminarBorrador = /*#__PURE__*/function () {
-    var _ref17 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(borrador) {
+    var _ref19 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(borrador) {
       var _res$data7, res, _res$data8;
-      return _regeneratorRuntime().wrap(function _callee10$(_context11) {
-        while (1) switch (_context11.prev = _context11.next) {
+      return _regeneratorRuntime().wrap(function _callee11$(_context12) {
+        while (1) switch (_context12.prev = _context12.next) {
           case 0:
             if (window.confirm("\xBFEliminar la orden en preparaci\xF3n #".concat(borrador.id, "? No descont\xF3 inventario, solo se borra el borrador."))) {
-              _context11.next = 2;
+              _context12.next = 2;
               break;
             }
-            return _context11.abrupt("return");
+            return _context12.abrupt("return");
           case 2:
             setProcesando('del-' + borrador.id);
-            _context11.prev = 3;
-            _context11.next = 6;
+            _context12.prev = 3;
+            _context12.next = 6;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdEliminarOrden({
               id: borrador.id
             });
           case 6:
-            res = _context11.sent;
+            res = _context12.sent;
             if (!((_res$data7 = res.data) !== null && _res$data7 !== void 0 && _res$data7.estado)) {
-              _context11.next = 13;
+              _context12.next = 13;
               break;
             }
-            _context11.next = 10;
+            _context12.next = 10;
             return cargarBorradores();
           case 10:
             setRefreshListKey(function (k) {
               return k + 1;
             }); // por si vuelve a aparecer la premonta
-            _context11.next = 14;
+            _context12.next = 14;
             break;
           case 13:
             alert(((_res$data8 = res.data) === null || _res$data8 === void 0 ? void 0 : _res$data8.msj) || 'No se pudo eliminar.');
           case 14:
-            _context11.next = 19;
+            _context12.next = 19;
             break;
           case 16:
-            _context11.prev = 16;
-            _context11.t0 = _context11["catch"](3);
-            alert('Error al eliminar: ' + (_context11.t0.message || _context11.t0));
+            _context12.prev = 16;
+            _context12.t0 = _context12["catch"](3);
+            alert('Error al eliminar: ' + (_context12.t0.message || _context12.t0));
           case 19:
-            _context11.prev = 19;
+            _context12.prev = 19;
             setProcesando(null);
-            return _context11.finish(19);
+            return _context12.finish(19);
           case 22:
           case "end":
-            return _context11.stop();
+            return _context12.stop();
         }
-      }, _callee10, null, [[3, 16, 19, 22]]);
+      }, _callee11, null, [[3, 16, 19, 22]]);
     }));
-    return function eliminarBorrador(_x9) {
-      return _ref17.apply(this, arguments);
+    return function eliminarBorrador(_x0) {
+      return _ref19.apply(this, arguments);
     };
   }();
   var handleSaveTransfer = function handleSaveTransfer(transferenciaGuardada) {
@@ -138291,6 +138619,7 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
     setVistaActual('list');
     setTransferenciaSeleccionada(null);
     setBorradorEnEdicion(null);
+    setConflictosPremonta(null);
   };
   var handleGoToCreate = function handleGoToCreate() {
     // Una transferencia nueva se arma como BORRADOR (orden en preparación): no descuenta
@@ -138358,7 +138687,7 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
           onClick: handleGoToCreate,
           className: "mt-3 sm:mt-0 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition",
           children: "+ Nueva Transferencia"
-        }), (vistaActual === 'form' || vistaActual === 'detail') && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+        }), (vistaActual === 'form' || vistaActual === 'detail' || vistaActual === 'conflictos') && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
           onClick: handleCancelForm,
           className: "mt-3 sm:mt-0 bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition",
           children: "\u2190 Volver al Listado"
@@ -138441,19 +138770,19 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
                       className: "px-3 py-2 text-center whitespace-nowrap",
                       children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
                         onClick: function onClick() {
-                          return crearOrdenDesdePremonta(prem);
+                          return abrirResolucionPremonta(prem);
                         },
                         disabled: procesando === 'prem-' + prem.id_orden_distribucion,
                         className: "px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold rounded-md",
-                        title: "Crear una orden editable a partir de esta redistribuci\xF3n",
+                        title: "Cotejar contra tu inventario, resolver conflictos y crear la orden editable",
                         children: procesando === 'prem-' + prem.id_orden_distribucion ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
                           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
                             className: "fas fa-spinner fa-spin mr-1"
-                          }), "Creando..."]
+                          }), "Cotejando..."]
                         }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
                           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
-                            className: "fas fa-file-circle-plus mr-1"
-                          }), "Crear orden"]
+                            className: "fas fa-magnifying-glass mr-1"
+                          }), "Revisar y crear"]
                         })
                       })
                     })]
@@ -138611,6 +138940,13 @@ var TransferenciasModule = function TransferenciasModule(_ref0) {
         cargarTransferencias: cargarTransferencias,
         modoBorrador: !!borradorEnEdicion,
         onGuardarBorrador: guardarBorrador
+      }), vistaActual === 'conflictos' && conflictosPremonta && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(ResolverConflictosPremonta, {
+        prem: conflictosPremonta.prem,
+        filas: conflictosPremonta.filas,
+        destinoBadge: badgeDestinoPorId((_conflictosPremonta$p = conflictosPremonta.prem) === null || _conflictosPremonta$p === void 0 || (_conflictosPremonta$p = _conflictosPremonta$p.sucursal_destino) === null || _conflictosPremonta$p === void 0 ? void 0 : _conflictosPremonta$p.id),
+        onConfirmar: confirmarOrdenConflictos,
+        onCancelar: handleCancelForm,
+        procesando: procesando === 'crear-conflictos'
       }), vistaActual === 'detail' && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(TransferenciaDetailView, {
         transferencia: transferenciaSeleccionada,
         onBack: handleCancelForm,

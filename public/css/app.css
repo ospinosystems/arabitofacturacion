@@ -24369,6 +24369,9 @@ body{
 .max-h-\[50vh\]{
   max-height: 50vh;
 }
+.max-h-\[55vh\]{
+  max-height: 55vh;
+}
 .max-h-\[600px\]{
   max-height: 600px;
 }
@@ -25794,6 +25797,9 @@ body{
 }
 .bg-red-50\/40{
   background-color: rgb(254 242 242 / 0.4);
+}
+.bg-red-50\/60{
+  background-color: rgb(254 242 242 / 0.6);
 }
 .bg-red-500{
   --tw-bg-opacity: 1;
@@ -27307,6 +27313,11 @@ body{
   background-color: rgb(165 243 252 / var(--tw-bg-opacity));
 }
 
+.hover\:bg-emerald-50:hover{
+  --tw-bg-opacity: 1;
+  background-color: rgb(236 253 245 / var(--tw-bg-opacity));
+}
+
 .hover\:bg-emerald-600:hover{
   --tw-bg-opacity: 1;
   background-color: rgb(5 150 105 / var(--tw-bg-opacity));
@@ -28610,6 +28621,9 @@ body{
   }
   .md\:p-3{
     padding: 0.75rem;
+  }
+  .md\:p-4{
+    padding: 1rem;
   }
   .md\:p-6{
     padding: 1.5rem;

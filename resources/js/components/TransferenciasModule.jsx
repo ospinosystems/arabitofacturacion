@@ -1368,6 +1368,155 @@ const TransferenciaList = ({
     );
 };
 
+// Paso de resolución de conflictos al crear una orden desde una redistribución de central.
+// Cada producto de la redistribución se coteja contra el inventario local por código de barras:
+//   • no existe localmente → se excluye (no se puede enviar lo que no tenés en sistema)
+//   • existe pero la cantidad no alcanza → se avisa y el usuario ajusta la cantidad
+// El usuario ajusta/excluye y recién ahí se crea la orden en preparación (sin descontar).
+const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, onCancelar, procesando }) => {
+    const [rows, setRows] = useState([]);
+    useEffect(() => {
+        setRows((filas || []).map(f => ({
+            ...f,
+            // sugerir de entrada lo factible: mín(solicitado, stock). El usuario lo ajusta.
+            cantidad: f.existe ? String(Math.min(parseFloat(f.cantidadSolicitada) || 0, parseFloat(f.stockLocal) || 0)) : '0',
+            incluir: !!f.existe,
+        })));
+    }, [filas]);
+
+    const setCantidad = (key, val) => {
+        if (val !== '' && !/^\d*\.?\d{0,2}$/.test(val)) return;
+        setRows(prev => prev.map(r => (r.key === key ? { ...r, cantidad: val } : r)));
+    };
+    const usarSolicitado = (key) => setRows(prev => prev.map(r => (r.key === key ? { ...r, cantidad: String(r.cantidadSolicitada) } : r)));
+    const usarStock = (key) => setRows(prev => prev.map(r => (r.key === key ? { ...r, cantidad: String(r.stockLocal || 0) } : r)));
+    const toggleIncluir = (key) => setRows(prev => prev.map(r => (r.key === key ? { ...r, incluir: !r.incluir } : r)));
+
+    const incluidos = rows.filter(r => r.incluir && r.existe && parseFloat(r.cantidad) > 0);
+    const noExisten = rows.filter(r => !r.existe).length;
+    const excedenStock = rows.filter(r => r.existe && r.incluir && parseFloat(r.cantidad) > (parseFloat(r.stockLocal) || 0)).length;
+
+    const confirmar = () => {
+        const items = incluidos.map(r => ({ id_producto_insucursal: r.local.id, cantidad: parseFloat(r.cantidad).toFixed(2) }));
+        onConfirmar(items);
+    };
+
+    return (
+        <div className="bg-white rounded-lg shadow p-3 md:p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 mb-3 border-b border-gray-200">
+                <div>
+                    <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">
+                        <i className="fas fa-triangle-exclamation text-amber-500 mr-1"></i>
+                        Resolver conflictos · Redistribución #{prem?.id_orden_distribucion}
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-0.5">Ajustá cantidades y excluí lo que no tengas antes de crear la orden. Todavía no se descuenta nada.</p>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                    <span className="text-gray-500">Destino:</span> {destinoBadge}
+                </div>
+            </div>
+
+            {/* Resumen de conflictos */}
+            <div className="flex flex-wrap gap-2 mb-3 text-xs">
+                <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold"><i className="fas fa-check mr-1"></i>{incluidos.length} a enviar</span>
+                {excedenStock > 0 && <span className="px-2 py-1 rounded bg-amber-50 text-amber-700 border border-amber-200 font-semibold"><i className="fas fa-exclamation mr-1"></i>{excedenStock} supera(n) stock</span>}
+                {noExisten > 0 && <span className="px-2 py-1 rounded bg-red-50 text-red-700 border border-red-200 font-semibold"><i className="fas fa-ban mr-1"></i>{noExisten} no existe(n)</span>}
+            </div>
+
+            <div className="border rounded-md overflow-x-auto max-h-[55vh] overflow-y-auto">
+                <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0">
+                        <tr>
+                            <th className="px-2 py-1.5 text-left font-semibold">Producto</th>
+                            <th className="px-2 py-1.5 text-left font-semibold">Cód. Barras</th>
+                            <th className="px-2 py-1.5 text-center font-semibold">Solicitado</th>
+                            <th className="px-2 py-1.5 text-center font-semibold">Stock local</th>
+                            <th className="px-2 py-1.5 text-center font-semibold">A enviar</th>
+                            <th className="px-2 py-1.5 text-center font-semibold">Estado</th>
+                            <th className="px-2 py-1.5 text-center font-semibold w-10"></th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {rows.map(r => {
+                            const cant = parseFloat(r.cantidad) || 0;
+                            const stock = parseFloat(r.stockLocal) || 0;
+                            const excede = r.existe && cant > stock;
+                            const rowCls = !r.existe ? 'bg-red-50/60' : (!r.incluir ? 'bg-gray-50 opacity-60' : (excede ? 'bg-amber-50/60' : ''));
+                            return (
+                                <tr key={r.key} className={rowCls}>
+                                    <td className="px-2 py-1.5 text-gray-800">{r.descripcion || '—'}</td>
+                                    <td className="px-2 py-1.5 font-mono text-xs text-gray-600 whitespace-nowrap">{r.barras || '—'}</td>
+                                    <td className="px-2 py-1.5 text-center text-gray-600">{parseFloat(r.cantidadSolicitada || 0).toFixed(2)}</td>
+                                    <td className="px-2 py-1.5 text-center">{r.existe ? <span className={stock > 0 ? 'text-gray-700' : 'text-red-600 font-semibold'}>{stock.toFixed(2)}</span> : <span className="text-red-500">—</span>}</td>
+                                    <td className="px-2 py-1.5 text-center">
+                                        {r.existe ? (
+                                            <div className="flex items-center justify-center gap-1">
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={r.cantidad}
+                                                    disabled={!r.incluir}
+                                                    onChange={(e) => setCantidad(r.key, e.target.value)}
+                                                    className={`w-20 p-1 text-center border rounded ${excede ? 'border-amber-400 text-amber-700' : 'border-gray-300'} ${!r.incluir ? 'bg-gray-100' : ''}`}
+                                                />
+                                                {r.incluir && (
+                                                    <div className="flex flex-col leading-none">
+                                                        <button type="button" onClick={() => usarSolicitado(r.key)} title="Usar lo solicitado" className="text-[10px] text-indigo-600 hover:underline">sol.</button>
+                                                        <button type="button" onClick={() => usarStock(r.key)} title="Usar el stock disponible" className="text-[10px] text-indigo-600 hover:underline">stock</button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : <span className="text-gray-400">—</span>}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-center whitespace-nowrap">
+                                        {!r.existe ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold"><i className="fas fa-ban"></i>No existe</span>
+                                        ) : !r.incluir ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 text-xs font-bold">Excluido</span>
+                                        ) : excede ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold" title={`Solo hay ${stock} en stock`}><i className="fas fa-exclamation"></i>Supera stock</span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold"><i className="fas fa-check"></i>OK</span>
+                                        )}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-center">
+                                        {r.existe && (
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleIncluir(r.key)}
+                                                className={`p-1 rounded ${r.incluir ? 'text-red-500 hover:bg-red-50' : 'text-emerald-600 hover:bg-emerald-50'}`}
+                                                title={r.incluir ? 'Excluir de la orden' : 'Incluir en la orden'}
+                                            >
+                                                <i className={`fas ${r.incluir ? 'fa-trash' : 'fa-plus'}`}></i>
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+
+            {noExisten > 0 && (
+                <p className="mt-2 text-xs text-red-600"><i className="fas fa-circle-info mr-1"></i>{noExisten} producto(s) de la redistribución no existen en tu inventario local: quedan excluidos. Si deberían existir, primero creá su ficha en el inventario.</p>
+            )}
+
+            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-3 mt-2 border-t border-gray-200">
+                <button type="button" onClick={onCancelar} disabled={!!procesando} className="px-4 py-2 border rounded-md text-sm bg-white hover:bg-gray-50">Cancelar</button>
+                <button
+                    type="button"
+                    onClick={confirmar}
+                    disabled={!!procesando || incluidos.length === 0}
+                    className="inline-flex justify-center items-center px-4 py-2 rounded-md text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                >
+                    {procesando ? <><i className="fas fa-spinner fa-spin mr-1"></i>Creando...</> : <><i className="fas fa-file-circle-plus mr-1"></i>Crear orden ({incluidos.length})</>}
+                </button>
+            </div>
+        </div>
+    );
+};
+
 const TransferenciasModule = ({ sucursalActualId }) => {
     const [vistaActual, setVistaActual] = useState('list'); // 'list', 'form', 'detail'
     const [transferenciaSeleccionada, setTransferenciaSeleccionada] = useState(null);
@@ -1389,6 +1538,8 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const [borradores, setBorradores] = useState([]);
     const [borradorEnEdicion, setBorradorEnEdicion] = useState(null);
     const [procesando, setProcesando] = useState(null); // id ocupado (crear/salida/eliminar)
+    // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
+    const [conflictosPremonta, setConflictosPremonta] = useState(null);
 
     const cargarTransferencias = useCallback(async (filtros) => {
         try {
@@ -1448,12 +1599,13 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         cargarBorradores();
     }, [refreshListKey, cargarBorradores]);
 
-    // Mapea los productos de una redistribución al inventario local por código de barras.
-    const mapearItemsPremonta = async (prem) => {
-        const items = [];
-        const noEncontrados = [];
-        for (const it of (prem.items || [])) {
-            const barras = it.producto?.codigo_barras;
+    // Coteja cada producto de la redistribución contra el inventario local (por código de barras)
+    // y arma las filas de conflicto: existe/no existe, stock local, cantidad solicitada.
+    const construirFilasConflicto = async (prem) => {
+        const filas = [];
+        for (const [idx, it] of (prem.items || []).entries()) {
+            const snap = it.producto || {};
+            const barras = snap.codigo_barras;
             let local = null;
             if (barras) {
                 try {
@@ -1462,25 +1614,43 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                     local = arr.find(p => String(p.codigo_barras) === String(barras)) || null;
                 } catch (e) { /* ignore */ }
             }
-            if (local) {
-                items.push({ id_producto_insucursal: local.id, cantidad: it.cantidad });
-            } else {
-                noEncontrados.push(it.producto?.descripcion || barras || ('#' + (it.producto_id_master || it.id)));
-            }
+            filas.push({
+                key: 'f' + idx + '-' + (barras || it.id || idx),
+                descripcion: snap.descripcion || (local && local.descripcion) || null,
+                barras: barras || (local && local.codigo_barras) || null,
+                codigo_proveedor: snap.codigo_proveedor || (local && local.codigo_proveedor) || null,
+                cantidadSolicitada: it.cantidad,
+                local,
+                existe: !!local,
+                stockLocal: local ? local.cantidad : null,
+            });
         }
-        return { items, noEncontrados };
+        return filas;
     };
 
-    // "Crear orden" desde una redistribución: genera una COPIA editable local (orden en
-    // preparación, estado 0, SIN descontar), ligada a la redistribución. La original queda intacta.
-    const crearOrdenDesdePremonta = async (prem) => {
+    // "Crear orden" desde una redistribución: primero abre el paso de resolución de conflictos
+    // (ajustar cantidades / excluir inexistentes). La creación real ocurre en confirmarOrdenConflictos.
+    const abrirResolucionPremonta = async (prem) => {
         setProcesando('prem-' + prem.id_orden_distribucion);
         try {
-            const { items, noEncontrados } = await mapearItemsPremonta(prem);
-            if (noEncontrados.length) {
-                alert('Estos productos de la redistribución no están en tu inventario local y no se incluyeron (podés agregarlos manualmente en la orden):\n- ' + noEncontrados.join('\n- '));
-            }
-            if (!items.length) { alert('Ningún producto de la redistribución se pudo mapear a tu inventario local.'); return; }
+            const filas = await construirFilasConflicto(prem);
+            setConflictosPremonta({ prem, filas });
+            setVistaActual('conflictos');
+        } catch (e) {
+            alert('Error al cotejar la redistribución: ' + (e.message || e));
+        } finally {
+            setProcesando(null);
+        }
+    };
+
+    // Crea la orden en preparación (estado 0, SIN descontar) con los ítems ya resueltos por el
+    // usuario, ligada a la redistribución. La redistribución original de central queda intacta.
+    const confirmarOrdenConflictos = async (items) => {
+        const prem = conflictosPremonta?.prem;
+        if (!prem) return;
+        if (!items.length) { alert('No hay productos válidos para crear la orden.'); return; }
+        setProcesando('crear-conflictos');
+        try {
             const res = await db.tdGuardarOrden({
                 id_destino: prem.sucursal_destino?.id || '',
                 id_orden_distribucion: prem.id_orden_distribucion,
@@ -1490,6 +1660,8 @@ const TransferenciasModule = ({ sucursalActualId }) => {
             if (res.data?.estado) {
                 await cargarBorradores();
                 setPremontas(prev => prev.filter(p => p.id_orden_distribucion !== prem.id_orden_distribucion));
+                setConflictosPremonta(null);
+                setVistaActual('list');
             } else {
                 alert(res.data?.msj || 'No se pudo crear la orden.');
             }
@@ -1571,6 +1743,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         setVistaActual('list');
         setTransferenciaSeleccionada(null);
         setBorradorEnEdicion(null);
+        setConflictosPremonta(null);
     };
 
     const handleGoToCreate = () => {
@@ -1628,7 +1801,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                 <div className="flex flex-col sm:flex-row justify-between items-center">
                     <h3 className="text-lg sm:text-xl font-bold text-gray-800">Gestión de Transferencias</h3>
                     {vistaActual === 'list' && (<button onClick={handleGoToCreate} className="mt-3 sm:mt-0 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">+ Nueva Transferencia</button>)}
-                    {(vistaActual === 'form' || vistaActual === 'detail') && (<button onClick={handleCancelForm} className="mt-3 sm:mt-0 bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">&larr; Volver al Listado</button>)}
+                    {(vistaActual === 'form' || vistaActual === 'detail' || vistaActual === 'conflictos') && (<button onClick={handleCancelForm} className="mt-3 sm:mt-0 bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">&larr; Volver al Listado</button>)}
                 </div>
             </header>
             <main>
@@ -1671,14 +1844,14 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                                 <td className="px-3 py-2 text-center text-gray-600">{(prem.items || []).length}</td>
                                                 <td className="px-3 py-2 text-center whitespace-nowrap">
                                                     <button
-                                                        onClick={() => crearOrdenDesdePremonta(prem)}
+                                                        onClick={() => abrirResolucionPremonta(prem)}
                                                         disabled={procesando === 'prem-' + prem.id_orden_distribucion}
                                                         className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold rounded-md"
-                                                        title="Crear una orden editable a partir de esta redistribución"
+                                                        title="Cotejar contra tu inventario, resolver conflictos y crear la orden editable"
                                                     >
                                                         {procesando === 'prem-' + prem.id_orden_distribucion
-                                                            ? <><i className="fas fa-spinner fa-spin mr-1"></i>Creando...</>
-                                                            : <><i className="fas fa-file-circle-plus mr-1"></i>Crear orden</>}
+                                                            ? <><i className="fas fa-spinner fa-spin mr-1"></i>Cotejando...</>
+                                                            : <><i className="fas fa-magnifying-glass mr-1"></i>Revisar y crear</>}
                                                     </button>
                                                 </td>
                                             </tr>
@@ -1777,9 +1950,19 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                         onGuardarBorrador={guardarBorrador}
                     />
                 )}
+                {vistaActual === 'conflictos' && conflictosPremonta && (
+                    <ResolverConflictosPremonta
+                        prem={conflictosPremonta.prem}
+                        filas={conflictosPremonta.filas}
+                        destinoBadge={badgeDestinoPorId(conflictosPremonta.prem?.sucursal_destino?.id)}
+                        onConfirmar={confirmarOrdenConflictos}
+                        onCancelar={handleCancelForm}
+                        procesando={procesando === 'crear-conflictos'}
+                    />
+                )}
                 {vistaActual === 'detail' && (
-                    <TransferenciaDetailView 
-                        transferencia={transferenciaSeleccionada} 
+                    <TransferenciaDetailView
+                        transferencia={transferenciaSeleccionada}
                         onBack={handleCancelForm}
                         sucursales={sucursales}
                     />
