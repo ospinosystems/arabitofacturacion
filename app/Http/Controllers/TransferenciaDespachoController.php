@@ -245,6 +245,8 @@ class TransferenciaDespachoController extends Controller
                 'precio' => (float) ($it->producto->precio ?? 0),
                 'base' => (float) ($it->producto->precio_base ?? 0),
                 'cantidad' => (float) $it->cantidad,
+                // Stock disponible ACTUAL del producto en el inventario local (para el editor).
+                'stock_disponible' => (float) ($it->producto->cantidad ?? 0),
                 'revisado' => (bool) $it->revisado,
                 'recolectado' => $this->recolectadoPorItem($it->id),
                 'empacado' => $this->empacadoPorItem($it->id),
@@ -788,6 +790,15 @@ class TransferenciaDespachoController extends Controller
         $itemsValidos = $orden->items->filter(fn ($it) => (float) $it->cantidad > 0)->values();
         if ($itemsValidos->isEmpty()) {
             return Response::json(['estado' => false, 'msj' => 'La orden no tiene ítems con cantidad para despachar.']);
+        }
+
+        // Guard: no se da la primera salida hasta que TODOS los ítems estén revisados (picking Plan B).
+        // Solo aplica en estado 0 (primera salida); en el reintento de envío a central (estado 1) no.
+        if ((int) $orden->estado === 0) {
+            $sinRevisar = $orden->items->filter(fn ($it) => !$it->revisado)->count();
+            if ($sinRevisar > 0) {
+                return Response::json(['estado' => false, 'msj' => "No se puede dar salida: faltan {$sinRevisar} producto(s) por revisar."]);
+            }
         }
 
         // ── Fase A: descontar inventario (solo si aún no se descontó: estado 0) ──

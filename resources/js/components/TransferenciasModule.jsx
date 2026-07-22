@@ -697,6 +697,31 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
         }
     };
 
+    // Navegación entre inputs de cantidad con Enter / flechas ↑↓. Opera sobre los inputs
+    // visibles de la MISMA tabla (respeta el filtro), no re-renderiza nada.
+    const handleQtyKeyDown = (e) => {
+        if (e.key !== 'Enter' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault();
+        const tabla = e.target.closest('table');
+        if (!tabla) return;
+        const inputs = Array.from(tabla.querySelectorAll('input.js-qty-input'));
+        const i = inputs.indexOf(e.target);
+        if (i === -1) return;
+        const next = e.key === 'ArrowUp' ? i - 1 : i + 1;
+        if (next >= 0 && next < inputs.length) {
+            inputs[next].focus();
+            inputs[next].select();
+        } else {
+            e.target.blur(); // en el último, Enter/↓ confirma el valor
+        }
+    };
+
+    // Stock disponible vs cantidad pedida: marca en rojo si se pide más de lo que hay.
+    const stockDisp = item.stock_disponible != null ? parseFloat(item.stock_disponible) : null;
+    const cantNum = parseFloat(item.cantidad);
+    const excedeStock = stockDisp != null && !isNaN(cantNum) && cantNum > stockDisp;
+    const origNum = item.cantidad_original_orden != null ? parseFloat(item.cantidad_original_orden) : null;
+
     // En modo picking: fila verde si ya fue revisado, ámbar si falta revisar.
     const rowCls = mostrarRevisado
         ? (item.revisado ? 'bg-emerald-50' : 'bg-amber-50/50 hover:bg-amber-50')
@@ -721,6 +746,13 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
             <td className="px-2 py-1 text-sm text-gray-800">{item.descripcion_real || item.producto?.descripcion || '—'}</td>
             <td className="px-2 py-1 text-xs font-mono text-gray-600 whitespace-nowrap">{item.barras_real || item.producto?.codigo_barras || '—'}</td>
             <td className="px-2 py-1 text-xs font-mono text-gray-600 whitespace-nowrap">{item.alterno_real || item.producto?.codigo_proveedor || '—'}</td>
+            <td className={`px-2 py-1 text-center text-xs font-semibold whitespace-nowrap ${excedeStock ? 'text-red-600' : 'text-gray-600'}`} title={excedeStock ? 'Estás pidiendo más de lo disponible en inventario' : 'Stock disponible en inventario'}>
+                {stockDisp != null ? stockDisp : '—'}
+                {excedeStock && <i className="fas fa-triangle-exclamation ml-1 text-red-500" title="Excede el disponible"></i>}
+            </td>
+            <td className="px-2 py-1 text-center text-xs text-gray-400 whitespace-nowrap" title="Cantidad original de la orden (antes de editar)">
+                {origNum != null ? origNum : '—'}
+            </td>
             <td className="px-2 py-1 text-center">
                 <input
                     type="text"
@@ -728,6 +760,7 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
                     value={item.cantidad}
                     onChange={handleCantidadChange}
                     onFocus={(e) => e.target.select()}
+                    onKeyDown={handleQtyKeyDown}
                     onBlur={(e) => {
                         const valor = e.target.value;
                         if (valor === '' || isNaN(parseFloat(valor)) || parseFloat(valor) <= 0) {
@@ -737,7 +770,7 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
                         }
                     }}
                     readOnly={!isEditable}
-                    className={`w-20 p-1 text-sm border border-gray-300 rounded text-center ${!isEditable ? 'bg-gray-100' : 'focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500'}`}
+                    className={`js-qty-input w-20 p-1 text-sm border rounded text-center ${excedeStock ? 'border-red-400 bg-red-50' : 'border-gray-300'} ${!isEditable ? 'bg-gray-100' : 'focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500'}`}
                     aria-label={`Cantidad para ${item.descripcion_real}`}
                 />
             </td>
@@ -777,6 +810,8 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
     // Marca si el usuario tocó algo (para confirmar el descarte al cancelar). Los cambios viven
     // en estado local: cancelar (sin guardar) siempre los descarta y la orden vuelve a como estaba.
     const [dirty, setDirty] = useState(false);
+    // Buscador dentro de la orden (filtra la lista por barras / cód. proveedor / descripción).
+    const [filtroProducto, setFiltroProducto] = useState('');
     const handleCancelClick = () => {
         if (dirty && !window.confirm('¿Descartar los cambios? La orden volverá a como estaba (no se guardó nada).')) return;
         onCancel();
@@ -828,6 +863,10 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                     created_at: itemAPI.created_at,
                     updated_at: itemAPI.updated_at,
                     cantidad_original_stock_inventario: itemAPI?.cantidad || 0,
+                    // Stock disponible ACTUAL del producto en inventario (lo manda ordenConDetalle).
+                    stock_disponible: itemAPI.stock_disponible != null ? parseFloat(itemAPI.stock_disponible) : null,
+                    // Cantidad ORIGINAL de la orden al abrir el editor (antes de tocar nada).
+                    cantidad_original_orden: parseFloat(itemAPI.cantidad) || 0,
                     revisado: !!itemAPI.revisado, // marca de picking (Plan B)
                     ubicacion: itemAPI.ubicacion || (itemAPI.producto && itemAPI.producto.ubicacion) || null, // ubicación de almacén
                     modificable: true, // Permitir edición en el formulario,
@@ -866,6 +905,8 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
             updated_at: new Date().toISOString(),
             id_producto_insucursal: productoDeInventario.id, // Clave para identificar el producto del inventario
             cantidad_original_stock_inventario: productoDeInventario.cantidad, // Stock del inventario al momento de agregar
+            stock_disponible: productoDeInventario.cantidad != null ? parseFloat(productoDeInventario.cantidad) : null,
+            cantidad_original_orden: parseFloat(productoDeInventario.cantidadInicial || "1.00") || 0,
             revisado: true, // recién agregado a mano = ya revisado físicamente
             modificable: true,
         };
@@ -1021,6 +1062,16 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
         }
     };
 
+    // Filtro dentro de la orden por barras / cód. proveedor / descripción.
+    const qFiltro = filtroProducto.trim().toLowerCase();
+    const itemsFiltrados = qFiltro
+        ? itemsTransferencia.filter(it =>
+            (it.barras_real || '').toLowerCase().includes(qFiltro) ||
+            (it.alterno_real || '').toLowerCase().includes(qFiltro) ||
+            (it.descripcion_real || '').toLowerCase().includes(qFiltro))
+        : itemsTransferencia;
+    const todosRevisados = itemsTransferencia.length > 0 && itemsTransferencia.every(i => i.revisado);
+
     return (
         <form onSubmit={handleSubmit} className="space-y-3 p-1 md:p-3 rounded-lg">
             {/* Encabezado compacto + destino, arriba */}
@@ -1123,20 +1174,40 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                                     );
                                 })()}
                             </h3>
-                            <button
-                                type="button"
-                                onClick={() => onImprimir && onImprimir({
-                                    titulo: 'Lista de picking' + (transferenciaToEdit?.id ? ' · Orden #' + transferenciaToEdit.id : ''),
-                                    subtitulo: (transferenciaToEdit?.id_orden_distribucion ? 'Redistribución #' + transferenciaToEdit.id_orden_distribucion + ' · ' : '') + itemsTransferencia.length + ' producto(s)',
-                                    destino: codigoDestino || '—',
-                                    filas: itemsTransferencia.map(i => ({ barras: i.barras_real, codigo_proveedor: i.alterno_real, descripcion: i.descripcion_real, ubicacion: i.ubicacion, cantidad: i.cantidad })),
-                                })}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
-                                title="Imprimir la lista (hoja carta) para buscar los productos en almacén"
-                            >
-                                <i className="fas fa-print"></i> Imprimir lista
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <div className="relative">
+                                    <i className="fas fa-search absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                                    <input
+                                        type="text"
+                                        value={filtroProducto}
+                                        onChange={(e) => setFiltroProducto(e.target.value)}
+                                        placeholder="Filtrar por barras, cód. proveedor o descripción…"
+                                        className="w-64 pl-7 pr-6 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                    />
+                                    {filtroProducto && (
+                                        <button type="button" onClick={() => setFiltroProducto('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" title="Limpiar">
+                                            <i className="fas fa-times-circle"></i>
+                                        </button>
+                                    )}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => onImprimir && onImprimir({
+                                        titulo: 'Lista de picking' + (transferenciaToEdit?.id ? ' · Orden #' + transferenciaToEdit.id : ''),
+                                        subtitulo: (transferenciaToEdit?.id_orden_distribucion ? 'Redistribución #' + transferenciaToEdit.id_orden_distribucion + ' · ' : '') + itemsTransferencia.length + ' producto(s)',
+                                        destino: codigoDestino || '—',
+                                        filas: itemsTransferencia.map(i => ({ barras: i.barras_real, codigo_proveedor: i.alterno_real, descripcion: i.descripcion_real, ubicacion: i.ubicacion, cantidad: i.cantidad })),
+                                    })}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-gray-300 text-gray-700 hover:bg-gray-50 whitespace-nowrap"
+                                    title="Imprimir la lista (hoja carta) para buscar los productos en almacén"
+                                >
+                                    <i className="fas fa-print"></i> Imprimir lista
+                                </button>
+                            </div>
                         </div>
+                        {qFiltro && (
+                            <p className="text-xs text-gray-500 mb-1">Mostrando {itemsFiltrados.length} de {itemsTransferencia.length}{itemsFiltrados.length === 0 ? ' — sin coincidencias' : ''}.</p>
+                        )}
                         <div className="border rounded-md max-h-[calc(100vh-340px)] overflow-y-auto">
                             <table className="min-w-full text-sm">
                                 <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0">
@@ -1146,19 +1217,21 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                                         <th className="px-2 py-1 text-left font-semibold">Descripción</th>
                                         <th className="px-2 py-1 text-left font-semibold">Cód. Barras</th>
                                         <th className="px-2 py-1 text-left font-semibold">Cód. Proveedor</th>
+                                        <th className="px-2 py-1 text-center font-semibold" title="Stock disponible en inventario">Disp.</th>
+                                        <th className="px-2 py-1 text-center font-semibold" title="Cantidad original de la orden (antes de editar)">Orig.</th>
                                         <th className="px-2 py-1 text-center font-semibold">Cantidad</th>
                                         <th className="px-2 py-1 text-center font-semibold w-10"></th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {itemsTransferencia.map((item, index) => (
+                                    {itemsFiltrados.map((item) => (
                                         <SelectedProductItem
                                             key={item.id_producto_insucursal}
                                             item={item}
                                             onRemove={handleRemoveProduct}
                                             onQuantityChange={handleQuantityChange}
                                             isEditable={true}
-                                            index={index}
+                                            index={itemsTransferencia.indexOf(item)}
                                             totalItems={itemsTransferencia.length}
                                             mostrarRevisado={esBorrador}
                                             onToggleRevisado={toggleRevisado}
@@ -2640,7 +2713,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                                         <button onClick={() => editarBorrador(b)} disabled={ocupado} className="px-2 py-1 text-xs font-semibold text-blue-700 border border-blue-300 rounded hover:bg-blue-50 disabled:opacity-50" title="Editar cantidades / ítems">
                                                             <i className="fas fa-edit mr-1"></i>Editar
                                                         </button>
-                                                        <button onClick={() => darSalida(b)} disabled={ocupado || nItems === 0} className="ml-1 px-2 py-1 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded disabled:opacity-50" title="Descontar inventario y enviar a central">
+                                                        <button onClick={() => darSalida(b)} disabled={ocupado || nItems === 0 || !revDone} className="ml-1 px-2 py-1 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded disabled:opacity-50 disabled:cursor-not-allowed" title={!revDone ? `Faltan ${totalItems - revItems} producto(s) por revisar antes de dar salida` : 'Descontar inventario y enviar a central'}>
                                                             {procesando === 'salida-' + b.id ? <><i className="fas fa-spinner fa-spin mr-1"></i>Saliendo...</> : <><i className="fas fa-truck-arrow-right mr-1"></i>Dar salida</>}
                                                         </button>
                                                         <button onClick={() => eliminarBorrador(b)} disabled={ocupado} className="ml-1 px-2 py-1 text-xs font-semibold text-red-600 border border-red-200 rounded hover:bg-red-50 disabled:opacity-50" title="Eliminar borrador">

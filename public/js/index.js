@@ -136766,6 +136766,31 @@ var SelectedProductItem = function SelectedProductItem(_ref7) {
     }
   };
 
+  // Navegación entre inputs de cantidad con Enter / flechas ↑↓. Opera sobre los inputs
+  // visibles de la MISMA tabla (respeta el filtro), no re-renderiza nada.
+  var handleQtyKeyDown = function handleQtyKeyDown(e) {
+    if (e.key !== 'Enter' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    var tabla = e.target.closest('table');
+    if (!tabla) return;
+    var inputs = Array.from(tabla.querySelectorAll('input.js-qty-input'));
+    var i = inputs.indexOf(e.target);
+    if (i === -1) return;
+    var next = e.key === 'ArrowUp' ? i - 1 : i + 1;
+    if (next >= 0 && next < inputs.length) {
+      inputs[next].focus();
+      inputs[next].select();
+    } else {
+      e.target.blur(); // en el último, Enter/↓ confirma el valor
+    }
+  };
+
+  // Stock disponible vs cantidad pedida: marca en rojo si se pide más de lo que hay.
+  var stockDisp = item.stock_disponible != null ? parseFloat(item.stock_disponible) : null;
+  var cantNum = parseFloat(item.cantidad);
+  var excedeStock = stockDisp != null && !isNaN(cantNum) && cantNum > stockDisp;
+  var origNum = item.cantidad_original_orden != null ? parseFloat(item.cantidad_original_orden) : null;
+
   // En modo picking: fila verde si ya fue revisado, ámbar si falta revisar.
   var rowCls = mostrarRevisado ? item.revisado ? 'bg-emerald-50' : 'bg-amber-50/50 hover:bg-amber-50' : 'hover:bg-gray-50';
   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
@@ -136795,6 +136820,17 @@ var SelectedProductItem = function SelectedProductItem(_ref7) {
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
       className: "px-2 py-1 text-xs font-mono text-gray-600 whitespace-nowrap",
       children: item.alterno_real || ((_item$producto3 = item.producto) === null || _item$producto3 === void 0 ? void 0 : _item$producto3.codigo_proveedor) || '—'
+    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
+      className: "px-2 py-1 text-center text-xs font-semibold whitespace-nowrap ".concat(excedeStock ? 'text-red-600' : 'text-gray-600'),
+      title: excedeStock ? 'Estás pidiendo más de lo disponible en inventario' : 'Stock disponible en inventario',
+      children: [stockDisp != null ? stockDisp : '—', excedeStock && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+        className: "fas fa-triangle-exclamation ml-1 text-red-500",
+        title: "Excede el disponible"
+      })]
+    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+      className: "px-2 py-1 text-center text-xs text-gray-400 whitespace-nowrap",
+      title: "Cantidad original de la orden (antes de editar)",
+      children: origNum != null ? origNum : '—'
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
       className: "px-2 py-1 text-center",
       children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
@@ -136805,6 +136841,7 @@ var SelectedProductItem = function SelectedProductItem(_ref7) {
         onFocus: function onFocus(e) {
           return e.target.select();
         },
+        onKeyDown: handleQtyKeyDown,
         onBlur: function onBlur(e) {
           var valor = e.target.value;
           if (valor === '' || isNaN(parseFloat(valor)) || parseFloat(valor) <= 0) {
@@ -136814,7 +136851,7 @@ var SelectedProductItem = function SelectedProductItem(_ref7) {
           }
         },
         readOnly: !isEditable,
-        className: "w-20 p-1 text-sm border border-gray-300 rounded text-center ".concat(!isEditable ? 'bg-gray-100' : 'focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500'),
+        className: "js-qty-input w-20 p-1 text-sm border rounded text-center ".concat(excedeStock ? 'border-red-400 bg-red-50' : 'border-gray-300', " ").concat(!isEditable ? 'bg-gray-100' : 'focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500'),
         "aria-label": "Cantidad para ".concat(item.descripcion_real)
       })
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
@@ -136887,6 +136924,11 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
     _useState32 = _slicedToArray(_useState31, 2),
     dirty = _useState32[0],
     setDirty = _useState32[1];
+  // Buscador dentro de la orden (filtra la lista por barras / cód. proveedor / descripción).
+  var _useState33 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    _useState34 = _slicedToArray(_useState33, 2),
+    filtroProducto = _useState34[0],
+    setFiltroProducto = _useState34[1];
   var handleCancelClick = function handleCancelClick() {
     if (dirty && !window.confirm('¿Descartar los cambios? La orden volverá a como estaba (no se guardó nada).')) return;
     onCancel();
@@ -136894,18 +136936,18 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
 
   // Destino: bloqueado por defecto cuando ya trae un destino (edición o borrador de
   // redistribución); en un borrador nuevo/manual sin destino queda el buscador abierto.
-  var _useState33 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((esEdicion || esBorrador) && !!(transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_destino)),
-    _useState34 = _slicedToArray(_useState33, 2),
-    destinoBloqueado = _useState34[0],
-    setDestinoBloqueado = _useState34[1];
-  var _useState35 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+  var _useState35 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((esEdicion || esBorrador) && !!(transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_destino)),
     _useState36 = _slicedToArray(_useState35, 2),
-    busquedaDestino = _useState36[0],
-    setBusquedaDestino = _useState36[1];
-  var _useState37 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    destinoBloqueado = _useState36[0],
+    setDestinoBloqueado = _useState36[1];
+  var _useState37 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState38 = _slicedToArray(_useState37, 2),
-    mostrarListaDestino = _useState38[0],
-    setMostrarListaDestino = _useState38[1];
+    busquedaDestino = _useState38[0],
+    setBusquedaDestino = _useState38[1];
+  var _useState39 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    _useState40 = _slicedToArray(_useState39, 2),
+    mostrarListaDestino = _useState40[0],
+    setMostrarListaDestino = _useState40[1];
   var codigoDestino = (sucursales.find(function (s) {
     return String(s.id) === String(idSucursalDestinoSeleccionada);
   }) || {}).codigo || '';
@@ -136956,6 +136998,10 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
           created_at: itemAPI.created_at,
           updated_at: itemAPI.updated_at,
           cantidad_original_stock_inventario: (itemAPI === null || itemAPI === void 0 ? void 0 : itemAPI.cantidad) || 0,
+          // Stock disponible ACTUAL del producto en inventario (lo manda ordenConDetalle).
+          stock_disponible: itemAPI.stock_disponible != null ? parseFloat(itemAPI.stock_disponible) : null,
+          // Cantidad ORIGINAL de la orden al abrir el editor (antes de tocar nada).
+          cantidad_original_orden: parseFloat(itemAPI.cantidad) || 0,
           revisado: !!itemAPI.revisado,
           // marca de picking (Plan B)
           ubicacion: itemAPI.ubicacion || itemAPI.producto && itemAPI.producto.ubicacion || null,
@@ -137004,6 +137050,8 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
       // Clave para identificar el producto del inventario
       cantidad_original_stock_inventario: productoDeInventario.cantidad,
       // Stock del inventario al momento de agregar
+      stock_disponible: productoDeInventario.cantidad != null ? parseFloat(productoDeInventario.cantidad) : null,
+      cantidad_original_orden: parseFloat(productoDeInventario.cantidadInicial || "1.00") || 0,
       revisado: true,
       // recién agregado a mano = ya revisado físicamente
       modificable: true
@@ -137221,6 +137269,15 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
       return _ref9.apply(this, arguments);
     };
   }();
+
+  // Filtro dentro de la orden por barras / cód. proveedor / descripción.
+  var qFiltro = filtroProducto.trim().toLowerCase();
+  var itemsFiltrados = qFiltro ? itemsTransferencia.filter(function (it) {
+    return (it.barras_real || '').toLowerCase().includes(qFiltro) || (it.alterno_real || '').toLowerCase().includes(qFiltro) || (it.descripcion_real || '').toLowerCase().includes(qFiltro);
+  }) : itemsTransferencia;
+  var todosRevisados = itemsTransferencia.length > 0 && itemsTransferencia.every(function (i) {
+    return i.revisado;
+  });
   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("form", {
     onSubmit: handleSubmit,
     className: "space-y-3 p-1 md:p-3 rounded-lg",
@@ -137353,30 +137410,59 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
                 }), rev, "/", total, " revisados", !done ? " \xB7 faltan ".concat(total - rev) : '']
               });
             }()]
-          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
-            type: "button",
-            onClick: function onClick() {
-              return onImprimir && onImprimir({
-                titulo: 'Lista de picking' + (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id ? ' · Orden #' + transferenciaToEdit.id : ''),
-                subtitulo: (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_orden_distribucion ? 'Redistribución #' + transferenciaToEdit.id_orden_distribucion + ' · ' : '') + itemsTransferencia.length + ' producto(s)',
-                destino: codigoDestino || '—',
-                filas: itemsTransferencia.map(function (i) {
-                  return {
-                    barras: i.barras_real,
-                    codigo_proveedor: i.alterno_real,
-                    descripcion: i.descripcion_real,
-                    ubicacion: i.ubicacion,
-                    cantidad: i.cantidad
-                  };
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+            className: "flex items-center gap-2",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+              className: "relative",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                className: "fas fa-search absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs"
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+                type: "text",
+                value: filtroProducto,
+                onChange: function onChange(e) {
+                  return setFiltroProducto(e.target.value);
+                },
+                placeholder: "Filtrar por barras, c\xF3d. proveedor o descripci\xF3n\u2026",
+                className: "w-64 pl-7 pr-6 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              }), filtroProducto && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                type: "button",
+                onClick: function onClick() {
+                  return setFiltroProducto('');
+                },
+                className: "absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600",
+                title: "Limpiar",
+                children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                  className: "fas fa-times-circle"
                 })
-              });
-            },
-            className: "inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-gray-300 text-gray-700 hover:bg-gray-50",
-            title: "Imprimir la lista (hoja carta) para buscar los productos en almac\xE9n",
-            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
-              className: "fas fa-print"
-            }), " Imprimir lista"]
+              })]
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+              type: "button",
+              onClick: function onClick() {
+                return onImprimir && onImprimir({
+                  titulo: 'Lista de picking' + (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id ? ' · Orden #' + transferenciaToEdit.id : ''),
+                  subtitulo: (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_orden_distribucion ? 'Redistribución #' + transferenciaToEdit.id_orden_distribucion + ' · ' : '') + itemsTransferencia.length + ' producto(s)',
+                  destino: codigoDestino || '—',
+                  filas: itemsTransferencia.map(function (i) {
+                    return {
+                      barras: i.barras_real,
+                      codigo_proveedor: i.alterno_real,
+                      descripcion: i.descripcion_real,
+                      ubicacion: i.ubicacion,
+                      cantidad: i.cantidad
+                    };
+                  })
+                });
+              },
+              className: "inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-gray-300 text-gray-700 hover:bg-gray-50 whitespace-nowrap",
+              title: "Imprimir la lista (hoja carta) para buscar los productos en almac\xE9n",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                className: "fas fa-print"
+              }), " Imprimir lista"]
+            })]
           })]
+        }), qFiltro && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("p", {
+          className: "text-xs text-gray-500 mb-1",
+          children: ["Mostrando ", itemsFiltrados.length, " de ", itemsTransferencia.length, itemsFiltrados.length === 0 ? ' — sin coincidencias' : '', "."]
         }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
           className: "border rounded-md max-h-[calc(100vh-340px)] overflow-y-auto",
           children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("table", {
@@ -137401,19 +137487,27 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
                   children: "C\xF3d. Proveedor"
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
                   className: "px-2 py-1 text-center font-semibold",
+                  title: "Stock disponible en inventario",
+                  children: "Disp."
+                }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                  className: "px-2 py-1 text-center font-semibold",
+                  title: "Cantidad original de la orden (antes de editar)",
+                  children: "Orig."
+                }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                  className: "px-2 py-1 text-center font-semibold",
                   children: "Cantidad"
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
                   className: "px-2 py-1 text-center font-semibold w-10"
                 })]
               })
             }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("tbody", {
-              children: itemsTransferencia.map(function (item, index) {
+              children: itemsFiltrados.map(function (item) {
                 return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(SelectedProductItem, {
                   item: item,
                   onRemove: handleRemoveProduct,
                   onQuantityChange: handleQuantityChange,
                   isEditable: true,
-                  index: index,
+                  index: itemsTransferencia.indexOf(item),
                   totalItems: itemsTransferencia.length,
                   mostrarRevisado: esBorrador,
                   onToggleRevisado: toggleRevisado
@@ -138117,10 +138211,10 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref11) {
     onCancelar = _ref11.onCancelar,
     onImprimir = _ref11.onImprimir,
     procesando = _ref11.procesando;
-  var _useState39 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState40 = _slicedToArray(_useState39, 2),
-    rows = _useState40[0],
-    setRows = _useState40[1];
+  var _useState41 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    _useState42 = _slicedToArray(_useState41, 2),
+    rows = _useState42[0],
+    setRows = _useState42[1];
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     setRows((filas || []).map(function (f) {
       return _objectSpread(_objectSpread({}, f), {}, {
@@ -138452,26 +138546,26 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref11) {
 var PrintPickingModal = function PrintPickingModal(_ref12) {
   var payload = _ref12.payload,
     onClose = _ref12.onClose;
-  var _useState41 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('descripcion'),
-    _useState42 = _slicedToArray(_useState41, 2),
-    campo = _useState42[0],
-    setCampo = _useState42[1];
-  var _useState43 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('asc'),
+  var _useState43 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('descripcion'),
     _useState44 = _slicedToArray(_useState43, 2),
-    dir = _useState44[0],
-    setDir = _useState44[1];
-  var _useState45 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('ninguno'),
+    campo = _useState44[0],
+    setCampo = _useState44[1];
+  var _useState45 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('asc'),
     _useState46 = _slicedToArray(_useState45, 2),
-    modo = _useState46[0],
-    setModo = _useState46[1]; // 'ninguno' | 'partes' | 'porLista'
-  var _useState47 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(2),
+    dir = _useState46[0],
+    setDir = _useState46[1];
+  var _useState47 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('ninguno'),
     _useState48 = _slicedToArray(_useState47, 2),
-    nPartes = _useState48[0],
-    setNPartes = _useState48[1];
-  var _useState49 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(50),
+    modo = _useState48[0],
+    setModo = _useState48[1]; // 'ninguno' | 'partes' | 'porLista'
+  var _useState49 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(2),
     _useState50 = _slicedToArray(_useState49, 2),
-    porLista = _useState50[0],
-    setPorLista = _useState50[1];
+    nPartes = _useState50[0],
+    setNPartes = _useState50[1];
+  var _useState51 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(50),
+    _useState52 = _slicedToArray(_useState51, 2),
+    porLista = _useState52[0],
+    setPorLista = _useState52[1];
   if (!payload) return null;
   var total = (payload.filas || []).length;
   var valor = modo === 'partes' ? parseInt(nPartes) || 2 : modo === 'porLista' ? parseInt(porLista) || 1 : 0;
@@ -138656,46 +138750,36 @@ var PrintPickingModal = function PrintPickingModal(_ref12) {
 var TransferenciasModule = function TransferenciasModule(_ref13) {
   var _conflictosPremonta$p;
   var sucursalActualId = _ref13.sucursalActualId;
-  var _useState51 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('list'),
-    _useState52 = _slicedToArray(_useState51, 2),
-    vistaActual = _useState52[0],
-    setVistaActual = _useState52[1]; // 'list', 'form', 'detail'
-  var _useState53 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+  var _useState53 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('list'),
     _useState54 = _slicedToArray(_useState53, 2),
-    transferenciaSeleccionada = _useState54[0],
-    setTransferenciaSeleccionada = _useState54[1];
-  var _useState55 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(0),
+    vistaActual = _useState54[0],
+    setVistaActual = _useState54[1]; // 'list', 'form', 'detail'
+  var _useState55 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState56 = _slicedToArray(_useState55, 2),
-    refreshListKey = _useState56[0],
-    setRefreshListKey = _useState56[1];
-  var _useState57 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    transferenciaSeleccionada = _useState56[0],
+    setTransferenciaSeleccionada = _useState56[1];
+  var _useState57 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(0),
     _useState58 = _slicedToArray(_useState57, 2),
-    sucursales = _useState58[0],
-    setSucursales = _useState58[1];
-
-  // Estados movidos desde TransferenciaList
+    refreshListKey = _useState58[0],
+    setRefreshListKey = _useState58[1];
   var _useState59 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState60 = _slicedToArray(_useState59, 2),
-    transferencias = _useState60[0],
-    setTransferencias = _useState60[1];
-  var _useState61 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
+    sucursales = _useState60[0],
+    setSucursales = _useState60[1];
+
+  // Estados movidos desde TransferenciaList
+  var _useState61 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState62 = _slicedToArray(_useState61, 2),
-    estaCargando = _useState62[0],
-    setEstaCargando = _useState62[1];
-  var _useState63 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    transferencias = _useState62[0],
+    setTransferencias = _useState62[1];
+  var _useState63 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
     _useState64 = _slicedToArray(_useState63, 2),
-    error = _useState64[0],
-    setError = _useState64[1];
-  var _useState65 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
-      q: '',
-      estatus_string: '',
-      id_origen: '',
-      id_destino: '',
-      limit: 10
-    }),
+    estaCargando = _useState64[0],
+    setEstaCargando = _useState64[1];
+  var _useState65 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState66 = _slicedToArray(_useState65, 2),
-    filtros = _useState66[0],
-    setFiltros = _useState66[1];
+    error = _useState66[0],
+    setError = _useState66[1];
   var _useState67 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
       q: '',
       estatus_string: '',
@@ -138704,21 +138788,31 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
       limit: 10
     }),
     _useState68 = _slicedToArray(_useState67, 2),
-    filtrosActivos = _useState68[0],
-    setFiltrosActivos = _useState68[1];
-  var _useState69 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({}),
+    filtros = _useState68[0],
+    setFiltros = _useState68[1];
+  var _useState69 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+      q: '',
+      estatus_string: '',
+      id_origen: '',
+      id_destino: '',
+      limit: 10
+    }),
     _useState70 = _slicedToArray(_useState69, 2),
-    paginacion = _useState70[0],
-    setPaginacion = _useState70[1];
-  var _useState71 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    filtrosActivos = _useState70[0],
+    setFiltrosActivos = _useState70[1];
+  var _useState71 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({}),
     _useState72 = _slicedToArray(_useState71, 2),
-    mostrarFiltros = _useState72[0],
-    setMostrarFiltros = _useState72[1];
-  // Premontas = órdenes de redistribución 'Aprobada' de central donde ESTA sucursal es el origen.
-  var _useState73 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    paginacion = _useState72[0],
+    setPaginacion = _useState72[1];
+  var _useState73 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState74 = _slicedToArray(_useState73, 2),
-    premontas = _useState74[0],
-    setPremontas = _useState74[1];
+    mostrarFiltros = _useState74[0],
+    setMostrarFiltros = _useState74[1];
+  // Premontas = órdenes de redistribución 'Aprobada' de central donde ESTA sucursal es el origen.
+  var _useState75 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    _useState76 = _slicedToArray(_useState75, 2),
+    premontas = _useState76[0],
+    setPremontas = _useState76[1];
   // Filtro común para las órdenes (premontas / borradores / despachadas).
   // Fecha local de hoy (YYYY-MM-DD), sin desfase de zona horaria.
   var hoyLocal = function hoyLocal() {
@@ -138737,15 +138831,15 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
     return "".concat(dd, "/").concat(m, "/").concat(y);
   };
   // Por defecto el filtro arranca en HOY (evita mostrar órdenes viejas). Limpiar quita las fechas.
-  var _useState75 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+  var _useState77 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
       q: '',
       destino: '',
       desde: hoyLocal(),
       hasta: ''
     }),
-    _useState76 = _slicedToArray(_useState75, 2),
-    filtroOrdenes = _useState76[0],
-    setFiltroOrdenes = _useState76[1];
+    _useState78 = _slicedToArray(_useState77, 2),
+    filtroOrdenes = _useState78[0],
+    setFiltroOrdenes = _useState78[1];
   var setFiltro = function setFiltro(campo, val) {
     return setFiltroOrdenes(function (prev) {
       return _objectSpread(_objectSpread({}, prev), {}, _defineProperty({}, campo, val));
@@ -138760,59 +138854,59 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
     });
   };
   // Tab activo del listado: 'enviadas' | 'redistribuciones' | 'preparacion' | 'despachadas'.
-  var _useState77 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('redistribuciones'),
-    _useState78 = _slicedToArray(_useState77, 2),
-    tabActiva = _useState78[0],
-    setTabActiva = _useState78[1];
-  // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
-  var _useState79 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+  var _useState79 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('redistribuciones'),
     _useState80 = _slicedToArray(_useState79, 2),
-    borradores = _useState80[0],
-    setBorradores = _useState80[1];
-  var _useState81 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    tabActiva = _useState80[0],
+    setTabActiva = _useState80[1];
+  // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
+  var _useState81 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState82 = _slicedToArray(_useState81, 2),
-    borradorEnEdicion = _useState82[0],
-    setBorradorEnEdicion = _useState82[1];
+    borradores = _useState82[0],
+    setBorradores = _useState82[1];
   var _useState83 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState84 = _slicedToArray(_useState83, 2),
-    procesando = _useState84[0],
-    setProcesando = _useState84[1]; // id ocupado (crear/salida/eliminar)
-  // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
+    borradorEnEdicion = _useState84[0],
+    setBorradorEnEdicion = _useState84[1];
   var _useState85 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState86 = _slicedToArray(_useState85, 2),
-    conflictosPremonta = _useState86[0],
-    setConflictosPremonta = _useState86[1];
-  // Modal de opciones de impresión de la lista de picking: { titulo, subtitulo, filas } | null.
+    procesando = _useState86[0],
+    setProcesando = _useState86[1]; // id ocupado (crear/salida/eliminar)
+  // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
   var _useState87 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState88 = _slicedToArray(_useState87, 2),
-    printModal = _useState88[0],
-    setPrintModal = _useState88[1];
+    conflictosPremonta = _useState88[0],
+    setConflictosPremonta = _useState88[1];
+  // Modal de opciones de impresión de la lista de picking: { titulo, subtitulo, filas } | null.
+  var _useState89 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState90 = _slicedToArray(_useState89, 2),
+    printModal = _useState90[0],
+    setPrintModal = _useState90[1];
   var abrirPrintModal = function abrirPrintModal(payload) {
     return setPrintModal(payload);
   };
   // Órdenes ya despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
-  var _useState89 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState90 = _slicedToArray(_useState89, 2),
-    despachadas = _useState90[0],
-    setDespachadas = _useState90[1];
-  // Loading al cargar las órdenes (premontas + borradores + despachadas).
-  var _useState91 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
+  var _useState91 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState92 = _slicedToArray(_useState91, 2),
-    cargandoOrdenes = _useState92[0],
-    setCargandoOrdenes = _useState92[1];
-  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
-  var _useState93 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    despachadas = _useState92[0],
+    setDespachadas = _useState92[1];
+  // Loading al cargar las órdenes (premontas + borradores + despachadas).
+  var _useState93 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
     _useState94 = _slicedToArray(_useState93, 2),
-    bultosOrden = _useState94[0],
-    setBultosOrden = _useState94[1];
-  var _useState95 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    cargandoOrdenes = _useState94[0],
+    setCargandoOrdenes = _useState94[1];
+  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
+  var _useState95 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState96 = _slicedToArray(_useState95, 2),
-    numBultosInput = _useState96[0],
-    setNumBultosInput = _useState96[1];
-  var _useState97 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    bultosOrden = _useState96[0],
+    setBultosOrden = _useState96[1];
+  var _useState97 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState98 = _slicedToArray(_useState97, 2),
-    bultosIframeUrl = _useState98[0],
-    setBultosIframeUrl = _useState98[1];
+    numBultosInput = _useState98[0],
+    setNumBultosInput = _useState98[1];
+  var _useState99 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState100 = _slicedToArray(_useState99, 2),
+    bultosIframeUrl = _useState100[0],
+    setBultosIframeUrl = _useState100[1];
   var refIframeBultos = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var cargarTransferencias = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
     var _ref14 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5(filtros) {
@@ -140116,9 +140210,9 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
                         onClick: function onClick() {
                           return darSalida(b);
                         },
-                        disabled: ocupado || nItems === 0,
-                        className: "ml-1 px-2 py-1 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded disabled:opacity-50",
-                        title: "Descontar inventario y enviar a central",
+                        disabled: ocupado || nItems === 0 || !revDone,
+                        className: "ml-1 px-2 py-1 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded disabled:opacity-50 disabled:cursor-not-allowed",
+                        title: !revDone ? "Faltan ".concat(totalItems - revItems, " producto(s) por revisar antes de dar salida") : 'Descontar inventario y enviar a central',
                         children: procesando === 'salida-' + b.id ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
                           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
                             className: "fas fa-spinner fa-spin mr-1"
