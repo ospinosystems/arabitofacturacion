@@ -25539,6 +25539,9 @@ body{
 .bg-amber-50\/40{
   background-color: rgb(255 251 235 / 0.4);
 }
+.bg-amber-50\/50{
+  background-color: rgb(255 251 235 / 0.5);
+}
 .bg-amber-50\/60{
   background-color: rgb(255 251 235 / 0.6);
 }

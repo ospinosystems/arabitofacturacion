@@ -135774,7 +135774,6 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _database_database__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../database/database */ "./resources/js/database/database.js");
 /* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! react/jsx-runtime */ "./node_modules/react/jsx-runtime.js");
 function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
-function _createForOfIteratorHelper(r, e) { var t = "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (!t) { if (Array.isArray(r) || (t = _unsupportedIterableToArray(r)) || e && r && "number" == typeof r.length) { t && (r = t); var _n = 0, F = function F() {}; return { s: F, n: function n() { return _n >= r.length ? { done: !0 } : { done: !1, value: r[_n++] }; }, e: function e(r) { throw r; }, f: F }; } throw new TypeError("Invalid attempt to iterate non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); } var o, a = !0, u = !1; return { s: function s() { t = t.call(r); }, n: function n() { var r = t.next(); return a = r.done, r; }, e: function e(r) { u = !0, o = r; }, f: function f() { try { a || null == t["return"] || t["return"](); } finally { if (u) throw o; } } }; }
 function _toConsumableArray(r) { return _arrayWithoutHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableSpread(); }
 function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
 function _iterableToArray(r) { if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"]) return Array.from(r); }
@@ -135797,6 +135796,38 @@ function _toPrimitive(t, r) { if ("object" != _typeof(t) || !t) return t; var e 
 
 
 
+
+// Imprime una lista de picking en HOJA CARTA (para buscar físicamente los productos en almacén).
+// filas: [{ barras, codigo_proveedor, descripcion, cantidad }]
+
+var imprimirListaPicking = function imprimirListaPicking(_ref) {
+  var titulo = _ref.titulo,
+    subtitulo = _ref.subtitulo,
+    filas = _ref.filas;
+  var esc = function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>]/g, function (c) {
+      return {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;'
+      }[c];
+    });
+  };
+  var rows = (filas || []).map(function (f, i) {
+    return "\n        <tr>\n          <td class=\"c\">".concat(i + 1, "</td>\n          <td class=\"mono\">").concat(esc(f.barras || '—'), "</td>\n          <td class=\"mono\">").concat(esc(f.codigo_proveedor || '—'), "</td>\n          <td>").concat(esc(f.descripcion || '—'), "</td>\n          <td class=\"c b\">").concat(esc(f.cantidad), "</td>\n          <td class=\"ub\"></td>\n          <td class=\"chk\"><span class=\"box\"></span></td>\n        </tr>");
+  }).join('');
+  var totalUni = (filas || []).reduce(function (a, f) {
+    return a + (parseFloat(f.cantidad) || 0);
+  }, 0);
+  var html = "<!doctype html><html><head><meta charset=\"utf-8\"><title>".concat(esc(titulo), "</title>\n      <style>\n        @page { size: letter portrait; margin: 12mm; }\n        * { font-family: Arial, sans-serif; }\n        body { color:#111; font-size:12px; }\n        h1 { font-size:16px; margin:0 0 2px; }\n        .sub { color:#555; margin-bottom:10px; font-size:11px; }\n        table { width:100%; border-collapse:collapse; }\n        th,td { border:1px solid #cbd5e1; padding:5px 6px; text-align:left; font-size:11px; vertical-align:top; }\n        th { background:#1e3a8a; color:#fff; }\n        td.c { text-align:center; } td.b { font-weight:bold; } .mono { font-family:monospace; }\n        td.ub { width:90px; } td.chk { width:30px; text-align:center; }\n        .box { display:inline-block; width:15px; height:15px; border:2px solid #334155; }\n        .pie { margin-top:14px; font-size:10px; color:#444; }\n      </style></head><body>\n      <h1>").concat(esc(titulo), "</h1>\n      <div class=\"sub\">").concat(esc(subtitulo || ''), "</div>\n      <table><thead><tr>\n        <th>#</th><th>C\xF3d. Barras</th><th>C\xF3d. Prov.</th><th>Descripci\xF3n</th>\n        <th>Cant.</th><th>Ubicaci\xF3n</th><th>\u2714</th>\n      </tr></thead><tbody>").concat(rows, "</tbody></table>\n      <div class=\"pie\">Total l\xEDneas: ").concat((filas || []).length, " \xB7 Total unidades: ").concat(totalUni, "</div>\n      <script>window.onload=function(){setTimeout(function(){window.print();},300);}</script>\n      </body></html>");
+  var w = window.open('', '_blank');
+  if (!w) {
+    alert('Habilitá las ventanas emergentes para poder imprimir la lista.');
+    return;
+  }
+  w.document.write(html);
+  w.document.close();
+};
 
 // ###################################################################################
 // #                            INICIO: MOCK DATA Y SERVICIOS                        #
@@ -136165,8 +136196,8 @@ var crearOActualizarTransferenciaMock = function crearOActualizarTransferenciaMo
 // #                            INICIO: COMPONENTES REACT                            #
 // ###################################################################################
 
-var StatusBadge = function StatusBadge(_ref) {
-  var estadoNum = _ref.estadoNum;
+var StatusBadge = function StatusBadge(_ref2) {
+  var estadoNum = _ref2.estadoNum;
   var estatusString = ESTADO_NUMERICO_A_STRING[estadoNum] || 'DESCONOCIDO';
   var statusColors = {
     'PENDIENTE': 'bg-red-500 text-white',
@@ -136180,11 +136211,11 @@ var StatusBadge = function StatusBadge(_ref) {
     children: estatusString
   });
 };
-var ProductSearchInput = function ProductSearchInput(_ref2) {
-  var onProductSelect = _ref2.onProductSelect,
-    sucursalIdOrigen = _ref2.sucursalIdOrigen,
-    _ref2$placeholder = _ref2.placeholder,
-    placeholder = _ref2$placeholder === void 0 ? "Buscar producto..." : _ref2$placeholder;
+var ProductSearchInput = function ProductSearchInput(_ref3) {
+  var onProductSelect = _ref3.onProductSelect,
+    sucursalIdOrigen = _ref3.sucursalIdOrigen,
+    _ref3$placeholder = _ref3.placeholder,
+    placeholder = _ref3$placeholder === void 0 ? "Buscar producto..." : _ref3$placeholder;
   var _useState = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState2 = _slicedToArray(_useState, 2),
     terminoBusqueda = _useState2[0],
@@ -136217,7 +136248,7 @@ var ProductSearchInput = function ProductSearchInput(_ref2) {
   var cantidadInputRef = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var debounceTimeoutRef = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var realizarBusqueda = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
-    var _ref3 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee(termino) {
+    var _ref4 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee(termino) {
       var response;
       return _regeneratorRuntime().wrap(function _callee$(_context) {
         while (1) switch (_context.prev = _context.next) {
@@ -136264,7 +136295,7 @@ var ProductSearchInput = function ProductSearchInput(_ref2) {
       }, _callee, null, [[5, 14, 18, 21]]);
     }));
     return function (_x) {
-      return _ref3.apply(this, arguments);
+      return _ref4.apply(this, arguments);
     };
   }(), [sucursalIdOrigen]);
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
@@ -136444,14 +136475,17 @@ var ProductSearchInput = function ProductSearchInput(_ref2) {
     })]
   });
 };
-var SelectedProductItem = function SelectedProductItem(_ref4) {
+var SelectedProductItem = function SelectedProductItem(_ref5) {
   var _item$producto, _item$producto2, _item$producto3;
-  var item = _ref4.item,
-    onRemove = _ref4.onRemove,
-    onQuantityChange = _ref4.onQuantityChange,
-    isEditable = _ref4.isEditable,
-    index = _ref4.index,
-    totalItems = _ref4.totalItems;
+  var item = _ref5.item,
+    onRemove = _ref5.onRemove,
+    onQuantityChange = _ref5.onQuantityChange,
+    isEditable = _ref5.isEditable,
+    index = _ref5.index,
+    totalItems = _ref5.totalItems,
+    _ref5$mostrarRevisado = _ref5.mostrarRevisado,
+    mostrarRevisado = _ref5$mostrarRevisado === void 0 ? false : _ref5$mostrarRevisado,
+    onToggleRevisado = _ref5.onToggleRevisado;
   var handleCantidadChange = function handleCantidadChange(e) {
     var valor = e.target.value;
     // Permitir valores vacíos temporalmente para mejor UX
@@ -136465,9 +136499,23 @@ var SelectedProductItem = function SelectedProductItem(_ref4) {
       onQuantityChange(item.id_producto_insucursal, valor);
     }
   };
+
+  // En modo picking: fila verde si ya fue revisado, ámbar si falta revisar.
+  var rowCls = mostrarRevisado ? item.revisado ? 'bg-emerald-50' : 'bg-amber-50/50 hover:bg-amber-50' : 'hover:bg-gray-50';
   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
-    className: "border-b border-gray-100 hover:bg-gray-50",
-    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+    className: "border-b border-gray-100 ".concat(rowCls),
+    children: [mostrarRevisado && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+      className: "px-2 py-1 text-center",
+      children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+        type: "checkbox",
+        checked: !!item.revisado,
+        onChange: function onChange() {
+          return onToggleRevisado && onToggleRevisado(item.id_producto_insucursal);
+        },
+        className: "w-5 h-5 text-emerald-600 rounded cursor-pointer align-middle",
+        title: item.revisado ? 'Revisado — click para desmarcar' : 'Marcar como revisado'
+      })
+    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
       className: "px-2 py-1 text-center text-xs text-gray-400 whitespace-nowrap",
       children: index + 1
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
@@ -136514,17 +136562,17 @@ var SelectedProductItem = function SelectedProductItem(_ref4) {
     })]
   });
 };
-var TransferenciaForm = function TransferenciaForm(_ref5) {
-  var onSave = _ref5.onSave,
-    onCancel = _ref5.onCancel,
-    sucursalActualId = _ref5.sucursalActualId,
-    _ref5$transferenciaTo = _ref5.transferenciaToEdit,
-    transferenciaToEdit = _ref5$transferenciaTo === void 0 ? null : _ref5$transferenciaTo,
-    sucursales = _ref5.sucursales,
-    cargarTransferencias = _ref5.cargarTransferencias,
-    _ref5$modoBorrador = _ref5.modoBorrador,
-    modoBorrador = _ref5$modoBorrador === void 0 ? false : _ref5$modoBorrador,
-    onGuardarBorrador = _ref5.onGuardarBorrador;
+var TransferenciaForm = function TransferenciaForm(_ref6) {
+  var onSave = _ref6.onSave,
+    onCancel = _ref6.onCancel,
+    sucursalActualId = _ref6.sucursalActualId,
+    _ref6$transferenciaTo = _ref6.transferenciaToEdit,
+    transferenciaToEdit = _ref6$transferenciaTo === void 0 ? null : _ref6$transferenciaTo,
+    sucursales = _ref6.sucursales,
+    cargarTransferencias = _ref6.cargarTransferencias,
+    _ref6$modoBorrador = _ref6.modoBorrador,
+    modoBorrador = _ref6$modoBorrador === void 0 ? false : _ref6$modoBorrador,
+    onGuardarBorrador = _ref6.onGuardarBorrador;
   // Una premonta (orden de redistribución traída de central) se arma como transferencia NUEVA,
   // no como edición de una transferencia local existente.
   var esPremonta = !!(transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.es_premontada);
@@ -136626,6 +136674,8 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
           created_at: itemAPI.created_at,
           updated_at: itemAPI.updated_at,
           cantidad_original_stock_inventario: (itemAPI === null || itemAPI === void 0 ? void 0 : itemAPI.cantidad) || 0,
+          revisado: !!itemAPI.revisado,
+          // marca de picking (Plan B)
           modificable: true // Permitir edición en el formulario,
         };
       });
@@ -136669,6 +136719,8 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
       // Clave para identificar el producto del inventario
       cantidad_original_stock_inventario: productoDeInventario.cantidad,
       // Stock del inventario al momento de agregar
+      revisado: true,
+      // recién agregado a mano = ya revisado físicamente
       modificable: true
     };
     setItemsTransferencia(function (prev) {
@@ -136697,13 +136749,26 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
         return _objectSpread(_objectSpread({}, item), {}, {
           cantidad: nuevaCantidadStr,
           monto: String(nuevoMonto),
-          ct_real: valido ? nuevaCantidadNum : item.ct_real
+          ct_real: valido ? nuevaCantidadNum : item.ct_real,
+          // Editar la cantidad marca el producto como revisado (picking Plan B).
+          revisado: nuevaCantidadStr === '' ? item.revisado : true
         });
       });
     });
   };
+
+  // Alterna la marca de "revisado" de un producto (picking Plan B).
+  var toggleRevisado = function toggleRevisado(idProductoInsucursal) {
+    setItemsTransferencia(function (prev) {
+      return prev.map(function (item) {
+        return item.id_producto_insucursal === idProductoInsucursal ? _objectSpread(_objectSpread({}, item), {}, {
+          revisado: !item.revisado
+        }) : item;
+      });
+    });
+  };
   var handleSubmit = /*#__PURE__*/function () {
-    var _ref6 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee2(e) {
+    var _ref7 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee2(e) {
       var validSubmission, datosTransferencia, res, _res;
       return _regeneratorRuntime().wrap(function _callee2$(_context2) {
         while (1) switch (_context2.prev = _context2.next) {
@@ -136756,7 +136821,8 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
                   base: item.base,
                   venta: item.venta,
                   descripcion_real: item.descripcion_real,
-                  barras_real: item.barras_real
+                  barras_real: item.barras_real,
+                  revisado: !!item.revisado
                 };
               })
             }; // Agregar el ID si es edición
@@ -136864,7 +136930,7 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
       }, _callee2, null, [[19, 32, 35, 38], [40, 56, 59, 62]]);
     }));
     return function handleSubmit(_x2) {
-      return _ref6.apply(this, arguments);
+      return _ref7.apply(this, arguments);
     };
   }();
   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("form", {
@@ -136980,9 +137046,45 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
         })]
       }), itemsTransferencia.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
         className: "mt-3",
-        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h3", {
-          className: "text-sm font-semibold text-gray-700 mb-1",
-          children: ["Productos (", itemsTransferencia.length, ")"]
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "flex flex-wrap items-center justify-between gap-2 mb-1",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h3", {
+            className: "text-sm font-semibold text-gray-700",
+            children: ["Productos (", itemsTransferencia.length, ")", esBorrador && function () {
+              var rev = itemsTransferencia.filter(function (i) {
+                return i.revisado;
+              }).length;
+              var total = itemsTransferencia.length;
+              var done = rev === total;
+              return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+                className: "ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ".concat(done ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'),
+                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                  className: "fas ".concat(done ? 'fa-check-circle' : 'fa-clipboard-check')
+                }), rev, "/", total, " revisados", !done ? " \xB7 faltan ".concat(total - rev) : '']
+              });
+            }()]
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+            type: "button",
+            onClick: function onClick() {
+              return imprimirListaPicking({
+                titulo: 'Lista de picking' + (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id ? ' · Orden #' + transferenciaToEdit.id : ''),
+                subtitulo: (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_orden_distribucion ? 'Redistribución #' + transferenciaToEdit.id_orden_distribucion + ' · ' : '') + 'Destino ' + (codigoDestino || '—') + ' · ' + itemsTransferencia.length + ' producto(s)',
+                filas: itemsTransferencia.map(function (i) {
+                  return {
+                    barras: i.barras_real,
+                    codigo_proveedor: i.alterno_real,
+                    descripcion: i.descripcion_real,
+                    cantidad: i.cantidad
+                  };
+                })
+              });
+            },
+            className: "inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-gray-300 text-gray-700 hover:bg-gray-50",
+            title: "Imprimir la lista (hoja carta) para buscar los productos en almac\xE9n",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+              className: "fas fa-print"
+            }), " Imprimir lista"]
+          })]
         }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
           className: "border rounded-md max-h-[calc(100vh-340px)] overflow-y-auto",
           children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("table", {
@@ -136990,7 +137092,11 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
             children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("thead", {
               className: "bg-gray-50 text-xs uppercase text-gray-500 sticky top-0",
               children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
-                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                children: [esBorrador && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                  className: "px-2 py-1 text-center font-semibold w-10",
+                  title: "Revisado",
+                  children: "\u2714"
+                }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
                   className: "px-2 py-1 text-center font-semibold",
                   children: "#"
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
@@ -137017,7 +137123,9 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
                   onQuantityChange: handleQuantityChange,
                   isEditable: true,
                   index: index,
-                  totalItems: itemsTransferencia.length
+                  totalItems: itemsTransferencia.length,
+                  mostrarRevisado: esBorrador,
+                  onToggleRevisado: toggleRevisado
                 }, item.id_producto_insucursal);
               })
             })]
@@ -137068,10 +137176,10 @@ var TransferenciaForm = function TransferenciaForm(_ref5) {
     })]
   });
 };
-var TransferenciaDetailView = function TransferenciaDetailView(_ref7) {
-  var transferencia = _ref7.transferencia,
-    onBack = _ref7.onBack,
-    sucursales = _ref7.sucursales;
+var TransferenciaDetailView = function TransferenciaDetailView(_ref8) {
+  var transferencia = _ref8.transferencia,
+    onBack = _ref8.onBack,
+    sucursales = _ref8.sucursales;
   if (!transferencia) return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
     children: "Cargando detalles..."
   });
@@ -137258,27 +137366,27 @@ var TransferenciaDetailView = function TransferenciaDetailView(_ref7) {
     })]
   });
 };
-var TransferenciaList = function TransferenciaList(_ref8) {
-  var sucursalActualId = _ref8.sucursalActualId,
-    onRequireRefresh = _ref8.onRequireRefresh,
-    onEdit = _ref8.onEdit,
-    onViewDetails = _ref8.onViewDetails,
-    sucursales = _ref8.sucursales,
-    cargarTransferencias = _ref8.cargarTransferencias,
-    transferencias = _ref8.transferencias,
-    setTransferencias = _ref8.setTransferencias,
-    estaCargando = _ref8.estaCargando,
-    setEstaCargando = _ref8.setEstaCargando,
-    error = _ref8.error,
-    setError = _ref8.setError,
-    filtros = _ref8.filtros,
-    setFiltros = _ref8.setFiltros,
-    filtrosActivos = _ref8.filtrosActivos,
-    setFiltrosActivos = _ref8.setFiltrosActivos,
-    paginacion = _ref8.paginacion,
-    setPaginacion = _ref8.setPaginacion,
-    mostrarFiltros = _ref8.mostrarFiltros,
-    setMostrarFiltros = _ref8.setMostrarFiltros;
+var TransferenciaList = function TransferenciaList(_ref9) {
+  var sucursalActualId = _ref9.sucursalActualId,
+    onRequireRefresh = _ref9.onRequireRefresh,
+    onEdit = _ref9.onEdit,
+    onViewDetails = _ref9.onViewDetails,
+    sucursales = _ref9.sucursales,
+    cargarTransferencias = _ref9.cargarTransferencias,
+    transferencias = _ref9.transferencias,
+    setTransferencias = _ref9.setTransferencias,
+    estaCargando = _ref9.estaCargando,
+    setEstaCargando = _ref9.setEstaCargando,
+    error = _ref9.error,
+    setError = _ref9.setError,
+    filtros = _ref9.filtros,
+    setFiltros = _ref9.setFiltros,
+    filtrosActivos = _ref9.filtrosActivos,
+    setFiltrosActivos = _ref9.setFiltrosActivos,
+    paginacion = _ref9.paginacion,
+    setPaginacion = _ref9.setPaginacion,
+    mostrarFiltros = _ref9.mostrarFiltros,
+    setMostrarFiltros = _ref9.setMostrarFiltros;
   // Eliminamos el useEffect de carga de datos ya que ahora está en el componente padre
 
   var handleFilterChange = function handleFilterChange(e) {
@@ -137291,7 +137399,7 @@ var TransferenciaList = function TransferenciaList(_ref8) {
     cargarTransferencias();
   };
   var handleDelete = /*#__PURE__*/function () {
-    var _ref9 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee3(t) {
+    var _ref0 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee3(t) {
       var res;
       return _regeneratorRuntime().wrap(function _callee3$(_context3) {
         while (1) switch (_context3.prev = _context3.next) {
@@ -137327,7 +137435,7 @@ var TransferenciaList = function TransferenciaList(_ref8) {
       }, _callee3, null, [[2, 9]]);
     }));
     return function handleDelete(_x3) {
-      return _ref9.apply(this, arguments);
+      return _ref0.apply(this, arguments);
     };
   }();
   if (estaCargando && transferencias.length === 0) return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
@@ -137731,13 +137839,13 @@ var TransferenciaList = function TransferenciaList(_ref8) {
 //   • no existe localmente → se excluye (no se puede enviar lo que no tenés en sistema)
 //   • existe pero la cantidad no alcanza → se avisa y el usuario ajusta la cantidad
 // El usuario ajusta/excluye y recién ahí se crea la orden en preparación (sin descontar).
-var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref0) {
-  var prem = _ref0.prem,
-    filas = _ref0.filas,
-    destinoBadge = _ref0.destinoBadge,
-    onConfirmar = _ref0.onConfirmar,
-    onCancelar = _ref0.onCancelar,
-    procesando = _ref0.procesando;
+var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref1) {
+  var prem = _ref1.prem,
+    filas = _ref1.filas,
+    destinoBadge = _ref1.destinoBadge,
+    onConfirmar = _ref1.onConfirmar,
+    onCancelar = _ref1.onCancelar,
+    procesando = _ref1.procesando;
   var _useState33 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState34 = _slicedToArray(_useState33, 2),
     rows = _useState34[0],
@@ -137822,7 +137930,29 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref0) {
         })]
       }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
         className: "flex items-center gap-2 text-xs",
-        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+          type: "button",
+          onClick: function onClick() {
+            var _prem$id_orden_distri;
+            return imprimirListaPicking({
+              titulo: 'Lista de picking · Redistribución #' + ((_prem$id_orden_distri = prem === null || prem === void 0 ? void 0 : prem.id_orden_distribucion) !== null && _prem$id_orden_distri !== void 0 ? _prem$id_orden_distri : ''),
+              subtitulo: 'Búsqueda física en almacén — ' + rows.length + ' producto(s)',
+              filas: rows.map(function (r) {
+                return {
+                  barras: r.barras,
+                  codigo_proveedor: r.codigo_proveedor,
+                  descripcion: r.descripcion,
+                  cantidad: parseFloat(r.cantidadSolicitada || 0).toFixed(0)
+                };
+              })
+            });
+          },
+          className: "inline-flex items-center gap-1 px-2.5 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold",
+          title: "Imprimir la lista de productos (hoja carta) para buscarlos en almac\xE9n",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-print"
+          }), " Imprimir lista"]
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
           className: "text-gray-500",
           children: "Destino:"
         }), " ", destinoBadge]
@@ -137978,11 +138108,39 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref0) {
           })
         })]
       })
-    }), noExisten > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("p", {
-      className: "mt-2 text-xs text-red-600",
-      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
-        className: "fas fa-circle-info mr-1"
-      }), noExisten, " producto(s) de la redistribuci\xF3n no existen en tu inventario local: quedan excluidos. Si deber\xEDan existir, primero cre\xE1 su ficha en el inventario."]
+    }), noExisten > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+      className: "mt-3 border border-red-200 bg-red-50 rounded-md p-3",
+      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("p", {
+        className: "text-xs font-bold text-red-700 mb-1",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+          className: "fas fa-ban mr-1"
+        }), noExisten, " producto(s) de la redistribuci\xF3n NO existen en tu inventario local (quedan excluidos):"]
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("ul", {
+        className: "text-xs text-red-700 space-y-0.5 max-h-40 overflow-y-auto",
+        children: rows.filter(function (r) {
+          return !r.existe;
+        }).map(function (r) {
+          return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("li", {
+            className: "flex gap-2",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+              className: "font-mono font-semibold whitespace-nowrap",
+              children: r.barras || r.codigo_proveedor || '—'
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+              className: "text-red-600",
+              children: "\xB7"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+              className: "truncate",
+              children: r.descripcion || 'sin descripción'
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+              className: "text-red-400 whitespace-nowrap",
+              children: ["(ped\xEDa ", parseFloat(r.cantidadSolicitada || 0).toFixed(0), ")"]
+            })]
+          }, r.key);
+        })
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
+        className: "text-[11px] text-red-500 mt-1.5",
+        children: "Si deber\xEDan existir, cre\xE1 su ficha en el inventario y volv\xE9 a \"Revisar y crear\"."
+      })]
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
       className: "flex flex-col sm:flex-row justify-end gap-2 pt-3 mt-2 border-t border-gray-200",
       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
@@ -138009,9 +138167,9 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref0) {
     })]
   });
 };
-var TransferenciasModule = function TransferenciasModule(_ref1) {
+var TransferenciasModule = function TransferenciasModule(_ref10) {
   var _conflictosPremonta$p;
-  var sucursalActualId = _ref1.sucursalActualId;
+  var sucursalActualId = _ref10.sucursalActualId;
   var _useState35 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('list'),
     _useState36 = _slicedToArray(_useState35, 2),
     vistaActual = _useState36[0],
@@ -138098,7 +138256,7 @@ var TransferenciasModule = function TransferenciasModule(_ref1) {
     conflictosPremonta = _useState68[0],
     setConflictosPremonta = _useState68[1];
   var cargarTransferencias = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
-    var _ref10 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee4(filtros) {
+    var _ref11 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee4(filtros) {
       var response;
       return _regeneratorRuntime().wrap(function _callee4$(_context4) {
         while (1) switch (_context4.prev = _context4.next) {
@@ -138123,14 +138281,14 @@ var TransferenciasModule = function TransferenciasModule(_ref1) {
       }, _callee4, null, [[0, 7]]);
     }));
     return function (_x4) {
-      return _ref10.apply(this, arguments);
+      return _ref11.apply(this, arguments);
     };
   }(), []);
 
   // useEffect movido desde TransferenciaList
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     var fetchData = /*#__PURE__*/function () {
-      var _ref11 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5() {
+      var _ref12 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5() {
         var _yield$cargarTransfer, nuevasTransferencias, nuevaPaginacion;
         return _regeneratorRuntime().wrap(function _callee5$(_context5) {
           while (1) switch (_context5.prev = _context5.next) {
@@ -138164,14 +138322,14 @@ var TransferenciasModule = function TransferenciasModule(_ref1) {
         }, _callee5, null, [[2, 12, 16, 19]]);
       }));
       return function fetchData() {
-        return _ref11.apply(this, arguments);
+        return _ref12.apply(this, arguments);
       };
     }();
     fetchData();
   }, [cargarTransferencias, filtrosActivos, refreshListKey]);
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     var cargarSucursales = /*#__PURE__*/function () {
-      var _ref12 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee6() {
+      var _ref13 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee6() {
         var res;
         return _regeneratorRuntime().wrap(function _callee6$(_context6) {
           while (1) switch (_context6.prev = _context6.next) {
@@ -138195,7 +138353,7 @@ var TransferenciasModule = function TransferenciasModule(_ref1) {
         }, _callee6, null, [[0, 7]]);
       }));
       return function cargarSucursales() {
-        return _ref12.apply(this, arguments);
+        return _ref13.apply(this, arguments);
       };
     }();
     cargarSucursales();
@@ -138242,167 +138400,135 @@ var TransferenciasModule = function TransferenciasModule(_ref1) {
     cargarBorradores();
   }, [refreshListKey, cargarBorradores]);
 
-  // Coteja cada producto de la redistribución contra el inventario local (por código de barras)
-  // y arma las filas de conflicto: existe/no existe, stock local, cantidad solicitada.
+  // Coteja los productos de la redistribución contra el inventario local en UNA sola petición
+  // (antes se hacía 1 request por producto → lentísimo con cientos de ítems). Arma las filas de
+  // conflicto: existe/no existe, stock local, cantidad solicitada.
   var construirFilasConflicto = /*#__PURE__*/function () {
-    var _ref14 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee8(prem) {
-      var filas, _iterator, _step, _loop;
-      return _regeneratorRuntime().wrap(function _callee8$(_context9) {
-        while (1) switch (_context9.prev = _context9.next) {
+    var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee8(prem) {
+      var items, codigos, porBarras, porProveedor, _r$data, r;
+      return _regeneratorRuntime().wrap(function _callee8$(_context8) {
+        while (1) switch (_context8.prev = _context8.next) {
           case 0:
-            filas = [];
-            _iterator = _createForOfIteratorHelper((prem.items || []).entries());
-            _context9.prev = 2;
-            _loop = /*#__PURE__*/_regeneratorRuntime().mark(function _loop() {
-              var _step$value, idx, it, snap, barras, local, r, arr;
-              return _regeneratorRuntime().wrap(function _loop$(_context8) {
-                while (1) switch (_context8.prev = _context8.next) {
-                  case 0:
-                    _step$value = _slicedToArray(_step.value, 2), idx = _step$value[0], it = _step$value[1];
-                    snap = it.producto || {};
-                    barras = snap.codigo_barras;
-                    local = null;
-                    if (!barras) {
-                      _context8.next = 15;
-                      break;
-                    }
-                    _context8.prev = 5;
-                    _context8.next = 8;
-                    return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].getinventario({
-                      vendedor: null,
-                      num: 5,
-                      itemCero: true,
-                      qProductosMain: barras,
-                      orderColumn: 'descripcion',
-                      orderBy: 'asc'
-                    });
-                  case 8:
-                    r = _context8.sent;
-                    arr = r.data || [];
-                    local = arr.find(function (p) {
-                      return String(p.codigo_barras) === String(barras);
-                    }) || null;
-                    _context8.next = 15;
-                    break;
-                  case 13:
-                    _context8.prev = 13;
-                    _context8.t0 = _context8["catch"](5);
-                  case 15:
-                    filas.push({
-                      key: 'f' + idx + '-' + (barras || it.id || idx),
-                      descripcion: snap.descripcion || local && local.descripcion || null,
-                      barras: barras || local && local.codigo_barras || null,
-                      codigo_proveedor: snap.codigo_proveedor || local && local.codigo_proveedor || null,
-                      cantidadSolicitada: it.cantidad,
-                      local: local,
-                      existe: !!local,
-                      stockLocal: local ? local.cantidad : null
-                    });
-                  case 16:
-                  case "end":
-                    return _context8.stop();
-                }
-              }, _loop, null, [[5, 13]]);
+            items = prem.items || []; // Junta todos los códigos (barras y proveedor) para resolverlos de un tiro.
+            codigos = [];
+            items.forEach(function (it) {
+              var s = it.producto || {};
+              if (s.codigo_barras) codigos.push(String(s.codigo_barras));
+              if (s.codigo_proveedor) codigos.push(String(s.codigo_proveedor));
             });
-            _iterator.s();
-          case 5:
-            if ((_step = _iterator.n()).done) {
-              _context9.next = 9;
-              break;
-            }
-            return _context9.delegateYield(_loop(), "t0", 7);
-          case 7:
-            _context9.next = 5;
+
+            // Índice local por barras y por proveedor (una consulta).
+            porBarras = {};
+            porProveedor = {};
+            _context8.prev = 5;
+            _context8.next = 8;
+            return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].resolverInventarioPorCodigos({
+              codigos: codigos
+            });
+          case 8:
+            r = _context8.sent;
+            (((_r$data = r.data) === null || _r$data === void 0 ? void 0 : _r$data.productos) || []).forEach(function (p) {
+              if (p.codigo_barras) porBarras[String(p.codigo_barras)] = p;
+              if (p.codigo_proveedor) porProveedor[String(p.codigo_proveedor)] = p;
+            });
+            _context8.next = 14;
             break;
-          case 9:
-            _context9.next = 14;
-            break;
-          case 11:
-            _context9.prev = 11;
-            _context9.t1 = _context9["catch"](2);
-            _iterator.e(_context9.t1);
+          case 12:
+            _context8.prev = 12;
+            _context8.t0 = _context8["catch"](5);
           case 14:
-            _context9.prev = 14;
-            _iterator.f();
-            return _context9.finish(14);
-          case 17:
-            return _context9.abrupt("return", filas);
-          case 18:
+            return _context8.abrupt("return", items.map(function (it, idx) {
+              var snap = it.producto || {};
+              var barras = snap.codigo_barras;
+              var prov = snap.codigo_proveedor;
+              var local = barras && porBarras[String(barras)] || prov && porProveedor[String(prov)] || null;
+              return {
+                key: 'f' + idx + '-' + (barras || prov || it.id || idx),
+                descripcion: snap.descripcion || local && local.descripcion || null,
+                barras: barras || local && local.codigo_barras || null,
+                codigo_proveedor: prov || local && local.codigo_proveedor || null,
+                cantidadSolicitada: it.cantidad,
+                local: local,
+                existe: !!local,
+                stockLocal: local ? local.cantidad : null
+              };
+            }));
+          case 15:
           case "end":
-            return _context9.stop();
+            return _context8.stop();
         }
-      }, _callee8, null, [[2, 11, 14, 17]]);
+      }, _callee8, null, [[5, 12]]);
     }));
     return function construirFilasConflicto(_x5) {
-      return _ref14.apply(this, arguments);
+      return _ref15.apply(this, arguments);
     };
   }();
 
   // "Crear orden" desde una redistribución: primero abre el paso de resolución de conflictos
   // (ajustar cantidades / excluir inexistentes). La creación real ocurre en confirmarOrdenConflictos.
   var abrirResolucionPremonta = /*#__PURE__*/function () {
-    var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee9(prem) {
+    var _ref16 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee9(prem) {
       var filas;
-      return _regeneratorRuntime().wrap(function _callee9$(_context0) {
-        while (1) switch (_context0.prev = _context0.next) {
+      return _regeneratorRuntime().wrap(function _callee9$(_context9) {
+        while (1) switch (_context9.prev = _context9.next) {
           case 0:
             setProcesando('prem-' + prem.id_orden_distribucion);
-            _context0.prev = 1;
-            _context0.next = 4;
+            _context9.prev = 1;
+            _context9.next = 4;
             return construirFilasConflicto(prem);
           case 4:
-            filas = _context0.sent;
+            filas = _context9.sent;
             setConflictosPremonta({
               prem: prem,
               filas: filas
             });
             setVistaActual('conflictos');
-            _context0.next = 12;
+            _context9.next = 12;
             break;
           case 9:
-            _context0.prev = 9;
-            _context0.t0 = _context0["catch"](1);
-            alert('Error al cotejar la redistribución: ' + (_context0.t0.message || _context0.t0));
+            _context9.prev = 9;
+            _context9.t0 = _context9["catch"](1);
+            alert('Error al cotejar la redistribución: ' + (_context9.t0.message || _context9.t0));
           case 12:
-            _context0.prev = 12;
+            _context9.prev = 12;
             setProcesando(null);
-            return _context0.finish(12);
+            return _context9.finish(12);
           case 15:
           case "end":
-            return _context0.stop();
+            return _context9.stop();
         }
       }, _callee9, null, [[1, 9, 12, 15]]);
     }));
     return function abrirResolucionPremonta(_x6) {
-      return _ref15.apply(this, arguments);
+      return _ref16.apply(this, arguments);
     };
   }();
 
   // Crea la orden en preparación (estado 0, SIN descontar) con los ítems ya resueltos por el
   // usuario, ligada a la redistribución. La redistribución original de central queda intacta.
   var confirmarOrdenConflictos = /*#__PURE__*/function () {
-    var _ref16 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(items) {
+    var _ref17 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(items) {
       var prem, _prem$sucursal_destin, _res$data3, res, _res$data4;
-      return _regeneratorRuntime().wrap(function _callee0$(_context1) {
-        while (1) switch (_context1.prev = _context1.next) {
+      return _regeneratorRuntime().wrap(function _callee0$(_context0) {
+        while (1) switch (_context0.prev = _context0.next) {
           case 0:
             prem = conflictosPremonta === null || conflictosPremonta === void 0 ? void 0 : conflictosPremonta.prem;
             if (prem) {
-              _context1.next = 3;
+              _context0.next = 3;
               break;
             }
-            return _context1.abrupt("return");
+            return _context0.abrupt("return");
           case 3:
             if (items.length) {
-              _context1.next = 6;
+              _context0.next = 6;
               break;
             }
             alert('No hay productos válidos para crear la orden.');
-            return _context1.abrupt("return");
+            return _context0.abrupt("return");
           case 6:
             setProcesando('crear-conflictos');
-            _context1.prev = 7;
-            _context1.next = 10;
+            _context0.prev = 7;
+            _context0.next = 10;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGuardarOrden({
               id_destino: ((_prem$sucursal_destin = prem.sucursal_destino) === null || _prem$sucursal_destin === void 0 ? void 0 : _prem$sucursal_destin.id) || '',
               id_orden_distribucion: prem.id_orden_distribucion,
@@ -138410,12 +138536,12 @@ var TransferenciasModule = function TransferenciasModule(_ref1) {
               items: items
             });
           case 10:
-            res = _context1.sent;
+            res = _context0.sent;
             if (!((_res$data3 = res.data) !== null && _res$data3 !== void 0 && _res$data3.estado)) {
-              _context1.next = 19;
+              _context0.next = 19;
               break;
             }
-            _context1.next = 14;
+            _context0.next = 14;
             return cargarBorradores();
           case 14:
             setPremontas(function (prev) {
@@ -138425,29 +138551,29 @@ var TransferenciasModule = function TransferenciasModule(_ref1) {
             });
             setConflictosPremonta(null);
             setVistaActual('list');
-            _context1.next = 20;
+            _context0.next = 20;
             break;
           case 19:
             alert(((_res$data4 = res.data) === null || _res$data4 === void 0 ? void 0 : _res$data4.msj) || 'No se pudo crear la orden.');
           case 20:
-            _context1.next = 25;
+            _context0.next = 25;
             break;
           case 22:
-            _context1.prev = 22;
-            _context1.t0 = _context1["catch"](7);
-            alert('Error al crear la orden: ' + (_context1.t0.message || _context1.t0));
+            _context0.prev = 22;
+            _context0.t0 = _context0["catch"](7);
+            alert('Error al crear la orden: ' + (_context0.t0.message || _context0.t0));
           case 25:
-            _context1.prev = 25;
+            _context0.prev = 25;
             setProcesando(null);
-            return _context1.finish(25);
+            return _context0.finish(25);
           case 28:
           case "end":
-            return _context1.stop();
+            return _context0.stop();
         }
       }, _callee0, null, [[7, 22, 25, 28]]);
     }));
     return function confirmarOrdenConflictos(_x7) {
-      return _ref16.apply(this, arguments);
+      return _ref17.apply(this, arguments);
     };
   }();
 
@@ -138466,145 +138592,145 @@ var TransferenciasModule = function TransferenciasModule(_ref1) {
 
   // Guarda el borrador (crear/actualizar) sin descontar. Devuelve {estado, msj, orden}.
   var guardarBorrador = /*#__PURE__*/function () {
-    var _ref17 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(datos) {
+    var _ref18 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(datos) {
       var res;
-      return _regeneratorRuntime().wrap(function _callee1$(_context10) {
-        while (1) switch (_context10.prev = _context10.next) {
+      return _regeneratorRuntime().wrap(function _callee1$(_context1) {
+        while (1) switch (_context1.prev = _context1.next) {
           case 0:
-            _context10.next = 2;
+            _context1.next = 2;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGuardarOrden(datos);
           case 2:
-            res = _context10.sent;
-            _context10.next = 5;
+            res = _context1.sent;
+            _context1.next = 5;
             return cargarBorradores();
           case 5:
-            return _context10.abrupt("return", res.data);
+            return _context1.abrupt("return", res.data);
           case 6:
           case "end":
-            return _context10.stop();
+            return _context1.stop();
         }
       }, _callee1);
     }));
     return function guardarBorrador(_x8) {
-      return _ref17.apply(this, arguments);
+      return _ref18.apply(this, arguments);
     };
   }();
 
   // Dar salida a un borrador: descuenta inventario + crea el espejo en central.
   var darSalida = /*#__PURE__*/function () {
-    var _ref18 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(borrador) {
+    var _ref19 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(borrador) {
       var nItems, _res$data5, res, _res$data6;
-      return _regeneratorRuntime().wrap(function _callee10$(_context11) {
-        while (1) switch (_context11.prev = _context11.next) {
+      return _regeneratorRuntime().wrap(function _callee10$(_context10) {
+        while (1) switch (_context10.prev = _context10.next) {
           case 0:
             nItems = (borrador.items || []).filter(function (i) {
               return parseFloat(i.cantidad) > 0;
             }).length;
             if (window.confirm("\xBFDar salida a la orden #".concat(borrador.id, "? Se descontar\xE1n ").concat(nItems, " producto(s) del inventario y se enviar\xE1 a central. Esta acci\xF3n s\xED mueve inventario."))) {
-              _context11.next = 3;
+              _context10.next = 3;
               break;
             }
-            return _context11.abrupt("return");
+            return _context10.abrupt("return");
           case 3:
             setProcesando('salida-' + borrador.id);
-            _context11.prev = 4;
-            _context11.next = 7;
+            _context10.prev = 4;
+            _context10.next = 7;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdDarSalidaSimple({
               id_transferencia: borrador.id
             });
           case 7:
-            res = _context11.sent;
+            res = _context10.sent;
             if (!((_res$data5 = res.data) !== null && _res$data5 !== void 0 && _res$data5.estado)) {
-              _context11.next = 15;
+              _context10.next = 15;
               break;
             }
-            _context11.next = 11;
+            _context10.next = 11;
             return cargarBorradores();
           case 11:
             setRefreshListKey(function (k) {
               return k + 1;
             }); // refrescar histórico central
             alert(res.data.msj || 'Salida dada.');
-            _context11.next = 16;
+            _context10.next = 16;
             break;
           case 15:
             alert(((_res$data6 = res.data) === null || _res$data6 === void 0 ? void 0 : _res$data6.msj) || 'No se pudo dar salida.');
           case 16:
-            _context11.next = 21;
+            _context10.next = 21;
             break;
           case 18:
-            _context11.prev = 18;
-            _context11.t0 = _context11["catch"](4);
-            alert('Error al dar salida: ' + (_context11.t0.message || _context11.t0));
+            _context10.prev = 18;
+            _context10.t0 = _context10["catch"](4);
+            alert('Error al dar salida: ' + (_context10.t0.message || _context10.t0));
           case 21:
-            _context11.prev = 21;
+            _context10.prev = 21;
             setProcesando(null);
-            return _context11.finish(21);
+            return _context10.finish(21);
           case 24:
           case "end":
-            return _context11.stop();
+            return _context10.stop();
         }
       }, _callee10, null, [[4, 18, 21, 24]]);
     }));
     return function darSalida(_x9) {
-      return _ref18.apply(this, arguments);
+      return _ref19.apply(this, arguments);
     };
   }();
 
   // Eliminar un borrador (no tocó inventario).
   var eliminarBorrador = /*#__PURE__*/function () {
-    var _ref19 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(borrador) {
+    var _ref20 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(borrador) {
       var _res$data7, res, _res$data8;
-      return _regeneratorRuntime().wrap(function _callee11$(_context12) {
-        while (1) switch (_context12.prev = _context12.next) {
+      return _regeneratorRuntime().wrap(function _callee11$(_context11) {
+        while (1) switch (_context11.prev = _context11.next) {
           case 0:
             if (window.confirm("\xBFEliminar la orden en preparaci\xF3n #".concat(borrador.id, "? No descont\xF3 inventario, solo se borra el borrador."))) {
-              _context12.next = 2;
+              _context11.next = 2;
               break;
             }
-            return _context12.abrupt("return");
+            return _context11.abrupt("return");
           case 2:
             setProcesando('del-' + borrador.id);
-            _context12.prev = 3;
-            _context12.next = 6;
+            _context11.prev = 3;
+            _context11.next = 6;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdEliminarOrden({
               id: borrador.id
             });
           case 6:
-            res = _context12.sent;
+            res = _context11.sent;
             if (!((_res$data7 = res.data) !== null && _res$data7 !== void 0 && _res$data7.estado)) {
-              _context12.next = 13;
+              _context11.next = 13;
               break;
             }
-            _context12.next = 10;
+            _context11.next = 10;
             return cargarBorradores();
           case 10:
             setRefreshListKey(function (k) {
               return k + 1;
             }); // por si vuelve a aparecer la premonta
-            _context12.next = 14;
+            _context11.next = 14;
             break;
           case 13:
             alert(((_res$data8 = res.data) === null || _res$data8 === void 0 ? void 0 : _res$data8.msj) || 'No se pudo eliminar.');
           case 14:
-            _context12.next = 19;
+            _context11.next = 19;
             break;
           case 16:
-            _context12.prev = 16;
-            _context12.t0 = _context12["catch"](3);
-            alert('Error al eliminar: ' + (_context12.t0.message || _context12.t0));
+            _context11.prev = 16;
+            _context11.t0 = _context11["catch"](3);
+            alert('Error al eliminar: ' + (_context11.t0.message || _context11.t0));
           case 19:
-            _context12.prev = 19;
+            _context11.prev = 19;
             setProcesando(null);
-            return _context12.finish(19);
+            return _context11.finish(19);
           case 22:
           case "end":
-            return _context12.stop();
+            return _context11.stop();
         }
       }, _callee11, null, [[3, 16, 19, 22]]);
     }));
     return function eliminarBorrador(_x0) {
-      return _ref19.apply(this, arguments);
+      return _ref20.apply(this, arguments);
     };
   }();
   var handleSaveTransfer = function handleSaveTransfer(transferenciaGuardada) {
@@ -138766,9 +138892,30 @@ var TransferenciasModule = function TransferenciasModule(_ref1) {
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
                       className: "px-3 py-2 text-center text-gray-600",
                       children: (prem.items || []).length
-                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
                       className: "px-3 py-2 text-center whitespace-nowrap",
-                      children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                        onClick: function onClick() {
+                          return imprimirListaPicking({
+                            titulo: 'Lista de picking · Redistribución #' + prem.id_orden_distribucion,
+                            subtitulo: 'Búsqueda física en almacén · ' + (prem.items || []).length + ' producto(s)',
+                            filas: (prem.items || []).map(function (it) {
+                              var _it$producto, _it$producto2, _it$producto3;
+                              return {
+                                barras: (_it$producto = it.producto) === null || _it$producto === void 0 ? void 0 : _it$producto.codigo_barras,
+                                codigo_proveedor: (_it$producto2 = it.producto) === null || _it$producto2 === void 0 ? void 0 : _it$producto2.codigo_proveedor,
+                                descripcion: (_it$producto3 = it.producto) === null || _it$producto3 === void 0 ? void 0 : _it$producto3.descripcion,
+                                cantidad: it.cantidad
+                              };
+                            })
+                          });
+                        },
+                        className: "mr-1 px-2 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold rounded-md",
+                        title: "Imprimir lista (hoja carta) para buscar los productos en almac\xE9n",
+                        children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas fa-print"
+                        })
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
                         onClick: function onClick() {
                           return abrirResolucionPremonta(prem);
                         },
@@ -138784,7 +138931,7 @@ var TransferenciasModule = function TransferenciasModule(_ref1) {
                             className: "fas fa-magnifying-glass mr-1"
                           }), "Revisar y crear"]
                         })
-                      })
+                      })]
                     })]
                   }, prem.id_orden_distribucion);
                 })
@@ -138834,6 +138981,11 @@ var TransferenciasModule = function TransferenciasModule(_ref1) {
                   var nItems = (b.items || []).filter(function (i) {
                     return parseFloat(i.cantidad) > 0;
                   }).length;
+                  var totalItems = (b.items || []).length;
+                  var revItems = (b.items || []).filter(function (i) {
+                    return i.revisado;
+                  }).length;
+                  var revDone = totalItems > 0 && revItems === totalItems;
                   var ocupado = procesando === 'salida-' + b.id || procesando === 'del-' + b.id;
                   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
                     className: "hover:bg-blue-50/40",
@@ -138857,12 +139009,38 @@ var TransferenciasModule = function TransferenciasModule(_ref1) {
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
                       className: "px-3 py-2",
                       children: badgeDestinoPorId(b.id_destino)
-                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
                       className: "px-3 py-2 text-center text-gray-600",
-                      children: nItems
+                      children: [nItems, totalItems > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+                        className: "ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ".concat(revDone ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'),
+                        title: "".concat(revItems, "/").concat(totalItems, " revisados"),
+                        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas ".concat(revDone ? 'fa-check' : 'fa-clipboard-check')
+                        }), revItems, "/", totalItems]
+                      })]
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
                       className: "px-3 py-2 text-center whitespace-nowrap",
-                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                        onClick: function onClick() {
+                          return imprimirListaPicking({
+                            titulo: 'Lista de picking · Orden #' + b.id,
+                            subtitulo: (b.id_orden_distribucion ? 'Redistribución #' + b.id_orden_distribucion + ' · ' : '') + totalItems + ' producto(s)',
+                            filas: (b.items || []).map(function (i) {
+                              return {
+                                barras: i.codigo_barras,
+                                codigo_proveedor: i.codigo_proveedor,
+                                descripcion: i.descripcion,
+                                cantidad: i.cantidad
+                              };
+                            })
+                          });
+                        },
+                        className: "mr-1 px-2 py-1 text-xs font-semibold text-gray-700 border border-gray-300 rounded hover:bg-gray-50",
+                        title: "Imprimir lista (hoja carta) para almac\xE9n",
+                        children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas fa-print"
+                        })
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
                         onClick: function onClick() {
                           return editarBorrador(b);
                         },
@@ -182815,6 +182993,9 @@ var db = {
   },
   tdDarSalidaSimple: function tdDarSalidaSimple(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/dar-salida-simple", data);
+  },
+  resolverInventarioPorCodigos: function resolverInventarioPorCodigos(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "inventario-resolver-codigos", data);
   },
   tdGetPasilleros: function tdGetPasilleros(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/get-pasilleros", data);

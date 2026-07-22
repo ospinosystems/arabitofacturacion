@@ -1209,6 +1209,36 @@ class InventarioController extends Controller
         }
     }
 
+    /**
+     * Resuelve MUCHOS productos de una sola vez por código (de barras o proveedor).
+     * Reemplaza el patrón de 1 request por producto (que era lentísimo al armar/revisar
+     * una orden de redistribución con cientos de ítems). Una única consulta whereIn.
+     *
+     * Input:  { codigos: string[] }
+     * Output: { estado, productos:[{id,codigo_barras,codigo_proveedor,descripcion,precio_base,precio,cantidad}] }
+     */
+    public function resolverProductosPorCodigos(Request $req)
+    {
+        $codigos = collect($req->codigos ?? [])
+            ->map(fn ($c) => trim((string) $c))
+            ->filter(fn ($c) => $c !== '')
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($codigos)) {
+            return Response::json(['estado' => true, 'productos' => []]);
+        }
+
+        $productos = inventario::where(function ($q) use ($codigos) {
+            $q->whereIn('codigo_barras', $codigos)
+                ->orWhereIn('codigo_proveedor', $codigos);
+        })
+            ->get(['id', 'codigo_barras', 'codigo_proveedor', 'descripcion', 'precio_base', 'precio', 'cantidad']);
+
+        return Response::json(['estado' => true, 'productos' => $productos]);
+    }
+
     public function index(Request $req)
     {
         $req = [

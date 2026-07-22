@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class transferencias_inventario_items extends Model
 {
     use HasFactory;
-    protected $fillable = ['id_transferencia', 'id_producto', 'cantidad', 'cantidad_original_stock_inventario'];
+    protected $fillable = ['id_transferencia', 'id_producto', 'cantidad', 'cantidad_original_stock_inventario', 'revisado'];
 
     public function transferencia()
     {

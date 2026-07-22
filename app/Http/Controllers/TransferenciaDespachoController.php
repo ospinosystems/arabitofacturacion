@@ -124,6 +124,7 @@ class TransferenciaDespachoController extends Controller
                     'id_producto' => $producto->id,
                     'cantidad' => $it['cantidad'],
                     'cantidad_original_stock_inventario' => $producto->cantidad,
+                    'revisado' => !empty($it['revisado']),
                 ]);
             }
 
@@ -181,6 +182,7 @@ class TransferenciaDespachoController extends Controller
                 'codigo_barras' => $it->producto->codigo_barras ?? null,
                 'codigo_proveedor' => $it->producto->codigo_proveedor ?? null,
                 'cantidad' => (float) $it->cantidad,
+                'revisado' => (bool) $it->revisado,
                 'recolectado' => $this->recolectadoPorItem($it->id),
                 'empacado' => $this->empacadoPorItem($it->id),
             ];

@@ -251,6 +251,7 @@ const db = {
   tdGetOrdenes: data => axios.post(host + "transferencia-despacho/get-ordenes", data),
   tdEliminarOrden: data => axios.post(host + "transferencia-despacho/eliminar-orden", data),
   tdDarSalidaSimple: data => axios.post(host + "transferencia-despacho/dar-salida-simple", data),
+  resolverInventarioPorCodigos: data => axios.post(host + "inventario-resolver-codigos", data),
   tdGetPasilleros: data => axios.post(host + "transferencia-despacho/get-pasilleros", data),
   tdAsignarLineas: data => axios.post(host + "transferencia-despacho/asignar-lineas", data),
   tdGetAsignaciones: data => axios.post(host + "transferencia-despacho/get-asignaciones", data),

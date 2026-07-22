@@ -3,6 +3,51 @@ import { format } from 'date-fns';
 import es from 'date-fns/locale/es';
 import db from '../database/database';
 
+// Imprime una lista de picking en HOJA CARTA (para buscar físicamente los productos en almacén).
+// filas: [{ barras, codigo_proveedor, descripcion, cantidad }]
+const imprimirListaPicking = ({ titulo, subtitulo, filas }) => {
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const rows = (filas || []).map((f, i) => `
+        <tr>
+          <td class="c">${i + 1}</td>
+          <td class="mono">${esc(f.barras || '—')}</td>
+          <td class="mono">${esc(f.codigo_proveedor || '—')}</td>
+          <td>${esc(f.descripcion || '—')}</td>
+          <td class="c b">${esc(f.cantidad)}</td>
+          <td class="ub"></td>
+          <td class="chk"><span class="box"></span></td>
+        </tr>`).join('');
+    const totalUni = (filas || []).reduce((a, f) => a + (parseFloat(f.cantidad) || 0), 0);
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(titulo)}</title>
+      <style>
+        @page { size: letter portrait; margin: 12mm; }
+        * { font-family: Arial, sans-serif; }
+        body { color:#111; font-size:12px; }
+        h1 { font-size:16px; margin:0 0 2px; }
+        .sub { color:#555; margin-bottom:10px; font-size:11px; }
+        table { width:100%; border-collapse:collapse; }
+        th,td { border:1px solid #cbd5e1; padding:5px 6px; text-align:left; font-size:11px; vertical-align:top; }
+        th { background:#1e3a8a; color:#fff; }
+        td.c { text-align:center; } td.b { font-weight:bold; } .mono { font-family:monospace; }
+        td.ub { width:90px; } td.chk { width:30px; text-align:center; }
+        .box { display:inline-block; width:15px; height:15px; border:2px solid #334155; }
+        .pie { margin-top:14px; font-size:10px; color:#444; }
+      </style></head><body>
+      <h1>${esc(titulo)}</h1>
+      <div class="sub">${esc(subtitulo || '')}</div>
+      <table><thead><tr>
+        <th>#</th><th>Cód. Barras</th><th>Cód. Prov.</th><th>Descripción</th>
+        <th>Cant.</th><th>Ubicación</th><th>✔</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+      <div class="pie">Total líneas: ${(filas || []).length} · Total unidades: ${totalUni}</div>
+      <script>window.onload=function(){setTimeout(function(){window.print();},300);}</script>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { alert('Habilitá las ventanas emergentes para poder imprimir la lista.'); return; }
+    w.document.write(html);
+    w.document.close();
+};
+
 // ###################################################################################
 // #                            INICIO: MOCK DATA Y SERVICIOS                        #
 // ###################################################################################
@@ -485,7 +530,7 @@ const ProductSearchInput = ({ onProductSelect, sucursalIdOrigen, placeholder = "
     );
 };
 
-const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, index, totalItems }) => {
+const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, index, totalItems, mostrarRevisado = false, onToggleRevisado }) => {
     const handleCantidadChange = (e) => {
         const valor = e.target.value;
         // Permitir valores vacíos temporalmente para mejor UX
@@ -493,15 +538,31 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
             onQuantityChange(item.id_producto_insucursal, '');
             return;
         }
-        
+
         // Validar que sea un número válido con hasta 2 decimales
         if (/^\d*\.?\d{0,2}$/.test(valor)) {
             onQuantityChange(item.id_producto_insucursal, valor);
         }
     };
 
+    // En modo picking: fila verde si ya fue revisado, ámbar si falta revisar.
+    const rowCls = mostrarRevisado
+        ? (item.revisado ? 'bg-emerald-50' : 'bg-amber-50/50 hover:bg-amber-50')
+        : 'hover:bg-gray-50';
+
     return (
-        <tr className="border-b border-gray-100 hover:bg-gray-50">
+        <tr className={`border-b border-gray-100 ${rowCls}`}>
+            {mostrarRevisado && (
+                <td className="px-2 py-1 text-center">
+                    <input
+                        type="checkbox"
+                        checked={!!item.revisado}
+                        onChange={() => onToggleRevisado && onToggleRevisado(item.id_producto_insucursal)}
+                        className="w-5 h-5 text-emerald-600 rounded cursor-pointer align-middle"
+                        title={item.revisado ? 'Revisado — click para desmarcar' : 'Marcar como revisado'}
+                    />
+                </td>
+            )}
             <td className="px-2 py-1 text-center text-xs text-gray-400 whitespace-nowrap">{index + 1}</td>
             <td className="px-2 py-1 text-sm text-gray-800">{item.descripcion_real || item.producto?.descripcion || '—'}</td>
             <td className="px-2 py-1 text-xs font-mono text-gray-600 whitespace-nowrap">{item.barras_real || item.producto?.codigo_barras || '—'}</td>
@@ -605,6 +666,7 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                     created_at: itemAPI.created_at,
                     updated_at: itemAPI.updated_at,
                     cantidad_original_stock_inventario: itemAPI?.cantidad || 0,
+                    revisado: !!itemAPI.revisado, // marca de picking (Plan B)
                     modificable: true, // Permitir edición en el formulario,
 
                 };
@@ -640,6 +702,7 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
             updated_at: new Date().toISOString(),
             id_producto_insucursal: productoDeInventario.id, // Clave para identificar el producto del inventario
             cantidad_original_stock_inventario: productoDeInventario.cantidad, // Stock del inventario al momento de agregar
+            revisado: true, // recién agregado a mano = ya revisado físicamente
             modificable: true,
         };
         setItemsTransferencia(prev => [...prev, nuevoItem]);
@@ -667,9 +730,18 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                     cantidad: nuevaCantidadStr,
                     monto: String(nuevoMonto),
                     ct_real: valido ? nuevaCantidadNum : item.ct_real,
+                    // Editar la cantidad marca el producto como revisado (picking Plan B).
+                    revisado: nuevaCantidadStr === '' ? item.revisado : true,
                 };
             })
         );
+    };
+
+    // Alterna la marca de "revisado" de un producto (picking Plan B).
+    const toggleRevisado = (idProductoInsucursal) => {
+        setItemsTransferencia(prev => prev.map(item =>
+            item.id_producto_insucursal === idProductoInsucursal ? { ...item, revisado: !item.revisado } : item
+        ));
     };
 
     const handleSubmit = async (e) => {
@@ -713,6 +785,7 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                 venta: item.venta,
                 descripcion_real: item.descripcion_real,
                 barras_real: item.barras_real,
+                revisado: !!item.revisado,
             })),
         };
 
@@ -865,13 +938,39 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                 {/* Lista de productos en tabla */}
                 {itemsTransferencia.length > 0 && (
                     <div className="mt-3">
-                        <h3 className="text-sm font-semibold text-gray-700 mb-1">
-                            Productos ({itemsTransferencia.length})
-                        </h3>
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                            <h3 className="text-sm font-semibold text-gray-700">
+                                Productos ({itemsTransferencia.length})
+                                {esBorrador && (() => {
+                                    const rev = itemsTransferencia.filter(i => i.revisado).length;
+                                    const total = itemsTransferencia.length;
+                                    const done = rev === total;
+                                    return (
+                                        <span className={`ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${done ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                            <i className={`fas ${done ? 'fa-check-circle' : 'fa-clipboard-check'}`}></i>
+                                            {rev}/{total} revisados{!done ? ` · faltan ${total - rev}` : ''}
+                                        </span>
+                                    );
+                                })()}
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => imprimirListaPicking({
+                                    titulo: 'Lista de picking' + (transferenciaToEdit?.id ? ' · Orden #' + transferenciaToEdit.id : ''),
+                                    subtitulo: (transferenciaToEdit?.id_orden_distribucion ? 'Redistribución #' + transferenciaToEdit.id_orden_distribucion + ' · ' : '') + 'Destino ' + (codigoDestino || '—') + ' · ' + itemsTransferencia.length + ' producto(s)',
+                                    filas: itemsTransferencia.map(i => ({ barras: i.barras_real, codigo_proveedor: i.alterno_real, descripcion: i.descripcion_real, cantidad: i.cantidad })),
+                                })}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                                title="Imprimir la lista (hoja carta) para buscar los productos en almacén"
+                            >
+                                <i className="fas fa-print"></i> Imprimir lista
+                            </button>
+                        </div>
                         <div className="border rounded-md max-h-[calc(100vh-340px)] overflow-y-auto">
                             <table className="min-w-full text-sm">
                                 <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0">
                                     <tr>
+                                        {esBorrador && <th className="px-2 py-1 text-center font-semibold w-10" title="Revisado">✔</th>}
                                         <th className="px-2 py-1 text-center font-semibold">#</th>
                                         <th className="px-2 py-1 text-left font-semibold">Descripción</th>
                                         <th className="px-2 py-1 text-left font-semibold">Cód. Barras</th>
@@ -890,6 +989,8 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                                             isEditable={true}
                                             index={index}
                                             totalItems={itemsTransferencia.length}
+                                            mostrarRevisado={esBorrador}
+                                            onToggleRevisado={toggleRevisado}
                                         />
                                     ))}
                                 </tbody>
@@ -1412,6 +1513,18 @@ const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, on
                     <p className="text-xs text-gray-500 mt-0.5">Ajustá cantidades y excluí lo que no tengas antes de crear la orden. Todavía no se descuenta nada.</p>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
+                    <button
+                        type="button"
+                        onClick={() => imprimirListaPicking({
+                            titulo: 'Lista de picking · Redistribución #' + (prem?.id_orden_distribucion ?? ''),
+                            subtitulo: 'Búsqueda física en almacén — ' + (rows.length) + ' producto(s)',
+                            filas: rows.map(r => ({ barras: r.barras, codigo_proveedor: r.codigo_proveedor, descripcion: r.descripcion, cantidad: parseFloat(r.cantidadSolicitada || 0).toFixed(0) })),
+                        })}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold"
+                        title="Imprimir la lista de productos (hoja carta) para buscarlos en almacén"
+                    >
+                        <i className="fas fa-print"></i> Imprimir lista
+                    </button>
                     <span className="text-gray-500">Destino:</span> {destinoBadge}
                 </div>
             </div>
@@ -1499,7 +1612,22 @@ const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, on
             </div>
 
             {noExisten > 0 && (
-                <p className="mt-2 text-xs text-red-600"><i className="fas fa-circle-info mr-1"></i>{noExisten} producto(s) de la redistribución no existen en tu inventario local: quedan excluidos. Si deberían existir, primero creá su ficha en el inventario.</p>
+                <div className="mt-3 border border-red-200 bg-red-50 rounded-md p-3">
+                    <p className="text-xs font-bold text-red-700 mb-1">
+                        <i className="fas fa-ban mr-1"></i>{noExisten} producto(s) de la redistribución NO existen en tu inventario local (quedan excluidos):
+                    </p>
+                    <ul className="text-xs text-red-700 space-y-0.5 max-h-40 overflow-y-auto">
+                        {rows.filter(r => !r.existe).map(r => (
+                            <li key={r.key} className="flex gap-2">
+                                <span className="font-mono font-semibold whitespace-nowrap">{r.barras || r.codigo_proveedor || '—'}</span>
+                                <span className="text-red-600">·</span>
+                                <span className="truncate">{r.descripcion || 'sin descripción'}</span>
+                                <span className="text-red-400 whitespace-nowrap">(pedía {parseFloat(r.cantidadSolicitada || 0).toFixed(0)})</span>
+                            </li>
+                        ))}
+                    </ul>
+                    <p className="text-[11px] text-red-500 mt-1.5">Si deberían existir, creá su ficha en el inventario y volvé a "Revisar y crear".</p>
+                </div>
             )}
 
             <div className="flex flex-col sm:flex-row justify-end gap-2 pt-3 mt-2 border-t border-gray-200">
@@ -1599,33 +1727,46 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         cargarBorradores();
     }, [refreshListKey, cargarBorradores]);
 
-    // Coteja cada producto de la redistribución contra el inventario local (por código de barras)
-    // y arma las filas de conflicto: existe/no existe, stock local, cantidad solicitada.
+    // Coteja los productos de la redistribución contra el inventario local en UNA sola petición
+    // (antes se hacía 1 request por producto → lentísimo con cientos de ítems). Arma las filas de
+    // conflicto: existe/no existe, stock local, cantidad solicitada.
     const construirFilasConflicto = async (prem) => {
-        const filas = [];
-        for (const [idx, it] of (prem.items || []).entries()) {
+        const items = prem.items || [];
+        // Junta todos los códigos (barras y proveedor) para resolverlos de un tiro.
+        const codigos = [];
+        items.forEach(it => {
+            const s = it.producto || {};
+            if (s.codigo_barras) codigos.push(String(s.codigo_barras));
+            if (s.codigo_proveedor) codigos.push(String(s.codigo_proveedor));
+        });
+
+        // Índice local por barras y por proveedor (una consulta).
+        const porBarras = {};
+        const porProveedor = {};
+        try {
+            const r = await db.resolverInventarioPorCodigos({ codigos });
+            (r.data?.productos || []).forEach(p => {
+                if (p.codigo_barras) porBarras[String(p.codigo_barras)] = p;
+                if (p.codigo_proveedor) porProveedor[String(p.codigo_proveedor)] = p;
+            });
+        } catch (e) { /* si falla, todo queda como "no existe" y el usuario lo ve */ }
+
+        return items.map((it, idx) => {
             const snap = it.producto || {};
             const barras = snap.codigo_barras;
-            let local = null;
-            if (barras) {
-                try {
-                    const r = await db.getinventario({ vendedor: null, num: 5, itemCero: true, qProductosMain: barras, orderColumn: 'descripcion', orderBy: 'asc' });
-                    const arr = r.data || [];
-                    local = arr.find(p => String(p.codigo_barras) === String(barras)) || null;
-                } catch (e) { /* ignore */ }
-            }
-            filas.push({
-                key: 'f' + idx + '-' + (barras || it.id || idx),
+            const prov = snap.codigo_proveedor;
+            const local = (barras && porBarras[String(barras)]) || (prov && porProveedor[String(prov)]) || null;
+            return {
+                key: 'f' + idx + '-' + (barras || prov || it.id || idx),
                 descripcion: snap.descripcion || (local && local.descripcion) || null,
                 barras: barras || (local && local.codigo_barras) || null,
-                codigo_proveedor: snap.codigo_proveedor || (local && local.codigo_proveedor) || null,
+                codigo_proveedor: prov || (local && local.codigo_proveedor) || null,
                 cantidadSolicitada: it.cantidad,
                 local,
                 existe: !!local,
                 stockLocal: local ? local.cantidad : null,
-            });
-        }
-        return filas;
+            };
+        });
     };
 
     // "Crear orden" desde una redistribución: primero abre el paso de resolución de conflictos
@@ -1844,6 +1985,17 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                                 <td className="px-3 py-2 text-center text-gray-600">{(prem.items || []).length}</td>
                                                 <td className="px-3 py-2 text-center whitespace-nowrap">
                                                     <button
+                                                        onClick={() => imprimirListaPicking({
+                                                            titulo: 'Lista de picking · Redistribución #' + prem.id_orden_distribucion,
+                                                            subtitulo: 'Búsqueda física en almacén · ' + (prem.items || []).length + ' producto(s)',
+                                                            filas: (prem.items || []).map(it => ({ barras: it.producto?.codigo_barras, codigo_proveedor: it.producto?.codigo_proveedor, descripcion: it.producto?.descripcion, cantidad: it.cantidad })),
+                                                        })}
+                                                        className="mr-1 px-2 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold rounded-md"
+                                                        title="Imprimir lista (hoja carta) para buscar los productos en almacén"
+                                                    >
+                                                        <i className="fas fa-print"></i>
+                                                    </button>
+                                                    <button
                                                         onClick={() => abrirResolucionPremonta(prem)}
                                                         disabled={procesando === 'prem-' + prem.id_orden_distribucion}
                                                         className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold rounded-md"
@@ -1883,6 +2035,9 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                     <tbody className="bg-white divide-y divide-gray-100">
                                         {borradores.map(b => {
                                             const nItems = (b.items || []).filter(i => parseFloat(i.cantidad) > 0).length;
+                                            const totalItems = (b.items || []).length;
+                                            const revItems = (b.items || []).filter(i => i.revisado).length;
+                                            const revDone = totalItems > 0 && revItems === totalItems;
                                             const ocupado = procesando === 'salida-' + b.id || procesando === 'del-' + b.id;
                                             return (
                                                 <tr key={b.id} className="hover:bg-blue-50/40">
@@ -1893,8 +2048,26 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                                             : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-600"><i className="fas fa-user"></i>MANUAL</span>}
                                                     </td>
                                                     <td className="px-3 py-2">{badgeDestinoPorId(b.id_destino)}</td>
-                                                    <td className="px-3 py-2 text-center text-gray-600">{nItems}</td>
+                                                    <td className="px-3 py-2 text-center text-gray-600">
+                                                        {nItems}
+                                                        {totalItems > 0 && (
+                                                            <span className={`ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${revDone ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`} title={`${revItems}/${totalItems} revisados`}>
+                                                                <i className={`fas ${revDone ? 'fa-check' : 'fa-clipboard-check'}`}></i>{revItems}/{totalItems}
+                                                            </span>
+                                                        )}
+                                                    </td>
                                                     <td className="px-3 py-2 text-center whitespace-nowrap">
+                                                        <button
+                                                            onClick={() => imprimirListaPicking({
+                                                                titulo: 'Lista de picking · Orden #' + b.id,
+                                                                subtitulo: (b.id_orden_distribucion ? 'Redistribución #' + b.id_orden_distribucion + ' · ' : '') + totalItems + ' producto(s)',
+                                                                filas: (b.items || []).map(i => ({ barras: i.codigo_barras, codigo_proveedor: i.codigo_proveedor, descripcion: i.descripcion, cantidad: i.cantidad })),
+                                                            })}
+                                                            className="mr-1 px-2 py-1 text-xs font-semibold text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+                                                            title="Imprimir lista (hoja carta) para almacén"
+                                                        >
+                                                            <i className="fas fa-print"></i>
+                                                        </button>
                                                         <button onClick={() => editarBorrador(b)} disabled={ocupado} className="px-2 py-1 text-xs font-semibold text-blue-700 border border-blue-300 rounded hover:bg-blue-50 disabled:opacity-50" title="Editar cantidades / ítems">
                                                             <i className="fas fa-edit mr-1"></i>Editar
                                                         </button>
