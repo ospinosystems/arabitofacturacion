@@ -203,7 +203,11 @@ class TransferenciaDespachoController extends Controller
         }
         $ordenes = $q->orderByDesc('id')->limit($req->limit ? (int) $req->limit : 50)->get()
             ->map(fn ($o) => $this->ordenConDetalle($o->id));
-        return Response::json(['estado' => true, 'ordenes' => $ordenes]);
+        // Código de la sucursal ORIGEN (este galpón) para que el front resuelva sus datos fiscales
+        // (razón social/RIF/estado viven en central, ya llegan en getSucursales) al imprimir la guía.
+        $origenCodigo = null;
+        try { $origenCodigo = (new sendCentral())->getOrigen(); } catch (\Throwable $e) {}
+        return Response::json(['estado' => true, 'ordenes' => $ordenes, 'origen_codigo' => $origenCodigo]);
     }
 
     /** Elimina una orden en preparación (estado 0). No tocó inventario, así que solo se borra. */

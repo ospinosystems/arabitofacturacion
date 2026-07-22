@@ -2095,6 +2095,8 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const abrirPrintModal = (payload) => setPrintModal(payload);
     // Órdenes ya despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
     const [despachadas, setDespachadas] = useState([]);
+    // Código de la sucursal ORIGEN (este galpón), para resolver sus datos fiscales en la guía.
+    const [origenCodigo, setOrigenCodigo] = useState(null);
     // Loading al cargar las órdenes (premontas + borradores + despachadas).
     const [cargandoOrdenes, setCargandoOrdenes] = useState(true);
     // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
@@ -2150,6 +2152,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         try {
             const res = await db.tdGetOrdenes({ estado: 0, limit: 100 });
             setBorradores(res.data?.ordenes || []);
+            if (res.data?.origen_codigo) setOrigenCodigo(res.data.origen_codigo);
         } catch (e) { setBorradores([]); }
     }, []);
 
@@ -2159,6 +2162,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         try {
             const res = await db.tdGetOrdenes({ estado: 1, limit: 100 });
             let ordenes = res.data?.ordenes || [];
+            if (res.data?.origen_codigo) setOrigenCodigo(res.data.origen_codigo);
             const ids = ordenes.map(o => o.id);
             if (ids.length) {
                 // Verificación contra central: distingue "verificado y presente" / "verificado y
@@ -2414,12 +2418,26 @@ const TransferenciasModule = ({ sucursalActualId }) => {
             return;
         }
         const id = String(centralId).padStart(8, '0');
+        // Título/Camel: "APURE" → "Apure", "san fernando" → "San Fernando".
+        const titleCase = (s) => String(s || '').toLowerCase().replace(/\b\p{L}/gu, c => c.toUpperCase()).trim();
         const destino = sucByIdLocal[orden.id_destino] || {};
-        const origenSuc = sucByIdLocal[sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER] || {};
-        const clienteRazon = destino.nombre || destino.codigo || ('Sucursal ' + (orden.id_destino ?? '—'));
-        const clienteRif = destino.rif || destino.identificacion || '—';
-        const clienteDir = (destino.direccion && String(destino.direccion).trim()) ? destino.direccion : '—';
-        const origenNombre = origenSuc.nombre || origenSuc.codigo || '—';
+        // Origen correcto = la sucursal cuyo `codigo` es el de ESTE galpón (no un id placeholder).
+        const origenSuc = (sucursales || []).find(s => origenCodigo && String(s.codigo) === String(origenCodigo)) || {};
+
+        const destEmpresa = destino.empresa || {};
+        const origEmpresa = origenSuc.empresa || {};
+        // Cliente (Razón Social) = razón social de la empresa + nombre de la sucursal destino.
+        const razonEmpresaDest = (destEmpresa.razon_social || '').trim();
+        const nombreSucDest = (destino.nombre || destino.codigo || ('Sucursal ' + (orden.id_destino ?? '—'))).trim();
+        const clienteRazon = razonEmpresaDest ? `${razonEmpresaDest} - ${nombreSucDest}` : nombreSucDest;
+        const clienteRif = (destEmpresa.rif || destino.rif || '—').toString().trim() || '—';
+        // Dirección = nombre de la sucursal + estado (en Title/Camel case).
+        const estadoDest = titleCase(destino.estado);
+        const clienteDir = [nombreSucDest, estadoDest].filter(Boolean).join(', ') || '—';
+        // Origen = razón social de su empresa + nombre de la sucursal origen (o solo el nombre).
+        const razonEmpresaOrig = (origEmpresa.razon_social || '').trim();
+        const nombreSucOrig = (origenSuc.nombre || origenSuc.codigo || '—').trim();
+        const origenNombre = razonEmpresaOrig ? `${razonEmpresaOrig} - ${nombreSucOrig}` : nombreSucOrig;
         const items = orden.items || [];
         const sub = items.reduce((a, it) => a + (parseFloat(it.cantidad) || 0) * (parseFloat(it.precio) || 0), 0);
         const exento = 0, gravable = sub, iva = 0;
