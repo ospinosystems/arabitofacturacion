@@ -138944,9 +138944,10 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
     }, _callee8, null, [[0, 7]]);
   })), []);
 
-  // Cargar despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
+  // Cargar despachadas (estado 1). Además verifica contra central el Nº de Guía REAL (el id local
+  // guardado puede estar stale). Anota central_pedido_id / central_existe / central_estado.
   var cargarDespachadas = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/_asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee9() {
-    var _res$data2, res;
+    var _res$data2, res, ordenes, ids, _v$data, v, mapa;
     return _regeneratorRuntime().wrap(function _callee9$(_context9) {
       while (1) switch (_context9.prev = _context9.next) {
         case 0:
@@ -138958,18 +138959,48 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
           });
         case 3:
           res = _context9.sent;
-          setDespachadas(((_res$data2 = res.data) === null || _res$data2 === void 0 ? void 0 : _res$data2.ordenes) || []);
-          _context9.next = 10;
-          break;
-        case 7:
+          ordenes = ((_res$data2 = res.data) === null || _res$data2 === void 0 ? void 0 : _res$data2.ordenes) || [];
+          ids = ordenes.map(function (o) {
+            return o.id;
+          });
+          if (!ids.length) {
+            _context9.next = 17;
+            break;
+          }
           _context9.prev = 7;
-          _context9.t0 = _context9["catch"](0);
-          setDespachadas([]);
+          _context9.next = 10;
+          return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdVerificarEspejos({
+            ids: ids
+          });
         case 10:
+          v = _context9.sent;
+          mapa = ((_v$data = v.data) === null || _v$data === void 0 ? void 0 : _v$data.espejos) || {};
+          ordenes = ordenes.map(function (o) {
+            var c = mapa[String(o.id)];
+            return _objectSpread(_objectSpread({}, o), {}, {
+              central_pedido_id: c ? c.id : null,
+              central_existe: !!c,
+              central_estado: c ? c.estado : null
+            });
+          });
+          _context9.next = 17;
+          break;
+        case 15:
+          _context9.prev = 15;
+          _context9.t0 = _context9["catch"](7);
+        case 17:
+          setDespachadas(ordenes);
+          _context9.next = 23;
+          break;
+        case 20:
+          _context9.prev = 20;
+          _context9.t1 = _context9["catch"](0);
+          setDespachadas([]);
+        case 23:
         case "end":
           return _context9.stop();
       }
-    }, _callee9, null, [[0, 7]]);
+    }, _callee9, null, [[0, 20], [7, 15]]);
   })), []);
 
   // Cargar premontas (redistribuciones aprobadas para esta sucursal origen) + borradores.
@@ -139476,12 +139507,13 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
     (sucursales || []).forEach(function (s) {
       sucByIdLocal[s.id] = s;
     });
-    // Nº de Guía = id del pedido en CENTRAL (pedidos.id). Si aún no hay, no imprime número inventado.
-    if (!orden.id_transferencia_central) {
-      alert('Esta orden todavía no tiene número de pedido en central (el envío no se confirmó). Reintentá "Dar salida" antes de imprimir la guía.');
+    // Nº de Guía = id REAL del pedido en central (verificado). Si no existe, no imprime.
+    var centralId = orden.central_existe ? orden.central_pedido_id : null;
+    if (!centralId) {
+      alert('Esta orden no tiene pedido en central (el envío no se completó o fue reversado). Tocá "Enviar a central" antes de imprimir la guía.');
       return;
     }
-    var id = String(orden.id_transferencia_central).padStart(8, '0');
+    var id = String(centralId).padStart(8, '0');
     var destino = sucByIdLocal[orden.id_destino] || {};
     var origenSuc = sucByIdLocal[sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER] || {};
     var clienteRazon = destino.nombre || destino.codigo || 'Sucursal ' + ((_orden$id_destino = orden.id_destino) !== null && _orden$id_destino !== void 0 ? _orden$id_destino : '—');
@@ -139947,6 +139979,9 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
                     children: "Orden"
                   }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
                     className: "px-3 py-2 text-left font-semibold",
+                    children: "Fecha"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-left font-semibold",
                     children: "Origen"
                   }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
                     className: "px-3 py-2 text-left font-semibold",
@@ -139976,6 +140011,9 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
                     children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
                       className: "px-3 py-2 font-semibold text-gray-800 whitespace-nowrap",
                       children: ["#", b.id]
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2 text-gray-600 whitespace-nowrap",
+                      children: fmtFecha(b.created_at)
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
                       className: "px-3 py-2",
                       children: b.id_orden_distribucion ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
@@ -140107,6 +140145,9 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
                     children: "Orden"
                   }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
                     className: "px-3 py-2 text-left font-semibold",
+                    children: "Fecha"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-left font-semibold",
                     children: "N\xBA Gu\xEDa"
                   }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
                     className: "px-3 py-2 text-left font-semibold",
@@ -140123,18 +140164,22 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
                 className: "bg-white divide-y divide-gray-100",
                 children: despachadasFiltradas.map(function (d) {
                   var nItems = (d.items || []).length;
-                  // El Nº de Guía es el id del pedido en CENTRAL (pedidos.id). Sin fallback al id local.
-                  var guia = d.id_transferencia_central ? String(d.id_transferencia_central).padStart(8, '0') : '—';
+                  // El Nº de Guía es el id REAL del pedido en central (verificado). Sin fallback al id local.
+                  var guiaOk = d.central_existe;
+                  var guia = guiaOk ? String(d.central_pedido_id).padStart(8, '0') : '—';
                   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
                     className: "hover:bg-emerald-50/40",
                     children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
                       className: "px-3 py-2 font-semibold text-gray-800 whitespace-nowrap",
                       children: ["#", d.id]
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2 text-gray-600 whitespace-nowrap",
+                      children: fmtFecha(d.updated_at || d.created_at)
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
                       className: "px-3 py-2 font-mono text-gray-700 whitespace-nowrap",
-                      children: d.id_transferencia_central ? guia : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+                      children: guiaOk ? guia : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
                         className: "text-amber-500",
-                        title: "Sin pedido en central (reintent\xE1 dar salida)",
+                        title: "No hay pedido en central para esta orden (reenvi\xE1 a central)",
                         children: "\u2014 sin n\xBA \u2014"
                       })
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
@@ -140145,7 +140190,7 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
                       children: nItems
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
                       className: "px-3 py-2 text-center whitespace-nowrap",
-                      children: [!d.id_transferencia_central && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                      children: [!d.central_existe && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
                         onClick: function onClick() {
                           return reenviarACentral(d);
                         },
@@ -184192,6 +184237,9 @@ var db = {
   },
   tdReversarSalida: function tdReversarSalida(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/reversar-salida", data);
+  },
+  tdVerificarEspejos: function tdVerificarEspejos(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/verificar-espejos", data);
   },
   resolverInventarioPorCodigos: function resolverInventarioPorCodigos(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "inventario-resolver-codigos", data);

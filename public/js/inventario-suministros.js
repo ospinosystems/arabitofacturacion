@@ -34547,6 +34547,9 @@ var db = {
   tdReversarSalida: function tdReversarSalida(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/reversar-salida", data);
   },
+  tdVerificarEspejos: function tdVerificarEspejos(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "transferencia-despacho/verificar-espejos", data);
+  },
   resolverInventarioPorCodigos: function resolverInventarioPorCodigos(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "inventario-resolver-codigos", data);
   },

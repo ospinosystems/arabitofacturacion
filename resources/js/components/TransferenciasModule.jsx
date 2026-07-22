@@ -1993,11 +1993,24 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         } catch (e) { setBorradores([]); }
     }, []);
 
-    // Cargar despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
+    // Cargar despachadas (estado 1). Además verifica contra central el Nº de Guía REAL (el id local
+    // guardado puede estar stale). Anota central_pedido_id / central_existe / central_estado.
     const cargarDespachadas = useCallback(async () => {
         try {
             const res = await db.tdGetOrdenes({ estado: 1, limit: 100 });
-            setDespachadas(res.data?.ordenes || []);
+            let ordenes = res.data?.ordenes || [];
+            const ids = ordenes.map(o => o.id);
+            if (ids.length) {
+                try {
+                    const v = await db.tdVerificarEspejos({ ids });
+                    const mapa = v.data?.espejos || {};
+                    ordenes = ordenes.map(o => {
+                        const c = mapa[String(o.id)];
+                        return { ...o, central_pedido_id: c ? c.id : null, central_existe: !!c, central_estado: c ? c.estado : null };
+                    });
+                } catch (e) { /* si la verificación falla, se muestran sin nº verificado */ }
+            }
+            setDespachadas(ordenes);
         } catch (e) { setDespachadas([]); }
     }, []);
 
@@ -2218,12 +2231,13 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const imprimirGuiaDespacho = (orden) => {
         const sucByIdLocal = {};
         (sucursales || []).forEach(s => { sucByIdLocal[s.id] = s; });
-        // Nº de Guía = id del pedido en CENTRAL (pedidos.id). Si aún no hay, no imprime número inventado.
-        if (!orden.id_transferencia_central) {
-            alert('Esta orden todavía no tiene número de pedido en central (el envío no se confirmó). Reintentá "Dar salida" antes de imprimir la guía.');
+        // Nº de Guía = id REAL del pedido en central (verificado). Si no existe, no imprime.
+        const centralId = orden.central_existe ? orden.central_pedido_id : null;
+        if (!centralId) {
+            alert('Esta orden no tiene pedido en central (el envío no se completó o fue reversado). Tocá "Enviar a central" antes de imprimir la guía.');
             return;
         }
-        const id = String(orden.id_transferencia_central).padStart(8, '0');
+        const id = String(centralId).padStart(8, '0');
         const destino = sucByIdLocal[orden.id_destino] || {};
         const origenSuc = sucByIdLocal[sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER] || {};
         const clienteRazon = destino.nombre || destino.codigo || ('Sucursal ' + (orden.id_destino ?? '—'));
@@ -2553,6 +2567,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                     <thead className="bg-blue-50/60 text-xs uppercase tracking-wide text-blue-700">
                                         <tr>
                                             <th className="px-3 py-2 text-left font-semibold">Orden</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Fecha</th>
                                             <th className="px-3 py-2 text-left font-semibold">Origen</th>
                                             <th className="px-3 py-2 text-left font-semibold">Destino</th>
                                             <th className="px-3 py-2 text-center font-semibold">Productos</th>
@@ -2569,6 +2584,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                             return (
                                                 <tr key={b.id} className="hover:bg-blue-50/40">
                                                     <td className="px-3 py-2 font-semibold text-gray-800 whitespace-nowrap">#{b.id}</td>
+                                                    <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{fmtFecha(b.created_at)}</td>
                                                     <td className="px-3 py-2">
                                                         {b.id_orden_distribucion
                                                             ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800" title={'Redistribución #' + b.id_orden_distribucion}><i className="fas fa-random"></i>REDIST. #{b.id_orden_distribucion}</span>
@@ -2633,6 +2649,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                     <thead className="bg-emerald-50/60 text-xs uppercase tracking-wide text-emerald-700">
                                         <tr>
                                             <th className="px-3 py-2 text-left font-semibold">Orden</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Fecha</th>
                                             <th className="px-3 py-2 text-left font-semibold">Nº Guía</th>
                                             <th className="px-3 py-2 text-left font-semibold">Destino</th>
                                             <th className="px-3 py-2 text-center font-semibold">Productos</th>
@@ -2642,16 +2659,18 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                     <tbody className="bg-white divide-y divide-gray-100">
                                         {despachadasFiltradas.map(d => {
                                             const nItems = (d.items || []).length;
-                                            // El Nº de Guía es el id del pedido en CENTRAL (pedidos.id). Sin fallback al id local.
-                                            const guia = d.id_transferencia_central ? String(d.id_transferencia_central).padStart(8, '0') : '—';
+                                            // El Nº de Guía es el id REAL del pedido en central (verificado). Sin fallback al id local.
+                                            const guiaOk = d.central_existe;
+                                            const guia = guiaOk ? String(d.central_pedido_id).padStart(8, '0') : '—';
                                             return (
                                                 <tr key={d.id} className="hover:bg-emerald-50/40">
                                                     <td className="px-3 py-2 font-semibold text-gray-800 whitespace-nowrap">#{d.id}</td>
-                                                    <td className="px-3 py-2 font-mono text-gray-700 whitespace-nowrap">{d.id_transferencia_central ? guia : <span className="text-amber-500" title="Sin pedido en central (reintentá dar salida)">— sin nº —</span>}</td>
+                                                    <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{fmtFecha(d.updated_at || d.created_at)}</td>
+                                                    <td className="px-3 py-2 font-mono text-gray-700 whitespace-nowrap">{guiaOk ? guia : <span className="text-amber-500" title="No hay pedido en central para esta orden (reenviá a central)">— sin nº —</span>}</td>
                                                     <td className="px-3 py-2">{badgeDestinoPorId(d.id_destino)}</td>
                                                     <td className="px-3 py-2 text-center text-gray-600">{nItems}</td>
                                                     <td className="px-3 py-2 text-center whitespace-nowrap">
-                                                        {!d.id_transferencia_central && (
+                                                        {!d.central_existe && (
                                                             <button onClick={() => reenviarACentral(d)} disabled={procesando === 'reenv-' + d.id} className="mr-1 px-2 py-1 text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded disabled:opacity-50" title="El envío a central no se completó. Reintentar (no re-descuenta inventario).">
                                                                 {procesando === 'reenv-' + d.id ? <><i className="fas fa-spinner fa-spin mr-1"></i>Enviando...</> : <><i className="fas fa-paper-plane mr-1"></i>Enviar a central</>}
                                                             </button>

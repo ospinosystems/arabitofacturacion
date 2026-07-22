@@ -2098,6 +2098,27 @@ class sendCentral extends Controller
     }
 
     /**
+     * Verifica en central qué pedidos espejo existen (por id local = idinsucursal) y devuelve su
+     * id REAL de central + estado. Sirve para mostrar el Nº de Guía real (no el id local stale).
+     */
+    public function verificarEspejosCentral(array $idsLocales)
+    {
+        try {
+            $response = $this->requestToCentral('post', "/verificarEspejos", [
+                "codigo_origen" => $this->getOrigen(),
+                "ids_pedido_local" => array_values($idsLocales),
+            ]);
+            if ($response->ok()) {
+                $res = $this->jsonFromCentral($response);
+                return $res !== null ? $res : ["estado" => false, "espejos" => []];
+            }
+            return ["estado" => false, "msj" => "HTTP " . $response->status() . " de central", "espejos" => []];
+        } catch (\Exception $e) {
+            return ["estado" => false, "msj" => "Error: " . $e->getMessage(), "espejos" => []];
+        }
+    }
+
+    /**
      * SANEAR EXPORT 2026-06-09 — borra en central espejos de exportación por id local
      * explícito (ids_pedido_local), sin requerir que el pedido siga existiendo en esta
      * sucursal (caso huérfano: payload "pedidos" llega vacío). NO toca estado local;

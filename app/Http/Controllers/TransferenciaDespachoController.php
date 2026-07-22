@@ -140,6 +140,24 @@ class TransferenciaDespachoController extends Controller
         }
     }
 
+    /**
+     * Verifica en central el Nº de Guía REAL (pedido central) de un set de órdenes locales
+     * (por su id = idinsucursal del espejo). Devuelve mapa { idLocal: {id, estado} }.
+     */
+    public function verificarEspejos(Request $req)
+    {
+        $ids = collect((array) ($req->ids ?? $req->ids_pedido_local ?? []))
+            ->map(fn ($v) => (int) $v)->filter()->unique()->values()->all();
+        if (empty($ids)) {
+            return Response::json(['estado' => true, 'espejos' => []]);
+        }
+        $res = (new sendCentral())->verificarEspejosCentral($ids);
+        return Response::json([
+            'estado' => is_array($res) ? (bool) ($res['estado'] ?? false) : false,
+            'espejos' => is_array($res) ? ($res['espejos'] ?? []) : [],
+        ]);
+    }
+
     /** Lista las órdenes locales de despacho (por estado, default preparación=0). */
     public function getOrdenes(Request $req)
     {
