@@ -135919,7 +135919,7 @@ var dividirFilas = function dividirFilas(filas, modo, valor) {
 // (barras/proveedor, tolerante a espacios). Devuelve índices porId/porBarras/porProveedor.
 var resolverLocalesDePremonta = /*#__PURE__*/function () {
   var _ref2 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee(items) {
-    var codigos, ids, porId, porBarras, porProveedor, _r$data, r;
+    var codigos, ids, porId, porBarras, porProveedor, error, productosCount, conUbicacion, debug, _r$data, _r$data2, _r$data3, _r$data4, r, prods;
     return _regeneratorRuntime().wrap(function _callee$(_context) {
       while (1) switch (_context.prev = _context.next) {
         case 0:
@@ -135931,36 +135931,47 @@ var resolverLocalesDePremonta = /*#__PURE__*/function () {
             if (it.producto_id_master) ids.push(it.producto_id_master);
           });
           porId = {}, porBarras = {}, porProveedor = {};
-          _context.prev = 3;
-          _context.next = 6;
+          error = null, productosCount = 0, conUbicacion = 0, debug = null;
+          _context.prev = 4;
+          _context.next = 7;
           return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].resolverInventarioPorCodigos({
             ids: ids,
             codigos: codigos
           });
-        case 6:
+        case 7:
           r = _context.sent;
-          (((_r$data = r.data) === null || _r$data === void 0 ? void 0 : _r$data.productos) || []).forEach(function (p) {
+          prods = ((_r$data = r.data) === null || _r$data === void 0 ? void 0 : _r$data.productos) || [];
+          productosCount = prods.length;
+          debug = (_r$data2 = r.data) === null || _r$data2 === void 0 ? void 0 : _r$data2.debug_ubicaciones;
+          prods.forEach(function (p) {
             porId[String(p.id)] = p;
+            if (p.ubicacion) conUbicacion++;
             if (p.codigo_barras) porBarras[String(p.codigo_barras).trim()] = p;
             if (p.codigo_proveedor) porProveedor[String(p.codigo_proveedor).trim()] = p;
           });
-          _context.next = 13;
+          if (((_r$data3 = r.data) === null || _r$data3 === void 0 ? void 0 : _r$data3.estado) === false) error = ((_r$data4 = r.data) === null || _r$data4 === void 0 ? void 0 : _r$data4.msj) || 'El backend devolvió estado=false.';
+          _context.next = 19;
           break;
-        case 10:
-          _context.prev = 10;
-          _context.t0 = _context["catch"](3);
+        case 15:
+          _context.prev = 15;
+          _context.t0 = _context["catch"](4);
+          error = _context.t0.response ? 'HTTP ' + _context.t0.response.status : _context.t0.message || 'error de red';
           console.error('resolverLocalesDePremonta:', _context.t0);
-        case 13:
+        case 19:
           return _context.abrupt("return", {
             porId: porId,
             porBarras: porBarras,
-            porProveedor: porProveedor
+            porProveedor: porProveedor,
+            error: error,
+            productosCount: productosCount,
+            conUbicacion: conUbicacion,
+            debug: debug
           });
-        case 14:
+        case 20:
         case "end":
           return _context.stop();
       }
-    }, _callee, null, [[3, 10]]);
+    }, _callee, null, [[4, 15]]);
   }));
   return function resolverLocalesDePremonta(_x) {
     return _ref2.apply(this, arguments);
@@ -138875,7 +138886,7 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
   // Imprime la lista de picking de una premonta resolviendo la ubicación de almacén (1 petición).
   var imprimirPremonta = /*#__PURE__*/function () {
     var _ref19 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(prem) {
-      var items, _yield$resolverLocale2, porId, porBarras, porProveedor, filas;
+      var items, res, porId, porBarras, porProveedor, filas, conUbic, detalle;
       return _regeneratorRuntime().wrap(function _callee1$(_context1) {
         while (1) switch (_context1.prev = _context1.next) {
           case 0:
@@ -138885,10 +138896,8 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
             _context1.next = 5;
             return resolverLocalesDePremonta(items);
           case 5:
-            _yield$resolverLocale2 = _context1.sent;
-            porId = _yield$resolverLocale2.porId;
-            porBarras = _yield$resolverLocale2.porBarras;
-            porProveedor = _yield$resolverLocale2.porProveedor;
+            res = _context1.sent;
+            porId = res.porId, porBarras = res.porBarras, porProveedor = res.porProveedor;
             filas = items.map(function (it) {
               var s = it.producto || {};
               var local = matchLocal(it, s, porId, porBarras, porProveedor);
@@ -138899,7 +138908,14 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
                 ubicacion: local ? local.ubicacion || null : null,
                 cantidad: it.cantidad
               };
-            });
+            }); // Diagnóstico: si NO se resolvió ninguna ubicación, avisar por qué (en vez de imprimir en blanco).
+            conUbic = filas.filter(function (f) {
+              return f.ubicacion;
+            }).length;
+            if (conUbic === 0) {
+              detalle = res.error ? 'El endpoint de inventario falló: ' + res.error + '.\n\nProbablemente el backend del galpón está cacheado (opcache) o la ruta no está actualizada. Corré en el galpón:\n  php artisan optimize:clear' : 'El endpoint respondió pero sin ubicaciones.\nProductos devueltos: ' + res.productosCount + ' · con ubicación: ' + res.conUbicacion + ' · debug_ubicaciones: ' + res.debug + '.\n\nSi debug_ubicaciones NO aparece (undefined) → el backend es viejo (opcache): php artisan optimize:clear';
+              alert('No se pudo resolver la ubicación de ningún producto.\n\n' + detalle);
+            }
             abrirPrintModal({
               titulo: 'Lista de picking · Redistribución #' + prem.id_orden_distribucion,
               subtitulo: 'Búsqueda física en almacén · ' + items.length + ' producto(s)',

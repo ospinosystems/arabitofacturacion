@@ -418,6 +418,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::get('warehouse-inventory/tcd/pasillero', [TCDController::class, 'pasillero'])->name('warehouse-inventory.tcd.pasillero');
 		Route::get('warehouse-inventory/tcd/buscar-productos', [TCDController::class, 'buscarProductos'])->name('warehouse-inventory.tcd.buscar-productos');
 		Route::post('warehouse-inventory/tcd/crear-orden', [TCDController::class, 'crearOrden'])->name('warehouse-inventory.tcd.crear-orden');
+		Route::post('warehouse-inventory/tcd/crear-orden-premonta', [TCDController::class, 'crearOrdenDesdePremonta'])->name('warehouse-inventory.tcd.crear-orden-premonta');
 		Route::get('warehouse-inventory/tcd/get-pasilleros', [TCDController::class, 'getPasilleros'])->name('warehouse-inventory.tcd.get-pasilleros');
 		Route::post('warehouse-inventory/tcd/asignar-productos', [TCDController::class, 'asignarProductos'])->name('warehouse-inventory.tcd.asignar-productos');
 		Route::get('warehouse-inventory/tcd/get-ordenes', [TCDController::class, 'getOrdenes'])->name('warehouse-inventory.tcd.get-ordenes');

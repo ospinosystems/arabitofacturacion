@@ -23,6 +23,10 @@
             <button id="tabOrdenes" onclick="mostrarTab('ordenes')" class="px-4 py-2 font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">
                 <i class="fas fa-list mr-2"></i>Mis Órdenes
             </button>
+            <button id="tabRedistribuciones" onclick="mostrarTab('redistribuciones')" class="px-4 py-2 font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                <i class="fas fa-random mr-2"></i>Recibir Redistribuciones
+                <span id="badgePremontas" class="ml-1 px-1.5 py-0.5 text-xs font-bold bg-amber-100 text-amber-700 rounded-full" style="display:none;">0</span>
+            </button>
         </div>
     </div>
 
@@ -87,6 +91,23 @@
                 <div class="text-center text-gray-400 py-8">
                     <i class="fas fa-spinner fa-spin text-4xl mb-2"></i>
                     <p>Cargando órdenes...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab: Recibir Redistribuciones (premontas de central) -->
+    <div id="contenidoRedistribuciones" class="tab-content" style="display: none;">
+        <div class="bg-white rounded-lg shadow p-4 mb-4">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="font-bold text-gray-700"><i class="fas fa-random mr-2 text-amber-500"></i>Redistribuciones por despachar</h3>
+                <button onclick="cargarPremontas()" class="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg"><i class="fas fa-rotate mr-1"></i>Recargar</button>
+            </div>
+            <p class="text-sm text-gray-500 mb-3">Al crear la orden, cada producto entra al flujo normal del TCD: asignás a pasilleros y elegís de qué ubicación descontar (si está en varias).</p>
+            <div id="listaPremontas" class="space-y-2">
+                <div class="text-center text-gray-400 py-8">
+                    <i class="fas fa-spinner fa-spin text-4xl mb-2"></i>
+                    <p>Cargando redistribuciones...</p>
                 </div>
             </div>
         </div>
@@ -322,7 +343,8 @@ let esActualizacionCantidad = false;
 document.addEventListener('DOMContentLoaded', function() {
     cargarPasilleros();
     cargarOrdenes();
-    
+    cargarPremontas(); // actualiza el badge de redistribuciones pendientes
+
     // Buscar producto al presionar Enter
     document.getElementById('buscarProducto').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
@@ -354,27 +376,122 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function mostrarTab(tab) {
-    // Ocultar todos los contenidos
-    document.getElementById('contenidoCrear').style.display = 'none';
-    document.getElementById('contenidoOrdenes').style.display = 'none';
-    
-    // Remover estilos activos
-    document.getElementById('tabCrear').classList.remove('border-blue-500', 'text-blue-600');
-    document.getElementById('tabCrear').classList.add('border-transparent', 'text-gray-500');
-    document.getElementById('tabOrdenes').classList.remove('border-blue-500', 'text-blue-600');
-    document.getElementById('tabOrdenes').classList.add('border-transparent', 'text-gray-500');
-    
-    // Mostrar tab seleccionado
-    if (tab === 'crear') {
-        document.getElementById('contenidoCrear').style.display = 'block';
-        document.getElementById('tabCrear').classList.remove('border-transparent', 'text-gray-500');
-        document.getElementById('tabCrear').classList.add('border-blue-500', 'text-blue-600');
-    } else {
-        document.getElementById('contenidoOrdenes').style.display = 'block';
-        document.getElementById('tabOrdenes').classList.remove('border-transparent', 'text-gray-500');
-        document.getElementById('tabOrdenes').classList.add('border-blue-500', 'text-blue-600');
-        cargarOrdenes();
-    }
+    const tabs = {
+        crear: { cont: 'contenidoCrear', btn: 'tabCrear' },
+        ordenes: { cont: 'contenidoOrdenes', btn: 'tabOrdenes' },
+        redistribuciones: { cont: 'contenidoRedistribuciones', btn: 'tabRedistribuciones' },
+    };
+    // Ocultar todo y desactivar botones
+    Object.values(tabs).forEach(t => {
+        const c = document.getElementById(t.cont); if (c) c.style.display = 'none';
+        const b = document.getElementById(t.btn);
+        if (b) { b.classList.remove('border-blue-500', 'text-blue-600'); b.classList.add('border-transparent', 'text-gray-500'); }
+    });
+    const sel = tabs[tab] || tabs.crear;
+    document.getElementById(sel.cont).style.display = 'block';
+    const btn = document.getElementById(sel.btn);
+    btn.classList.remove('border-transparent', 'text-gray-500');
+    btn.classList.add('border-blue-500', 'text-blue-600');
+    if (tab === 'ordenes') cargarOrdenes();
+    if (tab === 'redistribuciones') cargarPremontas();
+}
+
+// ===== Recibir Redistribuciones (premontas de central) =====
+let premontasData = [];
+
+function actualizarBadgePremontas() {
+    const badge = document.getElementById('badgePremontas');
+    if (!badge) return;
+    if (premontasData.length > 0) { badge.textContent = premontasData.length; badge.style.display = 'inline-block'; }
+    else { badge.style.display = 'none'; }
+}
+
+function cargarPremontas() {
+    const cont = document.getElementById('listaPremontas');
+    cont.innerHTML = '<div class="text-center text-gray-400 py-8"><i class="fas fa-spinner fa-spin text-4xl mb-2"></i><p>Cargando redistribuciones...</p></div>';
+    fetch('/getPremontadas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+        body: JSON.stringify({ limit: 50 })
+    })
+    .then(r => r.json())
+    .then(data => {
+        premontasData = (data && data.premontadas) ? data.premontadas : [];
+        actualizarBadgePremontas();
+        if (!premontasData.length) {
+            cont.innerHTML = '<div class="text-center text-gray-400 py-8"><i class="fas fa-inbox text-4xl mb-2"></i><p>No hay redistribuciones pendientes por despachar</p></div>';
+            return;
+        }
+        cont.innerHTML = premontasData.map((p, idx) => {
+            const dest = p.sucursal_destino || {};
+            const destTxt = (dest.codigo || dest.nombre || ('Destino ' + (dest.id ?? '—')));
+            const n = (p.items || []).length;
+            return `
+            <div class="flex items-center justify-between gap-3 border border-amber-200 bg-amber-50 rounded-lg px-4 py-3 flex-wrap">
+                <div class="text-sm">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800"><i class="fas fa-random"></i>REDISTRIBUCIÓN</span>
+                    <span class="font-bold text-gray-800 ml-2">#${p.id_orden_distribucion}</span>
+                    <span class="text-gray-500 ml-2">&rarr; ${destTxt}</span>
+                    <span class="text-gray-400 ml-2">· ${n} producto(s)</span>
+                </div>
+                <button onclick="crearOrdenPremonta(${idx})" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-lg shadow">
+                    <i class="fas fa-file-circle-plus mr-1"></i>Crear orden
+                </button>
+            </div>`;
+        }).join('');
+    })
+    .catch(err => {
+        cont.innerHTML = '<div class="text-center text-red-500 py-8"><i class="fas fa-triangle-exclamation text-3xl mb-2"></i><p>Error al cargar redistribuciones</p></div>';
+        console.error(err);
+    });
+}
+
+function crearOrdenPremonta(idx) {
+    const prem = premontasData[idx];
+    if (!prem) return;
+    const dest = prem.sucursal_destino || {};
+    const items = (prem.items || []).map(it => ({
+        producto: {
+            codigo_barras: it.producto?.codigo_barras,
+            codigo_proveedor: it.producto?.codigo_proveedor,
+            descripcion: it.producto?.descripcion,
+        },
+        producto_id_master: it.producto_id_master,
+        cantidad: it.cantidad,
+    }));
+    if (!items.length) { alert('La redistribución no tiene productos.'); return; }
+
+    if (!confirm(`Crear orden TCD desde la redistribución #${prem.id_orden_distribucion} (${items.length} producto(s))?`)) return;
+
+    fetch('/warehouse-inventory/tcd/crear-orden-premonta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+        body: JSON.stringify({
+            id_orden_distribucion: prem.id_orden_distribucion,
+            sucursal_destino_id: dest.id || null,
+            sucursal_destino_codigo: dest.codigo || null,
+            observaciones: 'Redistribución #' + prem.id_orden_distribucion,
+            items,
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.estado) {
+            let msg = data.msj;
+            if (data.faltantes && data.faltantes.length) msg += '\n\nNo existen en tu inventario local (omitidos):\n- ' + data.faltantes.join('\n- ');
+            if (data.sin_stock && data.sin_stock.length) msg += '\n\nOJO, stock insuficiente (igual se agregaron, ajustá al recolectar):\n- ' + data.sin_stock.join('\n- ');
+            alert(msg);
+            // Sacar la premonta de la lista y pasar a Mis Órdenes
+            premontasData.splice(idx, 1);
+            actualizarBadgePremontas();
+            mostrarTab('ordenes');
+        } else {
+            let m = data.msj || 'No se pudo crear la orden.';
+            if (data.faltantes && data.faltantes.length) m += '\n\n- ' + data.faltantes.join('\n- ');
+            alert(m);
+        }
+    })
+    .catch(err => { alert('Error al crear la orden: ' + err.message); console.error(err); });
 }
 
 function buscarProductos() {

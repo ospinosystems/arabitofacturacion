@@ -102,15 +102,24 @@ const resolverLocalesDePremonta = async (items) => {
         if (it.producto_id_master) ids.push(it.producto_id_master);
     });
     const porId = {}, porBarras = {}, porProveedor = {};
+    let error = null, productosCount = 0, conUbicacion = 0, debug = null;
     try {
         const r = await db.resolverInventarioPorCodigos({ ids, codigos });
-        (r.data?.productos || []).forEach(p => {
+        const prods = r.data?.productos || [];
+        productosCount = prods.length;
+        debug = r.data?.debug_ubicaciones;
+        prods.forEach(p => {
             porId[String(p.id)] = p;
+            if (p.ubicacion) conUbicacion++;
             if (p.codigo_barras) porBarras[String(p.codigo_barras).trim()] = p;
             if (p.codigo_proveedor) porProveedor[String(p.codigo_proveedor).trim()] = p;
         });
-    } catch (e) { console.error('resolverLocalesDePremonta:', e); }
-    return { porId, porBarras, porProveedor };
+        if (r.data?.estado === false) error = r.data?.msj || 'El backend devolvió estado=false.';
+    } catch (e) {
+        error = (e.response ? ('HTTP ' + e.response.status) : (e.message || 'error de red'));
+        console.error('resolverLocalesDePremonta:', e);
+    }
+    return { porId, porBarras, porProveedor, error, productosCount, conUbicacion, debug };
 };
 
 // Busca el producto local para un ítem de premonta. Considera el match por id (producto_id_master)
@@ -1945,12 +1954,21 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         setProcesando('print-' + prem.id_orden_distribucion);
         try {
             const items = prem.items || [];
-            const { porId, porBarras, porProveedor } = await resolverLocalesDePremonta(items);
+            const res = await resolverLocalesDePremonta(items);
+            const { porId, porBarras, porProveedor } = res;
             const filas = items.map(it => {
                 const s = it.producto || {};
                 const local = matchLocal(it, s, porId, porBarras, porProveedor);
                 return { barras: s.codigo_barras, codigo_proveedor: s.codigo_proveedor, descripcion: s.descripcion, ubicacion: local ? (local.ubicacion || null) : null, cantidad: it.cantidad };
             });
+            // Diagnóstico: si NO se resolvió ninguna ubicación, avisar por qué (en vez de imprimir en blanco).
+            const conUbic = filas.filter(f => f.ubicacion).length;
+            if (conUbic === 0) {
+                const detalle = res.error
+                    ? ('El endpoint de inventario falló: ' + res.error + '.\n\nProbablemente el backend del galpón está cacheado (opcache) o la ruta no está actualizada. Corré en el galpón:\n  php artisan optimize:clear')
+                    : ('El endpoint respondió pero sin ubicaciones.\nProductos devueltos: ' + res.productosCount + ' · con ubicación: ' + res.conUbicacion + ' · debug_ubicaciones: ' + res.debug + '.\n\nSi debug_ubicaciones NO aparece (undefined) → el backend es viejo (opcache): php artisan optimize:clear');
+                alert('No se pudo resolver la ubicación de ningún producto.\n\n' + detalle);
+            }
             abrirPrintModal({
                 titulo: 'Lista de picking · Redistribución #' + prem.id_orden_distribucion,
                 subtitulo: 'Búsqueda física en almacén · ' + items.length + ' producto(s)',

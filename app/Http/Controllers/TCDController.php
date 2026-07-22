@@ -256,6 +256,135 @@ class TCDController extends Controller
     }
     
     /**
+     * Crea una orden TCD a partir de una PREMONTA (orden de redistribución de central).
+     * Resuelve cada producto al inventario local por id (idinsucursal = id local) o por código.
+     * NO frena por stock: se crea la orden con lo pedido; el pasillero ajusta y elige la ubicación
+     * de dónde descontar (el flujo normal del TCD). Los que no existan local se listan y se omiten.
+     */
+    public function crearOrdenDesdePremonta(Request $request)
+    {
+        $request->validate([
+            'id_orden_distribucion' => 'required|integer',
+            'items' => 'required|array|min:1',
+        ]);
+
+        $chequeadorId = session('id_usuario');
+        if (!$chequeadorId) {
+            return Response::json(['estado' => false, 'msj' => 'Usuario no autenticado'], 401);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Evitar duplicar: si ya hay una orden TCD para esta redistribución sin transferir.
+            $existe = TCDOrden::where('id_orden_distribucion', $request->id_orden_distribucion)
+                ->whereNull('fecha_transferencia')->first();
+            if ($existe) {
+                DB::rollBack();
+                return Response::json([
+                    'estado' => false,
+                    'msj' => 'Ya existe una orden TCD (' . $existe->numero_orden . ') para esta redistribución.',
+                    'orden_id' => $existe->id,
+                ], 200);
+            }
+
+            $ultimaOrden = TCDOrden::orderBy('id', 'desc')->first();
+            $numeroOrden = 'TCD #' . str_pad(($ultimaOrden ? $ultimaOrden->id : 0) + 1, 6, '0', STR_PAD_LEFT);
+
+            $orden = TCDOrden::create([
+                'numero_orden' => $numeroOrden,
+                'chequeador_id' => $chequeadorId,
+                'estado' => 'borrador',
+                'id_orden_distribucion' => (int) $request->id_orden_distribucion,
+                'sucursal_destino_id' => $request->sucursal_destino_id,
+                'sucursal_destino_codigo' => $request->sucursal_destino_codigo,
+                'observaciones' => $request->observaciones ?: ('Redistribución #' . $request->id_orden_distribucion),
+            ]);
+
+            $creados = 0;
+            $faltantes = [];
+            $sinStock = [];
+            foreach ($request->items as $it) {
+                $snap = $it['producto'] ?? [];
+                $barras = trim((string) ($snap['codigo_barras'] ?? ''));
+                $prov = trim((string) ($snap['codigo_proveedor'] ?? ''));
+                $idMaster = (int) ($it['producto_id_master'] ?? 0);
+                $cant = (float) ($it['cantidad'] ?? 0);
+                if ($cant <= 0) {
+                    continue;
+                }
+
+                // Resolver producto local: por id (idinsucursal reusa el id local) o por código.
+                $producto = $idMaster > 0 ? inventario::find($idMaster) : null;
+                if (!$producto && ($barras !== '' || $prov !== '')) {
+                    $producto = inventario::where(function ($q) use ($barras, $prov) {
+                        if ($barras !== '') {
+                            $q->where('codigo_barras', $barras)->orWhere(DB::raw('TRIM(codigo_barras)'), $barras);
+                        }
+                        if ($prov !== '') {
+                            $q->orWhere('codigo_proveedor', $prov)->orWhere(DB::raw('TRIM(codigo_proveedor)'), $prov);
+                        }
+                    })->first();
+                }
+                if (!$producto) {
+                    $faltantes[] = $snap['descripcion'] ?? ($prov ?: $barras);
+                    continue;
+                }
+
+                $stockTotalWh = WarehouseInventory::where('inventario_id', $producto->id)->sum('cantidad') ?? 0;
+                $stockDispWh = WarehouseInventory::where('inventario_id', $producto->id)
+                    ->selectRaw('SUM(cantidad - COALESCE(cantidad_bloqueada, 0)) as disponible')->value('disponible') ?? 0;
+                $stockDisp = ($stockTotalWh == 0 && $producto->cantidad > 0) ? (float) $producto->cantidad : (float) $stockDispWh;
+
+                $wi = WarehouseInventory::where('inventario_id', $producto->id)
+                    ->whereRaw('(cantidad - COALESCE(cantidad_bloqueada, 0)) > 0')
+                    ->with('warehouse')->orderBy('cantidad', 'desc')->first();
+                $ubicacion = $wi ? ($wi->warehouse->codigo ?? null) : null;
+
+                if ($stockDisp < $cant) {
+                    $sinStock[] = ($snap['descripcion'] ?? $producto->descripcion) . " (disp {$stockDisp}, pide {$cant})";
+                }
+
+                TCDOrdenItem::create([
+                    'tcd_orden_id' => $orden->id,
+                    'inventario_id' => $producto->id,
+                    'codigo_barras' => $producto->codigo_barras,
+                    'codigo_proveedor' => $producto->codigo_proveedor,
+                    'descripcion' => $producto->descripcion,
+                    'precio' => $producto->precio,
+                    'precio_base' => $producto->precio_base,
+                    'ubicacion' => $ubicacion,
+                    'cantidad' => $cant,
+                    'cantidad_descontada' => 0,
+                    'cantidad_bloqueada' => 0,
+                ]);
+                $creados++;
+            }
+
+            if ($creados === 0) {
+                DB::rollBack();
+                return Response::json([
+                    'estado' => false,
+                    'msj' => 'Ningún producto de la redistribución existe en tu inventario local.',
+                    'faltantes' => $faltantes,
+                ], 200);
+            }
+
+            DB::commit();
+            return Response::json([
+                'estado' => true,
+                'msj' => "Orden {$numeroOrden} creada desde la redistribución ({$creados} producto(s)).",
+                'orden' => $orden->load('items'),
+                'faltantes' => $faltantes,
+                'sin_stock' => $sinStock,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return Response::json(['estado' => false, 'msj' => 'Error: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Obtener usuarios pasilleros disponibles
      */
     public function getPasilleros()
@@ -1265,6 +1394,7 @@ class TCDController extends Controller
                     "pedidos" => [$pedidoFormato], // Array con un solo pedido
                     "tipo_pedido" => "TCD", // Indicar que es una orden TCD
                     "tcd_orden_id" => $orden->id, // ID de la orden TCD original
+                    "id_orden_distribucion" => $orden->id_orden_distribucion, // premonta → central marca la OD "En Tránsito"
                 ]
             );
             

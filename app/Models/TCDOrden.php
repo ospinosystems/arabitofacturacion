@@ -15,6 +15,7 @@ class TCDOrden extends Model
         'numero_orden',
         'chequeador_id',
         'estado',
+        'id_orden_distribucion',
         'observaciones',
         'fecha_despacho',
         'sucursal_destino_id',

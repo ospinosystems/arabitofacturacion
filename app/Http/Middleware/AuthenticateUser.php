@@ -31,6 +31,7 @@ class AuthenticateUser
         'searchProductosInventario',
         'producto',
         'inventarios/buscar',
+        'inventario-resolver-codigos', // resolución batch de productos + ubicación (picking Plan B)
         
         // Pedidos y transferencias
         'reqpedidos',
@@ -118,6 +119,7 @@ class AuthenticateUser
         "warehouse-inventory/tcd/pasillero",
         "warehouse-inventory/tcd/buscar-productos",
         "warehouse-inventory/tcd/crear-orden",
+        "warehouse-inventory/tcd/crear-orden-premonta",
         "warehouse-inventory/tcd/get-pasilleros",
         "warehouse-inventory/tcd/asignar-productos",
         "warehouse-inventory/tcd/get-ordenes",
