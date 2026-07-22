@@ -2002,14 +2002,26 @@ const TransferenciasModule = ({ sucursalActualId }) => {
             let ordenes = res.data?.ordenes || [];
             const ids = ordenes.map(o => o.id);
             if (ids.length) {
+                // Verificación contra central: distingue "verificado y presente" / "verificado y
+                // ausente (stale)" / "no se pudo verificar". Si la verificación NO está disponible
+                // (central sin desplegar → estado:false/404/error), se cae al id_transferencia_central
+                // guardado, que hoy es confiable (se setea al id real de central al enviar).
+                let verificado = false;
+                let mapa = {};
                 try {
                     const v = await db.tdVerificarEspejos({ ids });
-                    const mapa = v.data?.espejos || {};
-                    ordenes = ordenes.map(o => {
-                        const c = mapa[String(o.id)];
-                        return { ...o, central_pedido_id: c ? c.id : null, central_existe: !!c, central_estado: c ? c.estado : null };
-                    });
-                } catch (e) { /* si la verificación falla, se muestran sin nº verificado */ }
+                    verificado = !!(v.data && v.data.estado);
+                    mapa = v.data?.espejos || {};
+                } catch (e) { verificado = false; }
+                ordenes = ordenes.map(o => {
+                    const c = mapa[String(o.id)];
+                    if (verificado) {
+                        // Central respondió: su mapa es la verdad (presente ⇒ id real; ausente ⇒ stale).
+                        return { ...o, central_pedido_id: c ? c.id : (o.id_transferencia_central || null), central_existe: !!c, central_estado: c ? c.estado : null, central_verificado: true };
+                    }
+                    // No se pudo verificar: usar el id guardado como fallback (sin confirmar).
+                    return { ...o, central_pedido_id: o.id_transferencia_central || null, central_existe: !!o.id_transferencia_central, central_estado: null, central_verificado: false };
+                });
             }
             setDespachadas(ordenes);
         } catch (e) { setDespachadas([]); }
@@ -2235,7 +2247,8 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const imprimirGuiaDespacho = (orden) => {
         const sucByIdLocal = {};
         (sucursales || []).forEach(s => { sucByIdLocal[s.id] = s; });
-        // Nº de Guía = id REAL del pedido en central (verificado). Si no existe, no imprime.
+        // Nº de Guía = id del pedido en central (verificado, o guardado si no se pudo verificar).
+        // Solo se bloquea si central CONFIRMÓ que no existe (o nunca se envió).
         const centralId = orden.central_existe ? orden.central_pedido_id : null;
         if (!centralId) {
             alert('Esta orden no tiene pedido en central (el envío no se completó o fue reversado). Tocá "Enviar a central" antes de imprimir la guía.');
@@ -2671,14 +2684,23 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                     <tbody className="bg-white divide-y divide-gray-100">
                                         {despachadasFiltradas.map(d => {
                                             const nItems = (d.items || []).length;
-                                            // El Nº de Guía es el id REAL del pedido en central (verificado). Sin fallback al id local.
-                                            const guiaOk = d.central_existe;
-                                            const guia = guiaOk ? String(d.central_pedido_id).padStart(8, '0') : '—';
+                                            // Nº de Guía = id REAL del pedido en central. Confirmado = verificado y presente.
+                                            // Si no se pudo verificar (central sin desplegar), se muestra el id guardado
+                                            // (confiable) marcado "sin verificar". Si central confirmó que NO existe, "sin nº".
+                                            const tieneGuia = !!d.central_pedido_id;
+                                            const confirmado = d.central_existe && d.central_verificado;
+                                            const guia = tieneGuia ? String(d.central_pedido_id).padStart(8, '0') : '—';
                                             return (
                                                 <tr key={d.id} className="hover:bg-emerald-50/40">
                                                     <td className="px-3 py-2 font-semibold text-gray-800 whitespace-nowrap">#{d.id}</td>
                                                     <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{fmtFecha(d.updated_at || d.created_at)}</td>
-                                                    <td className="px-3 py-2 font-mono text-gray-700 whitespace-nowrap">{guiaOk ? guia : <span className="text-amber-500" title="No hay pedido en central para esta orden (reenviá a central)">— sin nº —</span>}</td>
+                                                    <td className="px-3 py-2 font-mono whitespace-nowrap">
+                                                        {tieneGuia
+                                                            ? (confirmado
+                                                                ? <span className="text-gray-700" title="Nº de pedido en central (verificado)">{guia}</span>
+                                                                : <span className="text-gray-600" title="Nº de pedido en central (guardado; no se pudo verificar contra central)">{guia} <i className="fas fa-clock text-amber-400 ml-0.5" title="sin verificar"></i></span>)
+                                                            : <span className="text-amber-500" title="No hay pedido en central para esta orden (reenviá a central)">— sin nº —</span>}
+                                                    </td>
                                                     <td className="px-3 py-2">{badgeDestinoPorId(d.id_destino)}</td>
                                                     <td className="px-3 py-2 text-center text-gray-600">{nItems}</td>
                                                     <td className="px-3 py-2 text-center whitespace-nowrap">

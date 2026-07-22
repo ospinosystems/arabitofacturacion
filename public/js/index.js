@@ -138949,7 +138949,7 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
   // Cargar despachadas (estado 1). Además verifica contra central el Nº de Guía REAL (el id local
   // guardado puede estar stale). Anota central_pedido_id / central_existe / central_estado.
   var cargarDespachadas = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/_asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee9() {
-    var _res$data2, res, ordenes, ids, _v$data, v, mapa;
+    var _res$data2, res, ordenes, ids, verificado, mapa, _v$data, v;
     return _regeneratorRuntime().wrap(function _callee9$(_context9) {
       while (1) switch (_context9.prev = _context9.next) {
         case 0:
@@ -138966,43 +138966,63 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
             return o.id;
           });
           if (!ids.length) {
-            _context9.next = 17;
+            _context9.next = 21;
             break;
           }
-          _context9.prev = 7;
-          _context9.next = 10;
+          // Verificación contra central: distingue "verificado y presente" / "verificado y
+          // ausente (stale)" / "no se pudo verificar". Si la verificación NO está disponible
+          // (central sin desplegar → estado:false/404/error), se cae al id_transferencia_central
+          // guardado, que hoy es confiable (se setea al id real de central al enviar).
+          verificado = false;
+          mapa = {};
+          _context9.prev = 9;
+          _context9.next = 12;
           return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdVerificarEspejos({
             ids: ids
           });
-        case 10:
+        case 12:
           v = _context9.sent;
+          verificado = !!(v.data && v.data.estado);
           mapa = ((_v$data = v.data) === null || _v$data === void 0 ? void 0 : _v$data.espejos) || {};
+          _context9.next = 20;
+          break;
+        case 17:
+          _context9.prev = 17;
+          _context9.t0 = _context9["catch"](9);
+          verificado = false;
+        case 20:
           ordenes = ordenes.map(function (o) {
             var c = mapa[String(o.id)];
+            if (verificado) {
+              // Central respondió: su mapa es la verdad (presente ⇒ id real; ausente ⇒ stale).
+              return _objectSpread(_objectSpread({}, o), {}, {
+                central_pedido_id: c ? c.id : o.id_transferencia_central || null,
+                central_existe: !!c,
+                central_estado: c ? c.estado : null,
+                central_verificado: true
+              });
+            }
+            // No se pudo verificar: usar el id guardado como fallback (sin confirmar).
             return _objectSpread(_objectSpread({}, o), {}, {
-              central_pedido_id: c ? c.id : null,
-              central_existe: !!c,
-              central_estado: c ? c.estado : null
+              central_pedido_id: o.id_transferencia_central || null,
+              central_existe: !!o.id_transferencia_central,
+              central_estado: null,
+              central_verificado: false
             });
           });
-          _context9.next = 17;
-          break;
-        case 15:
-          _context9.prev = 15;
-          _context9.t0 = _context9["catch"](7);
-        case 17:
+        case 21:
           setDespachadas(ordenes);
-          _context9.next = 23;
+          _context9.next = 27;
           break;
-        case 20:
-          _context9.prev = 20;
+        case 24:
+          _context9.prev = 24;
           _context9.t1 = _context9["catch"](0);
           setDespachadas([]);
-        case 23:
+        case 27:
         case "end":
           return _context9.stop();
       }
-    }, _callee9, null, [[0, 20], [7, 15]]);
+    }, _callee9, null, [[0, 24], [9, 17]]);
   })), []);
 
   // Cargar premontas (redistribuciones aprobadas para esta sucursal origen) + borradores.
@@ -139515,7 +139535,8 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
     (sucursales || []).forEach(function (s) {
       sucByIdLocal[s.id] = s;
     });
-    // Nº de Guía = id REAL del pedido en central (verificado). Si no existe, no imprime.
+    // Nº de Guía = id del pedido en central (verificado, o guardado si no se pudo verificar).
+    // Solo se bloquea si central CONFIRMÓ que no existe (o nunca se envió).
     var centralId = orden.central_existe ? orden.central_pedido_id : null;
     if (!centralId) {
       alert('Esta orden no tiene pedido en central (el envío no se completó o fue reversado). Tocá "Enviar a central" antes de imprimir la guía.');
@@ -140180,9 +140201,12 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
                 className: "bg-white divide-y divide-gray-100",
                 children: despachadasFiltradas.map(function (d) {
                   var nItems = (d.items || []).length;
-                  // El Nº de Guía es el id REAL del pedido en central (verificado). Sin fallback al id local.
-                  var guiaOk = d.central_existe;
-                  var guia = guiaOk ? String(d.central_pedido_id).padStart(8, '0') : '—';
+                  // Nº de Guía = id REAL del pedido en central. Confirmado = verificado y presente.
+                  // Si no se pudo verificar (central sin desplegar), se muestra el id guardado
+                  // (confiable) marcado "sin verificar". Si central confirmó que NO existe, "sin nº".
+                  var tieneGuia = !!d.central_pedido_id;
+                  var confirmado = d.central_existe && d.central_verificado;
+                  var guia = tieneGuia ? String(d.central_pedido_id).padStart(8, '0') : '—';
                   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
                     className: "hover:bg-emerald-50/40",
                     children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
@@ -140192,8 +140216,19 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
                       className: "px-3 py-2 text-gray-600 whitespace-nowrap",
                       children: fmtFecha(d.updated_at || d.created_at)
                     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
-                      className: "px-3 py-2 font-mono text-gray-700 whitespace-nowrap",
-                      children: guiaOk ? guia : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+                      className: "px-3 py-2 font-mono whitespace-nowrap",
+                      children: tieneGuia ? confirmado ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+                        className: "text-gray-700",
+                        title: "N\xBA de pedido en central (verificado)",
+                        children: guia
+                      }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+                        className: "text-gray-600",
+                        title: "N\xBA de pedido en central (guardado; no se pudo verificar contra central)",
+                        children: [guia, " ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas fa-clock text-amber-400 ml-0.5",
+                          title: "sin verificar"
+                        })]
+                      }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
                         className: "text-amber-500",
                         title: "No hay pedido en central para esta orden (reenvi\xE1 a central)",
                         children: "\u2014 sin n\xBA \u2014"
