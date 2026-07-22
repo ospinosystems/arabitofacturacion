@@ -1236,6 +1236,12 @@ class InventarioController extends Controller
         })
             ->get(['id', 'codigo_barras', 'codigo_proveedor', 'descripcion', 'precio_base', 'precio', 'cantidad']);
 
+        // Ubicación de almacén (warehouse) por producto, si está disponible.
+        $ubic = \App\Models\WarehouseInventory::ubicacionesPorProductos($productos->pluck('id')->all());
+        $productos->each(function ($p) use ($ubic) {
+            $p->ubicacion = $ubic[$p->id] ?? null;
+        });
+
         return Response::json(['estado' => true, 'productos' => $productos]);
     }
 

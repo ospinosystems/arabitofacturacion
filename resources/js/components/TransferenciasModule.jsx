@@ -14,7 +14,7 @@ const imprimirListaPicking = ({ titulo, subtitulo, filas }) => {
           <td class="mono">${esc(f.codigo_proveedor || '—')}</td>
           <td>${esc(f.descripcion || '—')}</td>
           <td class="c b">${esc(f.cantidad)}</td>
-          <td class="ub"></td>
+          <td class="ub mono">${esc(f.ubicacion || '')}</td>
           <td class="chk"><span class="box"></span></td>
         </tr>`).join('');
     const totalUni = (filas || []).reduce((a, f) => a + (parseFloat(f.cantidad) || 0), 0);
@@ -667,6 +667,7 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                     updated_at: itemAPI.updated_at,
                     cantidad_original_stock_inventario: itemAPI?.cantidad || 0,
                     revisado: !!itemAPI.revisado, // marca de picking (Plan B)
+                    ubicacion: itemAPI.ubicacion || (itemAPI.producto && itemAPI.producto.ubicacion) || null, // ubicación de almacén
                     modificable: true, // Permitir edición en el formulario,
 
                 };
@@ -958,7 +959,7 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                                 onClick={() => imprimirListaPicking({
                                     titulo: 'Lista de picking' + (transferenciaToEdit?.id ? ' · Orden #' + transferenciaToEdit.id : ''),
                                     subtitulo: (transferenciaToEdit?.id_orden_distribucion ? 'Redistribución #' + transferenciaToEdit.id_orden_distribucion + ' · ' : '') + 'Destino ' + (codigoDestino || '—') + ' · ' + itemsTransferencia.length + ' producto(s)',
-                                    filas: itemsTransferencia.map(i => ({ barras: i.barras_real, codigo_proveedor: i.alterno_real, descripcion: i.descripcion_real, cantidad: i.cantidad })),
+                                    filas: itemsTransferencia.map(i => ({ barras: i.barras_real, codigo_proveedor: i.alterno_real, descripcion: i.descripcion_real, ubicacion: i.ubicacion, cantidad: i.cantidad })),
                                 })}
                                 className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
                                 title="Imprimir la lista (hoja carta) para buscar los productos en almacén"
@@ -1518,7 +1519,7 @@ const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, on
                         onClick={() => imprimirListaPicking({
                             titulo: 'Lista de picking · Redistribución #' + (prem?.id_orden_distribucion ?? ''),
                             subtitulo: 'Búsqueda física en almacén — ' + (rows.length) + ' producto(s)',
-                            filas: rows.map(r => ({ barras: r.barras, codigo_proveedor: r.codigo_proveedor, descripcion: r.descripcion, cantidad: parseFloat(r.cantidadSolicitada || 0).toFixed(0) })),
+                            filas: rows.map(r => ({ barras: r.barras, codigo_proveedor: r.codigo_proveedor, descripcion: r.descripcion, ubicacion: r.ubicacion, cantidad: parseFloat(r.cantidadSolicitada || 0).toFixed(0) })),
                         })}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold"
                         title="Imprimir la lista de productos (hoja carta) para buscarlos en almacén"
@@ -1761,12 +1762,47 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                 descripcion: snap.descripcion || (local && local.descripcion) || null,
                 barras: barras || (local && local.codigo_barras) || null,
                 codigo_proveedor: prov || (local && local.codigo_proveedor) || null,
+                ubicacion: local ? (local.ubicacion || null) : null,
                 cantidadSolicitada: it.cantidad,
                 local,
                 existe: !!local,
                 stockLocal: local ? local.cantidad : null,
             };
         });
+    };
+
+    // Imprime la lista de picking de una premonta resolviendo la ubicación de almacén (1 petición).
+    const imprimirPremonta = async (prem) => {
+        setProcesando('print-' + prem.id_orden_distribucion);
+        try {
+            const items = prem.items || [];
+            const codigos = [];
+            items.forEach(it => {
+                const s = it.producto || {};
+                if (s.codigo_barras) codigos.push(String(s.codigo_barras));
+                if (s.codigo_proveedor) codigos.push(String(s.codigo_proveedor));
+            });
+            const porBarras = {}, porProveedor = {};
+            try {
+                const r = await db.resolverInventarioPorCodigos({ codigos });
+                (r.data?.productos || []).forEach(p => {
+                    if (p.codigo_barras) porBarras[String(p.codigo_barras)] = p;
+                    if (p.codigo_proveedor) porProveedor[String(p.codigo_proveedor)] = p;
+                });
+            } catch (e) { /* sin ubicación si falla */ }
+            const filas = items.map(it => {
+                const s = it.producto || {};
+                const local = (s.codigo_barras && porBarras[String(s.codigo_barras)]) || (s.codigo_proveedor && porProveedor[String(s.codigo_proveedor)]) || null;
+                return { barras: s.codigo_barras, codigo_proveedor: s.codigo_proveedor, descripcion: s.descripcion, ubicacion: local ? (local.ubicacion || null) : null, cantidad: it.cantidad };
+            });
+            imprimirListaPicking({
+                titulo: 'Lista de picking · Redistribución #' + prem.id_orden_distribucion,
+                subtitulo: 'Búsqueda física en almacén · ' + items.length + ' producto(s)',
+                filas,
+            });
+        } finally {
+            setProcesando(null);
+        }
     };
 
     // "Crear orden" desde una redistribución: primero abre el paso de resolución de conflictos
@@ -1985,15 +2021,12 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                                 <td className="px-3 py-2 text-center text-gray-600">{(prem.items || []).length}</td>
                                                 <td className="px-3 py-2 text-center whitespace-nowrap">
                                                     <button
-                                                        onClick={() => imprimirListaPicking({
-                                                            titulo: 'Lista de picking · Redistribución #' + prem.id_orden_distribucion,
-                                                            subtitulo: 'Búsqueda física en almacén · ' + (prem.items || []).length + ' producto(s)',
-                                                            filas: (prem.items || []).map(it => ({ barras: it.producto?.codigo_barras, codigo_proveedor: it.producto?.codigo_proveedor, descripcion: it.producto?.descripcion, cantidad: it.cantidad })),
-                                                        })}
-                                                        className="mr-1 px-2 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold rounded-md"
-                                                        title="Imprimir lista (hoja carta) para buscar los productos en almacén"
+                                                        onClick={() => imprimirPremonta(prem)}
+                                                        disabled={procesando === 'print-' + prem.id_orden_distribucion}
+                                                        className="mr-1 px-2 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 text-xs font-semibold rounded-md"
+                                                        title="Imprimir lista (hoja carta) con ubicaciones para buscar en almacén"
                                                     >
-                                                        <i className="fas fa-print"></i>
+                                                        {procesando === 'print-' + prem.id_orden_distribucion ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-print"></i>}
                                                     </button>
                                                     <button
                                                         onClick={() => abrirResolucionPremonta(prem)}
@@ -2061,7 +2094,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                                             onClick={() => imprimirListaPicking({
                                                                 titulo: 'Lista de picking · Orden #' + b.id,
                                                                 subtitulo: (b.id_orden_distribucion ? 'Redistribución #' + b.id_orden_distribucion + ' · ' : '') + totalItems + ' producto(s)',
-                                                                filas: (b.items || []).map(i => ({ barras: i.codigo_barras, codigo_proveedor: i.codigo_proveedor, descripcion: i.descripcion, cantidad: i.cantidad })),
+                                                                filas: (b.items || []).map(i => ({ barras: i.codigo_barras, codigo_proveedor: i.codigo_proveedor, descripcion: i.descripcion, ubicacion: i.ubicacion, cantidad: i.cantidad })),
                                                             })}
                                                             className="mr-1 px-2 py-1 text-xs font-semibold text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
                                                             title="Imprimir lista (hoja carta) para almacén"

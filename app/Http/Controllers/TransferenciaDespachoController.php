@@ -174,13 +174,16 @@ class TransferenciaDespachoController extends Controller
         if (!$orden) {
             return [];
         }
-        $items = $orden->items->map(function ($it) {
+        // Ubicación de almacén por producto (una consulta para toda la orden).
+        $ubic = \App\Models\WarehouseInventory::ubicacionesPorProductos($orden->items->pluck('id_producto')->all());
+        $items = $orden->items->map(function ($it) use ($ubic) {
             return [
                 'id' => $it->id,
                 'id_producto' => $it->id_producto,
                 'descripcion' => $it->producto->descripcion ?? null,
                 'codigo_barras' => $it->producto->codigo_barras ?? null,
                 'codigo_proveedor' => $it->producto->codigo_proveedor ?? null,
+                'ubicacion' => $ubic[$it->id_producto] ?? null,
                 'cantidad' => (float) $it->cantidad,
                 'revisado' => (bool) $it->revisado,
                 'recolectado' => $this->recolectadoPorItem($it->id),

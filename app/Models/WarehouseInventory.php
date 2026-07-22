@@ -53,6 +53,27 @@ class WarehouseInventory extends Model
     }
     
     /**
+     * Mapa producto_id => "COD1, COD2" con los códigos de ubicación (warehouses.codigo)
+     * donde cada producto tiene stock (cantidad > 0). Una sola consulta para muchos productos.
+     */
+    public static function ubicacionesPorProductos(array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter($ids)));
+        if (empty($ids)) {
+            return [];
+        }
+        return static::query()
+            ->join('warehouses', 'warehouses.id', '=', 'warehouse_inventory.warehouse_id')
+            ->whereIn('warehouse_inventory.inventario_id', $ids)
+            ->where('warehouse_inventory.cantidad', '>', 0)
+            ->orderBy('warehouses.codigo')
+            ->get(['warehouse_inventory.inventario_id as pid', 'warehouses.codigo as codigo'])
+            ->groupBy('pid')
+            ->map(fn ($g) => $g->pluck('codigo')->filter()->unique()->implode(', '))
+            ->toArray();
+    }
+
+    /**
      * Scope para inventario disponible
      */
     public function scopeDisponible($query)

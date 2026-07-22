@@ -135814,7 +135814,7 @@ var imprimirListaPicking = function imprimirListaPicking(_ref) {
     });
   };
   var rows = (filas || []).map(function (f, i) {
-    return "\n        <tr>\n          <td class=\"c\">".concat(i + 1, "</td>\n          <td class=\"mono\">").concat(esc(f.barras || '—'), "</td>\n          <td class=\"mono\">").concat(esc(f.codigo_proveedor || '—'), "</td>\n          <td>").concat(esc(f.descripcion || '—'), "</td>\n          <td class=\"c b\">").concat(esc(f.cantidad), "</td>\n          <td class=\"ub\"></td>\n          <td class=\"chk\"><span class=\"box\"></span></td>\n        </tr>");
+    return "\n        <tr>\n          <td class=\"c\">".concat(i + 1, "</td>\n          <td class=\"mono\">").concat(esc(f.barras || '—'), "</td>\n          <td class=\"mono\">").concat(esc(f.codigo_proveedor || '—'), "</td>\n          <td>").concat(esc(f.descripcion || '—'), "</td>\n          <td class=\"c b\">").concat(esc(f.cantidad), "</td>\n          <td class=\"ub mono\">").concat(esc(f.ubicacion || ''), "</td>\n          <td class=\"chk\"><span class=\"box\"></span></td>\n        </tr>");
   }).join('');
   var totalUni = (filas || []).reduce(function (a, f) {
     return a + (parseFloat(f.cantidad) || 0);
@@ -136676,6 +136676,8 @@ var TransferenciaForm = function TransferenciaForm(_ref6) {
           cantidad_original_stock_inventario: (itemAPI === null || itemAPI === void 0 ? void 0 : itemAPI.cantidad) || 0,
           revisado: !!itemAPI.revisado,
           // marca de picking (Plan B)
+          ubicacion: itemAPI.ubicacion || itemAPI.producto && itemAPI.producto.ubicacion || null,
+          // ubicación de almacén
           modificable: true // Permitir edición en el formulario,
         };
       });
@@ -137074,6 +137076,7 @@ var TransferenciaForm = function TransferenciaForm(_ref6) {
                     barras: i.barras_real,
                     codigo_proveedor: i.alterno_real,
                     descripcion: i.descripcion_real,
+                    ubicacion: i.ubicacion,
                     cantidad: i.cantidad
                   };
                 })
@@ -137942,6 +137945,7 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref1) {
                   barras: r.barras,
                   codigo_proveedor: r.codigo_proveedor,
                   descripcion: r.descripcion,
+                  ubicacion: r.ubicacion,
                   cantidad: parseFloat(r.cantidadSolicitada || 0).toFixed(0)
                 };
               })
@@ -138447,6 +138451,7 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
                 descripcion: snap.descripcion || local && local.descripcion || null,
                 barras: barras || local && local.codigo_barras || null,
                 codigo_proveedor: prov || local && local.codigo_proveedor || null,
+                ubicacion: local ? local.ubicacion || null : null,
                 cantidadSolicitada: it.cantidad,
                 local: local,
                 existe: !!local,
@@ -138464,71 +138469,136 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
     };
   }();
 
-  // "Crear orden" desde una redistribución: primero abre el paso de resolución de conflictos
-  // (ajustar cantidades / excluir inexistentes). La creación real ocurre en confirmarOrdenConflictos.
-  var abrirResolucionPremonta = /*#__PURE__*/function () {
+  // Imprime la lista de picking de una premonta resolviendo la ubicación de almacén (1 petición).
+  var imprimirPremonta = /*#__PURE__*/function () {
     var _ref16 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee9(prem) {
-      var filas;
+      var items, codigos, porBarras, porProveedor, _r$data2, r, filas;
       return _regeneratorRuntime().wrap(function _callee9$(_context9) {
         while (1) switch (_context9.prev = _context9.next) {
           case 0:
-            setProcesando('prem-' + prem.id_orden_distribucion);
+            setProcesando('print-' + prem.id_orden_distribucion);
             _context9.prev = 1;
-            _context9.next = 4;
+            items = prem.items || [];
+            codigos = [];
+            items.forEach(function (it) {
+              var s = it.producto || {};
+              if (s.codigo_barras) codigos.push(String(s.codigo_barras));
+              if (s.codigo_proveedor) codigos.push(String(s.codigo_proveedor));
+            });
+            porBarras = {}, porProveedor = {};
+            _context9.prev = 6;
+            _context9.next = 9;
+            return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].resolverInventarioPorCodigos({
+              codigos: codigos
+            });
+          case 9:
+            r = _context9.sent;
+            (((_r$data2 = r.data) === null || _r$data2 === void 0 ? void 0 : _r$data2.productos) || []).forEach(function (p) {
+              if (p.codigo_barras) porBarras[String(p.codigo_barras)] = p;
+              if (p.codigo_proveedor) porProveedor[String(p.codigo_proveedor)] = p;
+            });
+            _context9.next = 15;
+            break;
+          case 13:
+            _context9.prev = 13;
+            _context9.t0 = _context9["catch"](6);
+          case 15:
+            filas = items.map(function (it) {
+              var s = it.producto || {};
+              var local = s.codigo_barras && porBarras[String(s.codigo_barras)] || s.codigo_proveedor && porProveedor[String(s.codigo_proveedor)] || null;
+              return {
+                barras: s.codigo_barras,
+                codigo_proveedor: s.codigo_proveedor,
+                descripcion: s.descripcion,
+                ubicacion: local ? local.ubicacion || null : null,
+                cantidad: it.cantidad
+              };
+            });
+            imprimirListaPicking({
+              titulo: 'Lista de picking · Redistribución #' + prem.id_orden_distribucion,
+              subtitulo: 'Búsqueda física en almacén · ' + items.length + ' producto(s)',
+              filas: filas
+            });
+          case 17:
+            _context9.prev = 17;
+            setProcesando(null);
+            return _context9.finish(17);
+          case 20:
+          case "end":
+            return _context9.stop();
+        }
+      }, _callee9, null, [[1,, 17, 20], [6, 13]]);
+    }));
+    return function imprimirPremonta(_x6) {
+      return _ref16.apply(this, arguments);
+    };
+  }();
+
+  // "Crear orden" desde una redistribución: primero abre el paso de resolución de conflictos
+  // (ajustar cantidades / excluir inexistentes). La creación real ocurre en confirmarOrdenConflictos.
+  var abrirResolucionPremonta = /*#__PURE__*/function () {
+    var _ref17 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(prem) {
+      var filas;
+      return _regeneratorRuntime().wrap(function _callee0$(_context0) {
+        while (1) switch (_context0.prev = _context0.next) {
+          case 0:
+            setProcesando('prem-' + prem.id_orden_distribucion);
+            _context0.prev = 1;
+            _context0.next = 4;
             return construirFilasConflicto(prem);
           case 4:
-            filas = _context9.sent;
+            filas = _context0.sent;
             setConflictosPremonta({
               prem: prem,
               filas: filas
             });
             setVistaActual('conflictos');
-            _context9.next = 12;
+            _context0.next = 12;
             break;
           case 9:
-            _context9.prev = 9;
-            _context9.t0 = _context9["catch"](1);
-            alert('Error al cotejar la redistribución: ' + (_context9.t0.message || _context9.t0));
+            _context0.prev = 9;
+            _context0.t0 = _context0["catch"](1);
+            alert('Error al cotejar la redistribución: ' + (_context0.t0.message || _context0.t0));
           case 12:
-            _context9.prev = 12;
+            _context0.prev = 12;
             setProcesando(null);
-            return _context9.finish(12);
+            return _context0.finish(12);
           case 15:
           case "end":
-            return _context9.stop();
+            return _context0.stop();
         }
-      }, _callee9, null, [[1, 9, 12, 15]]);
+      }, _callee0, null, [[1, 9, 12, 15]]);
     }));
-    return function abrirResolucionPremonta(_x6) {
-      return _ref16.apply(this, arguments);
+    return function abrirResolucionPremonta(_x7) {
+      return _ref17.apply(this, arguments);
     };
   }();
 
   // Crea la orden en preparación (estado 0, SIN descontar) con los ítems ya resueltos por el
   // usuario, ligada a la redistribución. La redistribución original de central queda intacta.
   var confirmarOrdenConflictos = /*#__PURE__*/function () {
-    var _ref17 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(items) {
+    var _ref18 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(items) {
       var prem, _prem$sucursal_destin, _res$data3, res, _res$data4;
-      return _regeneratorRuntime().wrap(function _callee0$(_context0) {
-        while (1) switch (_context0.prev = _context0.next) {
+      return _regeneratorRuntime().wrap(function _callee1$(_context1) {
+        while (1) switch (_context1.prev = _context1.next) {
           case 0:
             prem = conflictosPremonta === null || conflictosPremonta === void 0 ? void 0 : conflictosPremonta.prem;
             if (prem) {
-              _context0.next = 3;
+              _context1.next = 3;
               break;
             }
-            return _context0.abrupt("return");
+            return _context1.abrupt("return");
           case 3:
             if (items.length) {
-              _context0.next = 6;
+              _context1.next = 6;
               break;
             }
             alert('No hay productos válidos para crear la orden.');
-            return _context0.abrupt("return");
+            return _context1.abrupt("return");
           case 6:
             setProcesando('crear-conflictos');
-            _context0.prev = 7;
-            _context0.next = 10;
+            _context1.prev = 7;
+            _context1.next = 10;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGuardarOrden({
               id_destino: ((_prem$sucursal_destin = prem.sucursal_destino) === null || _prem$sucursal_destin === void 0 ? void 0 : _prem$sucursal_destin.id) || '',
               id_orden_distribucion: prem.id_orden_distribucion,
@@ -138536,12 +138606,12 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
               items: items
             });
           case 10:
-            res = _context0.sent;
+            res = _context1.sent;
             if (!((_res$data3 = res.data) !== null && _res$data3 !== void 0 && _res$data3.estado)) {
-              _context0.next = 19;
+              _context1.next = 19;
               break;
             }
-            _context0.next = 14;
+            _context1.next = 14;
             return cargarBorradores();
           case 14:
             setPremontas(function (prev) {
@@ -138551,29 +138621,29 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
             });
             setConflictosPremonta(null);
             setVistaActual('list');
-            _context0.next = 20;
+            _context1.next = 20;
             break;
           case 19:
             alert(((_res$data4 = res.data) === null || _res$data4 === void 0 ? void 0 : _res$data4.msj) || 'No se pudo crear la orden.');
           case 20:
-            _context0.next = 25;
+            _context1.next = 25;
             break;
           case 22:
-            _context0.prev = 22;
-            _context0.t0 = _context0["catch"](7);
-            alert('Error al crear la orden: ' + (_context0.t0.message || _context0.t0));
+            _context1.prev = 22;
+            _context1.t0 = _context1["catch"](7);
+            alert('Error al crear la orden: ' + (_context1.t0.message || _context1.t0));
           case 25:
-            _context0.prev = 25;
+            _context1.prev = 25;
             setProcesando(null);
-            return _context0.finish(25);
+            return _context1.finish(25);
           case 28:
           case "end":
-            return _context0.stop();
+            return _context1.stop();
         }
-      }, _callee0, null, [[7, 22, 25, 28]]);
+      }, _callee1, null, [[7, 22, 25, 28]]);
     }));
-    return function confirmarOrdenConflictos(_x7) {
-      return _ref17.apply(this, arguments);
+    return function confirmarOrdenConflictos(_x8) {
+      return _ref18.apply(this, arguments);
     };
   }();
 
@@ -138592,145 +138662,145 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
 
   // Guarda el borrador (crear/actualizar) sin descontar. Devuelve {estado, msj, orden}.
   var guardarBorrador = /*#__PURE__*/function () {
-    var _ref18 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(datos) {
+    var _ref19 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(datos) {
       var res;
-      return _regeneratorRuntime().wrap(function _callee1$(_context1) {
-        while (1) switch (_context1.prev = _context1.next) {
+      return _regeneratorRuntime().wrap(function _callee10$(_context10) {
+        while (1) switch (_context10.prev = _context10.next) {
           case 0:
-            _context1.next = 2;
+            _context10.next = 2;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGuardarOrden(datos);
           case 2:
-            res = _context1.sent;
-            _context1.next = 5;
+            res = _context10.sent;
+            _context10.next = 5;
             return cargarBorradores();
           case 5:
-            return _context1.abrupt("return", res.data);
+            return _context10.abrupt("return", res.data);
           case 6:
           case "end":
-            return _context1.stop();
+            return _context10.stop();
         }
-      }, _callee1);
+      }, _callee10);
     }));
-    return function guardarBorrador(_x8) {
-      return _ref18.apply(this, arguments);
+    return function guardarBorrador(_x9) {
+      return _ref19.apply(this, arguments);
     };
   }();
 
   // Dar salida a un borrador: descuenta inventario + crea el espejo en central.
   var darSalida = /*#__PURE__*/function () {
-    var _ref19 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(borrador) {
+    var _ref20 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(borrador) {
       var nItems, _res$data5, res, _res$data6;
-      return _regeneratorRuntime().wrap(function _callee10$(_context10) {
-        while (1) switch (_context10.prev = _context10.next) {
+      return _regeneratorRuntime().wrap(function _callee11$(_context11) {
+        while (1) switch (_context11.prev = _context11.next) {
           case 0:
             nItems = (borrador.items || []).filter(function (i) {
               return parseFloat(i.cantidad) > 0;
             }).length;
             if (window.confirm("\xBFDar salida a la orden #".concat(borrador.id, "? Se descontar\xE1n ").concat(nItems, " producto(s) del inventario y se enviar\xE1 a central. Esta acci\xF3n s\xED mueve inventario."))) {
-              _context10.next = 3;
+              _context11.next = 3;
               break;
             }
-            return _context10.abrupt("return");
+            return _context11.abrupt("return");
           case 3:
             setProcesando('salida-' + borrador.id);
-            _context10.prev = 4;
-            _context10.next = 7;
+            _context11.prev = 4;
+            _context11.next = 7;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdDarSalidaSimple({
               id_transferencia: borrador.id
             });
           case 7:
-            res = _context10.sent;
+            res = _context11.sent;
             if (!((_res$data5 = res.data) !== null && _res$data5 !== void 0 && _res$data5.estado)) {
-              _context10.next = 15;
+              _context11.next = 15;
               break;
             }
-            _context10.next = 11;
+            _context11.next = 11;
             return cargarBorradores();
           case 11:
             setRefreshListKey(function (k) {
               return k + 1;
             }); // refrescar histórico central
             alert(res.data.msj || 'Salida dada.');
-            _context10.next = 16;
+            _context11.next = 16;
             break;
           case 15:
             alert(((_res$data6 = res.data) === null || _res$data6 === void 0 ? void 0 : _res$data6.msj) || 'No se pudo dar salida.');
           case 16:
-            _context10.next = 21;
+            _context11.next = 21;
             break;
           case 18:
-            _context10.prev = 18;
-            _context10.t0 = _context10["catch"](4);
-            alert('Error al dar salida: ' + (_context10.t0.message || _context10.t0));
+            _context11.prev = 18;
+            _context11.t0 = _context11["catch"](4);
+            alert('Error al dar salida: ' + (_context11.t0.message || _context11.t0));
           case 21:
-            _context10.prev = 21;
+            _context11.prev = 21;
             setProcesando(null);
-            return _context10.finish(21);
+            return _context11.finish(21);
           case 24:
           case "end":
-            return _context10.stop();
+            return _context11.stop();
         }
-      }, _callee10, null, [[4, 18, 21, 24]]);
+      }, _callee11, null, [[4, 18, 21, 24]]);
     }));
-    return function darSalida(_x9) {
-      return _ref19.apply(this, arguments);
+    return function darSalida(_x0) {
+      return _ref20.apply(this, arguments);
     };
   }();
 
   // Eliminar un borrador (no tocó inventario).
   var eliminarBorrador = /*#__PURE__*/function () {
-    var _ref20 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(borrador) {
+    var _ref21 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee12(borrador) {
       var _res$data7, res, _res$data8;
-      return _regeneratorRuntime().wrap(function _callee11$(_context11) {
-        while (1) switch (_context11.prev = _context11.next) {
+      return _regeneratorRuntime().wrap(function _callee12$(_context12) {
+        while (1) switch (_context12.prev = _context12.next) {
           case 0:
             if (window.confirm("\xBFEliminar la orden en preparaci\xF3n #".concat(borrador.id, "? No descont\xF3 inventario, solo se borra el borrador."))) {
-              _context11.next = 2;
+              _context12.next = 2;
               break;
             }
-            return _context11.abrupt("return");
+            return _context12.abrupt("return");
           case 2:
             setProcesando('del-' + borrador.id);
-            _context11.prev = 3;
-            _context11.next = 6;
+            _context12.prev = 3;
+            _context12.next = 6;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdEliminarOrden({
               id: borrador.id
             });
           case 6:
-            res = _context11.sent;
+            res = _context12.sent;
             if (!((_res$data7 = res.data) !== null && _res$data7 !== void 0 && _res$data7.estado)) {
-              _context11.next = 13;
+              _context12.next = 13;
               break;
             }
-            _context11.next = 10;
+            _context12.next = 10;
             return cargarBorradores();
           case 10:
             setRefreshListKey(function (k) {
               return k + 1;
             }); // por si vuelve a aparecer la premonta
-            _context11.next = 14;
+            _context12.next = 14;
             break;
           case 13:
             alert(((_res$data8 = res.data) === null || _res$data8 === void 0 ? void 0 : _res$data8.msj) || 'No se pudo eliminar.');
           case 14:
-            _context11.next = 19;
+            _context12.next = 19;
             break;
           case 16:
-            _context11.prev = 16;
-            _context11.t0 = _context11["catch"](3);
-            alert('Error al eliminar: ' + (_context11.t0.message || _context11.t0));
+            _context12.prev = 16;
+            _context12.t0 = _context12["catch"](3);
+            alert('Error al eliminar: ' + (_context12.t0.message || _context12.t0));
           case 19:
-            _context11.prev = 19;
+            _context12.prev = 19;
             setProcesando(null);
-            return _context11.finish(19);
+            return _context12.finish(19);
           case 22:
           case "end":
-            return _context11.stop();
+            return _context12.stop();
         }
-      }, _callee11, null, [[3, 16, 19, 22]]);
+      }, _callee12, null, [[3, 16, 19, 22]]);
     }));
-    return function eliminarBorrador(_x0) {
-      return _ref20.apply(this, arguments);
+    return function eliminarBorrador(_x1) {
+      return _ref21.apply(this, arguments);
     };
   }();
   var handleSaveTransfer = function handleSaveTransfer(transferenciaGuardada) {
@@ -138896,23 +138966,14 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
                       className: "px-3 py-2 text-center whitespace-nowrap",
                       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
                         onClick: function onClick() {
-                          return imprimirListaPicking({
-                            titulo: 'Lista de picking · Redistribución #' + prem.id_orden_distribucion,
-                            subtitulo: 'Búsqueda física en almacén · ' + (prem.items || []).length + ' producto(s)',
-                            filas: (prem.items || []).map(function (it) {
-                              var _it$producto, _it$producto2, _it$producto3;
-                              return {
-                                barras: (_it$producto = it.producto) === null || _it$producto === void 0 ? void 0 : _it$producto.codigo_barras,
-                                codigo_proveedor: (_it$producto2 = it.producto) === null || _it$producto2 === void 0 ? void 0 : _it$producto2.codigo_proveedor,
-                                descripcion: (_it$producto3 = it.producto) === null || _it$producto3 === void 0 ? void 0 : _it$producto3.descripcion,
-                                cantidad: it.cantidad
-                              };
-                            })
-                          });
+                          return imprimirPremonta(prem);
                         },
-                        className: "mr-1 px-2 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold rounded-md",
-                        title: "Imprimir lista (hoja carta) para buscar los productos en almac\xE9n",
-                        children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                        disabled: procesando === 'print-' + prem.id_orden_distribucion,
+                        className: "mr-1 px-2 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 text-xs font-semibold rounded-md",
+                        title: "Imprimir lista (hoja carta) con ubicaciones para buscar en almac\xE9n",
+                        children: procesando === 'print-' + prem.id_orden_distribucion ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas fa-spinner fa-spin"
+                        }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
                           className: "fas fa-print"
                         })
                       }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
@@ -139030,6 +139091,7 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
                                 barras: i.codigo_barras,
                                 codigo_proveedor: i.codigo_proveedor,
                                 descripcion: i.descripcion,
+                                ubicacion: i.ubicacion,
                                 cantidad: i.cantidad
                               };
                             })
