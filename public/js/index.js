@@ -136780,7 +136780,7 @@ function imprimirTicketBarcode() {
   document.body.removeChild(form);
 }
 var SelectedProductItem = function SelectedProductItem(_ref8) {
-  var _item$producto, _item$producto2, _item$producto3;
+  var _item$producto, _item$producto2, _item$producto3, _item$producto4, _item$producto5, _item$producto6;
   var item = _ref8.item,
     onRemove = _ref8.onRemove,
     onQuantityChange = _ref8.onQuantityChange,
@@ -136864,14 +136864,17 @@ var SelectedProductItem = function SelectedProductItem(_ref8) {
       className: "px-2 py-1 text-center text-xs text-gray-400 whitespace-nowrap",
       children: index + 1
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
-      className: "px-2 py-1 text-sm text-gray-800",
-      children: item.descripcion_real || ((_item$producto = item.producto) === null || _item$producto === void 0 ? void 0 : _item$producto.descripcion) || '—'
+      className: "px-2 py-1 text-sm text-gray-800 truncate",
+      title: item.descripcion_real || ((_item$producto = item.producto) === null || _item$producto === void 0 ? void 0 : _item$producto.descripcion) || '',
+      children: item.descripcion_real || ((_item$producto2 = item.producto) === null || _item$producto2 === void 0 ? void 0 : _item$producto2.descripcion) || '—'
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
-      className: "px-2 py-1 text-xs font-mono text-gray-600 whitespace-nowrap",
-      children: item.barras_real || ((_item$producto2 = item.producto) === null || _item$producto2 === void 0 ? void 0 : _item$producto2.codigo_barras) || '—'
+      className: "px-2 py-1 text-xs font-mono text-gray-600 truncate",
+      title: item.barras_real || ((_item$producto3 = item.producto) === null || _item$producto3 === void 0 ? void 0 : _item$producto3.codigo_barras) || '',
+      children: item.barras_real || ((_item$producto4 = item.producto) === null || _item$producto4 === void 0 ? void 0 : _item$producto4.codigo_barras) || '—'
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
-      className: "px-2 py-1 text-xs font-mono text-gray-600 whitespace-nowrap",
-      children: item.alterno_real || ((_item$producto3 = item.producto) === null || _item$producto3 === void 0 ? void 0 : _item$producto3.codigo_proveedor) || '—'
+      className: "px-2 py-1 text-xs font-mono text-gray-600 truncate",
+      title: item.alterno_real || ((_item$producto5 = item.producto) === null || _item$producto5 === void 0 ? void 0 : _item$producto5.codigo_proveedor) || '',
+      children: item.alterno_real || ((_item$producto6 = item.producto) === null || _item$producto6 === void 0 ? void 0 : _item$producto6.codigo_proveedor) || '—'
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
       className: "px-2 py-1 text-center text-xs font-semibold whitespace-nowrap ".concat(excedeStock ? 'text-red-600' : 'text-gray-600'),
       title: excedeStock ? 'Estás pidiendo más de lo disponible en inventario' : 'Stock disponible en inventario',
@@ -136905,7 +136908,7 @@ var SelectedProductItem = function SelectedProductItem(_ref8) {
           onQuantityChange(item.id_producto_insucursal, n.toFixed(2));
         },
         readOnly: !isEditable,
-        className: "js-qty-input w-32 p-1.5 text-base font-semibold border rounded text-center ".concat(excedeStock ? 'border-red-400 bg-red-50' : 'border-gray-300', " ").concat(!isEditable ? 'bg-gray-100' : 'focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500'),
+        className: "js-qty-input w-32 p-1.5 text-sm font-semibold text-gray-900 border rounded text-center ".concat(excedeStock ? 'border-red-400 bg-red-50' : 'border-gray-300', " ").concat(!isEditable ? 'bg-gray-100' : 'focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500'),
         "aria-label": "Cantidad para ".concat(item.descripcion_real)
       })
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
@@ -136913,11 +136916,11 @@ var SelectedProductItem = function SelectedProductItem(_ref8) {
       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
         type: "button",
         onClick: function onClick() {
-          var _item$producto4, _item$producto5, _item$producto6;
+          var _item$producto7, _item$producto8, _item$producto9;
           return imprimirTicketBarcode({
-            codigo_barras: item.barras_real || ((_item$producto4 = item.producto) === null || _item$producto4 === void 0 ? void 0 : _item$producto4.codigo_barras),
-            codigo_proveedor: item.alterno_real || ((_item$producto5 = item.producto) === null || _item$producto5 === void 0 ? void 0 : _item$producto5.codigo_proveedor),
-            descripcion: item.descripcion_real || ((_item$producto6 = item.producto) === null || _item$producto6 === void 0 ? void 0 : _item$producto6.descripcion)
+            codigo_barras: item.barras_real || ((_item$producto7 = item.producto) === null || _item$producto7 === void 0 ? void 0 : _item$producto7.codigo_barras),
+            codigo_proveedor: item.alterno_real || ((_item$producto8 = item.producto) === null || _item$producto8 === void 0 ? void 0 : _item$producto8.codigo_proveedor),
+            descripcion: item.descripcion_real || ((_item$producto9 = item.producto) === null || _item$producto9 === void 0 ? void 0 : _item$producto9.descripcion)
           });
         },
         className: "text-gray-500 hover:text-indigo-600 p-1",
@@ -137539,7 +137542,7 @@ var TransferenciaForm = function TransferenciaForm(_ref9) {
         }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
           className: "border rounded-md max-h-[calc(100vh-340px)] overflow-y-auto",
           children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("table", {
-            className: "min-w-full text-sm",
+            className: "w-full table-fixed text-sm",
             children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("thead", {
               className: "bg-gray-50 text-xs uppercase text-gray-500 sticky top-0",
               children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
@@ -137547,30 +137550,31 @@ var TransferenciaForm = function TransferenciaForm(_ref9) {
                   className: "px-2 py-1 text-center font-semibold w-24",
                   children: "Revisado"
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
-                  className: "px-2 py-1 text-center font-semibold",
+                  className: "px-2 py-1 text-center font-semibold w-10",
                   children: "#"
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
                   className: "px-2 py-1 text-left font-semibold",
                   children: "Descripci\xF3n"
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
-                  className: "px-2 py-1 text-left font-semibold",
+                  className: "px-2 py-1 text-left font-semibold w-32",
                   children: "C\xF3d. Barras"
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
-                  className: "px-2 py-1 text-left font-semibold",
+                  className: "px-2 py-1 text-left font-semibold w-32",
                   children: "C\xF3d. Proveedor"
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
-                  className: "px-2 py-1 text-center font-semibold",
+                  className: "px-2 py-1 text-center font-semibold w-16",
                   title: "Stock disponible en inventario",
                   children: "Disp."
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
-                  className: "px-2 py-1 text-center font-semibold",
+                  className: "px-2 py-1 text-center font-semibold w-16",
                   title: "Cantidad original de la orden (antes de editar)",
                   children: "Orig."
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
-                  className: "px-2 py-1 text-center font-semibold",
+                  className: "px-2 py-1 text-center font-semibold w-40",
                   children: "Cantidad"
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
-                  className: "px-2 py-1 text-center font-semibold w-10"
+                  className: "px-2 py-1 text-center font-semibold w-20",
+                  children: "Acciones"
                 })]
               })
             }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("tbody", {
@@ -140338,6 +140342,15 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
                         children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
                           className: "fas fa-edit mr-1"
                         }), "Editar"]
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+                        onClick: function onClick() {
+                          return abrirBultosModal(b);
+                        },
+                        className: "ml-1 px-2 py-1 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded",
+                        title: "Imprimir etiquetas de bultos",
+                        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas fa-box mr-1"
+                        }), "Bultos"]
                       }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
                         onClick: function onClick() {
                           return darSalida(b);

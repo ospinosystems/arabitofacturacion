@@ -779,9 +779,9 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
                 </td>
             )}
             <td className="px-2 py-1 text-center text-xs text-gray-400 whitespace-nowrap">{index + 1}</td>
-            <td className="px-2 py-1 text-sm text-gray-800">{item.descripcion_real || item.producto?.descripcion || '—'}</td>
-            <td className="px-2 py-1 text-xs font-mono text-gray-600 whitespace-nowrap">{item.barras_real || item.producto?.codigo_barras || '—'}</td>
-            <td className="px-2 py-1 text-xs font-mono text-gray-600 whitespace-nowrap">{item.alterno_real || item.producto?.codigo_proveedor || '—'}</td>
+            <td className="px-2 py-1 text-sm text-gray-800 truncate" title={item.descripcion_real || item.producto?.descripcion || ''}>{item.descripcion_real || item.producto?.descripcion || '—'}</td>
+            <td className="px-2 py-1 text-xs font-mono text-gray-600 truncate" title={item.barras_real || item.producto?.codigo_barras || ''}>{item.barras_real || item.producto?.codigo_barras || '—'}</td>
+            <td className="px-2 py-1 text-xs font-mono text-gray-600 truncate" title={item.alterno_real || item.producto?.codigo_proveedor || ''}>{item.alterno_real || item.producto?.codigo_proveedor || '—'}</td>
             <td className={`px-2 py-1 text-center text-xs font-semibold whitespace-nowrap ${excedeStock ? 'text-red-600' : 'text-gray-600'}`} title={excedeStock ? 'Estás pidiendo más de lo disponible en inventario' : 'Stock disponible en inventario'}>
                 {stockDisp != null ? stockDisp : '—'}
                 {excedeStock && <i className="fas fa-triangle-exclamation ml-1 text-red-500" title="Excede el disponible"></i>}
@@ -807,7 +807,7 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
                         onQuantityChange(item.id_producto_insucursal, n.toFixed(2));
                     }}
                     readOnly={!isEditable}
-                    className={`js-qty-input w-32 p-1.5 text-base font-semibold border rounded text-center ${excedeStock ? 'border-red-400 bg-red-50' : 'border-gray-300'} ${!isEditable ? 'bg-gray-100' : 'focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500'}`}
+                    className={`js-qty-input w-32 p-1.5 text-sm font-semibold text-gray-900 border rounded text-center ${excedeStock ? 'border-red-400 bg-red-50' : 'border-gray-300'} ${!isEditable ? 'bg-gray-100' : 'focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500'}`}
                     aria-label={`Cantidad para ${item.descripcion_real}`}
                 />
             </td>
@@ -1264,18 +1264,18 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                             <p className="text-xs text-gray-500 mb-1">Mostrando {itemsFiltrados.length} de {itemsTransferencia.length}{itemsFiltrados.length === 0 ? ' — sin coincidencias' : ''}.</p>
                         )}
                         <div className="border rounded-md max-h-[calc(100vh-340px)] overflow-y-auto">
-                            <table className="min-w-full text-sm">
+                            <table className="w-full table-fixed text-sm">
                                 <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0">
                                     <tr>
                                         {esBorrador && <th className="px-2 py-1 text-center font-semibold w-24">Revisado</th>}
-                                        <th className="px-2 py-1 text-center font-semibold">#</th>
+                                        <th className="px-2 py-1 text-center font-semibold w-10">#</th>
                                         <th className="px-2 py-1 text-left font-semibold">Descripción</th>
-                                        <th className="px-2 py-1 text-left font-semibold">Cód. Barras</th>
-                                        <th className="px-2 py-1 text-left font-semibold">Cód. Proveedor</th>
-                                        <th className="px-2 py-1 text-center font-semibold" title="Stock disponible en inventario">Disp.</th>
-                                        <th className="px-2 py-1 text-center font-semibold" title="Cantidad original de la orden (antes de editar)">Orig.</th>
-                                        <th className="px-2 py-1 text-center font-semibold">Cantidad</th>
-                                        <th className="px-2 py-1 text-center font-semibold w-10"></th>
+                                        <th className="px-2 py-1 text-left font-semibold w-32">Cód. Barras</th>
+                                        <th className="px-2 py-1 text-left font-semibold w-32">Cód. Proveedor</th>
+                                        <th className="px-2 py-1 text-center font-semibold w-16" title="Stock disponible en inventario">Disp.</th>
+                                        <th className="px-2 py-1 text-center font-semibold w-16" title="Cantidad original de la orden (antes de editar)">Orig.</th>
+                                        <th className="px-2 py-1 text-center font-semibold w-40">Cantidad</th>
+                                        <th className="px-2 py-1 text-center font-semibold w-20">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -2798,6 +2798,9 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                                         </button>
                                                         <button onClick={() => editarBorrador(b)} disabled={ocupado} className="px-2 py-1 text-xs font-semibold text-blue-700 border border-blue-300 rounded hover:bg-blue-50 disabled:opacity-50" title="Editar cantidades / ítems">
                                                             <i className="fas fa-edit mr-1"></i>Editar
+                                                        </button>
+                                                        <button onClick={() => abrirBultosModal(b)} className="ml-1 px-2 py-1 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded" title="Imprimir etiquetas de bultos">
+                                                            <i className="fas fa-box mr-1"></i>Bultos
                                                         </button>
                                                         <button onClick={() => darSalida(b)} disabled={ocupado || nItems === 0 || !revDone} className="ml-1 px-2 py-1 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded disabled:opacity-50 disabled:cursor-not-allowed" title={!revDone ? `Faltan ${totalItems - revItems} producto(s) por revisar antes de dar salida` : 'Descontar inventario y enviar a central'}>
                                                             {procesando === 'salida-' + b.id ? <><i className="fas fa-spinner fa-spin mr-1"></i>Saliendo...</> : <><i className="fas fa-truck-arrow-right mr-1"></i>Dar salida</>}

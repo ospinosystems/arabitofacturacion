@@ -1,114 +1,72 @@
-
-@extends('layouts.app')
-@section('tittle'," Mucho más que una ferreteria")
-@section('content')
-@foreach ($bultos as $num_bulto => $e)
-    
-    <div class= "" id = "divEtiqueta">
-        <div class="text-center">
-            <div class="text-center">
-                <label class= "sucursal">
-                    <b class="fs-1">{{$sucursal}}</b>
-                </label>
-            </div>
-            @if (!empty($id_pedido_etiqueta))
-            <div class="text-center">
-                <label class="id-pedido">Pedido #{{ $id_pedido_etiqueta }}</label>
-            </div>
-            @endif
-            <label class="numbultos fs-1">
-               <b> {{$num_bulto}} / {{$total}}</b>
-            </label>
-            <br>
-            <br>
-            {{-- <label class="numped">
-                <b class="fs-6">ITEMS {{count($e)}}</b>
-            </label>
-            <br> --}}
-        </div>
-        <div class="d-flex justify-content-between">
-            <label class="fecha">
-                ORIGEN: <b class="muted">{{$origen}}</b>
-            </label>
-            <label class="fecha">
-                <b class="muted">{{$fecha}}</b>
-            </label>
-        </div>
-        
-
-
-    </div>
-    <div class="pagebreak"> </div>
-
-@endforeach
-
-
-
-
-
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bultos - {{ $sucursal }}</title>
     <style>
-        #divEtiqueta{
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        @page {
+            size: 57mm 44mm;
+            margin: 0;
+        }
+
+        html, body {
+            width: 57mm;
+            background: #fff;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .etiqueta {
             width: 57mm;
             height: 44mm;
-            padding: 3px;
+            padding: 3mm;
             overflow: hidden;
-            font-family: arial;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
-        .numbultos{
-            width: 100%;
-            font-size: 0.5rem;
-        }
-        .numped{
-            width: 100%;
-            font-size: 0.5rem;
-        }
-        .fecha{
-            width: 100%;
-            font-size: 0.6rem;
-        }
-        
-        .sucursal{
-            font-size: 0.7rem;
-            font-weight: bold;
-            text-align: center
-        }
-        .id-pedido{
-            font-size: 0.65rem;
-            font-weight: bold;
-            text-align: center;
-            display: block;
-        }
-        
+
+        /* Corte SOLO entre etiquetas: la última no lleva salto → sin página en blanco al final. */
+        .etiqueta { page-break-after: always; break-after: page; }
+        .etiqueta:last-child { page-break-after: auto; break-after: auto; }
+
+        .cab { text-align: center; }
+        .sucursal { font-size: 12pt; font-weight: bold; display: block; }
+        .id-pedido { font-size: 10pt; font-weight: bold; display: block; margin-top: 1mm; }
+        .numbultos { font-size: 22pt; font-weight: bold; display: block; margin-top: 2mm; }
+        .pie { display: flex; justify-content: space-between; font-size: 8pt; }
+        .pie b { font-weight: bold; }
+
         @media print {
-            .pagebreak { page-break-before: always; } /* page-break-after works, as well */
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
-
-
     </style>
+</head>
+<body>
+    @foreach ($bultos as $num_bulto => $e)
+        <div class="etiqueta">
+            <div class="cab">
+                <span class="sucursal">{{ $sucursal }}</span>
+                @if (!empty($id_pedido_etiqueta))
+                    <span class="id-pedido">Pedido #{{ $id_pedido_etiqueta }}</span>
+                @endif
+                <span class="numbultos">{{ $num_bulto }} / {{ $total }}</span>
+            </div>
+            <div class="pie">
+                <span>ORIGEN: <b>{{ $origen }}</b></span>
+                <span><b>{{ $fecha }}</b></span>
+            </div>
+        </div>
+    @endforeach
 
     <script>
-
-    setTimeout(() => {
-
-    window.print();  
-
-    }, 2000);
-   
-
-
-
-
-    setTimeout(() => {
-
-    window.close();
-
-    }, 3000);
-
-    window.onfocus = function () { setTimeout(function () { window.close(); }, 3000); }
-   
+        window.onload = function () {
+            setTimeout(function () { window.print(); }, 500);
+        };
+        window.onafterprint = function () { window.close(); };
+        window.onfocus = function () { setTimeout(function () { window.close(); }, 3000); };
     </script>
-@endsection
-
-
-
-
+</body>
+</html>
