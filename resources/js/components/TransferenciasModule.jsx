@@ -1819,7 +1819,10 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
     // Premontas = órdenes de redistribución 'Aprobada' de central donde ESTA sucursal es el origen.
     const [premontas, setPremontas] = useState([]);
-    const [qPremonta, setQPremonta] = useState('');
+    // Filtro común para las órdenes (premontas / borradores / despachadas).
+    const [filtroOrdenes, setFiltroOrdenes] = useState({ q: '', destino: '', desde: '', hasta: '' });
+    const setFiltro = (campo, val) => setFiltroOrdenes(prev => ({ ...prev, [campo]: val }));
+    const limpiarFiltros = () => setFiltroOrdenes({ q: '', destino: '', desde: '', hasta: '' });
     // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
     const [borradores, setBorradores] = useState([]);
     const [borradorEnEdicion, setBorradorEnEdicion] = useState(null);
@@ -2186,14 +2189,47 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         borradores.map(b => b.id_orden_distribucion).filter(Boolean).map(Number)
     );
 
-    // Premontas: sin borrador aún + filtradas por buscador (id de redistribución o destino).
+    // ── Filtro común (texto / destino / rango de fechas) ──
+    const hayFiltros = !!(filtroOrdenes.q || filtroOrdenes.destino || filtroOrdenes.desde || filtroOrdenes.hasta);
+    const enRangoFecha = (fechaStr) => {
+        if (!filtroOrdenes.desde && !filtroOrdenes.hasta) return true;
+        if (!fechaStr) return true;
+        const f = new Date(fechaStr);
+        if (isNaN(f)) return true;
+        if (filtroOrdenes.desde && f < new Date(filtroOrdenes.desde + 'T00:00:00')) return false;
+        if (filtroOrdenes.hasta && f > new Date(filtroOrdenes.hasta + 'T23:59:59')) return false;
+        return true;
+    };
+    const matchTexto = (campos) => {
+        const q = filtroOrdenes.q.trim().toLowerCase();
+        if (!q) return true;
+        return campos.filter(v => v != null && v !== '').some(c => String(c).toLowerCase().includes(q));
+    };
+    const matchDestino = (idDestino) => !filtroOrdenes.destino || String(idDestino) === String(filtroOrdenes.destino);
+    const codDestino = (id) => { const s = sucById[id]; return s ? [s.codigo, s.nombre] : []; };
+
+    // Premontas: sin borrador aún + filtro común (por # redistribución, destino, fecha).
     const premontasFiltradas = premontas.filter(p => {
         if (odsConBorrador.has(Number(p.id_orden_distribucion))) return false;
-        const q = qPremonta.trim().toLowerCase();
-        if (!q) return true;
-        const destino = (p.sucursal_destino?.codigo || p.sucursal_destino?.nombre || '').toLowerCase();
-        return String(p.id_orden_distribucion).includes(q) || destino.includes(q);
+        const destino = p.sucursal_destino || {};
+        return matchDestino(destino.id)
+            && enRangoFecha(p.created_at || p.fecha_emision)
+            && matchTexto([p.id_orden_distribucion, destino.codigo, destino.nombre]);
     });
+
+    // Borradores: filtro común (por # orden, # redistribución, destino, fecha).
+    const borradoresFiltrados = borradores.filter(b =>
+        matchDestino(b.id_destino)
+        && enRangoFecha(b.created_at)
+        && matchTexto([b.id, b.id_orden_distribucion, ...codDestino(b.id_destino)])
+    );
+
+    // Despachadas: filtro común (por # orden, nº guía, # redistribución, destino, fecha).
+    const despachadasFiltradas = despachadas.filter(d =>
+        matchDestino(d.id_destino)
+        && enRangoFecha(d.updated_at || d.created_at)
+        && matchTexto([d.id, d.id_transferencia_central, d.id_orden_distribucion, ...codDestino(d.id_destino)])
+    );
 
     return (
         <div className="mx-auto px-2 pt-1 pb-2 sm:px-4 md:px-6">
@@ -2207,18 +2243,55 @@ const TransferenciasModule = ({ sucursalActualId }) => {
             <main>
                 {vistaActual === 'list' && (
                     <>
+                    {/* ── Filtro común de órdenes (buscar / destino / fechas) + recargar ── */}
+                    <div className="mb-3 bg-white border border-gray-200 rounded-lg p-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 items-end">
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Buscar</label>
+                                <input
+                                    type="text"
+                                    value={filtroOrdenes.q}
+                                    onChange={e => setFiltro('q', e.target.value)}
+                                    placeholder="# orden, # redistribución, guía, destino…"
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Destino</label>
+                                <select value={filtroOrdenes.destino} onChange={e => setFiltro('destino', e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded">
+                                    <option value="">Todos</option>
+                                    {(sucursales || []).map(s => <option key={s.id} value={s.id}>{s.codigo}{s.nombre ? ' · ' + s.nombre : ''}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Desde</label>
+                                <input type="date" value={filtroOrdenes.desde} onChange={e => setFiltro('desde', e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Hasta</label>
+                                <input type="date" value={filtroOrdenes.hasta} onChange={e => setFiltro('hasta', e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded" />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            <button onClick={() => setRefreshListKey(k => k + 1)} className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded" title="Recargar órdenes">
+                                <i className="fas fa-rotate"></i>Recargar
+                            </button>
+                            {hayFiltros && (
+                                <button onClick={limpiarFiltros} className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-semibold text-gray-600 border border-gray-300 rounded hover:bg-gray-50" title="Limpiar filtros">
+                                    <i className="fas fa-eraser"></i>Limpiar
+                                </button>
+                            )}
+                            <span className="text-xs text-gray-400 ml-auto">
+                                {premontasFiltradas.length} premonta(s) · {borradoresFiltrados.length} en preparación · {despachadasFiltradas.length} despachada(s)
+                            </span>
+                        </div>
+                    </div>
+
                     {/* ── Redistribuciones por despachar (premontas de central) ── */}
-                    {(premontasFiltradas.length > 0 || (qPremonta && premontas.length > 0)) && (
+                    {(premontasFiltradas.length > 0 || (hayFiltros && premontas.length > 0)) && (
                         <div className="mb-3 border border-amber-300 rounded-lg overflow-hidden">
                             <div className="flex items-center justify-between gap-2 bg-amber-50 px-3 py-2 flex-wrap">
                                 <h4 className="text-sm font-bold text-amber-800"><i className="fas fa-inbox mr-1"></i>Redistribuciones por despachar ({premontasFiltradas.length})</h4>
-                                <input
-                                    type="text"
-                                    value={qPremonta}
-                                    onChange={(e) => setQPremonta(e.target.value)}
-                                    placeholder="Filtrar por # o destino..."
-                                    className="w-48 px-2 py-1 text-sm border border-amber-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-400"
-                                />
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="min-w-full text-sm divide-y divide-amber-100">
@@ -2271,10 +2344,10 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                     )}
 
                     {/* ── Órdenes en preparación (borradores, sin descontar todavía) ── */}
-                    {borradores.length > 0 && (
+                    {borradoresFiltrados.length > 0 && (
                         <div className="mb-3 border border-blue-200 rounded-lg overflow-hidden">
                             <div className="bg-blue-50 px-3 py-2">
-                                <h4 className="text-sm font-bold text-blue-800"><i className="fas fa-pen-to-square mr-1"></i>Órdenes en preparación ({borradores.length})</h4>
+                                <h4 className="text-sm font-bold text-blue-800"><i className="fas fa-pen-to-square mr-1"></i>Órdenes en preparación ({borradoresFiltrados.length})</h4>
                                 <p className="text-xs text-blue-600">Ajustá cantidades a lo que consigas. El inventario sale recién al “Dar salida”.</p>
                             </div>
                             <div className="overflow-x-auto">
@@ -2289,7 +2362,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-100">
-                                        {borradores.map(b => {
+                                        {borradoresFiltrados.map(b => {
                                             const nItems = (b.items || []).filter(i => parseFloat(i.cantidad) > 0).length;
                                             const totalItems = (b.items || []).length;
                                             const revItems = (b.items || []).filter(i => i.revisado).length;
@@ -2343,10 +2416,10 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                         </div>
                     )}
                     {/* ── Despachadas (estado 1, inventario ya descontado) — imprimir Guía / Bultos ── */}
-                    {despachadas.length > 0 && (
+                    {despachadasFiltradas.length > 0 && (
                         <div className="mb-3 border border-emerald-200 rounded-lg overflow-hidden">
                             <div className="bg-emerald-50 px-3 py-2">
-                                <h4 className="text-sm font-bold text-emerald-800"><i className="fas fa-truck-fast mr-1"></i>Despachadas — listas para imprimir ({despachadas.length})</h4>
+                                <h4 className="text-sm font-bold text-emerald-800"><i className="fas fa-truck-fast mr-1"></i>Despachadas — listas para imprimir ({despachadasFiltradas.length})</h4>
                                 <p className="text-xs text-emerald-600">Inventario ya descontado. Imprimí la Guía de Despacho y las etiquetas de bultos.</p>
                             </div>
                             <div className="overflow-x-auto">
@@ -2361,7 +2434,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-100">
-                                        {despachadas.map(d => {
+                                        {despachadasFiltradas.map(d => {
                                             const nItems = (d.items || []).length;
                                             const guia = String(d.id_transferencia_central || d.id).padStart(8, '0');
                                             return (

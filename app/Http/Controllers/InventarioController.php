@@ -1249,19 +1249,32 @@ class InventarioController extends Controller
             })
                 ->get(['id', 'codigo_barras', 'codigo_proveedor', 'descripcion', 'precio_base', 'precio', 'cantidad']);
 
-            // Ubicación de almacén por producto. BLINDADO: si el módulo warehouse no está o falla,
-            // NO debe tumbar la resolución de productos (antes un error acá dejaba todo "no existe").
+            // Ubicación de almacén por producto (warehouse_inventory por inventario_id). BLINDADO:
+            // si el módulo warehouse falla, no tumba la resolución de productos.
             $ubic = [];
             try {
                 $ubic = \App\Models\WarehouseInventory::ubicacionesPorProductos($productos->pluck('id')->all());
             } catch (\Throwable $e) {
                 \Log::warning('resolverProductosPorCodigos: ubicaciones warehouse no disponibles: ' . $e->getMessage());
             }
-            $productos->each(function ($p) use ($ubic) {
-                $p->ubicacion = $ubic[$p->id] ?? null;
-            });
 
-            return Response::json(['estado' => true, 'productos' => $productos]);
+            // Arrays planos con `ubicacion` EXPLÍCITA (sin depender de atributos mágicos del modelo).
+            $out = $productos->map(fn ($p) => [
+                'id' => $p->id,
+                'codigo_barras' => $p->codigo_barras,
+                'codigo_proveedor' => $p->codigo_proveedor,
+                'descripcion' => $p->descripcion,
+                'precio_base' => $p->precio_base,
+                'precio' => $p->precio,
+                'cantidad' => $p->cantidad,
+                'ubicacion' => $ubic[$p->id] ?? null,
+            ])->values();
+
+            return Response::json([
+                'estado' => true,
+                'productos' => $out,
+                'debug_ubicaciones' => count($ubic), // diagnóstico: cuántos productos resolvieron ubicación
+            ]);
         } catch (\Throwable $e) {
             \Log::error('resolverProductosPorCodigos: ' . $e->getMessage() . ' | ' . $e->getFile() . ':' . $e->getLine());
             return Response::json(['estado' => false, 'msj' => 'Error al resolver productos: ' . $e->getMessage(), 'productos' => []], 200);

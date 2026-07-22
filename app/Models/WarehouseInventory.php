@@ -64,10 +64,11 @@ class WarehouseInventory extends Model
         if (empty($ids)) {
             return [];
         }
+        // Igual que el resto de la app (InventarioController ~2564): where inventario_id + with('warehouse').
         $rows = static::whereIn('inventario_id', $ids)
-            ->with('warehouse:id,codigo')
+            ->with('warehouse')
             ->orderByDesc('cantidad')
-            ->get(['id', 'inventario_id', 'warehouse_id', 'cantidad']);
+            ->get();
 
         $map = [];
         foreach ($rows as $wi) {
@@ -75,11 +76,12 @@ class WarehouseInventory extends Model
             if (!$cod) {
                 continue;
             }
-            if (!isset($map[$wi->inventario_id])) {
-                $map[$wi->inventario_id] = [];
+            $pid = (int) $wi->inventario_id;
+            if (!isset($map[$pid])) {
+                $map[$pid] = [];
             }
-            if (!in_array($cod, $map[$wi->inventario_id], true)) {
-                $map[$wi->inventario_id][] = $cod;
+            if (!in_array($cod, $map[$pid], true)) {
+                $map[$pid][] = $cod;
             }
         }
         return array_map(fn ($codes) => implode(', ', $codes), $map);

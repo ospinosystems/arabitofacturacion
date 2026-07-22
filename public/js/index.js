@@ -138533,10 +138533,29 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
     _useState68 = _slicedToArray(_useState67, 2),
     premontas = _useState68[0],
     setPremontas = _useState68[1];
-  var _useState69 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+  // Filtro común para las órdenes (premontas / borradores / despachadas).
+  var _useState69 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+      q: '',
+      destino: '',
+      desde: '',
+      hasta: ''
+    }),
     _useState70 = _slicedToArray(_useState69, 2),
-    qPremonta = _useState70[0],
-    setQPremonta = _useState70[1];
+    filtroOrdenes = _useState70[0],
+    setFiltroOrdenes = _useState70[1];
+  var setFiltro = function setFiltro(campo, val) {
+    return setFiltroOrdenes(function (prev) {
+      return _objectSpread(_objectSpread({}, prev), {}, _defineProperty({}, campo, val));
+    });
+  };
+  var limpiarFiltros = function limpiarFiltros() {
+    return setFiltroOrdenes({
+      q: '',
+      destino: '',
+      desde: '',
+      hasta: ''
+    });
+  };
   // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
   var _useState71 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState72 = _slicedToArray(_useState71, 2),
@@ -139252,14 +139271,49 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
     return b.id_orden_distribucion;
   }).filter(Boolean).map(Number));
 
-  // Premontas: sin borrador aún + filtradas por buscador (id de redistribución o destino).
-  var premontasFiltradas = premontas.filter(function (p) {
-    var _p$sucursal_destino, _p$sucursal_destino2;
-    if (odsConBorrador.has(Number(p.id_orden_distribucion))) return false;
-    var q = qPremonta.trim().toLowerCase();
+  // ── Filtro común (texto / destino / rango de fechas) ──
+  var hayFiltros = !!(filtroOrdenes.q || filtroOrdenes.destino || filtroOrdenes.desde || filtroOrdenes.hasta);
+  var enRangoFecha = function enRangoFecha(fechaStr) {
+    if (!filtroOrdenes.desde && !filtroOrdenes.hasta) return true;
+    if (!fechaStr) return true;
+    var f = new Date(fechaStr);
+    if (isNaN(f)) return true;
+    if (filtroOrdenes.desde && f < new Date(filtroOrdenes.desde + 'T00:00:00')) return false;
+    if (filtroOrdenes.hasta && f > new Date(filtroOrdenes.hasta + 'T23:59:59')) return false;
+    return true;
+  };
+  var matchTexto = function matchTexto(campos) {
+    var q = filtroOrdenes.q.trim().toLowerCase();
     if (!q) return true;
-    var destino = (((_p$sucursal_destino = p.sucursal_destino) === null || _p$sucursal_destino === void 0 ? void 0 : _p$sucursal_destino.codigo) || ((_p$sucursal_destino2 = p.sucursal_destino) === null || _p$sucursal_destino2 === void 0 ? void 0 : _p$sucursal_destino2.nombre) || '').toLowerCase();
-    return String(p.id_orden_distribucion).includes(q) || destino.includes(q);
+    return campos.filter(function (v) {
+      return v != null && v !== '';
+    }).some(function (c) {
+      return String(c).toLowerCase().includes(q);
+    });
+  };
+  var matchDestino = function matchDestino(idDestino) {
+    return !filtroOrdenes.destino || String(idDestino) === String(filtroOrdenes.destino);
+  };
+  var codDestino = function codDestino(id) {
+    var s = sucById[id];
+    return s ? [s.codigo, s.nombre] : [];
+  };
+
+  // Premontas: sin borrador aún + filtro común (por # redistribución, destino, fecha).
+  var premontasFiltradas = premontas.filter(function (p) {
+    if (odsConBorrador.has(Number(p.id_orden_distribucion))) return false;
+    var destino = p.sucursal_destino || {};
+    return matchDestino(destino.id) && enRangoFecha(p.created_at || p.fecha_emision) && matchTexto([p.id_orden_distribucion, destino.codigo, destino.nombre]);
+  });
+
+  // Borradores: filtro común (por # orden, # redistribución, destino, fecha).
+  var borradoresFiltrados = borradores.filter(function (b) {
+    return matchDestino(b.id_destino) && enRangoFecha(b.created_at) && matchTexto([b.id, b.id_orden_distribucion].concat(_toConsumableArray(codDestino(b.id_destino))));
+  });
+
+  // Despachadas: filtro común (por # orden, nº guía, # redistribución, destino, fecha).
+  var despachadasFiltradas = despachadas.filter(function (d) {
+    return matchDestino(d.id_destino) && enRangoFecha(d.updated_at || d.created_at) && matchTexto([d.id, d.id_transferencia_central, d.id_orden_distribucion].concat(_toConsumableArray(codDestino(d.id_destino))));
   });
   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
     className: "mx-auto px-2 pt-1 pb-2 sm:px-4 md:px-6",
@@ -139282,24 +139336,104 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
       })
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("main", {
       children: [vistaActual === 'list' && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
-        children: [(premontasFiltradas.length > 0 || qPremonta && premontas.length > 0) && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-          className: "mb-3 border border-amber-300 rounded-lg overflow-hidden",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "mb-3 bg-white border border-gray-200 rounded-lg p-3",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+            className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 items-end",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+              className: "lg:col-span-2",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
+                className: "block text-xs font-medium text-gray-600 mb-1",
+                children: "Buscar"
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+                type: "text",
+                value: filtroOrdenes.q,
+                onChange: function onChange(e) {
+                  return setFiltro('q', e.target.value);
+                },
+                placeholder: "# orden, # redistribuci\xF3n, gu\xEDa, destino\u2026",
+                className: "w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              })]
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
+                className: "block text-xs font-medium text-gray-600 mb-1",
+                children: "Destino"
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("select", {
+                value: filtroOrdenes.destino,
+                onChange: function onChange(e) {
+                  return setFiltro('destino', e.target.value);
+                },
+                className: "w-full px-2 py-1.5 text-sm border border-gray-300 rounded",
+                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+                  value: "",
+                  children: "Todos"
+                }), (sucursales || []).map(function (s) {
+                  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("option", {
+                    value: s.id,
+                    children: [s.codigo, s.nombre ? ' · ' + s.nombre : '']
+                  }, s.id);
+                })]
+              })]
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
+                className: "block text-xs font-medium text-gray-600 mb-1",
+                children: "Desde"
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+                type: "date",
+                value: filtroOrdenes.desde,
+                onChange: function onChange(e) {
+                  return setFiltro('desde', e.target.value);
+                },
+                className: "w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+              })]
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
+                className: "block text-xs font-medium text-gray-600 mb-1",
+                children: "Hasta"
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+                type: "date",
+                value: filtroOrdenes.hasta,
+                onChange: function onChange(e) {
+                  return setFiltro('hasta', e.target.value);
+                },
+                className: "w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+              })]
+            })]
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+            className: "flex items-center gap-2 mt-2 flex-wrap",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+              onClick: function onClick() {
+                return setRefreshListKey(function (k) {
+                  return k + 1;
+                });
+              },
+              className: "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded",
+              title: "Recargar \xF3rdenes",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                className: "fas fa-rotate"
+              }), "Recargar"]
+            }), hayFiltros && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+              onClick: limpiarFiltros,
+              className: "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-semibold text-gray-600 border border-gray-300 rounded hover:bg-gray-50",
+              title: "Limpiar filtros",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                className: "fas fa-eraser"
+              }), "Limpiar"]
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+              className: "text-xs text-gray-400 ml-auto",
+              children: [premontasFiltradas.length, " premonta(s) \xB7 ", borradoresFiltrados.length, " en preparaci\xF3n \xB7 ", despachadasFiltradas.length, " despachada(s)"]
+            })]
+          })]
+        }), (premontasFiltradas.length > 0 || hayFiltros && premontas.length > 0) && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "mb-3 border border-amber-300 rounded-lg overflow-hidden",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
             className: "flex items-center justify-between gap-2 bg-amber-50 px-3 py-2 flex-wrap",
-            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h4", {
+            children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h4", {
               className: "text-sm font-bold text-amber-800",
               children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
                 className: "fas fa-inbox mr-1"
               }), "Redistribuciones por despachar (", premontasFiltradas.length, ")"]
-            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
-              type: "text",
-              value: qPremonta,
-              onChange: function onChange(e) {
-                return setQPremonta(e.target.value);
-              },
-              placeholder: "Filtrar por # o destino...",
-              className: "w-48 px-2 py-1 text-sm border border-amber-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-400"
-            })]
+            })
           }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
             className: "overflow-x-auto",
             children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("table", {
@@ -139390,7 +139524,7 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
               })]
             })
           })]
-        }), borradores.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        }), borradoresFiltrados.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "mb-3 border border-blue-200 rounded-lg overflow-hidden",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
             className: "bg-blue-50 px-3 py-2",
@@ -139398,7 +139532,7 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
               className: "text-sm font-bold text-blue-800",
               children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
                 className: "fas fa-pen-to-square mr-1"
-              }), "\xD3rdenes en preparaci\xF3n (", borradores.length, ")"]
+              }), "\xD3rdenes en preparaci\xF3n (", borradoresFiltrados.length, ")"]
             }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
               className: "text-xs text-blue-600",
               children: "Ajust\xE1 cantidades a lo que consigas. El inventario sale reci\xE9n al \u201CDar salida\u201D."
@@ -139429,7 +139563,7 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
                 })
               }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("tbody", {
                 className: "bg-white divide-y divide-gray-100",
-                children: borradores.map(function (b) {
+                children: borradoresFiltrados.map(function (b) {
                   var nItems = (b.items || []).filter(function (i) {
                     return parseFloat(i.cantidad) > 0;
                   }).length;
@@ -139538,7 +139672,7 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
               })]
             })
           })]
-        }), despachadas.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        }), despachadasFiltradas.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "mb-3 border border-emerald-200 rounded-lg overflow-hidden",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
             className: "bg-emerald-50 px-3 py-2",
@@ -139546,7 +139680,7 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
               className: "text-sm font-bold text-emerald-800",
               children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
                 className: "fas fa-truck-fast mr-1"
-              }), "Despachadas \u2014 listas para imprimir (", despachadas.length, ")"]
+              }), "Despachadas \u2014 listas para imprimir (", despachadasFiltradas.length, ")"]
             }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
               className: "text-xs text-emerald-600",
               children: "Inventario ya descontado. Imprim\xED la Gu\xEDa de Despacho y las etiquetas de bultos."
@@ -139577,7 +139711,7 @@ var TransferenciasModule = function TransferenciasModule(_ref12) {
                 })
               }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("tbody", {
                 className: "bg-white divide-y divide-gray-100",
-                children: despachadas.map(function (d) {
+                children: despachadasFiltradas.map(function (d) {
                   var nItems = (d.items || []).length;
                   var guia = String(d.id_transferencia_central || d.id).padStart(8, '0');
                   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
