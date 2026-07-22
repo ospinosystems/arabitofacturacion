@@ -136741,17 +136741,62 @@ var ProductSearchInput = function ProductSearchInput(_ref5) {
     })]
   });
 };
-var SelectedProductItem = function SelectedProductItem(_ref7) {
+
+// Imprime un ticket con código de barras del producto, REUTILIZANDO la plantilla del módulo
+// warehouse-inventory (`ticket-producto.blade.php`, JsBarcode + auto-print). Se hace vía un
+// form POST temporal a /warehouse-inventory/imprimir-ticket-producto en pestaña nueva (mismo
+// patrón que el pasillero TCR), que auto-imprime y se cierra.
+function imprimirTicketBarcode() {
+  var _ref7 = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+    codigo_barras = _ref7.codigo_barras,
+    codigo_proveedor = _ref7.codigo_proveedor,
+    descripcion = _ref7.descripcion,
+    marca = _ref7.marca;
+  if (!codigo_barras) {
+    alert('Este producto no tiene código de barras.');
+    return;
+  }
+  var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+  var form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/warehouse-inventory/imprimir-ticket-producto';
+  form.target = '_blank';
+  var campos = {
+    _token: csrf,
+    codigo_barras: codigo_barras || '',
+    codigo_proveedor: codigo_proveedor || '',
+    descripcion: descripcion || '',
+    marca: marca || ''
+  };
+  Object.keys(campos).forEach(function (k) {
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = k;
+    input.value = campos[k];
+    form.appendChild(input);
+  });
+  document.body.appendChild(form);
+  form.submit();
+  document.body.removeChild(form);
+}
+var SelectedProductItem = function SelectedProductItem(_ref8) {
   var _item$producto, _item$producto2, _item$producto3;
-  var item = _ref7.item,
-    onRemove = _ref7.onRemove,
-    onQuantityChange = _ref7.onQuantityChange,
-    isEditable = _ref7.isEditable,
-    index = _ref7.index,
-    totalItems = _ref7.totalItems,
-    _ref7$mostrarRevisado = _ref7.mostrarRevisado,
-    mostrarRevisado = _ref7$mostrarRevisado === void 0 ? false : _ref7$mostrarRevisado,
-    onToggleRevisado = _ref7.onToggleRevisado;
+  var item = _ref8.item,
+    onRemove = _ref8.onRemove,
+    onQuantityChange = _ref8.onQuantityChange,
+    isEditable = _ref8.isEditable,
+    index = _ref8.index,
+    totalItems = _ref8.totalItems,
+    _ref8$mostrarRevisado = _ref8.mostrarRevisado,
+    mostrarRevisado = _ref8$mostrarRevisado === void 0 ? false : _ref8$mostrarRevisado,
+    onToggleRevisado = _ref8.onToggleRevisado;
+  // Resalta la fila mientras el input de cantidad tiene foco (para no perder dónde vas).
+  var _useState17 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    _useState18 = _slicedToArray(_useState17, 2),
+    focused = _useState18[0],
+    setFocused = _useState18[1];
+  // Stock disponible del producto en inventario (tope para la cantidad a enviar).
+  var stockDispHandler = item.stock_disponible != null ? parseFloat(item.stock_disponible) : null;
   var handleCantidadChange = function handleCantidadChange(e) {
     var valor = e.target.value;
     // Permitir valores vacíos temporalmente para mejor UX
@@ -136762,6 +136807,11 @@ var SelectedProductItem = function SelectedProductItem(_ref7) {
 
     // Validar que sea un número válido con hasta 2 decimales
     if (/^\d*\.?\d{0,2}$/.test(valor)) {
+      // No permitir superar el stock disponible: se topa al máximo.
+      if (stockDispHandler != null && !isNaN(stockDispHandler) && parseFloat(valor) > stockDispHandler) {
+        onQuantityChange(item.id_producto_insucursal, String(stockDispHandler));
+        return;
+      }
       onQuantityChange(item.id_producto_insucursal, valor);
     }
   };
@@ -136793,8 +136843,10 @@ var SelectedProductItem = function SelectedProductItem(_ref7) {
 
   // En modo picking: fila verde si ya fue revisado, ámbar si falta revisar.
   var rowCls = mostrarRevisado ? item.revisado ? 'bg-emerald-50' : 'bg-amber-50/50 hover:bg-amber-50' : 'hover:bg-gray-50';
+  // Con foco en la cantidad, resalta toda la fila (anillo indigo) para ubicar dónde estás.
+  var focusCls = focused ? 'ring-2 ring-inset ring-indigo-400 bg-indigo-50/60' : '';
   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
-    className: "border-b border-gray-100 ".concat(rowCls),
+    className: "border-b border-gray-100 ".concat(focused ? focusCls : rowCls),
     children: [mostrarRevisado && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
       className: "px-2 py-1 text-center",
       children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
@@ -136839,49 +136891,66 @@ var SelectedProductItem = function SelectedProductItem(_ref7) {
         value: item.cantidad,
         onChange: handleCantidadChange,
         onFocus: function onFocus(e) {
-          return e.target.select();
+          setFocused(true);
+          e.target.select();
         },
         onKeyDown: handleQtyKeyDown,
         onBlur: function onBlur(e) {
+          setFocused(false);
           var valor = e.target.value;
-          if (valor === '' || isNaN(parseFloat(valor)) || parseFloat(valor) <= 0) {
-            onQuantityChange(item.id_producto_insucursal, '1.00');
-          } else {
-            onQuantityChange(item.id_producto_insucursal, parseFloat(valor).toFixed(2));
-          }
+          var n = parseFloat(valor);
+          if (valor === '' || isNaN(n) || n <= 0) n = 1; // vacío/inválido → 1
+          // No permitir superar el stock disponible: se topa al máximo.
+          if (stockDispHandler != null && !isNaN(stockDispHandler) && n > stockDispHandler) n = stockDispHandler;
+          onQuantityChange(item.id_producto_insucursal, n.toFixed(2));
         },
         readOnly: !isEditable,
-        className: "js-qty-input w-20 p-1 text-sm border rounded text-center ".concat(excedeStock ? 'border-red-400 bg-red-50' : 'border-gray-300', " ").concat(!isEditable ? 'bg-gray-100' : 'focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500'),
+        className: "js-qty-input w-32 p-1.5 text-base font-semibold border rounded text-center ".concat(excedeStock ? 'border-red-400 bg-red-50' : 'border-gray-300', " ").concat(!isEditable ? 'bg-gray-100' : 'focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500'),
         "aria-label": "Cantidad para ".concat(item.descripcion_real)
       })
-    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
-      className: "px-2 py-1 text-center",
-      children: isEditable && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
+      className: "px-2 py-1 text-center whitespace-nowrap",
+      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+        type: "button",
+        onClick: function onClick() {
+          var _item$producto4, _item$producto5, _item$producto6;
+          return imprimirTicketBarcode({
+            codigo_barras: item.barras_real || ((_item$producto4 = item.producto) === null || _item$producto4 === void 0 ? void 0 : _item$producto4.codigo_barras),
+            codigo_proveedor: item.alterno_real || ((_item$producto5 = item.producto) === null || _item$producto5 === void 0 ? void 0 : _item$producto5.codigo_proveedor),
+            descripcion: item.descripcion_real || ((_item$producto6 = item.producto) === null || _item$producto6 === void 0 ? void 0 : _item$producto6.descripcion)
+          });
+        },
+        className: "text-gray-500 hover:text-indigo-600 p-1",
+        title: "Imprimir ticket con c\xF3digo de barras",
+        children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+          className: "fas fa-barcode"
+        })
+      }), isEditable && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
         type: "button",
         onClick: function onClick() {
           return onRemove(item.id_producto_insucursal);
         },
-        className: "text-red-600 hover:text-red-800 p-1",
+        className: "text-red-600 hover:text-red-800 p-1 ml-1",
         title: "Eliminar",
         children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
           className: "fas fa-trash"
         })
-      })
+      })]
     })]
   });
 };
-var TransferenciaForm = function TransferenciaForm(_ref8) {
-  var onSave = _ref8.onSave,
-    onCancel = _ref8.onCancel,
-    sucursalActualId = _ref8.sucursalActualId,
-    _ref8$transferenciaTo = _ref8.transferenciaToEdit,
-    transferenciaToEdit = _ref8$transferenciaTo === void 0 ? null : _ref8$transferenciaTo,
-    sucursales = _ref8.sucursales,
-    cargarTransferencias = _ref8.cargarTransferencias,
-    _ref8$modoBorrador = _ref8.modoBorrador,
-    modoBorrador = _ref8$modoBorrador === void 0 ? false : _ref8$modoBorrador,
-    onGuardarBorrador = _ref8.onGuardarBorrador,
-    onImprimir = _ref8.onImprimir;
+var TransferenciaForm = function TransferenciaForm(_ref9) {
+  var onSave = _ref9.onSave,
+    onCancel = _ref9.onCancel,
+    sucursalActualId = _ref9.sucursalActualId,
+    _ref9$transferenciaTo = _ref9.transferenciaToEdit,
+    transferenciaToEdit = _ref9$transferenciaTo === void 0 ? null : _ref9$transferenciaTo,
+    sucursales = _ref9.sucursales,
+    cargarTransferencias = _ref9.cargarTransferencias,
+    _ref9$modoBorrador = _ref9.modoBorrador,
+    modoBorrador = _ref9$modoBorrador === void 0 ? false : _ref9$modoBorrador,
+    onGuardarBorrador = _ref9.onGuardarBorrador,
+    onImprimir = _ref9.onImprimir;
   // Una premonta (orden de redistribución traída de central) se arma como transferencia NUEVA,
   // no como edición de una transferencia local existente.
   var esPremonta = !!(transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.es_premontada);
@@ -136890,45 +136959,50 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
   var esBorrador = !!modoBorrador;
   var esEdicion = !!transferenciaToEdit && !esPremonta && !esBorrador;
   var idSucursalOrigen = sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER;
-  var _useState17 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((transferenciaToEdit === null || transferenciaToEdit === void 0 ? void 0 : transferenciaToEdit.id_destino) || ''),
-    _useState18 = _slicedToArray(_useState17, 2),
-    idSucursalDestinoSeleccionada = _useState18[0],
-    setIdSucursalDestinoSeleccionada = _useState18[1];
-  var _useState19 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+  var _useState19 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((transferenciaToEdit === null || transferenciaToEdit === void 0 ? void 0 : transferenciaToEdit.id_destino) || ''),
     _useState20 = _slicedToArray(_useState19, 2),
-    itemsTransferencia = _useState20[0],
-    setItemsTransferencia = _useState20[1];
-  var _useState21 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    idSucursalDestinoSeleccionada = _useState20[0],
+    setIdSucursalDestinoSeleccionada = _useState20[1];
+  var _useState21 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState22 = _slicedToArray(_useState21, 2),
-    error = _useState22[0],
-    setError = _useState22[1];
-  var _useState23 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    itemsTransferencia = _useState22[0],
+    setItemsTransferencia = _useState22[1];
+  var _useState23 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState24 = _slicedToArray(_useState23, 2),
-    estaCargando = _useState24[0],
-    setEstaCargando = _useState24[1];
-  var _useState25 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    error = _useState24[0],
+    setError = _useState24[1];
+  var _useState25 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState26 = _slicedToArray(_useState25, 2),
-    mensajeExito = _useState26[0],
-    setMensajeExito = _useState26[1];
-  var _useState27 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((transferenciaToEdit === null || transferenciaToEdit === void 0 ? void 0 : transferenciaToEdit.observaciones) || ''),
+    estaCargando = _useState26[0],
+    setEstaCargando = _useState26[1];
+  var _useState27 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState28 = _slicedToArray(_useState27, 2),
-    observaciones = _useState28[0],
-    setObservaciones = _useState28[1];
-  var _useState29 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    mensajeExito = _useState28[0],
+    setMensajeExito = _useState28[1];
+  var _useState29 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((transferenciaToEdit === null || transferenciaToEdit === void 0 ? void 0 : transferenciaToEdit.observaciones) || ''),
     _useState30 = _slicedToArray(_useState29, 2),
-    mostrarObservaciones = _useState30[0],
-    setMostrarObservaciones = _useState30[1];
-  // Marca si el usuario tocó algo (para confirmar el descarte al cancelar). Los cambios viven
-  // en estado local: cancelar (sin guardar) siempre los descarta y la orden vuelve a como estaba.
+    observaciones = _useState30[0],
+    setObservaciones = _useState30[1];
   var _useState31 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState32 = _slicedToArray(_useState31, 2),
-    dirty = _useState32[0],
-    setDirty = _useState32[1];
-  // Buscador dentro de la orden (filtra la lista por barras / cód. proveedor / descripción).
-  var _useState33 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    mostrarObservaciones = _useState32[0],
+    setMostrarObservaciones = _useState32[1];
+  // Marca si el usuario tocó algo (para confirmar el descarte al cancelar). Los cambios viven
+  // en estado local: cancelar (sin guardar) siempre los descarta y la orden vuelve a como estaba.
+  var _useState33 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState34 = _slicedToArray(_useState33, 2),
-    filtroProducto = _useState34[0],
-    setFiltroProducto = _useState34[1];
+    dirty = _useState34[0],
+    setDirty = _useState34[1];
+  // Buscador dentro de la orden (filtra la lista por barras / cód. proveedor / descripción).
+  var _useState35 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    _useState36 = _slicedToArray(_useState35, 2),
+    filtroProducto = _useState36[0],
+    setFiltroProducto = _useState36[1];
+  // Modal para agregar un producto nuevo (separado del filtro de la lista, para no confundirlos).
+  var _useState37 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    _useState38 = _slicedToArray(_useState37, 2),
+    mostrarAgregarModal = _useState38[0],
+    setMostrarAgregarModal = _useState38[1];
   var handleCancelClick = function handleCancelClick() {
     if (dirty && !window.confirm('¿Descartar los cambios? La orden volverá a como estaba (no se guardó nada).')) return;
     onCancel();
@@ -136936,18 +137010,18 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
 
   // Destino: bloqueado por defecto cuando ya trae un destino (edición o borrador de
   // redistribución); en un borrador nuevo/manual sin destino queda el buscador abierto.
-  var _useState35 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((esEdicion || esBorrador) && !!(transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_destino)),
-    _useState36 = _slicedToArray(_useState35, 2),
-    destinoBloqueado = _useState36[0],
-    setDestinoBloqueado = _useState36[1];
-  var _useState37 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
-    _useState38 = _slicedToArray(_useState37, 2),
-    busquedaDestino = _useState38[0],
-    setBusquedaDestino = _useState38[1];
-  var _useState39 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+  var _useState39 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)((esEdicion || esBorrador) && !!(transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_destino)),
     _useState40 = _slicedToArray(_useState39, 2),
-    mostrarListaDestino = _useState40[0],
-    setMostrarListaDestino = _useState40[1];
+    destinoBloqueado = _useState40[0],
+    setDestinoBloqueado = _useState40[1];
+  var _useState41 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    _useState42 = _slicedToArray(_useState41, 2),
+    busquedaDestino = _useState42[0],
+    setBusquedaDestino = _useState42[1];
+  var _useState43 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    _useState44 = _slicedToArray(_useState43, 2),
+    mostrarListaDestino = _useState44[0],
+    setMostrarListaDestino = _useState44[1];
   var codigoDestino = (sucursales.find(function (s) {
     return String(s.id) === String(idSucursalDestinoSeleccionada);
   }) || {}).codigo || '';
@@ -137104,8 +137178,8 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
     });
   };
   var handleSubmit = /*#__PURE__*/function () {
-    var _ref9 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee3(e) {
-      var validSubmission, datosTransferencia, res, _res;
+    var _ref0 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee3(e) {
+      var validSubmission, excedidos, datosTransferencia, res, _res;
       return _regeneratorRuntime().wrap(function _callee3$(_context3) {
         while (1) switch (_context3.prev = _context3.next) {
           case 0:
@@ -137127,24 +137201,29 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
             return _context3.abrupt("return");
           case 9:
             validSubmission = true;
+            excedidos = [];
             itemsTransferencia.forEach(function (item) {
               var cant = parseFloat(item.cantidad);
-              var stockOrig = parseFloat(item.cantidad_original_stock_inventario);
               if (isNaN(cant) || cant <= 0) {
                 setError("Cantidad inv\xE1lida para ".concat(item.descripcion_real, "."));
                 validSubmission = false;
               }
-              /*  if (cant > stockOrig) {
-                   setError(`Cantidad para ${item.descripcion_real} (${cant}) excede el stock original del inventario (${stockOrig}).`);
-                   validSubmission = false;
-               } */
+              // No se guarda si la cantidad supera el stock disponible del inventario.
+              var stockDisp = item.stock_disponible != null ? parseFloat(item.stock_disponible) : null;
+              if (stockDisp != null && !isNaN(stockDisp) && !isNaN(cant) && cant > stockDisp) {
+                excedidos.push("".concat(item.descripcion_real, " (").concat(cant, " > ").concat(stockDisp, ")"));
+                validSubmission = false;
+              }
             });
+            if (excedidos.length) {
+              setError("No se puede guardar: hay cantidades mayores al stock disponible \u2192 ".concat(excedidos.join('; '), ". Correg\xED esas cantidades."));
+            }
             if (validSubmission) {
-              _context3.next = 13;
+              _context3.next = 15;
               break;
             }
             return _context3.abrupt("return");
-          case 13:
+          case 15:
             datosTransferencia = {
               id_origen: idSucursalOrigen,
               id_destino: parseInt(idSucursalDestinoSeleccionada),
@@ -137177,18 +137256,18 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
 
             // ── Modo borrador (Plan B): guardar la orden "en preparación" SIN descontar inventario ──
             if (!esBorrador) {
-              _context3.next = 39;
+              _context3.next = 41;
               break;
             }
             if (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id) datosTransferencia.id = transferenciaToEdit.id;
             setEstaCargando(true);
-            _context3.prev = 19;
-            _context3.next = 22;
+            _context3.prev = 21;
+            _context3.next = 24;
             return onGuardarBorrador(datosTransferencia);
-          case 22:
+          case 24:
             res = _context3.sent;
             if (!(res !== null && res !== void 0 && res.estado)) {
-              _context3.next = 29;
+              _context3.next = 31;
               break;
             }
             setMensajeExito('Borrador guardado (no se descontó inventario).');
@@ -137196,38 +137275,38 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
             setTimeout(function () {
               return setMensajeExito('');
             }, 4000);
-            _context3.next = 30;
+            _context3.next = 32;
             break;
-          case 29:
+          case 31:
             throw new Error((res === null || res === void 0 ? void 0 : res.msj) || 'No se pudo guardar el borrador.');
-          case 30:
-            _context3.next = 35;
-            break;
           case 32:
-            _context3.prev = 32;
-            _context3.t0 = _context3["catch"](19);
+            _context3.next = 37;
+            break;
+          case 34:
+            _context3.prev = 34;
+            _context3.t0 = _context3["catch"](21);
             setError(_context3.t0.message || 'Error al guardar el borrador.');
-          case 35:
-            _context3.prev = 35;
+          case 37:
+            _context3.prev = 37;
             setEstaCargando(false);
-            return _context3.finish(35);
-          case 38:
+            return _context3.finish(37);
+          case 40:
             return _context3.abrupt("return");
-          case 39:
+          case 41:
             setEstaCargando(true);
-            _context3.prev = 40;
-            _context3.next = 43;
+            _context3.prev = 42;
+            _context3.next = 45;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].settransferenciaDici(datosTransferencia);
-          case 43:
+          case 45:
             _res = _context3.sent;
             if (!_res.data.estado) {
-              _context3.next = 53;
+              _context3.next = 55;
               break;
             }
             setMensajeExito("Transferencia ".concat(esEdicion ? 'actualizada' : 'creada', " exitosamente."));
-            _context3.next = 48;
+            _context3.next = 50;
             return cargarTransferencias();
-          case 48:
+          case 50:
             // Recargar la lista
 
             if (!esEdicion) {
@@ -137244,29 +137323,29 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
             setTimeout(function () {
               return setMensajeExito('');
             }, 5000);
-            _context3.next = 54;
+            _context3.next = 56;
             break;
-          case 53:
+          case 55:
             throw new Error(_res.data.mensaje || 'Error al procesar la transferencia');
-          case 54:
-            _context3.next = 59;
-            break;
           case 56:
-            _context3.prev = 56;
-            _context3.t1 = _context3["catch"](40);
+            _context3.next = 61;
+            break;
+          case 58:
+            _context3.prev = 58;
+            _context3.t1 = _context3["catch"](42);
             setError(_context3.t1.message || "Error al ".concat(esEdicion ? 'actualizar' : 'crear', " transferencia."));
-          case 59:
-            _context3.prev = 59;
+          case 61:
+            _context3.prev = 61;
             setEstaCargando(false);
-            return _context3.finish(59);
-          case 62:
+            return _context3.finish(61);
+          case 64:
           case "end":
             return _context3.stop();
         }
-      }, _callee3, null, [[19, 32, 35, 38], [40, 56, 59, 62]]);
+      }, _callee3, null, [[21, 34, 37, 40], [42, 58, 61, 64]]);
     }));
     return function handleSubmit(_x3) {
-      return _ref9.apply(this, arguments);
+      return _ref0.apply(this, arguments);
     };
   }();
 
@@ -137277,6 +137356,12 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
   }) : itemsTransferencia;
   var todosRevisados = itemsTransferencia.length > 0 && itemsTransferencia.every(function (i) {
     return i.revisado;
+  });
+  // Hay al menos un ítem con cantidad mayor al stock disponible → no se puede guardar.
+  var hayExcedidosStock = itemsTransferencia.some(function (i) {
+    var s = i.stock_disponible != null ? parseFloat(i.stock_disponible) : null;
+    var c = parseFloat(i.cantidad);
+    return s != null && !isNaN(s) && !isNaN(c) && c > s;
   });
   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("form", {
     onSubmit: handleSubmit,
@@ -137361,35 +137446,23 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
       children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
         children: mensajeExito
       })
-    }), esBorrador && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-      className: "bg-blue-50 border-l-4 border-blue-500 text-blue-800 px-3 py-2 text-sm flex items-start gap-2",
-      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
-        className: "fas fa-info-circle mt-0.5"
-      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
-        children: ["Est\xE1s ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("b", {
-          children: "preparando"
-        }), " la orden", transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_orden_distribucion ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
-          children: [" de la redistribuci\xF3n ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("b", {
-            children: ["#", transferenciaToEdit.id_orden_distribucion]
-          })]
-        }) : '', ". Ajust\xE1 las cantidades a lo que vayas consiguiendo y quit\xE1 lo que no. Guardar ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("b", {
-          children: "no descuenta inventario"
-        }), "; el inventario sale reci\xE9n cuando le das ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("b", {
-          children: "\u201CDar salida\u201D"
-        }), " desde el listado."]
-      })]
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
       className: "relative",
       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-        className: "sticky top-0 z-10 bg-white pb-2 border-b border-gray-200",
-        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("label", {
-          className: "block text-xs font-medium text-gray-700 mb-1",
+        className: "pb-2 border-b border-gray-200",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+          type: "button",
+          onClick: function onClick() {
+            return setMostrarAgregarModal(true);
+          },
+          className: "inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm",
+          title: esBorrador ? 'Agregar un producto fuera de la redistribución original' : 'Buscar y agregar productos',
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
-            className: "fas fa-plus-circle text-indigo-500 mr-1"
-          }), esBorrador ? 'Agregar producto (fuera de la redistribución original)' : 'Buscar y Agregar Productos:']
-        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(ProductSearchInput, {
-          onProductSelect: handleAddProduct,
-          sucursalIdOrigen: idSucursalOrigen
+            className: "fas fa-plus-circle"
+          }), esBorrador ? 'Agregar producto' : 'Buscar y agregar productos']
+        }), esBorrador && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+          className: "ml-2 text-xs text-gray-400",
+          children: "(fuera de la redistribuci\xF3n original)"
         })]
       }), itemsTransferencia.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
         className: "mt-3",
@@ -137544,6 +137617,15 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
         className: "mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm",
         placeholder: "Ingrese observaciones adicionales sobre la transferencia..."
       })]
+    }), hayExcedidosStock && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+      className: "bg-red-50 border-l-4 border-red-500 text-red-700 px-3 py-2 text-sm flex items-start gap-2",
+      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+        className: "fas fa-triangle-exclamation mt-0.5"
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+        children: ["Hay cantidades ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("b", {
+          children: "mayores al stock disponible"
+        }), " (en rojo). Corregilas para poder guardar."]
+      })]
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
       className: "flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 pt-2 border-t border-gray-200",
       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
@@ -137554,17 +137636,67 @@ var TransferenciaForm = function TransferenciaForm(_ref8) {
         children: "Cancelar"
       }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
         type: "submit",
-        disabled: estaCargando || itemsTransferencia.length === 0,
-        className: "w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border-transparent rounded-md shadow-sm text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition",
+        disabled: estaCargando || itemsTransferencia.length === 0 || hayExcedidosStock,
+        className: "w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border-transparent rounded-md shadow-sm text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition",
+        title: hayExcedidosStock ? 'Corregí las cantidades que exceden el stock disponible' : '',
         children: estaCargando ? 'Guardando...' : esBorrador ? transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id ? 'Guardar cambios' : 'Guardar borrador' : esEdicion ? 'Actualizar Transferencia' : 'Crear Transferencia'
       })]
+    }), mostrarAgregarModal && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+      className: "fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20",
+      onMouseDown: function onMouseDown() {
+        return setMostrarAgregarModal(false);
+      },
+      children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        className: "bg-white rounded-lg shadow-xl w-full max-w-2xl",
+        onMouseDown: function onMouseDown(e) {
+          return e.stopPropagation();
+        },
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "flex items-center justify-between px-4 py-3 border-b border-gray-200",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h3", {
+            className: "text-sm font-bold text-gray-800",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+              className: "fas fa-plus-circle text-indigo-500 mr-1"
+            }), "Agregar producto"]
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+            type: "button",
+            onClick: function onClick() {
+              return setMostrarAgregarModal(false);
+            },
+            className: "text-gray-400 hover:text-gray-600",
+            title: "Cerrar",
+            children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+              className: "fas fa-times text-lg"
+            })
+          })]
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "p-4",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
+            className: "text-xs text-gray-500 mb-2",
+            children: "Busc\xE1 por c\xF3digo de barras, c\xF3digo de proveedor o descripci\xF3n y seleccion\xE1 para agregarlo a la orden."
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(ProductSearchInput, {
+            onProductSelect: handleAddProduct,
+            sucursalIdOrigen: idSucursalOrigen
+          })]
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+          className: "flex justify-end px-4 py-3 border-t border-gray-200",
+          children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+            type: "button",
+            onClick: function onClick() {
+              return setMostrarAgregarModal(false);
+            },
+            className: "px-4 py-2 text-sm font-semibold text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50",
+            children: "Listo"
+          })
+        })]
+      })
     })]
   });
 };
-var TransferenciaDetailView = function TransferenciaDetailView(_ref0) {
-  var transferencia = _ref0.transferencia,
-    onBack = _ref0.onBack,
-    sucursales = _ref0.sucursales;
+var TransferenciaDetailView = function TransferenciaDetailView(_ref1) {
+  var transferencia = _ref1.transferencia,
+    onBack = _ref1.onBack,
+    sucursales = _ref1.sucursales;
   if (!transferencia) return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
     children: "Cargando detalles..."
   });
@@ -137751,27 +137883,27 @@ var TransferenciaDetailView = function TransferenciaDetailView(_ref0) {
     })]
   });
 };
-var TransferenciaList = function TransferenciaList(_ref1) {
-  var sucursalActualId = _ref1.sucursalActualId,
-    onRequireRefresh = _ref1.onRequireRefresh,
-    onEdit = _ref1.onEdit,
-    onViewDetails = _ref1.onViewDetails,
-    sucursales = _ref1.sucursales,
-    cargarTransferencias = _ref1.cargarTransferencias,
-    transferencias = _ref1.transferencias,
-    setTransferencias = _ref1.setTransferencias,
-    estaCargando = _ref1.estaCargando,
-    setEstaCargando = _ref1.setEstaCargando,
-    error = _ref1.error,
-    setError = _ref1.setError,
-    filtros = _ref1.filtros,
-    setFiltros = _ref1.setFiltros,
-    filtrosActivos = _ref1.filtrosActivos,
-    setFiltrosActivos = _ref1.setFiltrosActivos,
-    paginacion = _ref1.paginacion,
-    setPaginacion = _ref1.setPaginacion,
-    mostrarFiltros = _ref1.mostrarFiltros,
-    setMostrarFiltros = _ref1.setMostrarFiltros;
+var TransferenciaList = function TransferenciaList(_ref10) {
+  var sucursalActualId = _ref10.sucursalActualId,
+    onRequireRefresh = _ref10.onRequireRefresh,
+    onEdit = _ref10.onEdit,
+    onViewDetails = _ref10.onViewDetails,
+    sucursales = _ref10.sucursales,
+    cargarTransferencias = _ref10.cargarTransferencias,
+    transferencias = _ref10.transferencias,
+    setTransferencias = _ref10.setTransferencias,
+    estaCargando = _ref10.estaCargando,
+    setEstaCargando = _ref10.setEstaCargando,
+    error = _ref10.error,
+    setError = _ref10.setError,
+    filtros = _ref10.filtros,
+    setFiltros = _ref10.setFiltros,
+    filtrosActivos = _ref10.filtrosActivos,
+    setFiltrosActivos = _ref10.setFiltrosActivos,
+    paginacion = _ref10.paginacion,
+    setPaginacion = _ref10.setPaginacion,
+    mostrarFiltros = _ref10.mostrarFiltros,
+    setMostrarFiltros = _ref10.setMostrarFiltros;
   // Eliminamos el useEffect de carga de datos ya que ahora está en el componente padre
 
   var handleFilterChange = function handleFilterChange(e) {
@@ -137784,7 +137916,7 @@ var TransferenciaList = function TransferenciaList(_ref1) {
     cargarTransferencias();
   };
   var handleDelete = /*#__PURE__*/function () {
-    var _ref10 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee4(t) {
+    var _ref11 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee4(t) {
       var res;
       return _regeneratorRuntime().wrap(function _callee4$(_context4) {
         while (1) switch (_context4.prev = _context4.next) {
@@ -137820,7 +137952,7 @@ var TransferenciaList = function TransferenciaList(_ref1) {
       }, _callee4, null, [[2, 9]]);
     }));
     return function handleDelete(_x4) {
-      return _ref10.apply(this, arguments);
+      return _ref11.apply(this, arguments);
     };
   }();
   if (estaCargando && transferencias.length === 0) return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
@@ -138203,18 +138335,18 @@ var TransferenciaList = function TransferenciaList(_ref1) {
 //   • no existe localmente → se excluye (no se puede enviar lo que no tenés en sistema)
 //   • existe pero la cantidad no alcanza → se avisa y el usuario ajusta la cantidad
 // El usuario ajusta/excluye y recién ahí se crea la orden en preparación (sin descontar).
-var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref11) {
-  var prem = _ref11.prem,
-    filas = _ref11.filas,
-    destinoBadge = _ref11.destinoBadge,
-    onConfirmar = _ref11.onConfirmar,
-    onCancelar = _ref11.onCancelar,
-    onImprimir = _ref11.onImprimir,
-    procesando = _ref11.procesando;
-  var _useState41 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState42 = _slicedToArray(_useState41, 2),
-    rows = _useState42[0],
-    setRows = _useState42[1];
+var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref12) {
+  var prem = _ref12.prem,
+    filas = _ref12.filas,
+    destinoBadge = _ref12.destinoBadge,
+    onConfirmar = _ref12.onConfirmar,
+    onCancelar = _ref12.onCancelar,
+    onImprimir = _ref12.onImprimir,
+    procesando = _ref12.procesando;
+  var _useState45 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    _useState46 = _slicedToArray(_useState45, 2),
+    rows = _useState46[0],
+    setRows = _useState46[1];
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     setRows((filas || []).map(function (f) {
       return _objectSpread(_objectSpread({}, f), {}, {
@@ -138543,29 +138675,29 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref11) {
 };
 
 // Modal de opciones para imprimir la lista de picking: ordenar y dividir en varias sublistas.
-var PrintPickingModal = function PrintPickingModal(_ref12) {
-  var payload = _ref12.payload,
-    onClose = _ref12.onClose;
-  var _useState43 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('descripcion'),
-    _useState44 = _slicedToArray(_useState43, 2),
-    campo = _useState44[0],
-    setCampo = _useState44[1];
-  var _useState45 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('asc'),
-    _useState46 = _slicedToArray(_useState45, 2),
-    dir = _useState46[0],
-    setDir = _useState46[1];
-  var _useState47 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('ninguno'),
+var PrintPickingModal = function PrintPickingModal(_ref13) {
+  var payload = _ref13.payload,
+    onClose = _ref13.onClose;
+  var _useState47 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('descripcion'),
     _useState48 = _slicedToArray(_useState47, 2),
-    modo = _useState48[0],
-    setModo = _useState48[1]; // 'ninguno' | 'partes' | 'porLista'
-  var _useState49 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(2),
+    campo = _useState48[0],
+    setCampo = _useState48[1];
+  var _useState49 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('asc'),
     _useState50 = _slicedToArray(_useState49, 2),
-    nPartes = _useState50[0],
-    setNPartes = _useState50[1];
-  var _useState51 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(50),
+    dir = _useState50[0],
+    setDir = _useState50[1];
+  var _useState51 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('ninguno'),
     _useState52 = _slicedToArray(_useState51, 2),
-    porLista = _useState52[0],
-    setPorLista = _useState52[1];
+    modo = _useState52[0],
+    setModo = _useState52[1]; // 'ninguno' | 'partes' | 'porLista'
+  var _useState53 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(2),
+    _useState54 = _slicedToArray(_useState53, 2),
+    nPartes = _useState54[0],
+    setNPartes = _useState54[1];
+  var _useState55 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(50),
+    _useState56 = _slicedToArray(_useState55, 2),
+    porLista = _useState56[0],
+    setPorLista = _useState56[1];
   if (!payload) return null;
   var total = (payload.filas || []).length;
   var valor = modo === 'partes' ? parseInt(nPartes) || 2 : modo === 'porLista' ? parseInt(porLista) || 1 : 0;
@@ -138747,72 +138879,72 @@ var PrintPickingModal = function PrintPickingModal(_ref12) {
     })
   });
 };
-var TransferenciasModule = function TransferenciasModule(_ref13) {
+var TransferenciasModule = function TransferenciasModule(_ref14) {
   var _conflictosPremonta$p;
-  var sucursalActualId = _ref13.sucursalActualId;
-  var _useState53 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('list'),
-    _useState54 = _slicedToArray(_useState53, 2),
-    vistaActual = _useState54[0],
-    setVistaActual = _useState54[1]; // 'list', 'form', 'detail'
-  var _useState55 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
-    _useState56 = _slicedToArray(_useState55, 2),
-    transferenciaSeleccionada = _useState56[0],
-    setTransferenciaSeleccionada = _useState56[1];
-  var _useState57 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(0),
+  var sucursalActualId = _ref14.sucursalActualId;
+  var _useState57 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('list'),
     _useState58 = _slicedToArray(_useState57, 2),
-    refreshListKey = _useState58[0],
-    setRefreshListKey = _useState58[1];
-  var _useState59 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    vistaActual = _useState58[0],
+    setVistaActual = _useState58[1]; // 'list', 'form', 'detail'
+  var _useState59 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState60 = _slicedToArray(_useState59, 2),
-    sucursales = _useState60[0],
-    setSucursales = _useState60[1];
+    transferenciaSeleccionada = _useState60[0],
+    setTransferenciaSeleccionada = _useState60[1];
+  var _useState61 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(0),
+    _useState62 = _slicedToArray(_useState61, 2),
+    refreshListKey = _useState62[0],
+    setRefreshListKey = _useState62[1];
+  var _useState63 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    _useState64 = _slicedToArray(_useState63, 2),
+    sucursales = _useState64[0],
+    setSucursales = _useState64[1];
 
   // Estados movidos desde TransferenciaList
-  var _useState61 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState62 = _slicedToArray(_useState61, 2),
-    transferencias = _useState62[0],
-    setTransferencias = _useState62[1];
-  var _useState63 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
-    _useState64 = _slicedToArray(_useState63, 2),
-    estaCargando = _useState64[0],
-    setEstaCargando = _useState64[1];
-  var _useState65 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+  var _useState65 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState66 = _slicedToArray(_useState65, 2),
-    error = _useState66[0],
-    setError = _useState66[1];
-  var _useState67 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
-      q: '',
-      estatus_string: '',
-      id_origen: '',
-      id_destino: '',
-      limit: 10
-    }),
+    transferencias = _useState66[0],
+    setTransferencias = _useState66[1];
+  var _useState67 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
     _useState68 = _slicedToArray(_useState67, 2),
-    filtros = _useState68[0],
-    setFiltros = _useState68[1];
-  var _useState69 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+    estaCargando = _useState68[0],
+    setEstaCargando = _useState68[1];
+  var _useState69 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    _useState70 = _slicedToArray(_useState69, 2),
+    error = _useState70[0],
+    setError = _useState70[1];
+  var _useState71 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
       q: '',
       estatus_string: '',
       id_origen: '',
       id_destino: '',
       limit: 10
     }),
-    _useState70 = _slicedToArray(_useState69, 2),
-    filtrosActivos = _useState70[0],
-    setFiltrosActivos = _useState70[1];
-  var _useState71 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({}),
     _useState72 = _slicedToArray(_useState71, 2),
-    paginacion = _useState72[0],
-    setPaginacion = _useState72[1];
-  var _useState73 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    filtros = _useState72[0],
+    setFiltros = _useState72[1];
+  var _useState73 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+      q: '',
+      estatus_string: '',
+      id_origen: '',
+      id_destino: '',
+      limit: 10
+    }),
     _useState74 = _slicedToArray(_useState73, 2),
-    mostrarFiltros = _useState74[0],
-    setMostrarFiltros = _useState74[1];
-  // Premontas = órdenes de redistribución 'Aprobada' de central donde ESTA sucursal es el origen.
-  var _useState75 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    filtrosActivos = _useState74[0],
+    setFiltrosActivos = _useState74[1];
+  var _useState75 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({}),
     _useState76 = _slicedToArray(_useState75, 2),
-    premontas = _useState76[0],
-    setPremontas = _useState76[1];
+    paginacion = _useState76[0],
+    setPaginacion = _useState76[1];
+  var _useState77 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    _useState78 = _slicedToArray(_useState77, 2),
+    mostrarFiltros = _useState78[0],
+    setMostrarFiltros = _useState78[1];
+  // Premontas = órdenes de redistribución 'Aprobada' de central donde ESTA sucursal es el origen.
+  var _useState79 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    _useState80 = _slicedToArray(_useState79, 2),
+    premontas = _useState80[0],
+    setPremontas = _useState80[1];
   // Filtro común para las órdenes (premontas / borradores / despachadas).
   // Fecha local de hoy (YYYY-MM-DD), sin desfase de zona horaria.
   var hoyLocal = function hoyLocal() {
@@ -138831,15 +138963,15 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
     return "".concat(dd, "/").concat(m, "/").concat(y);
   };
   // Por defecto el filtro arranca en HOY (evita mostrar órdenes viejas). Limpiar quita las fechas.
-  var _useState77 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+  var _useState81 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
       q: '',
       destino: '',
       desde: hoyLocal(),
       hasta: ''
     }),
-    _useState78 = _slicedToArray(_useState77, 2),
-    filtroOrdenes = _useState78[0],
-    setFiltroOrdenes = _useState78[1];
+    _useState82 = _slicedToArray(_useState81, 2),
+    filtroOrdenes = _useState82[0],
+    setFiltroOrdenes = _useState82[1];
   var setFiltro = function setFiltro(campo, val) {
     return setFiltroOrdenes(function (prev) {
       return _objectSpread(_objectSpread({}, prev), {}, _defineProperty({}, campo, val));
@@ -138854,62 +138986,62 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
     });
   };
   // Tab activo del listado: 'enviadas' | 'redistribuciones' | 'preparacion' | 'despachadas'.
-  var _useState79 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('redistribuciones'),
-    _useState80 = _slicedToArray(_useState79, 2),
-    tabActiva = _useState80[0],
-    setTabActiva = _useState80[1];
-  // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
-  var _useState81 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState82 = _slicedToArray(_useState81, 2),
-    borradores = _useState82[0],
-    setBorradores = _useState82[1];
-  var _useState83 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+  var _useState83 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('redistribuciones'),
     _useState84 = _slicedToArray(_useState83, 2),
-    borradorEnEdicion = _useState84[0],
-    setBorradorEnEdicion = _useState84[1];
-  var _useState85 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    tabActiva = _useState84[0],
+    setTabActiva = _useState84[1];
+  // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
+  var _useState85 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState86 = _slicedToArray(_useState85, 2),
-    procesando = _useState86[0],
-    setProcesando = _useState86[1]; // id ocupado (crear/salida/eliminar)
-  // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
+    borradores = _useState86[0],
+    setBorradores = _useState86[1];
   var _useState87 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState88 = _slicedToArray(_useState87, 2),
-    conflictosPremonta = _useState88[0],
-    setConflictosPremonta = _useState88[1];
-  // Modal de opciones de impresión de la lista de picking: { titulo, subtitulo, filas } | null.
+    borradorEnEdicion = _useState88[0],
+    setBorradorEnEdicion = _useState88[1];
   var _useState89 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState90 = _slicedToArray(_useState89, 2),
-    printModal = _useState90[0],
-    setPrintModal = _useState90[1];
+    procesando = _useState90[0],
+    setProcesando = _useState90[1]; // id ocupado (crear/salida/eliminar)
+  // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
+  var _useState91 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState92 = _slicedToArray(_useState91, 2),
+    conflictosPremonta = _useState92[0],
+    setConflictosPremonta = _useState92[1];
+  // Modal de opciones de impresión de la lista de picking: { titulo, subtitulo, filas } | null.
+  var _useState93 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState94 = _slicedToArray(_useState93, 2),
+    printModal = _useState94[0],
+    setPrintModal = _useState94[1];
   var abrirPrintModal = function abrirPrintModal(payload) {
     return setPrintModal(payload);
   };
   // Órdenes ya despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
-  var _useState91 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState92 = _slicedToArray(_useState91, 2),
-    despachadas = _useState92[0],
-    setDespachadas = _useState92[1];
-  // Loading al cargar las órdenes (premontas + borradores + despachadas).
-  var _useState93 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
-    _useState94 = _slicedToArray(_useState93, 2),
-    cargandoOrdenes = _useState94[0],
-    setCargandoOrdenes = _useState94[1];
-  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
-  var _useState95 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+  var _useState95 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState96 = _slicedToArray(_useState95, 2),
-    bultosOrden = _useState96[0],
-    setBultosOrden = _useState96[1];
-  var _useState97 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    despachadas = _useState96[0],
+    setDespachadas = _useState96[1];
+  // Loading al cargar las órdenes (premontas + borradores + despachadas).
+  var _useState97 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
     _useState98 = _slicedToArray(_useState97, 2),
-    numBultosInput = _useState98[0],
-    setNumBultosInput = _useState98[1];
+    cargandoOrdenes = _useState98[0],
+    setCargandoOrdenes = _useState98[1];
+  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
   var _useState99 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState100 = _slicedToArray(_useState99, 2),
-    bultosIframeUrl = _useState100[0],
-    setBultosIframeUrl = _useState100[1];
+    bultosOrden = _useState100[0],
+    setBultosOrden = _useState100[1];
+  var _useState101 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    _useState102 = _slicedToArray(_useState101, 2),
+    numBultosInput = _useState102[0],
+    setNumBultosInput = _useState102[1];
+  var _useState103 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState104 = _slicedToArray(_useState103, 2),
+    bultosIframeUrl = _useState104[0],
+    setBultosIframeUrl = _useState104[1];
   var refIframeBultos = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var cargarTransferencias = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
-    var _ref14 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5(filtros) {
+    var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5(filtros) {
       var response;
       return _regeneratorRuntime().wrap(function _callee5$(_context5) {
         while (1) switch (_context5.prev = _context5.next) {
@@ -138934,14 +139066,14 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
       }, _callee5, null, [[0, 7]]);
     }));
     return function (_x5) {
-      return _ref14.apply(this, arguments);
+      return _ref15.apply(this, arguments);
     };
   }(), []);
 
   // useEffect movido desde TransferenciaList
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     var fetchData = /*#__PURE__*/function () {
-      var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee6() {
+      var _ref16 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee6() {
         var _yield$cargarTransfer, nuevasTransferencias, nuevaPaginacion;
         return _regeneratorRuntime().wrap(function _callee6$(_context6) {
           while (1) switch (_context6.prev = _context6.next) {
@@ -138975,14 +139107,14 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
         }, _callee6, null, [[2, 12, 16, 19]]);
       }));
       return function fetchData() {
-        return _ref15.apply(this, arguments);
+        return _ref16.apply(this, arguments);
       };
     }();
     fetchData();
   }, [cargarTransferencias, filtrosActivos, refreshListKey]);
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     var cargarSucursales = /*#__PURE__*/function () {
-      var _ref16 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee7() {
+      var _ref17 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee7() {
         var res;
         return _regeneratorRuntime().wrap(function _callee7$(_context7) {
           while (1) switch (_context7.prev = _context7.next) {
@@ -139006,7 +139138,7 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
         }, _callee7, null, [[0, 7]]);
       }));
       return function cargarSucursales() {
-        return _ref16.apply(this, arguments);
+        return _ref17.apply(this, arguments);
       };
     }();
     cargarSucursales();
@@ -139143,7 +139275,7 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
   // (antes se hacía 1 request por producto → lentísimo con cientos de ítems). Arma las filas de
   // conflicto: existe/no existe, stock local, cantidad solicitada.
   var construirFilasConflicto = /*#__PURE__*/function () {
-    var _ref19 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(prem) {
+    var _ref20 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(prem) {
       var items, _yield$resolverLocale, porId, porBarras, porProveedor;
       return _regeneratorRuntime().wrap(function _callee0$(_context0) {
         while (1) switch (_context0.prev = _context0.next) {
@@ -139180,13 +139312,13 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
       }, _callee0);
     }));
     return function construirFilasConflicto(_x6) {
-      return _ref19.apply(this, arguments);
+      return _ref20.apply(this, arguments);
     };
   }();
 
   // Imprime la lista de picking de una premonta resolviendo la ubicación de almacén (1 petición).
   var imprimirPremonta = /*#__PURE__*/function () {
-    var _ref20 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(prem) {
+    var _ref21 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(prem) {
       var _d$id, items, res, porId, porBarras, porProveedor, filas, conUbic, detalle, d;
       return _regeneratorRuntime().wrap(function _callee1$(_context1) {
         while (1) switch (_context1.prev = _context1.next) {
@@ -139235,14 +139367,14 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
       }, _callee1, null, [[1,, 12, 15]]);
     }));
     return function imprimirPremonta(_x7) {
-      return _ref20.apply(this, arguments);
+      return _ref21.apply(this, arguments);
     };
   }();
 
   // "Crear orden" desde una redistribución: primero abre el paso de resolución de conflictos
   // (ajustar cantidades / excluir inexistentes). La creación real ocurre en confirmarOrdenConflictos.
   var abrirResolucionPremonta = /*#__PURE__*/function () {
-    var _ref21 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(prem) {
+    var _ref22 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(prem) {
       var filas;
       return _regeneratorRuntime().wrap(function _callee10$(_context10) {
         while (1) switch (_context10.prev = _context10.next) {
@@ -139275,14 +139407,14 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
       }, _callee10, null, [[1, 9, 12, 15]]);
     }));
     return function abrirResolucionPremonta(_x8) {
-      return _ref21.apply(this, arguments);
+      return _ref22.apply(this, arguments);
     };
   }();
 
   // Crea la orden en preparación (estado 0, SIN descontar) con los ítems ya resueltos por el
   // usuario, ligada a la redistribución. La redistribución original de central queda intacta.
   var confirmarOrdenConflictos = /*#__PURE__*/function () {
-    var _ref22 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(items) {
+    var _ref23 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(items) {
       var prem, _prem$sucursal_destin5, _res$data4, res, _res$data5;
       return _regeneratorRuntime().wrap(function _callee11$(_context11) {
         while (1) switch (_context11.prev = _context11.next) {
@@ -139348,7 +139480,7 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
       }, _callee11, null, [[7, 22, 25, 28]]);
     }));
     return function confirmarOrdenConflictos(_x9) {
-      return _ref22.apply(this, arguments);
+      return _ref23.apply(this, arguments);
     };
   }();
 
@@ -139367,7 +139499,7 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
 
   // Guarda el borrador (crear/actualizar) sin descontar. Devuelve {estado, msj, orden}.
   var guardarBorrador = /*#__PURE__*/function () {
-    var _ref23 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee12(datos) {
+    var _ref24 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee12(datos) {
       var res;
       return _regeneratorRuntime().wrap(function _callee12$(_context12) {
         while (1) switch (_context12.prev = _context12.next) {
@@ -139387,13 +139519,13 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
       }, _callee12);
     }));
     return function guardarBorrador(_x0) {
-      return _ref23.apply(this, arguments);
+      return _ref24.apply(this, arguments);
     };
   }();
 
   // Dar salida a un borrador: descuenta inventario + crea el espejo en central.
   var darSalida = /*#__PURE__*/function () {
-    var _ref24 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee13(borrador) {
+    var _ref25 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee13(borrador) {
       var nItems, _res$data6, res, _res$data7;
       return _regeneratorRuntime().wrap(function _callee13$(_context13) {
         while (1) switch (_context13.prev = _context13.next) {
@@ -139448,13 +139580,13 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
       }, _callee13, null, [[4, 18, 21, 24]]);
     }));
     return function darSalida(_x1) {
-      return _ref24.apply(this, arguments);
+      return _ref25.apply(this, arguments);
     };
   }();
 
   // Eliminar un borrador (no tocó inventario).
   var eliminarBorrador = /*#__PURE__*/function () {
-    var _ref25 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee14(borrador) {
+    var _ref26 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee14(borrador) {
       var _res$data8, res, _res$data9;
       return _regeneratorRuntime().wrap(function _callee14$(_context14) {
         while (1) switch (_context14.prev = _context14.next) {
@@ -139505,14 +139637,14 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
       }, _callee14, null, [[3, 16, 19, 22]]);
     }));
     return function eliminarBorrador(_x10) {
-      return _ref25.apply(this, arguments);
+      return _ref26.apply(this, arguments);
     };
   }();
 
   // Reenviar a central una despachada cuyo envío no se completó (sin Nº de Guía). Reusa
   // darSalidaSimple: para estado=1 sin central, solo reintenta el envío (NO re-descuenta).
   var reenviarACentral = /*#__PURE__*/function () {
-    var _ref26 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee15(d) {
+    var _ref27 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee15(d) {
       var _res$data0, res, _res$data1;
       return _regeneratorRuntime().wrap(function _callee15$(_context15) {
         while (1) switch (_context15.prev = _context15.next) {
@@ -139558,14 +139690,14 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
       }, _callee15, null, [[1, 15, 18, 21]]);
     }));
     return function reenviarACentral(_x11) {
-      return _ref26.apply(this, arguments);
+      return _ref27.apply(this, arguments);
     };
   }();
 
   // Reversar una orden despachada: reintegra inventario, quita el espejo en central y la vuelve
   // a "en preparación" (estado 0) para corregir y volver a dar salida.
   var reversarSalida = /*#__PURE__*/function () {
-    var _ref27 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee16(d) {
+    var _ref28 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee16(d) {
       var _res$data10, res, _res$data11;
       return _regeneratorRuntime().wrap(function _callee16$(_context16) {
         while (1) switch (_context16.prev = _context16.next) {
@@ -139617,7 +139749,7 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
       }, _callee16, null, [[3, 17, 20, 23]]);
     }));
     return function reversarSalida(_x12) {
-      return _ref27.apply(this, arguments);
+      return _ref28.apply(this, arguments);
     };
   }();
 

@@ -25764,6 +25764,9 @@ body{
   --tw-bg-opacity: 1;
   background-color: rgb(238 242 255 / var(--tw-bg-opacity));
 }
+.bg-indigo-50\/60{
+  background-color: rgb(238 242 255 / 0.6);
+}
 .bg-indigo-500{
   --tw-bg-opacity: 1;
   background-color: rgb(99 102 241 / var(--tw-bg-opacity));
@@ -26313,6 +26316,9 @@ body{
 }
 .pt-2{
   padding-top: 0.5rem;
+}
+.pt-20{
+  padding-top: 5rem;
 }
 .pt-28{
   padding-top: 7rem;
@@ -26972,6 +26978,10 @@ body{
 .ring-green-400{
   --tw-ring-opacity: 1;
   --tw-ring-color: rgb(74 222 128 / var(--tw-ring-opacity));
+}
+.ring-indigo-400{
+  --tw-ring-opacity: 1;
+  --tw-ring-color: rgb(129 140 248 / var(--tw-ring-opacity));
 }
 .ring-orange-200{
   --tw-ring-opacity: 1;
@@ -27683,6 +27693,11 @@ body{
 .hover\:text-green-900:hover{
   --tw-text-opacity: 1;
   color: rgb(20 83 45 / var(--tw-text-opacity));
+}
+
+.hover\:text-indigo-600:hover{
+  --tw-text-opacity: 1;
+  color: rgb(79 70 229 / var(--tw-text-opacity));
 }
 
 .hover\:text-indigo-900:hover{

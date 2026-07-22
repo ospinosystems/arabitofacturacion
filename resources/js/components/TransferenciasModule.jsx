@@ -682,7 +682,36 @@ const ProductSearchInput = ({ onProductSelect, sucursalIdOrigen, placeholder = "
     );
 };
 
+// Imprime un ticket con código de barras del producto, REUTILIZANDO la plantilla del módulo
+// warehouse-inventory (`ticket-producto.blade.php`, JsBarcode + auto-print). Se hace vía un
+// form POST temporal a /warehouse-inventory/imprimir-ticket-producto en pestaña nueva (mismo
+// patrón que el pasillero TCR), que auto-imprime y se cierra.
+function imprimirTicketBarcode({ codigo_barras, codigo_proveedor, descripcion, marca } = {}) {
+    if (!codigo_barras) { alert('Este producto no tiene código de barras.'); return; }
+    const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/warehouse-inventory/imprimir-ticket-producto';
+    form.target = '_blank';
+    const campos = { _token: csrf, codigo_barras: codigo_barras || '', codigo_proveedor: codigo_proveedor || '', descripcion: descripcion || '', marca: marca || '' };
+    Object.keys(campos).forEach(k => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = k;
+        input.value = campos[k];
+        form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+}
+
 const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, index, totalItems, mostrarRevisado = false, onToggleRevisado }) => {
+    // Resalta la fila mientras el input de cantidad tiene foco (para no perder dónde vas).
+    const [focused, setFocused] = useState(false);
+    // Stock disponible del producto en inventario (tope para la cantidad a enviar).
+    const stockDispHandler = item.stock_disponible != null ? parseFloat(item.stock_disponible) : null;
+
     const handleCantidadChange = (e) => {
         const valor = e.target.value;
         // Permitir valores vacíos temporalmente para mejor UX
@@ -693,6 +722,11 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
 
         // Validar que sea un número válido con hasta 2 decimales
         if (/^\d*\.?\d{0,2}$/.test(valor)) {
+            // No permitir superar el stock disponible: se topa al máximo.
+            if (stockDispHandler != null && !isNaN(stockDispHandler) && parseFloat(valor) > stockDispHandler) {
+                onQuantityChange(item.id_producto_insucursal, String(stockDispHandler));
+                return;
+            }
             onQuantityChange(item.id_producto_insucursal, valor);
         }
     };
@@ -726,9 +760,11 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
     const rowCls = mostrarRevisado
         ? (item.revisado ? 'bg-emerald-50' : 'bg-amber-50/50 hover:bg-amber-50')
         : 'hover:bg-gray-50';
+    // Con foco en la cantidad, resalta toda la fila (anillo indigo) para ubicar dónde estás.
+    const focusCls = focused ? 'ring-2 ring-inset ring-indigo-400 bg-indigo-50/60' : '';
 
     return (
-        <tr className={`border-b border-gray-100 ${rowCls}`}>
+        <tr className={`border-b border-gray-100 ${focused ? focusCls : rowCls}`}>
             {mostrarRevisado && (
                 <td className="px-2 py-1 text-center">
                     <button
@@ -759,27 +795,40 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
                     inputMode="decimal"
                     value={item.cantidad}
                     onChange={handleCantidadChange}
-                    onFocus={(e) => e.target.select()}
+                    onFocus={(e) => { setFocused(true); e.target.select(); }}
                     onKeyDown={handleQtyKeyDown}
                     onBlur={(e) => {
+                        setFocused(false);
                         const valor = e.target.value;
-                        if (valor === '' || isNaN(parseFloat(valor)) || parseFloat(valor) <= 0) {
-                            onQuantityChange(item.id_producto_insucursal, '1.00');
-                        } else {
-                            onQuantityChange(item.id_producto_insucursal, parseFloat(valor).toFixed(2));
-                        }
+                        let n = parseFloat(valor);
+                        if (valor === '' || isNaN(n) || n <= 0) n = 1; // vacío/inválido → 1
+                        // No permitir superar el stock disponible: se topa al máximo.
+                        if (stockDispHandler != null && !isNaN(stockDispHandler) && n > stockDispHandler) n = stockDispHandler;
+                        onQuantityChange(item.id_producto_insucursal, n.toFixed(2));
                     }}
                     readOnly={!isEditable}
-                    className={`js-qty-input w-20 p-1 text-sm border rounded text-center ${excedeStock ? 'border-red-400 bg-red-50' : 'border-gray-300'} ${!isEditable ? 'bg-gray-100' : 'focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500'}`}
+                    className={`js-qty-input w-32 p-1.5 text-base font-semibold border rounded text-center ${excedeStock ? 'border-red-400 bg-red-50' : 'border-gray-300'} ${!isEditable ? 'bg-gray-100' : 'focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500'}`}
                     aria-label={`Cantidad para ${item.descripcion_real}`}
                 />
             </td>
-            <td className="px-2 py-1 text-center">
+            <td className="px-2 py-1 text-center whitespace-nowrap">
+                <button
+                    type="button"
+                    onClick={() => imprimirTicketBarcode({
+                        codigo_barras: item.barras_real || item.producto?.codigo_barras,
+                        codigo_proveedor: item.alterno_real || item.producto?.codigo_proveedor,
+                        descripcion: item.descripcion_real || item.producto?.descripcion,
+                    })}
+                    className="text-gray-500 hover:text-indigo-600 p-1"
+                    title="Imprimir ticket con código de barras"
+                >
+                    <i className="fas fa-barcode"></i>
+                </button>
                 {isEditable && (
                     <button
                         type="button"
                         onClick={() => onRemove(item.id_producto_insucursal)}
-                        className="text-red-600 hover:text-red-800 p-1"
+                        className="text-red-600 hover:text-red-800 p-1 ml-1"
                         title="Eliminar"
                     >
                         <i className="fas fa-trash"></i>
@@ -812,6 +861,8 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
     const [dirty, setDirty] = useState(false);
     // Buscador dentro de la orden (filtra la lista por barras / cód. proveedor / descripción).
     const [filtroProducto, setFiltroProducto] = useState('');
+    // Modal para agregar un producto nuevo (separado del filtro de la lista, para no confundirlos).
+    const [mostrarAgregarModal, setMostrarAgregarModal] = useState(false);
     const handleCancelClick = () => {
         if (dirty && !window.confirm('¿Descartar los cambios? La orden volverá a como estaba (no se guardó nada).')) return;
         onCancel();
@@ -967,18 +1018,23 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
         }
 
         let validSubmission = true;
+        const excedidos = [];
         itemsTransferencia.forEach(item => {
             const cant = parseFloat(item.cantidad);
-            const stockOrig = parseFloat(item.cantidad_original_stock_inventario);
             if (isNaN(cant) || cant <= 0) {
                 setError(`Cantidad inválida para ${item.descripcion_real}.`);
                 validSubmission = false;
             }
-           /*  if (cant > stockOrig) {
-                setError(`Cantidad para ${item.descripcion_real} (${cant}) excede el stock original del inventario (${stockOrig}).`);
+            // No se guarda si la cantidad supera el stock disponible del inventario.
+            const stockDisp = item.stock_disponible != null ? parseFloat(item.stock_disponible) : null;
+            if (stockDisp != null && !isNaN(stockDisp) && !isNaN(cant) && cant > stockDisp) {
+                excedidos.push(`${item.descripcion_real} (${cant} > ${stockDisp})`);
                 validSubmission = false;
-            } */
+            }
         });
+        if (excedidos.length) {
+            setError(`No se puede guardar: hay cantidades mayores al stock disponible → ${excedidos.join('; ')}. Corregí esas cantidades.`);
+        }
         if (!validSubmission) return;
 
         const datosTransferencia = {
@@ -1071,6 +1127,12 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
             (it.descripcion_real || '').toLowerCase().includes(qFiltro))
         : itemsTransferencia;
     const todosRevisados = itemsTransferencia.length > 0 && itemsTransferencia.every(i => i.revisado);
+    // Hay al menos un ítem con cantidad mayor al stock disponible → no se puede guardar.
+    const hayExcedidosStock = itemsTransferencia.some(i => {
+        const s = i.stock_disponible != null ? parseFloat(i.stock_disponible) : null;
+        const c = parseFloat(i.cantidad);
+        return s != null && !isNaN(s) && !isNaN(c) && c > s;
+    });
 
     return (
         <form onSubmit={handleSubmit} className="space-y-3 p-1 md:p-3 rounded-lg">
@@ -1132,28 +1194,21 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
             </div>
             {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 px-3 py-2 text-sm"><p>{error}</p></div>}
             {mensajeExito && <div className="bg-green-100 border-l-4 border-green-500 text-green-700 px-3 py-2 text-sm"><p>{mensajeExito}</p></div>}
-            {esBorrador && (
-                <div className="bg-blue-50 border-l-4 border-blue-500 text-blue-800 px-3 py-2 text-sm flex items-start gap-2">
-                    <i className="fas fa-info-circle mt-0.5"></i>
-                    <span>
-                        Estás <b>preparando</b> la orden{transferenciaToEdit?.id_orden_distribucion ? <> de la redistribución <b>#{transferenciaToEdit.id_orden_distribucion}</b></> : ''}.
-                        Ajustá las cantidades a lo que vayas consiguiendo y quitá lo que no. Guardar <b>no descuenta inventario</b>;
-                        el inventario sale recién cuando le das <b>“Dar salida”</b> desde el listado.
-                    </span>
-                </div>
-            )}
-
-            
 
             {/* Contenedor con posición relativa para el área de búsqueda y lista */}
             <div className="relative">
-                {/* Área de búsqueda fija */}
-                <div className="sticky top-0 z-10 bg-white pb-2 border-b border-gray-200">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                        <i className="fas fa-plus-circle text-indigo-500 mr-1"></i>
-                        {esBorrador ? 'Agregar producto (fuera de la redistribución original)' : 'Buscar y Agregar Productos:'}
-                    </label>
-                    <ProductSearchInput onProductSelect={handleAddProduct} sucursalIdOrigen={idSucursalOrigen} />
+                {/* Agregar producto: botón que abre un modal (separado del filtro de la lista). */}
+                <div className="pb-2 border-b border-gray-200">
+                    <button
+                        type="button"
+                        onClick={() => setMostrarAgregarModal(true)}
+                        className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm"
+                        title={esBorrador ? 'Agregar un producto fuera de la redistribución original' : 'Buscar y agregar productos'}
+                    >
+                        <i className="fas fa-plus-circle"></i>
+                        {esBorrador ? 'Agregar producto' : 'Buscar y agregar productos'}
+                    </button>
+                    {esBorrador && <span className="ml-2 text-xs text-gray-400">(fuera de la redistribución original)</span>}
                 </div>
 
                 {/* Lista de productos en tabla */}
@@ -1272,12 +1327,43 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                 </div>
             )}
 
+            {hayExcedidosStock && (
+                <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-3 py-2 text-sm flex items-start gap-2">
+                    <i className="fas fa-triangle-exclamation mt-0.5"></i>
+                    <span>Hay cantidades <b>mayores al stock disponible</b> (en rojo). Corregilas para poder guardar.</span>
+                </div>
+            )}
             <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 pt-2 border-t border-gray-200">
                 <button type="button" onClick={handleCancelClick} disabled={estaCargando} className="w-full sm:w-auto px-4 py-2 border rounded-md shadow-sm text-sm bg-white hover:bg-gray-50 transition">Cancelar</button>
-                <button type="submit" disabled={estaCargando || itemsTransferencia.length === 0} className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border-transparent rounded-md shadow-sm text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition">
+                <button type="submit" disabled={estaCargando || itemsTransferencia.length === 0 || hayExcedidosStock} className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border-transparent rounded-md shadow-sm text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition" title={hayExcedidosStock ? 'Corregí las cantidades que exceden el stock disponible' : ''}>
                     {estaCargando ? 'Guardando...' : (esBorrador ? (transferenciaToEdit?.id ? 'Guardar cambios' : 'Guardar borrador') : (esEdicion ? 'Actualizar Transferencia' : 'Crear Transferencia'))}
                 </button>
             </div>
+
+            {/* Modal: agregar producto (buscador separado del filtro de la lista). */}
+            {mostrarAgregarModal && (
+                <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20" onMouseDown={() => setMostrarAgregarModal(false)}>
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl" onMouseDown={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                            <h3 className="text-sm font-bold text-gray-800">
+                                <i className="fas fa-plus-circle text-indigo-500 mr-1"></i>Agregar producto
+                            </h3>
+                            <button type="button" onClick={() => setMostrarAgregarModal(false)} className="text-gray-400 hover:text-gray-600" title="Cerrar">
+                                <i className="fas fa-times text-lg"></i>
+                            </button>
+                        </div>
+                        <div className="p-4">
+                            <p className="text-xs text-gray-500 mb-2">Buscá por código de barras, código de proveedor o descripción y seleccioná para agregarlo a la orden.</p>
+                            <ProductSearchInput onProductSelect={handleAddProduct} sucursalIdOrigen={idSucursalOrigen} />
+                        </div>
+                        <div className="flex justify-end px-4 py-3 border-t border-gray-200">
+                            <button type="button" onClick={() => setMostrarAgregarModal(false)} className="px-4 py-2 text-sm font-semibold text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50">
+                                Listo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </form>
     );
 };
