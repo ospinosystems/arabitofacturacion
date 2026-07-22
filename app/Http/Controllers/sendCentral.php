@@ -2119,6 +2119,28 @@ class sendCentral extends Controller
     }
 
     /**
+     * Pide a central que revierta una OrdenDistribucion 'En Tránsito' de vuelta a 'Aprobada'
+     * (para que reaparezca como premontada). Red de seguridad al eliminar un borrador atado a una OD.
+     * Best-effort: si falla, no rompe el borrado local.
+     */
+    public function revertirOrdenDistribucionEnTransito(int $idOrdenDistribucion)
+    {
+        try {
+            $response = $this->requestToCentral('post', "/revertirOrdenDistribucionEnTransito", [
+                "codigo_origen" => $this->getOrigen(),
+                "id_orden_distribucion" => $idOrdenDistribucion,
+            ]);
+            if ($response->ok()) {
+                $res = $this->jsonFromCentral($response);
+                return $res !== null ? $res : ["estado" => false];
+            }
+            return ["estado" => false, "msj" => "HTTP " . $response->status() . " de central"];
+        } catch (\Exception $e) {
+            return ["estado" => false, "msj" => "Error: " . $e->getMessage()];
+        }
+    }
+
+    /**
      * SANEAR EXPORT 2026-06-09 — borra en central espejos de exportación por id local
      * explícito (ids_pedido_local), sin requerir que el pedido siga existiendo en esta
      * sucursal (caso huérfano: payload "pedidos" llega vacío). NO toca estado local;

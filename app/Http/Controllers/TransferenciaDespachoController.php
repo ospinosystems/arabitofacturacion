@@ -220,7 +220,18 @@ class TransferenciaDespachoController extends Controller
         if ((int) $orden->estado !== 0) {
             return Response::json(['estado' => false, 'msj' => 'Solo se puede eliminar una orden en preparación.']);
         }
+        // Si el borrador venía de una redistribución (OD), avisar a central que la revierta a
+        // 'Aprobada' por si quedó 'En Tránsito' colgada → así reaparece como premontada disponible.
+        // Best-effort: no bloquea el borrado local si central no responde.
+        $idOD = $orden->id_orden_distribucion;
         $orden->delete(); // cascade: items, asignaciones, bultos, bulto_items
+        if ($idOD) {
+            try {
+                (new sendCentral())->revertirOrdenDistribucionEnTransito((int) $idOD);
+            } catch (\Throwable $e) {
+                \Log::warning('[eliminarOrden] no se pudo revertir OD #' . $idOD . ' en central: ' . $e->getMessage());
+            }
+        }
         return Response::json(['estado' => true, 'msj' => 'Orden eliminada.']);
     }
 
