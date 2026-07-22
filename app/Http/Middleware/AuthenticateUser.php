@@ -44,6 +44,7 @@ class AuthenticateUser
         'transferencia-despacho/{accion}',
         'transferencia-despacho/dar-salida-simple',
         'transferencia-despacho/reversar-salida',
+        'transferencia-despacho/verificar-espejos',
         // Salud de Inventario (analítica) — visible para DICI y gerente.
         'inventario-analytics/{accion}',
         
