@@ -174,8 +174,13 @@ class TransferenciaDespachoController extends Controller
         if (!$orden) {
             return [];
         }
-        // Ubicación de almacén por producto (una consulta para toda la orden).
-        $ubic = \App\Models\WarehouseInventory::ubicacionesPorProductos($orden->items->pluck('id_producto')->all());
+        // Ubicación de almacén por producto (una consulta). BLINDADO: si warehouse falla, no rompe.
+        $ubic = [];
+        try {
+            $ubic = \App\Models\WarehouseInventory::ubicacionesPorProductos($orden->items->pluck('id_producto')->all());
+        } catch (\Throwable $e) {
+            \Log::warning('ordenConDetalle: ubicaciones warehouse no disponibles: ' . $e->getMessage());
+        }
         $items = $orden->items->map(function ($it) use ($ubic) {
             return [
                 'id' => $it->id,
@@ -184,6 +189,8 @@ class TransferenciaDespachoController extends Controller
                 'codigo_barras' => $it->producto->codigo_barras ?? null,
                 'codigo_proveedor' => $it->producto->codigo_proveedor ?? null,
                 'ubicacion' => $ubic[$it->id_producto] ?? null,
+                'precio' => (float) ($it->producto->precio ?? 0),
+                'base' => (float) ($it->producto->precio_base ?? 0),
                 'cantidad' => (float) $it->cantidad,
                 'revisado' => (bool) $it->revisado,
                 'recolectado' => $this->recolectadoPorItem($it->id),
@@ -198,6 +205,7 @@ class TransferenciaDespachoController extends Controller
             'id_orden_distribucion' => $orden->id_orden_distribucion,
             'observacion' => $orden->observacion,
             'created_at' => (string) $orden->created_at,
+            'updated_at' => (string) $orden->updated_at,
             'items' => $items,
             'asignaciones' => $orden->asignaciones->map(fn ($a) => [
                 'id' => $a->id,
@@ -813,6 +821,44 @@ class TransferenciaDespachoController extends Controller
         } catch (\Throwable $e) {
             return Response::json(['estado' => false, 'msj' => 'La mercancía ya salió localmente; falló el envío a central (reintentá "Dar salida"): ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * Etiquetas de BULTOS de una orden de transferencia ya despachada, con el MISMO formato/vista
+     * que las ventas (`reportes.bultos`). El destino (código de sucursal) lo manda el front porque
+     * es una sucursal de central; el origen es esta sucursal.
+     * Input (GET, se carga en iframe): id, bultos, destino?
+     */
+    public function printBultosTransferencia(Request $req)
+    {
+        $orden = transferencias_inventario::find($req->id);
+        if (!$orden) {
+            abort(404, 'Orden no encontrada.');
+        }
+        $n = max(1, (int) $req->bultos);
+        $porbulto = [];
+        for ($i = 1; $i <= $n; $i++) {
+            $porbulto[$i] = $i;
+        }
+
+        $destino = trim((string) $req->destino);
+        $sucursal = $destino !== '' ? strtoupper($destino) : ('SUC ' . $orden->id_destino);
+
+        try {
+            $origen = (new sendCentral())->getOrigen();
+        } catch (\Throwable $e) {
+            $origen = 'N/A';
+        }
+
+        return view('reportes.bultos', [
+            'bultos' => $porbulto,
+            'id' => $orden->id,
+            'id_pedido_etiqueta' => (int) ($orden->id_transferencia_central ?: $orden->id),
+            'total' => count($porbulto),
+            'fecha' => $orden->updated_at ?? $orden->created_at ?? now(),
+            'origen' => $origen,
+            'sucursal' => $sucursal,
+        ]);
     }
 
     /** Reporte de mercancía excluida = solicitado − empacado (lo no encontrado/recolectado). */

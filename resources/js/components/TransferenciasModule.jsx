@@ -4,10 +4,17 @@ import es from 'date-fns/locale/es';
 import db from '../database/database';
 
 // Imprime una lista de picking en HOJA CARTA (para buscar físicamente los productos en almacén).
-// filas: [{ barras, codigo_proveedor, descripcion, cantidad }]
-const imprimirListaPicking = ({ titulo, subtitulo, filas }) => {
+// Acepta `grupos` = [{titulo, filas}] para dividir en varias sublistas (una por sección, con salto
+// de página), o `filas` sueltas (una sola lista). filas: [{ barras, codigo_proveedor, descripcion, ubicacion, cantidad }]
+const imprimirListaPicking = ({ titulo, subtitulo, filas, grupos }) => {
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-    const rows = (filas || []).map((f, i) => `
+    const secciones = (grupos && grupos.length) ? grupos : [{ titulo: null, filas: filas || [] }];
+    const thead = `<thead><tr>
+        <th>#</th><th>Cód. Barras</th><th>Cód. Prov.</th><th>Descripción</th>
+        <th>Cant.</th><th>Ubicación</th><th>✔</th>
+      </tr></thead>`;
+    const bloques = secciones.map((g, gi) => {
+        const rows = (g.filas || []).map((f, i) => `
         <tr>
           <td class="c">${i + 1}</td>
           <td class="mono">${esc(f.barras || '—')}</td>
@@ -17,35 +24,102 @@ const imprimirListaPicking = ({ titulo, subtitulo, filas }) => {
           <td class="ub mono">${esc(f.ubicacion || '')}</td>
           <td class="chk"><span class="box"></span></td>
         </tr>`).join('');
-    const totalUni = (filas || []).reduce((a, f) => a + (parseFloat(f.cantidad) || 0), 0);
+        const uni = (g.filas || []).reduce((a, f) => a + (parseFloat(f.cantidad) || 0), 0);
+        return `<section class="${gi > 0 ? 'brk' : ''}">
+            ${g.titulo ? `<h2>${esc(g.titulo)}</h2>` : ''}
+            <table>${thead}<tbody>${rows}</tbody></table>
+            <div class="pie">Líneas: ${(g.filas || []).length} · Unidades: ${uni}${g.titulo ? '' : ''}</div>
+          </section>`;
+    }).join('');
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(titulo)}</title>
       <style>
         @page { size: letter portrait; margin: 12mm; }
         * { font-family: Arial, sans-serif; }
         body { color:#111; font-size:12px; }
         h1 { font-size:16px; margin:0 0 2px; }
+        h2 { font-size:13px; margin:0 0 6px; padding:4px 8px; background:#eef2ff; border-left:4px solid #1e3a8a; }
         .sub { color:#555; margin-bottom:10px; font-size:11px; }
+        section.brk { page-break-before: always; }
         table { width:100%; border-collapse:collapse; }
         th,td { border:1px solid #cbd5e1; padding:5px 6px; text-align:left; font-size:11px; vertical-align:top; }
         th { background:#1e3a8a; color:#fff; }
         td.c { text-align:center; } td.b { font-weight:bold; } .mono { font-family:monospace; }
         td.ub { width:90px; } td.chk { width:30px; text-align:center; }
         .box { display:inline-block; width:15px; height:15px; border:2px solid #334155; }
-        .pie { margin-top:14px; font-size:10px; color:#444; }
+        .pie { margin:8px 0 14px; font-size:10px; color:#444; }
       </style></head><body>
       <h1>${esc(titulo)}</h1>
       <div class="sub">${esc(subtitulo || '')}</div>
-      <table><thead><tr>
-        <th>#</th><th>Cód. Barras</th><th>Cód. Prov.</th><th>Descripción</th>
-        <th>Cant.</th><th>Ubicación</th><th>✔</th>
-      </tr></thead><tbody>${rows}</tbody></table>
-      <div class="pie">Total líneas: ${(filas || []).length} · Total unidades: ${totalUni}</div>
+      ${bloques}
       <script>window.onload=function(){setTimeout(function(){window.print();},300);}</script>
       </body></html>`;
     const w = window.open('', '_blank');
     if (!w) { alert('Habilitá las ventanas emergentes para poder imprimir la lista.'); return; }
     w.document.write(html);
     w.document.close();
+};
+
+// Ordena filas por un campo y dirección.
+const ordenarFilas = (filas, campo, dir) => {
+    const arr = [...(filas || [])];
+    if (campo === 'original') return arr;
+    const key = { descripcion: 'descripcion', barras: 'barras', proveedor: 'codigo_proveedor', ubicacion: 'ubicacion' }[campo] || 'descripcion';
+    arr.sort((a, b) => {
+        const va = String(a[key] || '').toLowerCase();
+        const vb = String(b[key] || '').toLowerCase();
+        return dir === 'desc' ? vb.localeCompare(va) : va.localeCompare(vb);
+    });
+    return arr;
+};
+
+// Divide filas en sublistas: 'ninguno' (una), 'partes' (N grupos ~iguales), 'porLista' (chunks de N).
+const dividirFilas = (filas, modo, valor) => {
+    const arr = filas || [];
+    if (modo === 'partes' && valor >= 2) {
+        const n = Math.min(valor, arr.length || 1);
+        const base = Math.ceil(arr.length / n);
+        const grupos = [];
+        for (let i = 0; i < arr.length; i += base) grupos.push(arr.slice(i, i + base));
+        return grupos.length ? grupos : [arr];
+    }
+    if (modo === 'porLista' && valor >= 1) {
+        const grupos = [];
+        for (let i = 0; i < arr.length; i += valor) grupos.push(arr.slice(i, i + valor));
+        return grupos.length ? grupos : [arr];
+    }
+    return [arr];
+};
+
+// Resuelve los productos LOCALES de una premonta en UNA sola petición. El match confiable es por
+// ID (producto_id_master = el `id` que reusa el inventario local); si no hay id, cae a código
+// (barras/proveedor, tolerante a espacios). Devuelve índices porId/porBarras/porProveedor.
+const resolverLocalesDePremonta = async (items) => {
+    const codigos = [], ids = [];
+    (items || []).forEach(it => {
+        const s = it.producto || {};
+        if (s.codigo_barras) codigos.push(String(s.codigo_barras).trim());
+        if (s.codigo_proveedor) codigos.push(String(s.codigo_proveedor).trim());
+        if (it.producto_id_master) ids.push(it.producto_id_master);
+    });
+    const porId = {}, porBarras = {}, porProveedor = {};
+    try {
+        const r = await db.resolverInventarioPorCodigos({ ids, codigos });
+        (r.data?.productos || []).forEach(p => {
+            porId[String(p.id)] = p;
+            if (p.codigo_barras) porBarras[String(p.codigo_barras).trim()] = p;
+            if (p.codigo_proveedor) porProveedor[String(p.codigo_proveedor).trim()] = p;
+        });
+    } catch (e) { console.error('resolverLocalesDePremonta:', e); }
+    return { porId, porBarras, porProveedor };
+};
+
+// Busca el producto local para un ítem de premonta: primero por id, luego por código.
+const matchLocal = (it, snap, porId, porBarras, porProveedor) => {
+    const s = snap || it.producto || {};
+    return (it.producto_id_master && porId[String(it.producto_id_master)])
+        || (s.codigo_barras && porBarras[String(s.codigo_barras).trim()])
+        || (s.codigo_proveedor && porProveedor[String(s.codigo_proveedor).trim()])
+        || null;
 };
 
 // ###################################################################################
@@ -602,7 +676,7 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
     );
 };
 
-const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaToEdit = null, sucursales, cargarTransferencias, modoBorrador = false, onGuardarBorrador }) => {
+const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaToEdit = null, sucursales, cargarTransferencias, modoBorrador = false, onGuardarBorrador, onImprimir }) => {
     // Una premonta (orden de redistribución traída de central) se arma como transferencia NUEVA,
     // no como edición de una transferencia local existente.
     const esPremonta = !!transferenciaToEdit?.es_premontada;
@@ -956,7 +1030,7 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                             </h3>
                             <button
                                 type="button"
-                                onClick={() => imprimirListaPicking({
+                                onClick={() => onImprimir && onImprimir({
                                     titulo: 'Lista de picking' + (transferenciaToEdit?.id ? ' · Orden #' + transferenciaToEdit.id : ''),
                                     subtitulo: (transferenciaToEdit?.id_orden_distribucion ? 'Redistribución #' + transferenciaToEdit.id_orden_distribucion + ' · ' : '') + 'Destino ' + (codigoDestino || '—') + ' · ' + itemsTransferencia.length + ' producto(s)',
                                     filas: itemsTransferencia.map(i => ({ barras: i.barras_real, codigo_proveedor: i.alterno_real, descripcion: i.descripcion_real, ubicacion: i.ubicacion, cantidad: i.cantidad })),
@@ -1475,7 +1549,7 @@ const TransferenciaList = ({
 //   • no existe localmente → se excluye (no se puede enviar lo que no tenés en sistema)
 //   • existe pero la cantidad no alcanza → se avisa y el usuario ajusta la cantidad
 // El usuario ajusta/excluye y recién ahí se crea la orden en preparación (sin descontar).
-const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, onCancelar, procesando }) => {
+const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, onCancelar, onImprimir, procesando }) => {
     const [rows, setRows] = useState([]);
     useEffect(() => {
         setRows((filas || []).map(f => ({
@@ -1516,7 +1590,7 @@ const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, on
                 <div className="flex items-center gap-2 text-xs">
                     <button
                         type="button"
-                        onClick={() => imprimirListaPicking({
+                        onClick={() => onImprimir({
                             titulo: 'Lista de picking · Redistribución #' + (prem?.id_orden_distribucion ?? ''),
                             subtitulo: 'Búsqueda física en almacén — ' + (rows.length) + ' producto(s)',
                             filas: rows.map(r => ({ barras: r.barras, codigo_proveedor: r.codigo_proveedor, descripcion: r.descripcion, ubicacion: r.ubicacion, cantidad: parseFloat(r.cantidadSolicitada || 0).toFixed(0) })),
@@ -1646,6 +1720,89 @@ const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, on
     );
 };
 
+// Modal de opciones para imprimir la lista de picking: ordenar y dividir en varias sublistas.
+const PrintPickingModal = ({ payload, onClose }) => {
+    const [campo, setCampo] = useState('descripcion');
+    const [dir, setDir] = useState('asc');
+    const [modo, setModo] = useState('ninguno'); // 'ninguno' | 'partes' | 'porLista'
+    const [nPartes, setNPartes] = useState(2);
+    const [porLista, setPorLista] = useState(50);
+
+    if (!payload) return null;
+    const total = (payload.filas || []).length;
+    const valor = modo === 'partes' ? parseInt(nPartes) || 2 : (modo === 'porLista' ? parseInt(porLista) || 1 : 0);
+    const previewGrupos = dividirFilas(payload.filas, modo, valor);
+    const nListas = previewGrupos.length;
+
+    const imprimir = () => {
+        const ordenadas = ordenarFilas(payload.filas, campo, dir);
+        const partes = dividirFilas(ordenadas, modo, valor);
+        const grupos = partes.map((filas, i) => ({
+            titulo: partes.length > 1 ? `Lista ${i + 1} de ${partes.length} · ${filas.length} producto(s)` : null,
+            filas,
+        }));
+        imprimirListaPicking({ titulo: payload.titulo, subtitulo: payload.subtitulo, grupos });
+        onClose();
+    };
+
+    return (
+        <div className="fixed inset-0 bg-gray-900/50 z-[60] flex items-start justify-center p-4 overflow-y-auto">
+            <div className="relative mt-16 w-full max-w-md bg-white rounded-lg shadow-xl p-4">
+                <h3 className="text-base font-bold text-gray-800 mb-1"><i className="fas fa-print mr-1 text-indigo-600"></i>Imprimir lista de picking</h3>
+                <p className="text-xs text-gray-500 mb-3">{total} producto(s){payload.subtitulo ? ' · ' + payload.subtitulo : ''}</p>
+
+                {/* Orden */}
+                <div className="mb-3">
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Ordenar por</label>
+                    <div className="flex gap-2">
+                        <select value={campo} onChange={e => setCampo(e.target.value)} className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded">
+                            <option value="descripcion">Descripción (A→Z)</option>
+                            <option value="barras">Cód. Barras</option>
+                            <option value="proveedor">Cód. Proveedor</option>
+                            <option value="ubicacion">Ubicación</option>
+                            <option value="original">Sin ordenar (como viene)</option>
+                        </select>
+                        <select value={dir} onChange={e => setDir(e.target.value)} disabled={campo === 'original'} className="w-28 px-2 py-1.5 text-sm border border-gray-300 rounded disabled:bg-gray-100">
+                            <option value="asc">Ascendente</option>
+                            <option value="desc">Descendente</option>
+                        </select>
+                    </div>
+                </div>
+
+                {/* División */}
+                <div className="mb-3">
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Dividir la lista</label>
+                    <div className="space-y-1.5">
+                        <label className="flex items-center gap-2 text-sm">
+                            <input type="radio" name="modo" checked={modo === 'ninguno'} onChange={() => setModo('ninguno')} />
+                            Una sola lista
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                            <input type="radio" name="modo" checked={modo === 'partes'} onChange={() => setModo('partes')} />
+                            Dividir en
+                            <input type="number" min="2" max="10" value={nPartes} onChange={e => setNPartes(e.target.value)} onFocus={() => setModo('partes')} className="w-16 px-2 py-1 text-sm border border-gray-300 rounded text-center" />
+                            listas iguales
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                            <input type="radio" name="modo" checked={modo === 'porLista'} onChange={() => setModo('porLista')} />
+                            <input type="number" min="1" value={porLista} onChange={e => setPorLista(e.target.value)} onFocus={() => setModo('porLista')} className="w-16 px-2 py-1 text-sm border border-gray-300 rounded text-center" />
+                            productos por lista
+                        </label>
+                    </div>
+                    {modo !== 'ninguno' && (
+                        <p className="text-xs text-indigo-600 mt-1.5"><i className="fas fa-layer-group mr-1"></i>Se generarán <b>{nListas}</b> lista(s), cada una en su hoja.</p>
+                    )}
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
+                    <button onClick={onClose} className="px-4 py-2 border rounded-md text-sm bg-white hover:bg-gray-50">Cancelar</button>
+                    <button onClick={imprimir} className="px-4 py-2 rounded-md text-sm text-white bg-indigo-600 hover:bg-indigo-700"><i className="fas fa-print mr-1"></i>Imprimir</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const TransferenciasModule = ({ sucursalActualId }) => {
     const [vistaActual, setVistaActual] = useState('list'); // 'list', 'form', 'detail'
     const [transferenciaSeleccionada, setTransferenciaSeleccionada] = useState(null);
@@ -1669,6 +1826,16 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const [procesando, setProcesando] = useState(null); // id ocupado (crear/salida/eliminar)
     // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
     const [conflictosPremonta, setConflictosPremonta] = useState(null);
+    // Modal de opciones de impresión de la lista de picking: { titulo, subtitulo, filas } | null.
+    const [printModal, setPrintModal] = useState(null);
+    const abrirPrintModal = (payload) => setPrintModal(payload);
+    // Órdenes ya despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
+    const [despachadas, setDespachadas] = useState([]);
+    // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
+    const [bultosOrden, setBultosOrden] = useState(null);
+    const [numBultosInput, setNumBultosInput] = useState('');
+    const [bultosIframeUrl, setBultosIframeUrl] = useState(null);
+    const refIframeBultos = useRef(null);
 
     const cargarTransferencias = useCallback(async (filtros) => {
         try {
@@ -1720,43 +1887,35 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         } catch (e) { setBorradores([]); }
     }, []);
 
+    // Cargar despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
+    const cargarDespachadas = useCallback(async () => {
+        try {
+            const res = await db.tdGetOrdenes({ estado: 1, limit: 20 });
+            setDespachadas(res.data?.ordenes || []);
+        } catch (e) { setDespachadas([]); }
+    }, []);
+
     // Cargar premontas (redistribuciones aprobadas para esta sucursal origen) + borradores.
     useEffect(() => {
         db.getPremontadas({ limit: 50 })
             .then(res => setPremontas(res.data?.premontadas || []))
             .catch(() => setPremontas([]));
         cargarBorradores();
-    }, [refreshListKey, cargarBorradores]);
+        cargarDespachadas();
+    }, [refreshListKey, cargarBorradores, cargarDespachadas]);
 
     // Coteja los productos de la redistribución contra el inventario local en UNA sola petición
     // (antes se hacía 1 request por producto → lentísimo con cientos de ítems). Arma las filas de
     // conflicto: existe/no existe, stock local, cantidad solicitada.
     const construirFilasConflicto = async (prem) => {
         const items = prem.items || [];
-        // Junta todos los códigos (barras y proveedor) para resolverlos de un tiro.
-        const codigos = [];
-        items.forEach(it => {
-            const s = it.producto || {};
-            if (s.codigo_barras) codigos.push(String(s.codigo_barras));
-            if (s.codigo_proveedor) codigos.push(String(s.codigo_proveedor));
-        });
-
-        // Índice local por barras y por proveedor (una consulta).
-        const porBarras = {};
-        const porProveedor = {};
-        try {
-            const r = await db.resolverInventarioPorCodigos({ codigos });
-            (r.data?.productos || []).forEach(p => {
-                if (p.codigo_barras) porBarras[String(p.codigo_barras)] = p;
-                if (p.codigo_proveedor) porProveedor[String(p.codigo_proveedor)] = p;
-            });
-        } catch (e) { /* si falla, todo queda como "no existe" y el usuario lo ve */ }
+        const { porId, porBarras, porProveedor } = await resolverLocalesDePremonta(items);
 
         return items.map((it, idx) => {
             const snap = it.producto || {};
             const barras = snap.codigo_barras;
             const prov = snap.codigo_proveedor;
-            const local = (barras && porBarras[String(barras)]) || (prov && porProveedor[String(prov)]) || null;
+            const local = matchLocal(it, snap, porId, porBarras, porProveedor);
             return {
                 key: 'f' + idx + '-' + (barras || prov || it.id || idx),
                 descripcion: snap.descripcion || (local && local.descripcion) || null,
@@ -1776,26 +1935,13 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         setProcesando('print-' + prem.id_orden_distribucion);
         try {
             const items = prem.items || [];
-            const codigos = [];
-            items.forEach(it => {
-                const s = it.producto || {};
-                if (s.codigo_barras) codigos.push(String(s.codigo_barras));
-                if (s.codigo_proveedor) codigos.push(String(s.codigo_proveedor));
-            });
-            const porBarras = {}, porProveedor = {};
-            try {
-                const r = await db.resolverInventarioPorCodigos({ codigos });
-                (r.data?.productos || []).forEach(p => {
-                    if (p.codigo_barras) porBarras[String(p.codigo_barras)] = p;
-                    if (p.codigo_proveedor) porProveedor[String(p.codigo_proveedor)] = p;
-                });
-            } catch (e) { /* sin ubicación si falla */ }
+            const { porId, porBarras, porProveedor } = await resolverLocalesDePremonta(items);
             const filas = items.map(it => {
                 const s = it.producto || {};
-                const local = (s.codigo_barras && porBarras[String(s.codigo_barras)]) || (s.codigo_proveedor && porProveedor[String(s.codigo_proveedor)]) || null;
+                const local = matchLocal(it, s, porId, porBarras, porProveedor);
                 return { barras: s.codigo_barras, codigo_proveedor: s.codigo_proveedor, descripcion: s.descripcion, ubicacion: local ? (local.ubicacion || null) : null, cantidad: it.cantidad };
             });
-            imprimirListaPicking({
+            abrirPrintModal({
                 titulo: 'Lista de picking · Redistribución #' + prem.id_orden_distribucion,
                 subtitulo: 'Búsqueda física en almacén · ' + items.length + ' producto(s)',
                 filas,
@@ -1907,6 +2053,83 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         } finally {
             setProcesando(null);
         }
+    };
+
+    // Imprime la GUÍA DE DESPACHO de una orden despachada, con el MISMO formato/letras que la F4
+    // de pagarMain.js (mismo HTML, estilos y textos). Destino = sucursal receptora; Origen = esta.
+    const imprimirGuiaDespacho = (orden) => {
+        const sucByIdLocal = {};
+        (sucursales || []).forEach(s => { sucByIdLocal[s.id] = s; });
+        const id = String(orden.id_transferencia_central || orden.id).padStart(8, '0');
+        const destino = sucByIdLocal[orden.id_destino] || {};
+        const origenSuc = sucByIdLocal[sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER] || {};
+        const clienteRazon = destino.nombre || destino.codigo || ('Sucursal ' + (orden.id_destino ?? '—'));
+        const clienteRif = destino.rif || destino.identificacion || '—';
+        const clienteDir = (destino.direccion && String(destino.direccion).trim()) ? destino.direccion : '—';
+        const origenNombre = origenSuc.nombre || origenSuc.codigo || '—';
+        const items = orden.items || [];
+        const sub = items.reduce((a, it) => a + (parseFloat(it.cantidad) || 0) * (parseFloat(it.precio) || 0), 0);
+        const exento = 0, gravable = sub, iva = 0;
+        const fmtP = (n) => Number(n).toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const ventana = window.open('', '_blank');
+        if (!ventana) { alert('Habilitá las ventanas emergentes para poder imprimir la guía.'); return; }
+        ventana.document.write(`
+            <!DOCTYPE html><html><head><title>Guía de Despacho N° ${id}</title>
+            <style>body{font-family:sans-serif;padding:1rem;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;} .titulo-guia{text-align:left;font-weight:bold;margin-bottom:1rem;}</style>
+            </head><body>
+            <div class="titulo-guia">Guía de Despacho N°: ${id}</div>
+            <div class="header">
+                <div><strong>Cliente</strong></div>
+                <div>Razón Social: ${clienteRazon}</div>
+                <div>RIF: ${clienteRif}</div>
+                <div>Dirección: ${clienteDir}</div>
+                <div style="margin-top:0.5rem;"><strong>Origen:</strong> ${origenNombre}</div>
+
+            </div>
+            <table style="width:100%;"><thead><tr><th>#</th><th>Código</th><th>Cód. proveedor</th><th>Descripción</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Precio</th></tr></thead><tbody>
+            ${items.map((e, i) => {
+                const cod = (e.codigo_barras ?? '—').toString().trim() || '—';
+                const codProv = (e.codigo_proveedor ?? '—').toString().trim() || '—';
+                const desc = (e.descripcion ?? '—').toString();
+                const cant = Number(e.cantidad);
+                const prec = e.precio ?? 0;
+                const precStr = Number(prec).toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+                return `<tr><td>${i + 1}</td><td>${cod}</td><td>${codProv}</td><td>${desc}</td><td style="text-align:right">${cant % 1 === 0 ? cant : cant.toFixed(2)}</td><td style="text-align:right">${precStr}</td></tr>`;
+            }).join('')}
+            </tbody></table>
+            <div class="totales">
+                <table>
+                <tr><td style="padding-right:1rem;">Subtotal</td><td style="text-align:right;">${fmtP(sub)}</td></tr>
+                <tr><td style="padding-right:1rem;">Monto Exento</td><td style="text-align:right;">${fmtP(exento)}</td></tr>
+                <tr><td style="padding-right:1rem;">Monto Gravable</td><td style="text-align:right;">${fmtP(gravable)}</td></tr>
+                <tr><td style="padding-right:1rem;">IVA</td><td style="text-align:right;">${fmtP(iva)}</td></tr>
+                <tr><td style="padding-right:1rem;font-weight:bold;">Monto Total</td><td style="text-align:right;font-weight:bold;">${fmtP(sub)}</td></tr>
+                </table>
+            </div>
+            <div class="firmas">
+                <div><div style="border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;">Firma del Despachador</div></div>
+                <div><div style="border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;">Firma del Receptor</div></div>
+            </div>
+            </body></html>`);
+        ventana.document.close();
+        ventana.focus();
+        setTimeout(() => { ventana.print(); ventana.close(); }, 300);
+    };
+
+    // Abre el modal de impresión de bultos para una orden despachada.
+    const abrirBultosModal = (orden) => {
+        setBultosOrden(orden);
+        setNumBultosInput('');
+        setBultosIframeUrl(null);
+    };
+    const generarVistaBultos = () => {
+        const n = parseInt(numBultosInput, 10);
+        if (!(n >= 1)) { alert('Indique un número de bultos válido (≥ 1).'); return; }
+        const sucByIdLocal = {};
+        (sucursales || []).forEach(s => { sucByIdLocal[s.id] = s; });
+        const destinoCod = (sucByIdLocal[bultosOrden?.id_destino] || {}).codigo || ('SUC ' + (bultosOrden?.id_destino ?? ''));
+        const base = typeof window !== 'undefined' ? window.location.origin : '';
+        setBultosIframeUrl(`${base}/transferencia-despacho/print-bultos?id=${bultosOrden.id}&bultos=${n}&destino=${encodeURIComponent(destinoCod)}`);
     };
 
     const handleSaveTransfer = (transferenciaGuardada) => {
@@ -2091,7 +2314,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                                     </td>
                                                     <td className="px-3 py-2 text-center whitespace-nowrap">
                                                         <button
-                                                            onClick={() => imprimirListaPicking({
+                                                            onClick={() => abrirPrintModal({
                                                                 titulo: 'Lista de picking · Orden #' + b.id,
                                                                 subtitulo: (b.id_orden_distribucion ? 'Redistribución #' + b.id_orden_distribucion + ' · ' : '') + totalItems + ' producto(s)',
                                                                 filas: (b.items || []).map(i => ({ barras: i.codigo_barras, codigo_proveedor: i.codigo_proveedor, descripcion: i.descripcion, ubicacion: i.ubicacion, cantidad: i.cantidad })),
@@ -2119,9 +2342,53 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                             </div>
                         </div>
                     )}
+                    {/* ── Despachadas (estado 1, inventario ya descontado) — imprimir Guía / Bultos ── */}
+                    {despachadas.length > 0 && (
+                        <div className="mb-3 border border-emerald-200 rounded-lg overflow-hidden">
+                            <div className="bg-emerald-50 px-3 py-2">
+                                <h4 className="text-sm font-bold text-emerald-800"><i className="fas fa-truck-fast mr-1"></i>Despachadas — listas para imprimir ({despachadas.length})</h4>
+                                <p className="text-xs text-emerald-600">Inventario ya descontado. Imprimí la Guía de Despacho y las etiquetas de bultos.</p>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-sm divide-y divide-emerald-100">
+                                    <thead className="bg-emerald-50/60 text-xs uppercase tracking-wide text-emerald-700">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left font-semibold">Orden</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Nº Guía</th>
+                                            <th className="px-3 py-2 text-left font-semibold">Destino</th>
+                                            <th className="px-3 py-2 text-center font-semibold">Productos</th>
+                                            <th className="px-3 py-2 text-center font-semibold">Imprimir</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-100">
+                                        {despachadas.map(d => {
+                                            const nItems = (d.items || []).length;
+                                            const guia = String(d.id_transferencia_central || d.id).padStart(8, '0');
+                                            return (
+                                                <tr key={d.id} className="hover:bg-emerald-50/40">
+                                                    <td className="px-3 py-2 font-semibold text-gray-800 whitespace-nowrap">#{d.id}</td>
+                                                    <td className="px-3 py-2 font-mono text-gray-700 whitespace-nowrap">{guia}</td>
+                                                    <td className="px-3 py-2">{badgeDestinoPorId(d.id_destino)}</td>
+                                                    <td className="px-3 py-2 text-center text-gray-600">{nItems}</td>
+                                                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                                                        <button onClick={() => imprimirGuiaDespacho(d)} className="px-2 py-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded" title="Imprimir Guía de Despacho">
+                                                            <i className="fas fa-file-invoice mr-1"></i>Guía de Despacho
+                                                        </button>
+                                                        <button onClick={() => abrirBultosModal(d)} className="ml-1 px-2 py-1 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded" title="Imprimir etiquetas de bultos">
+                                                            <i className="fas fa-box mr-1"></i>Bultos
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                     <TransferenciaList
                         sucursalActualId={idOrigenReal}
-                        onRequireRefresh={refreshListKey} 
+                        onRequireRefresh={refreshListKey}
                         onEdit={handleEditTransfer} 
                         onViewDetails={handleViewDetails}
                         sucursales={sucursales}
@@ -2154,6 +2421,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                         cargarTransferencias={cargarTransferencias}
                         modoBorrador={!!borradorEnEdicion}
                         onGuardarBorrador={guardarBorrador}
+                        onImprimir={abrirPrintModal}
                     />
                 )}
                 {vistaActual === 'conflictos' && conflictosPremonta && (
@@ -2163,6 +2431,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                         destinoBadge={badgeDestinoPorId(conflictosPremonta.prem?.sucursal_destino?.id)}
                         onConfirmar={confirmarOrdenConflictos}
                         onCancelar={handleCancelForm}
+                        onImprimir={abrirPrintModal}
                         procesando={procesando === 'crear-conflictos'}
                     />
                 )}
@@ -2172,6 +2441,79 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                         onBack={handleCancelForm}
                         sucursales={sucursales}
                     />
+                )}
+                <PrintPickingModal payload={printModal} onClose={() => setPrintModal(null)} />
+
+                {/* Modal pantalla completa: Imprimir Bultos (mismo flujo/formato que pagarMain) */}
+                {bultosOrden && (
+                    <div className="fixed inset-0 z-[100] flex flex-col bg-white">
+                        <div className="flex-shrink-0 flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-amber-50 border-b border-amber-200">
+                            <h2 className="text-lg font-bold text-amber-900">
+                                <i className="fa fa-box mr-2"></i>
+                                Imprimir Bultos — Orden #{bultosOrden.id}
+                            </h2>
+                            <div className="flex items-center gap-3 flex-wrap">
+                                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                                    Número de bultos:
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        className="w-20 px-2 py-1.5 border border-gray-300 rounded-md text-center font-mono"
+                                        value={numBultosInput}
+                                        onChange={(e) => setNumBultosInput(e.target.value)}
+                                        placeholder="Ej: 5"
+                                    />
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={generarVistaBultos}
+                                    className="px-4 py-2 text-white bg-amber-600 border border-amber-700 rounded-lg hover:bg-amber-700"
+                                >
+                                    <i className="fa fa-refresh mr-2"></i>
+                                    Generar vista
+                                </button>
+                                {bultosIframeUrl && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            try {
+                                                if (refIframeBultos.current?.contentWindow) {
+                                                    refIframeBultos.current.contentWindow.print();
+                                                }
+                                            } catch (err) {
+                                                alert('Error al imprimir: ' + err.message);
+                                            }
+                                        }}
+                                        className="px-4 py-2 text-white bg-indigo-600 border border-indigo-700 rounded-lg hover:bg-indigo-700"
+                                    >
+                                        <i className="fa fa-print mr-2"></i>
+                                        Imprimir
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => { setBultosOrden(null); setBultosIframeUrl(null); setNumBultosInput(''); }}
+                                    className="px-4 py-2 text-gray-700 bg-gray-200 border border-gray-400 rounded-lg hover:bg-gray-300"
+                                >
+                                    Cerrar
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex-1 min-h-0 flex flex-col bg-gray-100 p-4">
+                            {bultosIframeUrl ? (
+                                <iframe
+                                    ref={refIframeBultos}
+                                    src={bultosIframeUrl}
+                                    title="Bultos"
+                                    className="flex-1 w-full bg-white border border-gray-300 rounded"
+                                />
+                            ) : (
+                                <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+                                    Indicá el número de bultos y tocá <b className="mx-1">Generar vista</b>.
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 )}
             </main>
         </div>

@@ -664,6 +664,7 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::post('transferencia-despacho/despachar-bulto', [TransferenciaDespachoController::class, 'despacharBulto']);
 		Route::post('transferencia-despacho/finalizar-despacho', [TransferenciaDespachoController::class, 'finalizarDespacho']);
 		Route::post('transferencia-despacho/reporte-excluidos', [TransferenciaDespachoController::class, 'reporteExcluidos']);
+		Route::get('transferencia-despacho/print-bultos', [TransferenciaDespachoController::class, 'printBultosTransferencia']);
 		// Impresión (GET, abren pestaña)
 		Route::get('transferencia-despacho/orden-recoleccion', [TransferenciaDespachoController::class, 'imprimirOrdenRecoleccion']);
 		Route::get('transferencia-despacho/etiqueta-bulto', [TransferenciaDespachoController::class, 'etiquetaBulto']);

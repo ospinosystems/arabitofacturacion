@@ -135774,17 +135774,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _database_database__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../database/database */ "./resources/js/database/database.js");
 /* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! react/jsx-runtime */ "./node_modules/react/jsx-runtime.js");
 function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
-function _toConsumableArray(r) { return _arrayWithoutHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableSpread(); }
-function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
-function _iterableToArray(r) { if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"]) return Array.from(r); }
-function _arrayWithoutHoles(r) { if (Array.isArray(r)) return _arrayLikeToArray(r); }
-function _regeneratorRuntime() { "use strict"; /*! regenerator-runtime -- Copyright (c) 2014-present, Facebook, Inc. -- license (MIT): https://github.com/babel/babel/blob/main/packages/babel-helpers/LICENSE */ _regeneratorRuntime = function _regeneratorRuntime() { return r; }; var t, r = {}, e = Object.prototype, n = e.hasOwnProperty, o = "function" == typeof Symbol ? Symbol : {}, i = o.iterator || "@@iterator", a = o.asyncIterator || "@@asyncIterator", u = o.toStringTag || "@@toStringTag"; function c(t, r, e, n) { return Object.defineProperty(t, r, { value: e, enumerable: !n, configurable: !n, writable: !n }); } try { c({}, ""); } catch (t) { c = function c(t, r, e) { return t[r] = e; }; } function h(r, e, n, o) { var i = e && e.prototype instanceof Generator ? e : Generator, a = Object.create(i.prototype); return c(a, "_invoke", function (r, e, n) { var o = 1; return function (i, a) { if (3 === o) throw Error("Generator is already running"); if (4 === o) { if ("throw" === i) throw a; return { value: t, done: !0 }; } for (n.method = i, n.arg = a;;) { var u = n.delegate; if (u) { var c = d(u, n); if (c) { if (c === f) continue; return c; } } if ("next" === n.method) n.sent = n._sent = n.arg;else if ("throw" === n.method) { if (1 === o) throw o = 4, n.arg; n.dispatchException(n.arg); } else "return" === n.method && n.abrupt("return", n.arg); o = 3; var h = s(r, e, n); if ("normal" === h.type) { if (o = n.done ? 4 : 2, h.arg === f) continue; return { value: h.arg, done: n.done }; } "throw" === h.type && (o = 4, n.method = "throw", n.arg = h.arg); } }; }(r, n, new Context(o || [])), !0), a; } function s(t, r, e) { try { return { type: "normal", arg: t.call(r, e) }; } catch (t) { return { type: "throw", arg: t }; } } r.wrap = h; var f = {}; function Generator() {} function GeneratorFunction() {} function GeneratorFunctionPrototype() {} var l = {}; c(l, i, function () { return this; }); var p = Object.getPrototypeOf, y = p && p(p(x([]))); y && y !== e && n.call(y, i) && (l = y); var v = GeneratorFunctionPrototype.prototype = Generator.prototype = Object.create(l); function g(t) { ["next", "throw", "return"].forEach(function (r) { c(t, r, function (t) { return this._invoke(r, t); }); }); } function AsyncIterator(t, r) { function e(o, i, a, u) { var c = s(t[o], t, i); if ("throw" !== c.type) { var h = c.arg, f = h.value; return f && "object" == _typeof(f) && n.call(f, "__await") ? r.resolve(f.__await).then(function (t) { e("next", t, a, u); }, function (t) { e("throw", t, a, u); }) : r.resolve(f).then(function (t) { h.value = t, a(h); }, function (t) { return e("throw", t, a, u); }); } u(c.arg); } var o; c(this, "_invoke", function (t, n) { function i() { return new r(function (r, o) { e(t, n, r, o); }); } return o = o ? o.then(i, i) : i(); }, !0); } function d(r, e) { var n = e.method, o = r.i[n]; if (o === t) return e.delegate = null, "throw" === n && r.i["return"] && (e.method = "return", e.arg = t, d(r, e), "throw" === e.method) || "return" !== n && (e.method = "throw", e.arg = new TypeError("The iterator does not provide a '" + n + "' method")), f; var i = s(o, r.i, e.arg); if ("throw" === i.type) return e.method = "throw", e.arg = i.arg, e.delegate = null, f; var a = i.arg; return a ? a.done ? (e[r.r] = a.value, e.next = r.n, "return" !== e.method && (e.method = "next", e.arg = t), e.delegate = null, f) : a : (e.method = "throw", e.arg = new TypeError("iterator result is not an object"), e.delegate = null, f); } function w(t) { this.tryEntries.push(t); } function m(r) { var e = r[4] || {}; e.type = "normal", e.arg = t, r[4] = e; } function Context(t) { this.tryEntries = [[-1]], t.forEach(w, this), this.reset(!0); } function x(r) { if (null != r) { var e = r[i]; if (e) return e.call(r); if ("function" == typeof r.next) return r; if (!isNaN(r.length)) { var o = -1, a = function e() { for (; ++o < r.length;) if (n.call(r, o)) return e.value = r[o], e.done = !1, e; return e.value = t, e.done = !0, e; }; return a.next = a; } } throw new TypeError(_typeof(r) + " is not iterable"); } return GeneratorFunction.prototype = GeneratorFunctionPrototype, c(v, "constructor", GeneratorFunctionPrototype), c(GeneratorFunctionPrototype, "constructor", GeneratorFunction), GeneratorFunction.displayName = c(GeneratorFunctionPrototype, u, "GeneratorFunction"), r.isGeneratorFunction = function (t) { var r = "function" == typeof t && t.constructor; return !!r && (r === GeneratorFunction || "GeneratorFunction" === (r.displayName || r.name)); }, r.mark = function (t) { return Object.setPrototypeOf ? Object.setPrototypeOf(t, GeneratorFunctionPrototype) : (t.__proto__ = GeneratorFunctionPrototype, c(t, u, "GeneratorFunction")), t.prototype = Object.create(v), t; }, r.awrap = function (t) { return { __await: t }; }, g(AsyncIterator.prototype), c(AsyncIterator.prototype, a, function () { return this; }), r.AsyncIterator = AsyncIterator, r.async = function (t, e, n, o, i) { void 0 === i && (i = Promise); var a = new AsyncIterator(h(t, e, n, o), i); return r.isGeneratorFunction(e) ? a : a.next().then(function (t) { return t.done ? t.value : a.next(); }); }, g(v), c(v, u, "Generator"), c(v, i, function () { return this; }), c(v, "toString", function () { return "[object Generator]"; }), r.keys = function (t) { var r = Object(t), e = []; for (var n in r) e.unshift(n); return function t() { for (; e.length;) if ((n = e.pop()) in r) return t.value = n, t.done = !1, t; return t.done = !0, t; }; }, r.values = x, Context.prototype = { constructor: Context, reset: function reset(r) { if (this.prev = this.next = 0, this.sent = this._sent = t, this.done = !1, this.delegate = null, this.method = "next", this.arg = t, this.tryEntries.forEach(m), !r) for (var e in this) "t" === e.charAt(0) && n.call(this, e) && !isNaN(+e.slice(1)) && (this[e] = t); }, stop: function stop() { this.done = !0; var t = this.tryEntries[0][4]; if ("throw" === t.type) throw t.arg; return this.rval; }, dispatchException: function dispatchException(r) { if (this.done) throw r; var e = this; function n(t) { a.type = "throw", a.arg = r, e.next = t; } for (var o = e.tryEntries.length - 1; o >= 0; --o) { var i = this.tryEntries[o], a = i[4], u = this.prev, c = i[1], h = i[2]; if (-1 === i[0]) return n("end"), !1; if (!c && !h) throw Error("try statement without catch or finally"); if (null != i[0] && i[0] <= u) { if (u < c) return this.method = "next", this.arg = t, n(c), !0; if (u < h) return n(h), !1; } } }, abrupt: function abrupt(t, r) { for (var e = this.tryEntries.length - 1; e >= 0; --e) { var n = this.tryEntries[e]; if (n[0] > -1 && n[0] <= this.prev && this.prev < n[2]) { var o = n; break; } } o && ("break" === t || "continue" === t) && o[0] <= r && r <= o[2] && (o = null); var i = o ? o[4] : {}; return i.type = t, i.arg = r, o ? (this.method = "next", this.next = o[2], f) : this.complete(i); }, complete: function complete(t, r) { if ("throw" === t.type) throw t.arg; return "break" === t.type || "continue" === t.type ? this.next = t.arg : "return" === t.type ? (this.rval = this.arg = t.arg, this.method = "return", this.next = "end") : "normal" === t.type && r && (this.next = r), f; }, finish: function finish(t) { for (var r = this.tryEntries.length - 1; r >= 0; --r) { var e = this.tryEntries[r]; if (e[2] === t) return this.complete(e[4], e[3]), m(e), f; } }, "catch": function _catch(t) { for (var r = this.tryEntries.length - 1; r >= 0; --r) { var e = this.tryEntries[r]; if (e[0] === t) { var n = e[4]; if ("throw" === n.type) { var o = n.arg; m(e); } return o; } } throw Error("illegal catch attempt"); }, delegateYield: function delegateYield(r, e, n) { return this.delegate = { i: x(r), r: e, n: n }, "next" === this.method && (this.arg = t), f; } }, r; }
-function asyncGeneratorStep(n, t, e, r, o, a, c) { try { var i = n[a](c), u = i.value; } catch (n) { return void e(n); } i.done ? t(u) : Promise.resolve(u).then(r, o); }
-function _asyncToGenerator(n) { return function () { var t = this, e = arguments; return new Promise(function (r, o) { var a = n.apply(t, e); function _next(n) { asyncGeneratorStep(a, r, o, _next, _throw, "next", n); } function _throw(n) { asyncGeneratorStep(a, r, o, _next, _throw, "throw", n); } _next(void 0); }); }; }
 function _slicedToArray(r, e) { return _arrayWithHoles(r) || _iterableToArrayLimit(r, e) || _unsupportedIterableToArray(r, e) || _nonIterableRest(); }
 function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
-function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
-function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
 function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
 function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
 function ownKeys(e, r) { var t = Object.keys(e); if (Object.getOwnPropertySymbols) { var o = Object.getOwnPropertySymbols(e); r && (o = o.filter(function (r) { return Object.getOwnPropertyDescriptor(e, r).enumerable; })), t.push.apply(t, o); } return t; }
@@ -135792,18 +135783,29 @@ function _objectSpread(e) { for (var r = 1; r < arguments.length; r++) { var t =
 function _defineProperty(e, r, t) { return (r = _toPropertyKey(r)) in e ? Object.defineProperty(e, r, { value: t, enumerable: !0, configurable: !0, writable: !0 }) : e[r] = t, e; }
 function _toPropertyKey(t) { var i = _toPrimitive(t, "string"); return "symbol" == _typeof(i) ? i : i + ""; }
 function _toPrimitive(t, r) { if ("object" != _typeof(t) || !t) return t; var e = t[Symbol.toPrimitive]; if (void 0 !== e) { var i = e.call(t, r || "default"); if ("object" != _typeof(i)) return i; throw new TypeError("@@toPrimitive must return a primitive value."); } return ("string" === r ? String : Number)(t); }
+function _regeneratorRuntime() { "use strict"; /*! regenerator-runtime -- Copyright (c) 2014-present, Facebook, Inc. -- license (MIT): https://github.com/babel/babel/blob/main/packages/babel-helpers/LICENSE */ _regeneratorRuntime = function _regeneratorRuntime() { return r; }; var t, r = {}, e = Object.prototype, n = e.hasOwnProperty, o = "function" == typeof Symbol ? Symbol : {}, i = o.iterator || "@@iterator", a = o.asyncIterator || "@@asyncIterator", u = o.toStringTag || "@@toStringTag"; function c(t, r, e, n) { return Object.defineProperty(t, r, { value: e, enumerable: !n, configurable: !n, writable: !n }); } try { c({}, ""); } catch (t) { c = function c(t, r, e) { return t[r] = e; }; } function h(r, e, n, o) { var i = e && e.prototype instanceof Generator ? e : Generator, a = Object.create(i.prototype); return c(a, "_invoke", function (r, e, n) { var o = 1; return function (i, a) { if (3 === o) throw Error("Generator is already running"); if (4 === o) { if ("throw" === i) throw a; return { value: t, done: !0 }; } for (n.method = i, n.arg = a;;) { var u = n.delegate; if (u) { var c = d(u, n); if (c) { if (c === f) continue; return c; } } if ("next" === n.method) n.sent = n._sent = n.arg;else if ("throw" === n.method) { if (1 === o) throw o = 4, n.arg; n.dispatchException(n.arg); } else "return" === n.method && n.abrupt("return", n.arg); o = 3; var h = s(r, e, n); if ("normal" === h.type) { if (o = n.done ? 4 : 2, h.arg === f) continue; return { value: h.arg, done: n.done }; } "throw" === h.type && (o = 4, n.method = "throw", n.arg = h.arg); } }; }(r, n, new Context(o || [])), !0), a; } function s(t, r, e) { try { return { type: "normal", arg: t.call(r, e) }; } catch (t) { return { type: "throw", arg: t }; } } r.wrap = h; var f = {}; function Generator() {} function GeneratorFunction() {} function GeneratorFunctionPrototype() {} var l = {}; c(l, i, function () { return this; }); var p = Object.getPrototypeOf, y = p && p(p(x([]))); y && y !== e && n.call(y, i) && (l = y); var v = GeneratorFunctionPrototype.prototype = Generator.prototype = Object.create(l); function g(t) { ["next", "throw", "return"].forEach(function (r) { c(t, r, function (t) { return this._invoke(r, t); }); }); } function AsyncIterator(t, r) { function e(o, i, a, u) { var c = s(t[o], t, i); if ("throw" !== c.type) { var h = c.arg, f = h.value; return f && "object" == _typeof(f) && n.call(f, "__await") ? r.resolve(f.__await).then(function (t) { e("next", t, a, u); }, function (t) { e("throw", t, a, u); }) : r.resolve(f).then(function (t) { h.value = t, a(h); }, function (t) { return e("throw", t, a, u); }); } u(c.arg); } var o; c(this, "_invoke", function (t, n) { function i() { return new r(function (r, o) { e(t, n, r, o); }); } return o = o ? o.then(i, i) : i(); }, !0); } function d(r, e) { var n = e.method, o = r.i[n]; if (o === t) return e.delegate = null, "throw" === n && r.i["return"] && (e.method = "return", e.arg = t, d(r, e), "throw" === e.method) || "return" !== n && (e.method = "throw", e.arg = new TypeError("The iterator does not provide a '" + n + "' method")), f; var i = s(o, r.i, e.arg); if ("throw" === i.type) return e.method = "throw", e.arg = i.arg, e.delegate = null, f; var a = i.arg; return a ? a.done ? (e[r.r] = a.value, e.next = r.n, "return" !== e.method && (e.method = "next", e.arg = t), e.delegate = null, f) : a : (e.method = "throw", e.arg = new TypeError("iterator result is not an object"), e.delegate = null, f); } function w(t) { this.tryEntries.push(t); } function m(r) { var e = r[4] || {}; e.type = "normal", e.arg = t, r[4] = e; } function Context(t) { this.tryEntries = [[-1]], t.forEach(w, this), this.reset(!0); } function x(r) { if (null != r) { var e = r[i]; if (e) return e.call(r); if ("function" == typeof r.next) return r; if (!isNaN(r.length)) { var o = -1, a = function e() { for (; ++o < r.length;) if (n.call(r, o)) return e.value = r[o], e.done = !1, e; return e.value = t, e.done = !0, e; }; return a.next = a; } } throw new TypeError(_typeof(r) + " is not iterable"); } return GeneratorFunction.prototype = GeneratorFunctionPrototype, c(v, "constructor", GeneratorFunctionPrototype), c(GeneratorFunctionPrototype, "constructor", GeneratorFunction), GeneratorFunction.displayName = c(GeneratorFunctionPrototype, u, "GeneratorFunction"), r.isGeneratorFunction = function (t) { var r = "function" == typeof t && t.constructor; return !!r && (r === GeneratorFunction || "GeneratorFunction" === (r.displayName || r.name)); }, r.mark = function (t) { return Object.setPrototypeOf ? Object.setPrototypeOf(t, GeneratorFunctionPrototype) : (t.__proto__ = GeneratorFunctionPrototype, c(t, u, "GeneratorFunction")), t.prototype = Object.create(v), t; }, r.awrap = function (t) { return { __await: t }; }, g(AsyncIterator.prototype), c(AsyncIterator.prototype, a, function () { return this; }), r.AsyncIterator = AsyncIterator, r.async = function (t, e, n, o, i) { void 0 === i && (i = Promise); var a = new AsyncIterator(h(t, e, n, o), i); return r.isGeneratorFunction(e) ? a : a.next().then(function (t) { return t.done ? t.value : a.next(); }); }, g(v), c(v, u, "Generator"), c(v, i, function () { return this; }), c(v, "toString", function () { return "[object Generator]"; }), r.keys = function (t) { var r = Object(t), e = []; for (var n in r) e.unshift(n); return function t() { for (; e.length;) if ((n = e.pop()) in r) return t.value = n, t.done = !1, t; return t.done = !0, t; }; }, r.values = x, Context.prototype = { constructor: Context, reset: function reset(r) { if (this.prev = this.next = 0, this.sent = this._sent = t, this.done = !1, this.delegate = null, this.method = "next", this.arg = t, this.tryEntries.forEach(m), !r) for (var e in this) "t" === e.charAt(0) && n.call(this, e) && !isNaN(+e.slice(1)) && (this[e] = t); }, stop: function stop() { this.done = !0; var t = this.tryEntries[0][4]; if ("throw" === t.type) throw t.arg; return this.rval; }, dispatchException: function dispatchException(r) { if (this.done) throw r; var e = this; function n(t) { a.type = "throw", a.arg = r, e.next = t; } for (var o = e.tryEntries.length - 1; o >= 0; --o) { var i = this.tryEntries[o], a = i[4], u = this.prev, c = i[1], h = i[2]; if (-1 === i[0]) return n("end"), !1; if (!c && !h) throw Error("try statement without catch or finally"); if (null != i[0] && i[0] <= u) { if (u < c) return this.method = "next", this.arg = t, n(c), !0; if (u < h) return n(h), !1; } } }, abrupt: function abrupt(t, r) { for (var e = this.tryEntries.length - 1; e >= 0; --e) { var n = this.tryEntries[e]; if (n[0] > -1 && n[0] <= this.prev && this.prev < n[2]) { var o = n; break; } } o && ("break" === t || "continue" === t) && o[0] <= r && r <= o[2] && (o = null); var i = o ? o[4] : {}; return i.type = t, i.arg = r, o ? (this.method = "next", this.next = o[2], f) : this.complete(i); }, complete: function complete(t, r) { if ("throw" === t.type) throw t.arg; return "break" === t.type || "continue" === t.type ? this.next = t.arg : "return" === t.type ? (this.rval = this.arg = t.arg, this.method = "return", this.next = "end") : "normal" === t.type && r && (this.next = r), f; }, finish: function finish(t) { for (var r = this.tryEntries.length - 1; r >= 0; --r) { var e = this.tryEntries[r]; if (e[2] === t) return this.complete(e[4], e[3]), m(e), f; } }, "catch": function _catch(t) { for (var r = this.tryEntries.length - 1; r >= 0; --r) { var e = this.tryEntries[r]; if (e[0] === t) { var n = e[4]; if ("throw" === n.type) { var o = n.arg; m(e); } return o; } } throw Error("illegal catch attempt"); }, delegateYield: function delegateYield(r, e, n) { return this.delegate = { i: x(r), r: e, n: n }, "next" === this.method && (this.arg = t), f; } }, r; }
+function asyncGeneratorStep(n, t, e, r, o, a, c) { try { var i = n[a](c), u = i.value; } catch (n) { return void e(n); } i.done ? t(u) : Promise.resolve(u).then(r, o); }
+function _asyncToGenerator(n) { return function () { var t = this, e = arguments; return new Promise(function (r, o) { var a = n.apply(t, e); function _next(n) { asyncGeneratorStep(a, r, o, _next, _throw, "next", n); } function _throw(n) { asyncGeneratorStep(a, r, o, _next, _throw, "throw", n); } _next(void 0); }); }; }
+function _toConsumableArray(r) { return _arrayWithoutHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableSpread(); }
+function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
+function _iterableToArray(r) { if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"]) return Array.from(r); }
+function _arrayWithoutHoles(r) { if (Array.isArray(r)) return _arrayLikeToArray(r); }
+function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
 
 
 
 
 
 // Imprime una lista de picking en HOJA CARTA (para buscar físicamente los productos en almacén).
-// filas: [{ barras, codigo_proveedor, descripcion, cantidad }]
+// Acepta `grupos` = [{titulo, filas}] para dividir en varias sublistas (una por sección, con salto
+// de página), o `filas` sueltas (una sola lista). filas: [{ barras, codigo_proveedor, descripcion, ubicacion, cantidad }]
 
 var imprimirListaPicking = function imprimirListaPicking(_ref) {
   var titulo = _ref.titulo,
     subtitulo = _ref.subtitulo,
-    filas = _ref.filas;
+    filas = _ref.filas,
+    grupos = _ref.grupos;
   var esc = function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>]/g, function (c) {
       return {
@@ -135813,13 +135815,21 @@ var imprimirListaPicking = function imprimirListaPicking(_ref) {
       }[c];
     });
   };
-  var rows = (filas || []).map(function (f, i) {
-    return "\n        <tr>\n          <td class=\"c\">".concat(i + 1, "</td>\n          <td class=\"mono\">").concat(esc(f.barras || '—'), "</td>\n          <td class=\"mono\">").concat(esc(f.codigo_proveedor || '—'), "</td>\n          <td>").concat(esc(f.descripcion || '—'), "</td>\n          <td class=\"c b\">").concat(esc(f.cantidad), "</td>\n          <td class=\"ub mono\">").concat(esc(f.ubicacion || ''), "</td>\n          <td class=\"chk\"><span class=\"box\"></span></td>\n        </tr>");
+  var secciones = grupos && grupos.length ? grupos : [{
+    titulo: null,
+    filas: filas || []
+  }];
+  var thead = "<thead><tr>\n        <th>#</th><th>C\xF3d. Barras</th><th>C\xF3d. Prov.</th><th>Descripci\xF3n</th>\n        <th>Cant.</th><th>Ubicaci\xF3n</th><th>\u2714</th>\n      </tr></thead>";
+  var bloques = secciones.map(function (g, gi) {
+    var rows = (g.filas || []).map(function (f, i) {
+      return "\n        <tr>\n          <td class=\"c\">".concat(i + 1, "</td>\n          <td class=\"mono\">").concat(esc(f.barras || '—'), "</td>\n          <td class=\"mono\">").concat(esc(f.codigo_proveedor || '—'), "</td>\n          <td>").concat(esc(f.descripcion || '—'), "</td>\n          <td class=\"c b\">").concat(esc(f.cantidad), "</td>\n          <td class=\"ub mono\">").concat(esc(f.ubicacion || ''), "</td>\n          <td class=\"chk\"><span class=\"box\"></span></td>\n        </tr>");
+    }).join('');
+    var uni = (g.filas || []).reduce(function (a, f) {
+      return a + (parseFloat(f.cantidad) || 0);
+    }, 0);
+    return "<section class=\"".concat(gi > 0 ? 'brk' : '', "\">\n            ").concat(g.titulo ? "<h2>".concat(esc(g.titulo), "</h2>") : '', "\n            <table>").concat(thead, "<tbody>").concat(rows, "</tbody></table>\n            <div class=\"pie\">L\xEDneas: ").concat((g.filas || []).length, " \xB7 Unidades: ").concat(uni).concat(g.titulo ? '' : '', "</div>\n          </section>");
   }).join('');
-  var totalUni = (filas || []).reduce(function (a, f) {
-    return a + (parseFloat(f.cantidad) || 0);
-  }, 0);
-  var html = "<!doctype html><html><head><meta charset=\"utf-8\"><title>".concat(esc(titulo), "</title>\n      <style>\n        @page { size: letter portrait; margin: 12mm; }\n        * { font-family: Arial, sans-serif; }\n        body { color:#111; font-size:12px; }\n        h1 { font-size:16px; margin:0 0 2px; }\n        .sub { color:#555; margin-bottom:10px; font-size:11px; }\n        table { width:100%; border-collapse:collapse; }\n        th,td { border:1px solid #cbd5e1; padding:5px 6px; text-align:left; font-size:11px; vertical-align:top; }\n        th { background:#1e3a8a; color:#fff; }\n        td.c { text-align:center; } td.b { font-weight:bold; } .mono { font-family:monospace; }\n        td.ub { width:90px; } td.chk { width:30px; text-align:center; }\n        .box { display:inline-block; width:15px; height:15px; border:2px solid #334155; }\n        .pie { margin-top:14px; font-size:10px; color:#444; }\n      </style></head><body>\n      <h1>").concat(esc(titulo), "</h1>\n      <div class=\"sub\">").concat(esc(subtitulo || ''), "</div>\n      <table><thead><tr>\n        <th>#</th><th>C\xF3d. Barras</th><th>C\xF3d. Prov.</th><th>Descripci\xF3n</th>\n        <th>Cant.</th><th>Ubicaci\xF3n</th><th>\u2714</th>\n      </tr></thead><tbody>").concat(rows, "</tbody></table>\n      <div class=\"pie\">Total l\xEDneas: ").concat((filas || []).length, " \xB7 Total unidades: ").concat(totalUni, "</div>\n      <script>window.onload=function(){setTimeout(function(){window.print();},300);}</script>\n      </body></html>");
+  var html = "<!doctype html><html><head><meta charset=\"utf-8\"><title>".concat(esc(titulo), "</title>\n      <style>\n        @page { size: letter portrait; margin: 12mm; }\n        * { font-family: Arial, sans-serif; }\n        body { color:#111; font-size:12px; }\n        h1 { font-size:16px; margin:0 0 2px; }\n        h2 { font-size:13px; margin:0 0 6px; padding:4px 8px; background:#eef2ff; border-left:4px solid #1e3a8a; }\n        .sub { color:#555; margin-bottom:10px; font-size:11px; }\n        section.brk { page-break-before: always; }\n        table { width:100%; border-collapse:collapse; }\n        th,td { border:1px solid #cbd5e1; padding:5px 6px; text-align:left; font-size:11px; vertical-align:top; }\n        th { background:#1e3a8a; color:#fff; }\n        td.c { text-align:center; } td.b { font-weight:bold; } .mono { font-family:monospace; }\n        td.ub { width:90px; } td.chk { width:30px; text-align:center; }\n        .box { display:inline-block; width:15px; height:15px; border:2px solid #334155; }\n        .pie { margin:8px 0 14px; font-size:10px; color:#444; }\n      </style></head><body>\n      <h1>").concat(esc(titulo), "</h1>\n      <div class=\"sub\">").concat(esc(subtitulo || ''), "</div>\n      ").concat(bloques, "\n      <script>window.onload=function(){setTimeout(function(){window.print();},300);}</script>\n      </body></html>");
   var w = window.open('', '_blank');
   if (!w) {
     alert('Habilitá las ventanas emergentes para poder imprimir la lista.');
@@ -135827,6 +135837,101 @@ var imprimirListaPicking = function imprimirListaPicking(_ref) {
   }
   w.document.write(html);
   w.document.close();
+};
+
+// Ordena filas por un campo y dirección.
+var ordenarFilas = function ordenarFilas(filas, campo, dir) {
+  var arr = _toConsumableArray(filas || []);
+  if (campo === 'original') return arr;
+  var key = {
+    descripcion: 'descripcion',
+    barras: 'barras',
+    proveedor: 'codigo_proveedor',
+    ubicacion: 'ubicacion'
+  }[campo] || 'descripcion';
+  arr.sort(function (a, b) {
+    var va = String(a[key] || '').toLowerCase();
+    var vb = String(b[key] || '').toLowerCase();
+    return dir === 'desc' ? vb.localeCompare(va) : va.localeCompare(vb);
+  });
+  return arr;
+};
+
+// Divide filas en sublistas: 'ninguno' (una), 'partes' (N grupos ~iguales), 'porLista' (chunks de N).
+var dividirFilas = function dividirFilas(filas, modo, valor) {
+  var arr = filas || [];
+  if (modo === 'partes' && valor >= 2) {
+    var n = Math.min(valor, arr.length || 1);
+    var base = Math.ceil(arr.length / n);
+    var grupos = [];
+    for (var i = 0; i < arr.length; i += base) grupos.push(arr.slice(i, i + base));
+    return grupos.length ? grupos : [arr];
+  }
+  if (modo === 'porLista' && valor >= 1) {
+    var _grupos = [];
+    for (var _i = 0; _i < arr.length; _i += valor) _grupos.push(arr.slice(_i, _i + valor));
+    return _grupos.length ? _grupos : [arr];
+  }
+  return [arr];
+};
+
+// Resuelve los productos LOCALES de una premonta en UNA sola petición. El match confiable es por
+// ID (producto_id_master = el `id` que reusa el inventario local); si no hay id, cae a código
+// (barras/proveedor, tolerante a espacios). Devuelve índices porId/porBarras/porProveedor.
+var resolverLocalesDePremonta = /*#__PURE__*/function () {
+  var _ref2 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee(items) {
+    var codigos, ids, porId, porBarras, porProveedor, _r$data, r;
+    return _regeneratorRuntime().wrap(function _callee$(_context) {
+      while (1) switch (_context.prev = _context.next) {
+        case 0:
+          codigos = [], ids = [];
+          (items || []).forEach(function (it) {
+            var s = it.producto || {};
+            if (s.codigo_barras) codigos.push(String(s.codigo_barras).trim());
+            if (s.codigo_proveedor) codigos.push(String(s.codigo_proveedor).trim());
+            if (it.producto_id_master) ids.push(it.producto_id_master);
+          });
+          porId = {}, porBarras = {}, porProveedor = {};
+          _context.prev = 3;
+          _context.next = 6;
+          return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].resolverInventarioPorCodigos({
+            ids: ids,
+            codigos: codigos
+          });
+        case 6:
+          r = _context.sent;
+          (((_r$data = r.data) === null || _r$data === void 0 ? void 0 : _r$data.productos) || []).forEach(function (p) {
+            porId[String(p.id)] = p;
+            if (p.codigo_barras) porBarras[String(p.codigo_barras).trim()] = p;
+            if (p.codigo_proveedor) porProveedor[String(p.codigo_proveedor).trim()] = p;
+          });
+          _context.next = 13;
+          break;
+        case 10:
+          _context.prev = 10;
+          _context.t0 = _context["catch"](3);
+          console.error('resolverLocalesDePremonta:', _context.t0);
+        case 13:
+          return _context.abrupt("return", {
+            porId: porId,
+            porBarras: porBarras,
+            porProveedor: porProveedor
+          });
+        case 14:
+        case "end":
+          return _context.stop();
+      }
+    }, _callee, null, [[3, 10]]);
+  }));
+  return function resolverLocalesDePremonta(_x) {
+    return _ref2.apply(this, arguments);
+  };
+}();
+
+// Busca el producto local para un ítem de premonta: primero por id, luego por código.
+var matchLocal = function matchLocal(it, snap, porId, porBarras, porProveedor) {
+  var s = snap || it.producto || {};
+  return it.producto_id_master && porId[String(it.producto_id_master)] || s.codigo_barras && porBarras[String(s.codigo_barras).trim()] || s.codigo_proveedor && porProveedor[String(s.codigo_proveedor).trim()] || null;
 };
 
 // ###################################################################################
@@ -136196,8 +136301,8 @@ var crearOActualizarTransferenciaMock = function crearOActualizarTransferenciaMo
 // #                            INICIO: COMPONENTES REACT                            #
 // ###################################################################################
 
-var StatusBadge = function StatusBadge(_ref2) {
-  var estadoNum = _ref2.estadoNum;
+var StatusBadge = function StatusBadge(_ref3) {
+  var estadoNum = _ref3.estadoNum;
   var estatusString = ESTADO_NUMERICO_A_STRING[estadoNum] || 'DESCONOCIDO';
   var statusColors = {
     'PENDIENTE': 'bg-red-500 text-white',
@@ -136211,11 +136316,11 @@ var StatusBadge = function StatusBadge(_ref2) {
     children: estatusString
   });
 };
-var ProductSearchInput = function ProductSearchInput(_ref3) {
-  var onProductSelect = _ref3.onProductSelect,
-    sucursalIdOrigen = _ref3.sucursalIdOrigen,
-    _ref3$placeholder = _ref3.placeholder,
-    placeholder = _ref3$placeholder === void 0 ? "Buscar producto..." : _ref3$placeholder;
+var ProductSearchInput = function ProductSearchInput(_ref4) {
+  var onProductSelect = _ref4.onProductSelect,
+    sucursalIdOrigen = _ref4.sucursalIdOrigen,
+    _ref4$placeholder = _ref4.placeholder,
+    placeholder = _ref4$placeholder === void 0 ? "Buscar producto..." : _ref4$placeholder;
   var _useState = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState2 = _slicedToArray(_useState, 2),
     terminoBusqueda = _useState2[0],
@@ -136248,22 +136353,22 @@ var ProductSearchInput = function ProductSearchInput(_ref3) {
   var cantidadInputRef = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var debounceTimeoutRef = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var realizarBusqueda = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
-    var _ref4 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee(termino) {
+    var _ref5 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee2(termino) {
       var response;
-      return _regeneratorRuntime().wrap(function _callee$(_context) {
-        while (1) switch (_context.prev = _context.next) {
+      return _regeneratorRuntime().wrap(function _callee2$(_context2) {
+        while (1) switch (_context2.prev = _context2.next) {
           case 0:
             if (!(!termino || termino.trim() === '')) {
-              _context.next = 4;
+              _context2.next = 4;
               break;
             }
             setResultados([]);
             setMostrarResultados(false);
-            return _context.abrupt("return");
+            return _context2.abrupt("return");
           case 4:
             setEstaCargando(true);
-            _context.prev = 5;
-            _context.next = 8;
+            _context2.prev = 5;
+            _context2.next = 8;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].getinventario({
               vendedor: null,
               num: 25,
@@ -136273,29 +136378,29 @@ var ProductSearchInput = function ProductSearchInput(_ref3) {
               orderBy: "asc"
             });
           case 8:
-            response = _context.sent;
+            response = _context2.sent;
             console.log(response.data);
             setResultados(response.data || []);
             setMostrarResultados(true);
-            _context.next = 18;
+            _context2.next = 18;
             break;
           case 14:
-            _context.prev = 14;
-            _context.t0 = _context["catch"](5);
-            console.error("Error buscando productos (mock):", _context.t0);
+            _context2.prev = 14;
+            _context2.t0 = _context2["catch"](5);
+            console.error("Error buscando productos (mock):", _context2.t0);
             setResultados([]);
           case 18:
-            _context.prev = 18;
+            _context2.prev = 18;
             setEstaCargando(false);
-            return _context.finish(18);
+            return _context2.finish(18);
           case 21:
           case "end":
-            return _context.stop();
+            return _context2.stop();
         }
-      }, _callee, null, [[5, 14, 18, 21]]);
+      }, _callee2, null, [[5, 14, 18, 21]]);
     }));
-    return function (_x) {
-      return _ref4.apply(this, arguments);
+    return function (_x2) {
+      return _ref5.apply(this, arguments);
     };
   }(), [sucursalIdOrigen]);
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
@@ -136475,17 +136580,17 @@ var ProductSearchInput = function ProductSearchInput(_ref3) {
     })]
   });
 };
-var SelectedProductItem = function SelectedProductItem(_ref5) {
+var SelectedProductItem = function SelectedProductItem(_ref6) {
   var _item$producto, _item$producto2, _item$producto3;
-  var item = _ref5.item,
-    onRemove = _ref5.onRemove,
-    onQuantityChange = _ref5.onQuantityChange,
-    isEditable = _ref5.isEditable,
-    index = _ref5.index,
-    totalItems = _ref5.totalItems,
-    _ref5$mostrarRevisado = _ref5.mostrarRevisado,
-    mostrarRevisado = _ref5$mostrarRevisado === void 0 ? false : _ref5$mostrarRevisado,
-    onToggleRevisado = _ref5.onToggleRevisado;
+  var item = _ref6.item,
+    onRemove = _ref6.onRemove,
+    onQuantityChange = _ref6.onQuantityChange,
+    isEditable = _ref6.isEditable,
+    index = _ref6.index,
+    totalItems = _ref6.totalItems,
+    _ref6$mostrarRevisado = _ref6.mostrarRevisado,
+    mostrarRevisado = _ref6$mostrarRevisado === void 0 ? false : _ref6$mostrarRevisado,
+    onToggleRevisado = _ref6.onToggleRevisado;
   var handleCantidadChange = function handleCantidadChange(e) {
     var valor = e.target.value;
     // Permitir valores vacíos temporalmente para mejor UX
@@ -136562,17 +136667,18 @@ var SelectedProductItem = function SelectedProductItem(_ref5) {
     })]
   });
 };
-var TransferenciaForm = function TransferenciaForm(_ref6) {
-  var onSave = _ref6.onSave,
-    onCancel = _ref6.onCancel,
-    sucursalActualId = _ref6.sucursalActualId,
-    _ref6$transferenciaTo = _ref6.transferenciaToEdit,
-    transferenciaToEdit = _ref6$transferenciaTo === void 0 ? null : _ref6$transferenciaTo,
-    sucursales = _ref6.sucursales,
-    cargarTransferencias = _ref6.cargarTransferencias,
-    _ref6$modoBorrador = _ref6.modoBorrador,
-    modoBorrador = _ref6$modoBorrador === void 0 ? false : _ref6$modoBorrador,
-    onGuardarBorrador = _ref6.onGuardarBorrador;
+var TransferenciaForm = function TransferenciaForm(_ref7) {
+  var onSave = _ref7.onSave,
+    onCancel = _ref7.onCancel,
+    sucursalActualId = _ref7.sucursalActualId,
+    _ref7$transferenciaTo = _ref7.transferenciaToEdit,
+    transferenciaToEdit = _ref7$transferenciaTo === void 0 ? null : _ref7$transferenciaTo,
+    sucursales = _ref7.sucursales,
+    cargarTransferencias = _ref7.cargarTransferencias,
+    _ref7$modoBorrador = _ref7.modoBorrador,
+    modoBorrador = _ref7$modoBorrador === void 0 ? false : _ref7$modoBorrador,
+    onGuardarBorrador = _ref7.onGuardarBorrador,
+    onImprimir = _ref7.onImprimir;
   // Una premonta (orden de redistribución traída de central) se arma como transferencia NUEVA,
   // no como edición de una transferencia local existente.
   var esPremonta = !!(transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.es_premontada);
@@ -136770,27 +136876,27 @@ var TransferenciaForm = function TransferenciaForm(_ref6) {
     });
   };
   var handleSubmit = /*#__PURE__*/function () {
-    var _ref7 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee2(e) {
+    var _ref8 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee3(e) {
       var validSubmission, datosTransferencia, res, _res;
-      return _regeneratorRuntime().wrap(function _callee2$(_context2) {
-        while (1) switch (_context2.prev = _context2.next) {
+      return _regeneratorRuntime().wrap(function _callee3$(_context3) {
+        while (1) switch (_context3.prev = _context3.next) {
           case 0:
             e.preventDefault();
             setError('');
             setMensajeExito('');
             if (idSucursalDestinoSeleccionada) {
-              _context2.next = 6;
+              _context3.next = 6;
               break;
             }
             setError('Debe seleccionar una sucursal de destino.');
-            return _context2.abrupt("return");
+            return _context3.abrupt("return");
           case 6:
             if (!(itemsTransferencia.length === 0)) {
-              _context2.next = 9;
+              _context3.next = 9;
               break;
             }
             setError('Debe agregar al menos un producto.');
-            return _context2.abrupt("return");
+            return _context3.abrupt("return");
           case 9:
             validSubmission = true;
             itemsTransferencia.forEach(function (item) {
@@ -136806,10 +136912,10 @@ var TransferenciaForm = function TransferenciaForm(_ref6) {
                } */
             });
             if (validSubmission) {
-              _context2.next = 13;
+              _context3.next = 13;
               break;
             }
-            return _context2.abrupt("return");
+            return _context3.abrupt("return");
           case 13:
             datosTransferencia = {
               id_origen: idSucursalOrigen,
@@ -136843,18 +136949,18 @@ var TransferenciaForm = function TransferenciaForm(_ref6) {
 
             // ── Modo borrador (Plan B): guardar la orden "en preparación" SIN descontar inventario ──
             if (!esBorrador) {
-              _context2.next = 39;
+              _context3.next = 39;
               break;
             }
             if (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id) datosTransferencia.id = transferenciaToEdit.id;
             setEstaCargando(true);
-            _context2.prev = 19;
-            _context2.next = 22;
+            _context3.prev = 19;
+            _context3.next = 22;
             return onGuardarBorrador(datosTransferencia);
           case 22:
-            res = _context2.sent;
+            res = _context3.sent;
             if (!(res !== null && res !== void 0 && res.estado)) {
-              _context2.next = 29;
+              _context3.next = 29;
               break;
             }
             setMensajeExito('Borrador guardado (no se descontó inventario).');
@@ -136862,36 +136968,36 @@ var TransferenciaForm = function TransferenciaForm(_ref6) {
             setTimeout(function () {
               return setMensajeExito('');
             }, 4000);
-            _context2.next = 30;
+            _context3.next = 30;
             break;
           case 29:
             throw new Error((res === null || res === void 0 ? void 0 : res.msj) || 'No se pudo guardar el borrador.');
           case 30:
-            _context2.next = 35;
+            _context3.next = 35;
             break;
           case 32:
-            _context2.prev = 32;
-            _context2.t0 = _context2["catch"](19);
-            setError(_context2.t0.message || 'Error al guardar el borrador.');
+            _context3.prev = 32;
+            _context3.t0 = _context3["catch"](19);
+            setError(_context3.t0.message || 'Error al guardar el borrador.');
           case 35:
-            _context2.prev = 35;
+            _context3.prev = 35;
             setEstaCargando(false);
-            return _context2.finish(35);
+            return _context3.finish(35);
           case 38:
-            return _context2.abrupt("return");
+            return _context3.abrupt("return");
           case 39:
             setEstaCargando(true);
-            _context2.prev = 40;
-            _context2.next = 43;
+            _context3.prev = 40;
+            _context3.next = 43;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].settransferenciaDici(datosTransferencia);
           case 43:
-            _res = _context2.sent;
+            _res = _context3.sent;
             if (!_res.data.estado) {
-              _context2.next = 53;
+              _context3.next = 53;
               break;
             }
             setMensajeExito("Transferencia ".concat(esEdicion ? 'actualizada' : 'creada', " exitosamente."));
-            _context2.next = 48;
+            _context3.next = 48;
             return cargarTransferencias();
           case 48:
             // Recargar la lista
@@ -136910,29 +137016,29 @@ var TransferenciaForm = function TransferenciaForm(_ref6) {
             setTimeout(function () {
               return setMensajeExito('');
             }, 5000);
-            _context2.next = 54;
+            _context3.next = 54;
             break;
           case 53:
             throw new Error(_res.data.mensaje || 'Error al procesar la transferencia');
           case 54:
-            _context2.next = 59;
+            _context3.next = 59;
             break;
           case 56:
-            _context2.prev = 56;
-            _context2.t1 = _context2["catch"](40);
-            setError(_context2.t1.message || "Error al ".concat(esEdicion ? 'actualizar' : 'crear', " transferencia."));
+            _context3.prev = 56;
+            _context3.t1 = _context3["catch"](40);
+            setError(_context3.t1.message || "Error al ".concat(esEdicion ? 'actualizar' : 'crear', " transferencia."));
           case 59:
-            _context2.prev = 59;
+            _context3.prev = 59;
             setEstaCargando(false);
-            return _context2.finish(59);
+            return _context3.finish(59);
           case 62:
           case "end":
-            return _context2.stop();
+            return _context3.stop();
         }
-      }, _callee2, null, [[19, 32, 35, 38], [40, 56, 59, 62]]);
+      }, _callee3, null, [[19, 32, 35, 38], [40, 56, 59, 62]]);
     }));
-    return function handleSubmit(_x2) {
-      return _ref7.apply(this, arguments);
+    return function handleSubmit(_x3) {
+      return _ref8.apply(this, arguments);
     };
   }();
   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("form", {
@@ -137068,7 +137174,7 @@ var TransferenciaForm = function TransferenciaForm(_ref6) {
           }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
             type: "button",
             onClick: function onClick() {
-              return imprimirListaPicking({
+              return onImprimir && onImprimir({
                 titulo: 'Lista de picking' + (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id ? ' · Orden #' + transferenciaToEdit.id : ''),
                 subtitulo: (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id_orden_distribucion ? 'Redistribución #' + transferenciaToEdit.id_orden_distribucion + ' · ' : '') + 'Destino ' + (codigoDestino || '—') + ' · ' + itemsTransferencia.length + ' producto(s)',
                 filas: itemsTransferencia.map(function (i) {
@@ -137179,10 +137285,10 @@ var TransferenciaForm = function TransferenciaForm(_ref6) {
     })]
   });
 };
-var TransferenciaDetailView = function TransferenciaDetailView(_ref8) {
-  var transferencia = _ref8.transferencia,
-    onBack = _ref8.onBack,
-    sucursales = _ref8.sucursales;
+var TransferenciaDetailView = function TransferenciaDetailView(_ref9) {
+  var transferencia = _ref9.transferencia,
+    onBack = _ref9.onBack,
+    sucursales = _ref9.sucursales;
   if (!transferencia) return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
     children: "Cargando detalles..."
   });
@@ -137369,27 +137475,27 @@ var TransferenciaDetailView = function TransferenciaDetailView(_ref8) {
     })]
   });
 };
-var TransferenciaList = function TransferenciaList(_ref9) {
-  var sucursalActualId = _ref9.sucursalActualId,
-    onRequireRefresh = _ref9.onRequireRefresh,
-    onEdit = _ref9.onEdit,
-    onViewDetails = _ref9.onViewDetails,
-    sucursales = _ref9.sucursales,
-    cargarTransferencias = _ref9.cargarTransferencias,
-    transferencias = _ref9.transferencias,
-    setTransferencias = _ref9.setTransferencias,
-    estaCargando = _ref9.estaCargando,
-    setEstaCargando = _ref9.setEstaCargando,
-    error = _ref9.error,
-    setError = _ref9.setError,
-    filtros = _ref9.filtros,
-    setFiltros = _ref9.setFiltros,
-    filtrosActivos = _ref9.filtrosActivos,
-    setFiltrosActivos = _ref9.setFiltrosActivos,
-    paginacion = _ref9.paginacion,
-    setPaginacion = _ref9.setPaginacion,
-    mostrarFiltros = _ref9.mostrarFiltros,
-    setMostrarFiltros = _ref9.setMostrarFiltros;
+var TransferenciaList = function TransferenciaList(_ref0) {
+  var sucursalActualId = _ref0.sucursalActualId,
+    onRequireRefresh = _ref0.onRequireRefresh,
+    onEdit = _ref0.onEdit,
+    onViewDetails = _ref0.onViewDetails,
+    sucursales = _ref0.sucursales,
+    cargarTransferencias = _ref0.cargarTransferencias,
+    transferencias = _ref0.transferencias,
+    setTransferencias = _ref0.setTransferencias,
+    estaCargando = _ref0.estaCargando,
+    setEstaCargando = _ref0.setEstaCargando,
+    error = _ref0.error,
+    setError = _ref0.setError,
+    filtros = _ref0.filtros,
+    setFiltros = _ref0.setFiltros,
+    filtrosActivos = _ref0.filtrosActivos,
+    setFiltrosActivos = _ref0.setFiltrosActivos,
+    paginacion = _ref0.paginacion,
+    setPaginacion = _ref0.setPaginacion,
+    mostrarFiltros = _ref0.mostrarFiltros,
+    setMostrarFiltros = _ref0.setMostrarFiltros;
   // Eliminamos el useEffect de carga de datos ya que ahora está en el componente padre
 
   var handleFilterChange = function handleFilterChange(e) {
@@ -137402,43 +137508,43 @@ var TransferenciaList = function TransferenciaList(_ref9) {
     cargarTransferencias();
   };
   var handleDelete = /*#__PURE__*/function () {
-    var _ref0 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee3(t) {
+    var _ref1 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee4(t) {
       var res;
-      return _regeneratorRuntime().wrap(function _callee3$(_context3) {
-        while (1) switch (_context3.prev = _context3.next) {
+      return _regeneratorRuntime().wrap(function _callee4$(_context4) {
+        while (1) switch (_context4.prev = _context4.next) {
           case 0:
             if (window.confirm("\xBFEliminar/anular la transferencia #".concat(t.id, "? Se reintegrar\xE1 el stock al inventario y se quitar\xE1 el espejo en central."))) {
-              _context3.next = 2;
+              _context4.next = 2;
               break;
             }
-            return _context3.abrupt("return");
+            return _context4.abrupt("return");
           case 2:
-            _context3.prev = 2;
-            _context3.next = 5;
+            _context4.prev = 2;
+            _context4.next = 5;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].delTransferenciaDici({
               id: t.id
             });
           case 5:
-            res = _context3.sent;
+            res = _context4.sent;
             if (res.data && res.data.estado) {
               setFiltrosActivos(_objectSpread({}, filtrosActivos)); // recargar la lista
             } else {
               window.alert(res.data && res.data.msj || 'No se pudo eliminar la transferencia.');
             }
-            _context3.next = 12;
+            _context4.next = 12;
             break;
           case 9:
-            _context3.prev = 9;
-            _context3.t0 = _context3["catch"](2);
+            _context4.prev = 9;
+            _context4.t0 = _context4["catch"](2);
             window.alert('Error al eliminar la transferencia.');
           case 12:
           case "end":
-            return _context3.stop();
+            return _context4.stop();
         }
-      }, _callee3, null, [[2, 9]]);
+      }, _callee4, null, [[2, 9]]);
     }));
-    return function handleDelete(_x3) {
-      return _ref0.apply(this, arguments);
+    return function handleDelete(_x4) {
+      return _ref1.apply(this, arguments);
     };
   }();
   if (estaCargando && transferencias.length === 0) return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
@@ -137842,13 +137948,14 @@ var TransferenciaList = function TransferenciaList(_ref9) {
 //   • no existe localmente → se excluye (no se puede enviar lo que no tenés en sistema)
 //   • existe pero la cantidad no alcanza → se avisa y el usuario ajusta la cantidad
 // El usuario ajusta/excluye y recién ahí se crea la orden en preparación (sin descontar).
-var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref1) {
-  var prem = _ref1.prem,
-    filas = _ref1.filas,
-    destinoBadge = _ref1.destinoBadge,
-    onConfirmar = _ref1.onConfirmar,
-    onCancelar = _ref1.onCancelar,
-    procesando = _ref1.procesando;
+var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref10) {
+  var prem = _ref10.prem,
+    filas = _ref10.filas,
+    destinoBadge = _ref10.destinoBadge,
+    onConfirmar = _ref10.onConfirmar,
+    onCancelar = _ref10.onCancelar,
+    onImprimir = _ref10.onImprimir,
+    procesando = _ref10.procesando;
   var _useState33 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState34 = _slicedToArray(_useState33, 2),
     rows = _useState34[0],
@@ -137937,7 +138044,7 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref1) {
           type: "button",
           onClick: function onClick() {
             var _prem$id_orden_distri;
-            return imprimirListaPicking({
+            return onImprimir({
               titulo: 'Lista de picking · Redistribución #' + ((_prem$id_orden_distri = prem === null || prem === void 0 ? void 0 : prem.id_orden_distribucion) !== null && _prem$id_orden_distri !== void 0 ? _prem$id_orden_distri : ''),
               subtitulo: 'Búsqueda física en almacén — ' + rows.length + ' producto(s)',
               filas: rows.map(function (r) {
@@ -138171,224 +138278,468 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref1) {
     })]
   });
 };
-var TransferenciasModule = function TransferenciasModule(_ref10) {
-  var _conflictosPremonta$p;
-  var sucursalActualId = _ref10.sucursalActualId;
-  var _useState35 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('list'),
+
+// Modal de opciones para imprimir la lista de picking: ordenar y dividir en varias sublistas.
+var PrintPickingModal = function PrintPickingModal(_ref11) {
+  var payload = _ref11.payload,
+    onClose = _ref11.onClose;
+  var _useState35 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('descripcion'),
     _useState36 = _slicedToArray(_useState35, 2),
-    vistaActual = _useState36[0],
-    setVistaActual = _useState36[1]; // 'list', 'form', 'detail'
-  var _useState37 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    campo = _useState36[0],
+    setCampo = _useState36[1];
+  var _useState37 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('asc'),
     _useState38 = _slicedToArray(_useState37, 2),
-    transferenciaSeleccionada = _useState38[0],
-    setTransferenciaSeleccionada = _useState38[1];
-  var _useState39 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(0),
+    dir = _useState38[0],
+    setDir = _useState38[1];
+  var _useState39 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('ninguno'),
     _useState40 = _slicedToArray(_useState39, 2),
-    refreshListKey = _useState40[0],
-    setRefreshListKey = _useState40[1];
-  var _useState41 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    modo = _useState40[0],
+    setModo = _useState40[1]; // 'ninguno' | 'partes' | 'porLista'
+  var _useState41 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(2),
     _useState42 = _slicedToArray(_useState41, 2),
-    sucursales = _useState42[0],
-    setSucursales = _useState42[1];
+    nPartes = _useState42[0],
+    setNPartes = _useState42[1];
+  var _useState43 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(50),
+    _useState44 = _slicedToArray(_useState43, 2),
+    porLista = _useState44[0],
+    setPorLista = _useState44[1];
+  if (!payload) return null;
+  var total = (payload.filas || []).length;
+  var valor = modo === 'partes' ? parseInt(nPartes) || 2 : modo === 'porLista' ? parseInt(porLista) || 1 : 0;
+  var previewGrupos = dividirFilas(payload.filas, modo, valor);
+  var nListas = previewGrupos.length;
+  var imprimir = function imprimir() {
+    var ordenadas = ordenarFilas(payload.filas, campo, dir);
+    var partes = dividirFilas(ordenadas, modo, valor);
+    var grupos = partes.map(function (filas, i) {
+      return {
+        titulo: partes.length > 1 ? "Lista ".concat(i + 1, " de ").concat(partes.length, " \xB7 ").concat(filas.length, " producto(s)") : null,
+        filas: filas
+      };
+    });
+    imprimirListaPicking({
+      titulo: payload.titulo,
+      subtitulo: payload.subtitulo,
+      grupos: grupos
+    });
+    onClose();
+  };
+  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+    className: "fixed inset-0 bg-gray-900/50 z-[60] flex items-start justify-center p-4 overflow-y-auto",
+    children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+      className: "relative mt-16 w-full max-w-md bg-white rounded-lg shadow-xl p-4",
+      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h3", {
+        className: "text-base font-bold text-gray-800 mb-1",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+          className: "fas fa-print mr-1 text-indigo-600"
+        }), "Imprimir lista de picking"]
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("p", {
+        className: "text-xs text-gray-500 mb-3",
+        children: [total, " producto(s)", payload.subtitulo ? ' · ' + payload.subtitulo : '']
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        className: "mb-3",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
+          className: "block text-xs font-semibold text-gray-700 mb-1",
+          children: "Ordenar por"
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "flex gap-2",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("select", {
+            value: campo,
+            onChange: function onChange(e) {
+              return setCampo(e.target.value);
+            },
+            className: "flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "descripcion",
+              children: "Descripci\xF3n (A\u2192Z)"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "barras",
+              children: "C\xF3d. Barras"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "proveedor",
+              children: "C\xF3d. Proveedor"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "ubicacion",
+              children: "Ubicaci\xF3n"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "original",
+              children: "Sin ordenar (como viene)"
+            })]
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("select", {
+            value: dir,
+            onChange: function onChange(e) {
+              return setDir(e.target.value);
+            },
+            disabled: campo === 'original',
+            className: "w-28 px-2 py-1.5 text-sm border border-gray-300 rounded disabled:bg-gray-100",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "asc",
+              children: "Ascendente"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+              value: "desc",
+              children: "Descendente"
+            })]
+          })]
+        })]
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        className: "mb-3",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
+          className: "block text-xs font-semibold text-gray-700 mb-1",
+          children: "Dividir la lista"
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "space-y-1.5",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("label", {
+            className: "flex items-center gap-2 text-sm",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+              type: "radio",
+              name: "modo",
+              checked: modo === 'ninguno',
+              onChange: function onChange() {
+                return setModo('ninguno');
+              }
+            }), "Una sola lista"]
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("label", {
+            className: "flex items-center gap-2 text-sm",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+              type: "radio",
+              name: "modo",
+              checked: modo === 'partes',
+              onChange: function onChange() {
+                return setModo('partes');
+              }
+            }), "Dividir en", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+              type: "number",
+              min: "2",
+              max: "10",
+              value: nPartes,
+              onChange: function onChange(e) {
+                return setNPartes(e.target.value);
+              },
+              onFocus: function onFocus() {
+                return setModo('partes');
+              },
+              className: "w-16 px-2 py-1 text-sm border border-gray-300 rounded text-center"
+            }), "listas iguales"]
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("label", {
+            className: "flex items-center gap-2 text-sm",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+              type: "radio",
+              name: "modo",
+              checked: modo === 'porLista',
+              onChange: function onChange() {
+                return setModo('porLista');
+              }
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+              type: "number",
+              min: "1",
+              value: porLista,
+              onChange: function onChange(e) {
+                return setPorLista(e.target.value);
+              },
+              onFocus: function onFocus() {
+                return setModo('porLista');
+              },
+              className: "w-16 px-2 py-1 text-sm border border-gray-300 rounded text-center"
+            }), "productos por lista"]
+          })]
+        }), modo !== 'ninguno' && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("p", {
+          className: "text-xs text-indigo-600 mt-1.5",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-layer-group mr-1"
+          }), "Se generar\xE1n ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("b", {
+            children: nListas
+          }), " lista(s), cada una en su hoja."]
+        })]
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        className: "flex justify-end gap-2 pt-2 border-t border-gray-200",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+          onClick: onClose,
+          className: "px-4 py-2 border rounded-md text-sm bg-white hover:bg-gray-50",
+          children: "Cancelar"
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+          onClick: imprimir,
+          className: "px-4 py-2 rounded-md text-sm text-white bg-indigo-600 hover:bg-indigo-700",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-print mr-1"
+          }), "Imprimir"]
+        })]
+      })]
+    })
+  });
+};
+var TransferenciasModule = function TransferenciasModule(_ref12) {
+  var _conflictosPremonta$p;
+  var sucursalActualId = _ref12.sucursalActualId;
+  var _useState45 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('list'),
+    _useState46 = _slicedToArray(_useState45, 2),
+    vistaActual = _useState46[0],
+    setVistaActual = _useState46[1]; // 'list', 'form', 'detail'
+  var _useState47 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState48 = _slicedToArray(_useState47, 2),
+    transferenciaSeleccionada = _useState48[0],
+    setTransferenciaSeleccionada = _useState48[1];
+  var _useState49 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(0),
+    _useState50 = _slicedToArray(_useState49, 2),
+    refreshListKey = _useState50[0],
+    setRefreshListKey = _useState50[1];
+  var _useState51 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    _useState52 = _slicedToArray(_useState51, 2),
+    sucursales = _useState52[0],
+    setSucursales = _useState52[1];
 
   // Estados movidos desde TransferenciaList
-  var _useState43 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState44 = _slicedToArray(_useState43, 2),
-    transferencias = _useState44[0],
-    setTransferencias = _useState44[1];
-  var _useState45 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
-    _useState46 = _slicedToArray(_useState45, 2),
-    estaCargando = _useState46[0],
-    setEstaCargando = _useState46[1];
-  var _useState47 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
-    _useState48 = _slicedToArray(_useState47, 2),
-    error = _useState48[0],
-    setError = _useState48[1];
-  var _useState49 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
-      q: '',
-      estatus_string: '',
-      id_origen: '',
-      id_destino: '',
-      limit: 10
-    }),
-    _useState50 = _slicedToArray(_useState49, 2),
-    filtros = _useState50[0],
-    setFiltros = _useState50[1];
-  var _useState51 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
-      q: '',
-      estatus_string: '',
-      id_origen: '',
-      id_destino: '',
-      limit: 10
-    }),
-    _useState52 = _slicedToArray(_useState51, 2),
-    filtrosActivos = _useState52[0],
-    setFiltrosActivos = _useState52[1];
-  var _useState53 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({}),
+  var _useState53 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState54 = _slicedToArray(_useState53, 2),
-    paginacion = _useState54[0],
-    setPaginacion = _useState54[1];
-  var _useState55 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
+    transferencias = _useState54[0],
+    setTransferencias = _useState54[1];
+  var _useState55 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
     _useState56 = _slicedToArray(_useState55, 2),
-    mostrarFiltros = _useState56[0],
-    setMostrarFiltros = _useState56[1];
-  // Premontas = órdenes de redistribución 'Aprobada' de central donde ESTA sucursal es el origen.
-  var _useState57 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    estaCargando = _useState56[0],
+    setEstaCargando = _useState56[1];
+  var _useState57 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState58 = _slicedToArray(_useState57, 2),
-    premontas = _useState58[0],
-    setPremontas = _useState58[1];
-  var _useState59 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    error = _useState58[0],
+    setError = _useState58[1];
+  var _useState59 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+      q: '',
+      estatus_string: '',
+      id_origen: '',
+      id_destino: '',
+      limit: 10
+    }),
     _useState60 = _slicedToArray(_useState59, 2),
-    qPremonta = _useState60[0],
-    setQPremonta = _useState60[1];
-  // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
-  var _useState61 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    filtros = _useState60[0],
+    setFiltros = _useState60[1];
+  var _useState61 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+      q: '',
+      estatus_string: '',
+      id_origen: '',
+      id_destino: '',
+      limit: 10
+    }),
     _useState62 = _slicedToArray(_useState61, 2),
-    borradores = _useState62[0],
-    setBorradores = _useState62[1];
-  var _useState63 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    filtrosActivos = _useState62[0],
+    setFiltrosActivos = _useState62[1];
+  var _useState63 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({}),
     _useState64 = _slicedToArray(_useState63, 2),
-    borradorEnEdicion = _useState64[0],
-    setBorradorEnEdicion = _useState64[1];
-  var _useState65 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    paginacion = _useState64[0],
+    setPaginacion = _useState64[1];
+  var _useState65 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState66 = _slicedToArray(_useState65, 2),
-    procesando = _useState66[0],
-    setProcesando = _useState66[1]; // id ocupado (crear/salida/eliminar)
-  // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
-  var _useState67 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    mostrarFiltros = _useState66[0],
+    setMostrarFiltros = _useState66[1];
+  // Premontas = órdenes de redistribución 'Aprobada' de central donde ESTA sucursal es el origen.
+  var _useState67 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState68 = _slicedToArray(_useState67, 2),
-    conflictosPremonta = _useState68[0],
-    setConflictosPremonta = _useState68[1];
+    premontas = _useState68[0],
+    setPremontas = _useState68[1];
+  var _useState69 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    _useState70 = _slicedToArray(_useState69, 2),
+    qPremonta = _useState70[0],
+    setQPremonta = _useState70[1];
+  // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
+  var _useState71 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    _useState72 = _slicedToArray(_useState71, 2),
+    borradores = _useState72[0],
+    setBorradores = _useState72[1];
+  var _useState73 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState74 = _slicedToArray(_useState73, 2),
+    borradorEnEdicion = _useState74[0],
+    setBorradorEnEdicion = _useState74[1];
+  var _useState75 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState76 = _slicedToArray(_useState75, 2),
+    procesando = _useState76[0],
+    setProcesando = _useState76[1]; // id ocupado (crear/salida/eliminar)
+  // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
+  var _useState77 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState78 = _slicedToArray(_useState77, 2),
+    conflictosPremonta = _useState78[0],
+    setConflictosPremonta = _useState78[1];
+  // Modal de opciones de impresión de la lista de picking: { titulo, subtitulo, filas } | null.
+  var _useState79 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState80 = _slicedToArray(_useState79, 2),
+    printModal = _useState80[0],
+    setPrintModal = _useState80[1];
+  var abrirPrintModal = function abrirPrintModal(payload) {
+    return setPrintModal(payload);
+  };
+  // Órdenes ya despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
+  var _useState81 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+    _useState82 = _slicedToArray(_useState81, 2),
+    despachadas = _useState82[0],
+    setDespachadas = _useState82[1];
+  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
+  var _useState83 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState84 = _slicedToArray(_useState83, 2),
+    bultosOrden = _useState84[0],
+    setBultosOrden = _useState84[1];
+  var _useState85 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    _useState86 = _slicedToArray(_useState85, 2),
+    numBultosInput = _useState86[0],
+    setNumBultosInput = _useState86[1];
+  var _useState87 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState88 = _slicedToArray(_useState87, 2),
+    bultosIframeUrl = _useState88[0],
+    setBultosIframeUrl = _useState88[1];
+  var refIframeBultos = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var cargarTransferencias = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
-    var _ref11 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee4(filtros) {
+    var _ref13 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5(filtros) {
       var response;
-      return _regeneratorRuntime().wrap(function _callee4$(_context4) {
-        while (1) switch (_context4.prev = _context4.next) {
+      return _regeneratorRuntime().wrap(function _callee5$(_context5) {
+        while (1) switch (_context5.prev = _context5.next) {
           case 0:
-            _context4.prev = 0;
-            _context4.next = 3;
+            _context5.prev = 0;
+            _context5.next = 3;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].reqMipedidos(filtros);
           case 3:
-            response = _context4.sent;
-            return _context4.abrupt("return", {
+            response = _context5.sent;
+            return _context5.abrupt("return", {
               transferencias: response.data.data || [],
               paginacion: response.data
             });
           case 7:
-            _context4.prev = 7;
-            _context4.t0 = _context4["catch"](0);
+            _context5.prev = 7;
+            _context5.t0 = _context5["catch"](0);
             throw new Error('Error al cargar transferencias');
           case 10:
           case "end":
-            return _context4.stop();
+            return _context5.stop();
         }
-      }, _callee4, null, [[0, 7]]);
+      }, _callee5, null, [[0, 7]]);
     }));
-    return function (_x4) {
-      return _ref11.apply(this, arguments);
+    return function (_x5) {
+      return _ref13.apply(this, arguments);
     };
   }(), []);
 
   // useEffect movido desde TransferenciaList
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     var fetchData = /*#__PURE__*/function () {
-      var _ref12 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5() {
+      var _ref14 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee6() {
         var _yield$cargarTransfer, nuevasTransferencias, nuevaPaginacion;
-        return _regeneratorRuntime().wrap(function _callee5$(_context5) {
-          while (1) switch (_context5.prev = _context5.next) {
+        return _regeneratorRuntime().wrap(function _callee6$(_context6) {
+          while (1) switch (_context6.prev = _context6.next) {
             case 0:
               setEstaCargando(true);
               setError('');
-              _context5.prev = 2;
-              _context5.next = 5;
+              _context6.prev = 2;
+              _context6.next = 5;
               return cargarTransferencias(filtrosActivos);
             case 5:
-              _yield$cargarTransfer = _context5.sent;
+              _yield$cargarTransfer = _context6.sent;
               nuevasTransferencias = _yield$cargarTransfer.transferencias;
               nuevaPaginacion = _yield$cargarTransfer.paginacion;
               setTransferencias(nuevasTransferencias);
               setPaginacion(nuevaPaginacion);
-              _context5.next = 16;
+              _context6.next = 16;
               break;
             case 12:
-              _context5.prev = 12;
-              _context5.t0 = _context5["catch"](2);
+              _context6.prev = 12;
+              _context6.t0 = _context6["catch"](2);
               setError('No se pudieron cargar las transferencias.');
               setTransferencias([]);
             case 16:
-              _context5.prev = 16;
+              _context6.prev = 16;
               setEstaCargando(false);
-              return _context5.finish(16);
+              return _context6.finish(16);
             case 19:
             case "end":
-              return _context5.stop();
+              return _context6.stop();
           }
-        }, _callee5, null, [[2, 12, 16, 19]]);
+        }, _callee6, null, [[2, 12, 16, 19]]);
       }));
       return function fetchData() {
-        return _ref12.apply(this, arguments);
+        return _ref14.apply(this, arguments);
       };
     }();
     fetchData();
   }, [cargarTransferencias, filtrosActivos, refreshListKey]);
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     var cargarSucursales = /*#__PURE__*/function () {
-      var _ref13 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee6() {
+      var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee7() {
         var res;
-        return _regeneratorRuntime().wrap(function _callee6$(_context6) {
-          while (1) switch (_context6.prev = _context6.next) {
+        return _regeneratorRuntime().wrap(function _callee7$(_context7) {
+          while (1) switch (_context7.prev = _context7.next) {
             case 0:
-              _context6.prev = 0;
-              _context6.next = 3;
+              _context7.prev = 0;
+              _context7.next = 3;
               return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].getSucursales();
             case 3:
-              res = _context6.sent;
+              res = _context7.sent;
               if (res.data.msj) setSucursales(res.data.msj);
-              _context6.next = 10;
+              _context7.next = 10;
               break;
             case 7:
-              _context6.prev = 7;
-              _context6.t0 = _context6["catch"](0);
-              console.error("Error cargando sucursales:", _context6.t0);
+              _context7.prev = 7;
+              _context7.t0 = _context7["catch"](0);
+              console.error("Error cargando sucursales:", _context7.t0);
             case 10:
             case "end":
-              return _context6.stop();
+              return _context7.stop();
           }
-        }, _callee6, null, [[0, 7]]);
+        }, _callee7, null, [[0, 7]]);
       }));
       return function cargarSucursales() {
-        return _ref13.apply(this, arguments);
+        return _ref15.apply(this, arguments);
       };
     }();
     cargarSucursales();
   }, []);
 
   // Cargar borradores (órdenes locales en preparación, estado 0).
-  var cargarBorradores = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/_asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee7() {
+  var cargarBorradores = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/_asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee8() {
     var _res$data, res;
-    return _regeneratorRuntime().wrap(function _callee7$(_context7) {
-      while (1) switch (_context7.prev = _context7.next) {
+    return _regeneratorRuntime().wrap(function _callee8$(_context8) {
+      while (1) switch (_context8.prev = _context8.next) {
         case 0:
-          _context7.prev = 0;
-          _context7.next = 3;
+          _context8.prev = 0;
+          _context8.next = 3;
           return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGetOrdenes({
             estado: 0,
             limit: 100
           });
         case 3:
-          res = _context7.sent;
+          res = _context8.sent;
           setBorradores(((_res$data = res.data) === null || _res$data === void 0 ? void 0 : _res$data.ordenes) || []);
-          _context7.next = 10;
+          _context8.next = 10;
           break;
         case 7:
-          _context7.prev = 7;
-          _context7.t0 = _context7["catch"](0);
+          _context8.prev = 7;
+          _context8.t0 = _context8["catch"](0);
           setBorradores([]);
         case 10:
         case "end":
-          return _context7.stop();
+          return _context8.stop();
       }
-    }, _callee7, null, [[0, 7]]);
+    }, _callee8, null, [[0, 7]]);
+  })), []);
+
+  // Cargar despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
+  var cargarDespachadas = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/_asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee9() {
+    var _res$data2, res;
+    return _regeneratorRuntime().wrap(function _callee9$(_context9) {
+      while (1) switch (_context9.prev = _context9.next) {
+        case 0:
+          _context9.prev = 0;
+          _context9.next = 3;
+          return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGetOrdenes({
+            estado: 1,
+            limit: 20
+          });
+        case 3:
+          res = _context9.sent;
+          setDespachadas(((_res$data2 = res.data) === null || _res$data2 === void 0 ? void 0 : _res$data2.ordenes) || []);
+          _context9.next = 10;
+          break;
+        case 7:
+          _context9.prev = 7;
+          _context9.t0 = _context9["catch"](0);
+          setDespachadas([]);
+        case 10:
+        case "end":
+          return _context9.stop();
+      }
+    }, _callee9, null, [[0, 7]]);
   })), []);
 
   // Cargar premontas (redistribuciones aprobadas para esta sucursal origen) + borradores.
@@ -138396,56 +138747,37 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
     _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].getPremontadas({
       limit: 50
     }).then(function (res) {
-      var _res$data2;
-      return setPremontas(((_res$data2 = res.data) === null || _res$data2 === void 0 ? void 0 : _res$data2.premontadas) || []);
+      var _res$data3;
+      return setPremontas(((_res$data3 = res.data) === null || _res$data3 === void 0 ? void 0 : _res$data3.premontadas) || []);
     })["catch"](function () {
       return setPremontas([]);
     });
     cargarBorradores();
-  }, [refreshListKey, cargarBorradores]);
+    cargarDespachadas();
+  }, [refreshListKey, cargarBorradores, cargarDespachadas]);
 
   // Coteja los productos de la redistribución contra el inventario local en UNA sola petición
   // (antes se hacía 1 request por producto → lentísimo con cientos de ítems). Arma las filas de
   // conflicto: existe/no existe, stock local, cantidad solicitada.
   var construirFilasConflicto = /*#__PURE__*/function () {
-    var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee8(prem) {
-      var items, codigos, porBarras, porProveedor, _r$data, r;
-      return _regeneratorRuntime().wrap(function _callee8$(_context8) {
-        while (1) switch (_context8.prev = _context8.next) {
+    var _ref18 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(prem) {
+      var items, _yield$resolverLocale, porId, porBarras, porProveedor;
+      return _regeneratorRuntime().wrap(function _callee0$(_context0) {
+        while (1) switch (_context0.prev = _context0.next) {
           case 0:
-            items = prem.items || []; // Junta todos los códigos (barras y proveedor) para resolverlos de un tiro.
-            codigos = [];
-            items.forEach(function (it) {
-              var s = it.producto || {};
-              if (s.codigo_barras) codigos.push(String(s.codigo_barras));
-              if (s.codigo_proveedor) codigos.push(String(s.codigo_proveedor));
-            });
-
-            // Índice local por barras y por proveedor (una consulta).
-            porBarras = {};
-            porProveedor = {};
-            _context8.prev = 5;
-            _context8.next = 8;
-            return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].resolverInventarioPorCodigos({
-              codigos: codigos
-            });
-          case 8:
-            r = _context8.sent;
-            (((_r$data = r.data) === null || _r$data === void 0 ? void 0 : _r$data.productos) || []).forEach(function (p) {
-              if (p.codigo_barras) porBarras[String(p.codigo_barras)] = p;
-              if (p.codigo_proveedor) porProveedor[String(p.codigo_proveedor)] = p;
-            });
-            _context8.next = 14;
-            break;
-          case 12:
-            _context8.prev = 12;
-            _context8.t0 = _context8["catch"](5);
-          case 14:
-            return _context8.abrupt("return", items.map(function (it, idx) {
+            items = prem.items || [];
+            _context0.next = 3;
+            return resolverLocalesDePremonta(items);
+          case 3:
+            _yield$resolverLocale = _context0.sent;
+            porId = _yield$resolverLocale.porId;
+            porBarras = _yield$resolverLocale.porBarras;
+            porProveedor = _yield$resolverLocale.porProveedor;
+            return _context0.abrupt("return", items.map(function (it, idx) {
               var snap = it.producto || {};
               var barras = snap.codigo_barras;
               var prov = snap.codigo_proveedor;
-              var local = barras && porBarras[String(barras)] || prov && porProveedor[String(prov)] || null;
+              var local = matchLocal(it, snap, porId, porBarras, porProveedor);
               return {
                 key: 'f' + idx + '-' + (barras || prov || it.id || idx),
                 descripcion: snap.descripcion || local && local.descripcion || null,
@@ -138458,54 +138790,37 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
                 stockLocal: local ? local.cantidad : null
               };
             }));
-          case 15:
+          case 8:
           case "end":
-            return _context8.stop();
+            return _context0.stop();
         }
-      }, _callee8, null, [[5, 12]]);
+      }, _callee0);
     }));
-    return function construirFilasConflicto(_x5) {
-      return _ref15.apply(this, arguments);
+    return function construirFilasConflicto(_x6) {
+      return _ref18.apply(this, arguments);
     };
   }();
 
   // Imprime la lista de picking de una premonta resolviendo la ubicación de almacén (1 petición).
   var imprimirPremonta = /*#__PURE__*/function () {
-    var _ref16 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee9(prem) {
-      var items, codigos, porBarras, porProveedor, _r$data2, r, filas;
-      return _regeneratorRuntime().wrap(function _callee9$(_context9) {
-        while (1) switch (_context9.prev = _context9.next) {
+    var _ref19 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(prem) {
+      var items, _yield$resolverLocale2, porId, porBarras, porProveedor, filas;
+      return _regeneratorRuntime().wrap(function _callee1$(_context1) {
+        while (1) switch (_context1.prev = _context1.next) {
           case 0:
             setProcesando('print-' + prem.id_orden_distribucion);
-            _context9.prev = 1;
+            _context1.prev = 1;
             items = prem.items || [];
-            codigos = [];
-            items.forEach(function (it) {
-              var s = it.producto || {};
-              if (s.codigo_barras) codigos.push(String(s.codigo_barras));
-              if (s.codigo_proveedor) codigos.push(String(s.codigo_proveedor));
-            });
-            porBarras = {}, porProveedor = {};
-            _context9.prev = 6;
-            _context9.next = 9;
-            return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].resolverInventarioPorCodigos({
-              codigos: codigos
-            });
-          case 9:
-            r = _context9.sent;
-            (((_r$data2 = r.data) === null || _r$data2 === void 0 ? void 0 : _r$data2.productos) || []).forEach(function (p) {
-              if (p.codigo_barras) porBarras[String(p.codigo_barras)] = p;
-              if (p.codigo_proveedor) porProveedor[String(p.codigo_proveedor)] = p;
-            });
-            _context9.next = 15;
-            break;
-          case 13:
-            _context9.prev = 13;
-            _context9.t0 = _context9["catch"](6);
-          case 15:
+            _context1.next = 5;
+            return resolverLocalesDePremonta(items);
+          case 5:
+            _yield$resolverLocale2 = _context1.sent;
+            porId = _yield$resolverLocale2.porId;
+            porBarras = _yield$resolverLocale2.porBarras;
+            porProveedor = _yield$resolverLocale2.porProveedor;
             filas = items.map(function (it) {
               var s = it.producto || {};
-              var local = s.codigo_barras && porBarras[String(s.codigo_barras)] || s.codigo_proveedor && porProveedor[String(s.codigo_proveedor)] || null;
+              var local = matchLocal(it, s, porId, porBarras, porProveedor);
               return {
                 barras: s.codigo_barras,
                 codigo_proveedor: s.codigo_proveedor,
@@ -138514,91 +138829,91 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
                 cantidad: it.cantidad
               };
             });
-            imprimirListaPicking({
+            abrirPrintModal({
               titulo: 'Lista de picking · Redistribución #' + prem.id_orden_distribucion,
               subtitulo: 'Búsqueda física en almacén · ' + items.length + ' producto(s)',
               filas: filas
             });
-          case 17:
-            _context9.prev = 17;
+          case 11:
+            _context1.prev = 11;
             setProcesando(null);
-            return _context9.finish(17);
-          case 20:
+            return _context1.finish(11);
+          case 14:
           case "end":
-            return _context9.stop();
+            return _context1.stop();
         }
-      }, _callee9, null, [[1,, 17, 20], [6, 13]]);
+      }, _callee1, null, [[1,, 11, 14]]);
     }));
-    return function imprimirPremonta(_x6) {
-      return _ref16.apply(this, arguments);
+    return function imprimirPremonta(_x7) {
+      return _ref19.apply(this, arguments);
     };
   }();
 
   // "Crear orden" desde una redistribución: primero abre el paso de resolución de conflictos
   // (ajustar cantidades / excluir inexistentes). La creación real ocurre en confirmarOrdenConflictos.
   var abrirResolucionPremonta = /*#__PURE__*/function () {
-    var _ref17 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(prem) {
+    var _ref20 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(prem) {
       var filas;
-      return _regeneratorRuntime().wrap(function _callee0$(_context0) {
-        while (1) switch (_context0.prev = _context0.next) {
+      return _regeneratorRuntime().wrap(function _callee10$(_context10) {
+        while (1) switch (_context10.prev = _context10.next) {
           case 0:
             setProcesando('prem-' + prem.id_orden_distribucion);
-            _context0.prev = 1;
-            _context0.next = 4;
+            _context10.prev = 1;
+            _context10.next = 4;
             return construirFilasConflicto(prem);
           case 4:
-            filas = _context0.sent;
+            filas = _context10.sent;
             setConflictosPremonta({
               prem: prem,
               filas: filas
             });
             setVistaActual('conflictos');
-            _context0.next = 12;
+            _context10.next = 12;
             break;
           case 9:
-            _context0.prev = 9;
-            _context0.t0 = _context0["catch"](1);
-            alert('Error al cotejar la redistribución: ' + (_context0.t0.message || _context0.t0));
+            _context10.prev = 9;
+            _context10.t0 = _context10["catch"](1);
+            alert('Error al cotejar la redistribución: ' + (_context10.t0.message || _context10.t0));
           case 12:
-            _context0.prev = 12;
+            _context10.prev = 12;
             setProcesando(null);
-            return _context0.finish(12);
+            return _context10.finish(12);
           case 15:
           case "end":
-            return _context0.stop();
+            return _context10.stop();
         }
-      }, _callee0, null, [[1, 9, 12, 15]]);
+      }, _callee10, null, [[1, 9, 12, 15]]);
     }));
-    return function abrirResolucionPremonta(_x7) {
-      return _ref17.apply(this, arguments);
+    return function abrirResolucionPremonta(_x8) {
+      return _ref20.apply(this, arguments);
     };
   }();
 
   // Crea la orden en preparación (estado 0, SIN descontar) con los ítems ya resueltos por el
   // usuario, ligada a la redistribución. La redistribución original de central queda intacta.
   var confirmarOrdenConflictos = /*#__PURE__*/function () {
-    var _ref18 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(items) {
-      var prem, _prem$sucursal_destin, _res$data3, res, _res$data4;
-      return _regeneratorRuntime().wrap(function _callee1$(_context1) {
-        while (1) switch (_context1.prev = _context1.next) {
+    var _ref21 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(items) {
+      var prem, _prem$sucursal_destin, _res$data4, res, _res$data5;
+      return _regeneratorRuntime().wrap(function _callee11$(_context11) {
+        while (1) switch (_context11.prev = _context11.next) {
           case 0:
             prem = conflictosPremonta === null || conflictosPremonta === void 0 ? void 0 : conflictosPremonta.prem;
             if (prem) {
-              _context1.next = 3;
+              _context11.next = 3;
               break;
             }
-            return _context1.abrupt("return");
+            return _context11.abrupt("return");
           case 3:
             if (items.length) {
-              _context1.next = 6;
+              _context11.next = 6;
               break;
             }
             alert('No hay productos válidos para crear la orden.');
-            return _context1.abrupt("return");
+            return _context11.abrupt("return");
           case 6:
             setProcesando('crear-conflictos');
-            _context1.prev = 7;
-            _context1.next = 10;
+            _context11.prev = 7;
+            _context11.next = 10;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGuardarOrden({
               id_destino: ((_prem$sucursal_destin = prem.sucursal_destino) === null || _prem$sucursal_destin === void 0 ? void 0 : _prem$sucursal_destin.id) || '',
               id_orden_distribucion: prem.id_orden_distribucion,
@@ -138606,12 +138921,12 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
               items: items
             });
           case 10:
-            res = _context1.sent;
-            if (!((_res$data3 = res.data) !== null && _res$data3 !== void 0 && _res$data3.estado)) {
-              _context1.next = 19;
+            res = _context11.sent;
+            if (!((_res$data4 = res.data) !== null && _res$data4 !== void 0 && _res$data4.estado)) {
+              _context11.next = 19;
               break;
             }
-            _context1.next = 14;
+            _context11.next = 14;
             return cargarBorradores();
           case 14:
             setPremontas(function (prev) {
@@ -138621,29 +138936,29 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
             });
             setConflictosPremonta(null);
             setVistaActual('list');
-            _context1.next = 20;
+            _context11.next = 20;
             break;
           case 19:
-            alert(((_res$data4 = res.data) === null || _res$data4 === void 0 ? void 0 : _res$data4.msj) || 'No se pudo crear la orden.');
+            alert(((_res$data5 = res.data) === null || _res$data5 === void 0 ? void 0 : _res$data5.msj) || 'No se pudo crear la orden.');
           case 20:
-            _context1.next = 25;
+            _context11.next = 25;
             break;
           case 22:
-            _context1.prev = 22;
-            _context1.t0 = _context1["catch"](7);
-            alert('Error al crear la orden: ' + (_context1.t0.message || _context1.t0));
+            _context11.prev = 22;
+            _context11.t0 = _context11["catch"](7);
+            alert('Error al crear la orden: ' + (_context11.t0.message || _context11.t0));
           case 25:
-            _context1.prev = 25;
+            _context11.prev = 25;
             setProcesando(null);
-            return _context1.finish(25);
+            return _context11.finish(25);
           case 28:
           case "end":
-            return _context1.stop();
+            return _context11.stop();
         }
-      }, _callee1, null, [[7, 22, 25, 28]]);
+      }, _callee11, null, [[7, 22, 25, 28]]);
     }));
-    return function confirmarOrdenConflictos(_x8) {
-      return _ref18.apply(this, arguments);
+    return function confirmarOrdenConflictos(_x9) {
+      return _ref21.apply(this, arguments);
     };
   }();
 
@@ -138662,147 +138977,223 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
 
   // Guarda el borrador (crear/actualizar) sin descontar. Devuelve {estado, msj, orden}.
   var guardarBorrador = /*#__PURE__*/function () {
-    var _ref19 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(datos) {
+    var _ref22 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee12(datos) {
       var res;
-      return _regeneratorRuntime().wrap(function _callee10$(_context10) {
-        while (1) switch (_context10.prev = _context10.next) {
+      return _regeneratorRuntime().wrap(function _callee12$(_context12) {
+        while (1) switch (_context12.prev = _context12.next) {
           case 0:
-            _context10.next = 2;
+            _context12.next = 2;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGuardarOrden(datos);
           case 2:
-            res = _context10.sent;
-            _context10.next = 5;
+            res = _context12.sent;
+            _context12.next = 5;
             return cargarBorradores();
           case 5:
-            return _context10.abrupt("return", res.data);
+            return _context12.abrupt("return", res.data);
           case 6:
           case "end":
-            return _context10.stop();
+            return _context12.stop();
         }
-      }, _callee10);
+      }, _callee12);
     }));
-    return function guardarBorrador(_x9) {
-      return _ref19.apply(this, arguments);
+    return function guardarBorrador(_x0) {
+      return _ref22.apply(this, arguments);
     };
   }();
 
   // Dar salida a un borrador: descuenta inventario + crea el espejo en central.
   var darSalida = /*#__PURE__*/function () {
-    var _ref20 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(borrador) {
-      var nItems, _res$data5, res, _res$data6;
-      return _regeneratorRuntime().wrap(function _callee11$(_context11) {
-        while (1) switch (_context11.prev = _context11.next) {
+    var _ref23 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee13(borrador) {
+      var nItems, _res$data6, res, _res$data7;
+      return _regeneratorRuntime().wrap(function _callee13$(_context13) {
+        while (1) switch (_context13.prev = _context13.next) {
           case 0:
             nItems = (borrador.items || []).filter(function (i) {
               return parseFloat(i.cantidad) > 0;
             }).length;
             if (window.confirm("\xBFDar salida a la orden #".concat(borrador.id, "? Se descontar\xE1n ").concat(nItems, " producto(s) del inventario y se enviar\xE1 a central. Esta acci\xF3n s\xED mueve inventario."))) {
-              _context11.next = 3;
+              _context13.next = 3;
               break;
             }
-            return _context11.abrupt("return");
+            return _context13.abrupt("return");
           case 3:
             setProcesando('salida-' + borrador.id);
-            _context11.prev = 4;
-            _context11.next = 7;
+            _context13.prev = 4;
+            _context13.next = 7;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdDarSalidaSimple({
               id_transferencia: borrador.id
             });
           case 7:
-            res = _context11.sent;
-            if (!((_res$data5 = res.data) !== null && _res$data5 !== void 0 && _res$data5.estado)) {
-              _context11.next = 15;
+            res = _context13.sent;
+            if (!((_res$data6 = res.data) !== null && _res$data6 !== void 0 && _res$data6.estado)) {
+              _context13.next = 15;
               break;
             }
-            _context11.next = 11;
+            _context13.next = 11;
             return cargarBorradores();
           case 11:
             setRefreshListKey(function (k) {
               return k + 1;
             }); // refrescar histórico central
             alert(res.data.msj || 'Salida dada.');
-            _context11.next = 16;
+            _context13.next = 16;
             break;
           case 15:
-            alert(((_res$data6 = res.data) === null || _res$data6 === void 0 ? void 0 : _res$data6.msj) || 'No se pudo dar salida.');
+            alert(((_res$data7 = res.data) === null || _res$data7 === void 0 ? void 0 : _res$data7.msj) || 'No se pudo dar salida.');
           case 16:
-            _context11.next = 21;
+            _context13.next = 21;
             break;
           case 18:
-            _context11.prev = 18;
-            _context11.t0 = _context11["catch"](4);
-            alert('Error al dar salida: ' + (_context11.t0.message || _context11.t0));
+            _context13.prev = 18;
+            _context13.t0 = _context13["catch"](4);
+            alert('Error al dar salida: ' + (_context13.t0.message || _context13.t0));
           case 21:
-            _context11.prev = 21;
+            _context13.prev = 21;
             setProcesando(null);
-            return _context11.finish(21);
+            return _context13.finish(21);
           case 24:
           case "end":
-            return _context11.stop();
+            return _context13.stop();
         }
-      }, _callee11, null, [[4, 18, 21, 24]]);
+      }, _callee13, null, [[4, 18, 21, 24]]);
     }));
-    return function darSalida(_x0) {
-      return _ref20.apply(this, arguments);
+    return function darSalida(_x1) {
+      return _ref23.apply(this, arguments);
     };
   }();
 
   // Eliminar un borrador (no tocó inventario).
   var eliminarBorrador = /*#__PURE__*/function () {
-    var _ref21 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee12(borrador) {
-      var _res$data7, res, _res$data8;
-      return _regeneratorRuntime().wrap(function _callee12$(_context12) {
-        while (1) switch (_context12.prev = _context12.next) {
+    var _ref24 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee14(borrador) {
+      var _res$data8, res, _res$data9;
+      return _regeneratorRuntime().wrap(function _callee14$(_context14) {
+        while (1) switch (_context14.prev = _context14.next) {
           case 0:
             if (window.confirm("\xBFEliminar la orden en preparaci\xF3n #".concat(borrador.id, "? No descont\xF3 inventario, solo se borra el borrador."))) {
-              _context12.next = 2;
+              _context14.next = 2;
               break;
             }
-            return _context12.abrupt("return");
+            return _context14.abrupt("return");
           case 2:
             setProcesando('del-' + borrador.id);
-            _context12.prev = 3;
-            _context12.next = 6;
+            _context14.prev = 3;
+            _context14.next = 6;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdEliminarOrden({
               id: borrador.id
             });
           case 6:
-            res = _context12.sent;
-            if (!((_res$data7 = res.data) !== null && _res$data7 !== void 0 && _res$data7.estado)) {
-              _context12.next = 13;
+            res = _context14.sent;
+            if (!((_res$data8 = res.data) !== null && _res$data8 !== void 0 && _res$data8.estado)) {
+              _context14.next = 13;
               break;
             }
-            _context12.next = 10;
+            _context14.next = 10;
             return cargarBorradores();
           case 10:
             setRefreshListKey(function (k) {
               return k + 1;
             }); // por si vuelve a aparecer la premonta
-            _context12.next = 14;
+            _context14.next = 14;
             break;
           case 13:
-            alert(((_res$data8 = res.data) === null || _res$data8 === void 0 ? void 0 : _res$data8.msj) || 'No se pudo eliminar.');
+            alert(((_res$data9 = res.data) === null || _res$data9 === void 0 ? void 0 : _res$data9.msj) || 'No se pudo eliminar.');
           case 14:
-            _context12.next = 19;
+            _context14.next = 19;
             break;
           case 16:
-            _context12.prev = 16;
-            _context12.t0 = _context12["catch"](3);
-            alert('Error al eliminar: ' + (_context12.t0.message || _context12.t0));
+            _context14.prev = 16;
+            _context14.t0 = _context14["catch"](3);
+            alert('Error al eliminar: ' + (_context14.t0.message || _context14.t0));
           case 19:
-            _context12.prev = 19;
+            _context14.prev = 19;
             setProcesando(null);
-            return _context12.finish(19);
+            return _context14.finish(19);
           case 22:
           case "end":
-            return _context12.stop();
+            return _context14.stop();
         }
-      }, _callee12, null, [[3, 16, 19, 22]]);
+      }, _callee14, null, [[3, 16, 19, 22]]);
     }));
-    return function eliminarBorrador(_x1) {
-      return _ref21.apply(this, arguments);
+    return function eliminarBorrador(_x10) {
+      return _ref24.apply(this, arguments);
     };
   }();
+
+  // Imprime la GUÍA DE DESPACHO de una orden despachada, con el MISMO formato/letras que la F4
+  // de pagarMain.js (mismo HTML, estilos y textos). Destino = sucursal receptora; Origen = esta.
+  var imprimirGuiaDespacho = function imprimirGuiaDespacho(orden) {
+    var _orden$id_destino;
+    var sucByIdLocal = {};
+    (sucursales || []).forEach(function (s) {
+      sucByIdLocal[s.id] = s;
+    });
+    var id = String(orden.id_transferencia_central || orden.id).padStart(8, '0');
+    var destino = sucByIdLocal[orden.id_destino] || {};
+    var origenSuc = sucByIdLocal[sucursalActualId || ID_SUCURSAL_ACTUAL_ORIGEN_PLACEHOLDER] || {};
+    var clienteRazon = destino.nombre || destino.codigo || 'Sucursal ' + ((_orden$id_destino = orden.id_destino) !== null && _orden$id_destino !== void 0 ? _orden$id_destino : '—');
+    var clienteRif = destino.rif || destino.identificacion || '—';
+    var clienteDir = destino.direccion && String(destino.direccion).trim() ? destino.direccion : '—';
+    var origenNombre = origenSuc.nombre || origenSuc.codigo || '—';
+    var items = orden.items || [];
+    var sub = items.reduce(function (a, it) {
+      return a + (parseFloat(it.cantidad) || 0) * (parseFloat(it.precio) || 0);
+    }, 0);
+    var exento = 0,
+      gravable = sub,
+      iva = 0;
+    var fmtP = function fmtP(n) {
+      return Number(n).toLocaleString('es', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    };
+    var ventana = window.open('', '_blank');
+    if (!ventana) {
+      alert('Habilitá las ventanas emergentes para poder imprimir la guía.');
+      return;
+    }
+    ventana.document.write("\n            <!DOCTYPE html><html><head><title>Gu\xEDa de Despacho N\xB0 ".concat(id, "</title>\n            <style>body{font-family:sans-serif;padding:1rem;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;} .titulo-guia{text-align:left;font-weight:bold;margin-bottom:1rem;}</style>\n            </head><body>\n            <div class=\"titulo-guia\">Gu\xEDa de Despacho N\xB0: ").concat(id, "</div>\n            <div class=\"header\">\n                <div><strong>Cliente</strong></div>\n                <div>Raz\xF3n Social: ").concat(clienteRazon, "</div>\n                <div>RIF: ").concat(clienteRif, "</div>\n                <div>Direcci\xF3n: ").concat(clienteDir, "</div>\n                <div style=\"margin-top:0.5rem;\"><strong>Origen:</strong> ").concat(origenNombre, "</div>\n\n            </div>\n            <table style=\"width:100%;\"><thead><tr><th>#</th><th>C\xF3digo</th><th>C\xF3d. proveedor</th><th>Descripci\xF3n</th><th style=\"text-align:right\">Cantidad</th><th style=\"text-align:right\">Precio</th></tr></thead><tbody>\n            ").concat(items.map(function (e, i) {
+      var _e$codigo_barras, _e$codigo_proveedor, _e$descripcion, _e$precio;
+      var cod = ((_e$codigo_barras = e.codigo_barras) !== null && _e$codigo_barras !== void 0 ? _e$codigo_barras : '—').toString().trim() || '—';
+      var codProv = ((_e$codigo_proveedor = e.codigo_proveedor) !== null && _e$codigo_proveedor !== void 0 ? _e$codigo_proveedor : '—').toString().trim() || '—';
+      var desc = ((_e$descripcion = e.descripcion) !== null && _e$descripcion !== void 0 ? _e$descripcion : '—').toString();
+      var cant = Number(e.cantidad);
+      var prec = (_e$precio = e.precio) !== null && _e$precio !== void 0 ? _e$precio : 0;
+      var precStr = Number(prec).toLocaleString('es', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 4
+      });
+      return "<tr><td>".concat(i + 1, "</td><td>").concat(cod, "</td><td>").concat(codProv, "</td><td>").concat(desc, "</td><td style=\"text-align:right\">").concat(cant % 1 === 0 ? cant : cant.toFixed(2), "</td><td style=\"text-align:right\">").concat(precStr, "</td></tr>");
+    }).join(''), "\n            </tbody></table>\n            <div class=\"totales\">\n                <table>\n                <tr><td style=\"padding-right:1rem;\">Subtotal</td><td style=\"text-align:right;\">").concat(fmtP(sub), "</td></tr>\n                <tr><td style=\"padding-right:1rem;\">Monto Exento</td><td style=\"text-align:right;\">").concat(fmtP(exento), "</td></tr>\n                <tr><td style=\"padding-right:1rem;\">Monto Gravable</td><td style=\"text-align:right;\">").concat(fmtP(gravable), "</td></tr>\n                <tr><td style=\"padding-right:1rem;\">IVA</td><td style=\"text-align:right;\">").concat(fmtP(iva), "</td></tr>\n                <tr><td style=\"padding-right:1rem;font-weight:bold;\">Monto Total</td><td style=\"text-align:right;font-weight:bold;\">").concat(fmtP(sub), "</td></tr>\n                </table>\n            </div>\n            <div class=\"firmas\">\n                <div><div style=\"border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;\">Firma del Despachador</div></div>\n                <div><div style=\"border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;\">Firma del Receptor</div></div>\n            </div>\n            </body></html>"));
+    ventana.document.close();
+    ventana.focus();
+    setTimeout(function () {
+      ventana.print();
+      ventana.close();
+    }, 300);
+  };
+
+  // Abre el modal de impresión de bultos para una orden despachada.
+  var abrirBultosModal = function abrirBultosModal(orden) {
+    setBultosOrden(orden);
+    setNumBultosInput('');
+    setBultosIframeUrl(null);
+  };
+  var generarVistaBultos = function generarVistaBultos() {
+    var _bultosOrden$id_desti;
+    var n = parseInt(numBultosInput, 10);
+    if (!(n >= 1)) {
+      alert('Indique un número de bultos válido (≥ 1).');
+      return;
+    }
+    var sucByIdLocal = {};
+    (sucursales || []).forEach(function (s) {
+      sucByIdLocal[s.id] = s;
+    });
+    var destinoCod = (sucByIdLocal[bultosOrden === null || bultosOrden === void 0 ? void 0 : bultosOrden.id_destino] || {}).codigo || 'SUC ' + ((_bultosOrden$id_desti = bultosOrden === null || bultosOrden === void 0 ? void 0 : bultosOrden.id_destino) !== null && _bultosOrden$id_desti !== void 0 ? _bultosOrden$id_desti : '');
+    var base = typeof window !== 'undefined' ? window.location.origin : '';
+    setBultosIframeUrl("".concat(base, "/transferencia-despacho/print-bultos?id=").concat(bultosOrden.id, "&bultos=").concat(n, "&destino=").concat(encodeURIComponent(destinoCod)));
+  };
   var handleSaveTransfer = function handleSaveTransfer(transferenciaGuardada) {
     setVistaActual('list');
     setTransferenciaSeleccionada(null);
@@ -139083,7 +139474,7 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
                       className: "px-3 py-2 text-center whitespace-nowrap",
                       children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
                         onClick: function onClick() {
-                          return imprimirListaPicking({
+                          return abrirPrintModal({
                             titulo: 'Lista de picking · Orden #' + b.id,
                             subtitulo: (b.id_orden_distribucion ? 'Redistribución #' + b.id_orden_distribucion + ' · ' : '') + totalItems + ' producto(s)',
                             filas: (b.items || []).map(function (i) {
@@ -139147,6 +139538,89 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
               })]
             })
           })]
+        }), despachadas.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "mb-3 border border-emerald-200 rounded-lg overflow-hidden",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+            className: "bg-emerald-50 px-3 py-2",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h4", {
+              className: "text-sm font-bold text-emerald-800",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                className: "fas fa-truck-fast mr-1"
+              }), "Despachadas \u2014 listas para imprimir (", despachadas.length, ")"]
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
+              className: "text-xs text-emerald-600",
+              children: "Inventario ya descontado. Imprim\xED la Gu\xEDa de Despacho y las etiquetas de bultos."
+            })]
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+            className: "overflow-x-auto",
+            children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("table", {
+              className: "min-w-full text-sm divide-y divide-emerald-100",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("thead", {
+                className: "bg-emerald-50/60 text-xs uppercase tracking-wide text-emerald-700",
+                children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
+                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-left font-semibold",
+                    children: "Orden"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-left font-semibold",
+                    children: "N\xBA Gu\xEDa"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-left font-semibold",
+                    children: "Destino"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-center font-semibold",
+                    children: "Productos"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-center font-semibold",
+                    children: "Imprimir"
+                  })]
+                })
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("tbody", {
+                className: "bg-white divide-y divide-gray-100",
+                children: despachadas.map(function (d) {
+                  var nItems = (d.items || []).length;
+                  var guia = String(d.id_transferencia_central || d.id).padStart(8, '0');
+                  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
+                    className: "hover:bg-emerald-50/40",
+                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
+                      className: "px-3 py-2 font-semibold text-gray-800 whitespace-nowrap",
+                      children: ["#", d.id]
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2 font-mono text-gray-700 whitespace-nowrap",
+                      children: guia
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2",
+                      children: badgeDestinoPorId(d.id_destino)
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2 text-center text-gray-600",
+                      children: nItems
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("td", {
+                      className: "px-3 py-2 text-center whitespace-nowrap",
+                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+                        onClick: function onClick() {
+                          return imprimirGuiaDespacho(d);
+                        },
+                        className: "px-2 py-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded",
+                        title: "Imprimir Gu\xEDa de Despacho",
+                        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas fa-file-invoice mr-1"
+                        }), "Gu\xEDa de Despacho"]
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+                        onClick: function onClick() {
+                          return abrirBultosModal(d);
+                        },
+                        className: "ml-1 px-2 py-1 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded",
+                        title: "Imprimir etiquetas de bultos",
+                        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas fa-box mr-1"
+                        }), "Bultos"]
+                      })]
+                    })]
+                  }, d.id);
+                })
+              })]
+            })
+          })]
         }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(TransferenciaList, {
           sucursalActualId: idOrigenReal,
           onRequireRefresh: refreshListKey,
@@ -139179,18 +139653,97 @@ var TransferenciasModule = function TransferenciasModule(_ref10) {
         sucursales: sucursales,
         cargarTransferencias: cargarTransferencias,
         modoBorrador: !!borradorEnEdicion,
-        onGuardarBorrador: guardarBorrador
+        onGuardarBorrador: guardarBorrador,
+        onImprimir: abrirPrintModal
       }), vistaActual === 'conflictos' && conflictosPremonta && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(ResolverConflictosPremonta, {
         prem: conflictosPremonta.prem,
         filas: conflictosPremonta.filas,
         destinoBadge: badgeDestinoPorId((_conflictosPremonta$p = conflictosPremonta.prem) === null || _conflictosPremonta$p === void 0 || (_conflictosPremonta$p = _conflictosPremonta$p.sucursal_destino) === null || _conflictosPremonta$p === void 0 ? void 0 : _conflictosPremonta$p.id),
         onConfirmar: confirmarOrdenConflictos,
         onCancelar: handleCancelForm,
+        onImprimir: abrirPrintModal,
         procesando: procesando === 'crear-conflictos'
       }), vistaActual === 'detail' && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(TransferenciaDetailView, {
         transferencia: transferenciaSeleccionada,
         onBack: handleCancelForm,
         sucursales: sucursales
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(PrintPickingModal, {
+        payload: printModal,
+        onClose: function onClose() {
+          return setPrintModal(null);
+        }
+      }), bultosOrden && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        className: "fixed inset-0 z-[100] flex flex-col bg-white",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "flex-shrink-0 flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-amber-50 border-b border-amber-200",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h2", {
+            className: "text-lg font-bold text-amber-900",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+              className: "fa fa-box mr-2"
+            }), "Imprimir Bultos \u2014 Orden #", bultosOrden.id]
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+            className: "flex items-center gap-3 flex-wrap",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("label", {
+              className: "flex items-center gap-2 text-sm font-medium text-gray-700",
+              children: ["N\xFAmero de bultos:", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+                type: "number",
+                min: "1",
+                className: "w-20 px-2 py-1.5 border border-gray-300 rounded-md text-center font-mono",
+                value: numBultosInput,
+                onChange: function onChange(e) {
+                  return setNumBultosInput(e.target.value);
+                },
+                placeholder: "Ej: 5"
+              })]
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+              type: "button",
+              onClick: generarVistaBultos,
+              className: "px-4 py-2 text-white bg-amber-600 border border-amber-700 rounded-lg hover:bg-amber-700",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                className: "fa fa-refresh mr-2"
+              }), "Generar vista"]
+            }), bultosIframeUrl && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+              type: "button",
+              onClick: function onClick() {
+                try {
+                  var _refIframeBultos$curr;
+                  if ((_refIframeBultos$curr = refIframeBultos.current) !== null && _refIframeBultos$curr !== void 0 && _refIframeBultos$curr.contentWindow) {
+                    refIframeBultos.current.contentWindow.print();
+                  }
+                } catch (err) {
+                  alert('Error al imprimir: ' + err.message);
+                }
+              },
+              className: "px-4 py-2 text-white bg-indigo-600 border border-indigo-700 rounded-lg hover:bg-indigo-700",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                className: "fa fa-print mr-2"
+              }), "Imprimir"]
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+              type: "button",
+              onClick: function onClick() {
+                setBultosOrden(null);
+                setBultosIframeUrl(null);
+                setNumBultosInput('');
+              },
+              className: "px-4 py-2 text-gray-700 bg-gray-200 border border-gray-400 rounded-lg hover:bg-gray-300",
+              children: "Cerrar"
+            })]
+          })]
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+          className: "flex-1 min-h-0 flex flex-col bg-gray-100 p-4",
+          children: bultosIframeUrl ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("iframe", {
+            ref: refIframeBultos,
+            src: bultosIframeUrl,
+            title: "Bultos",
+            className: "flex-1 w-full bg-white border border-gray-300 rounded"
+          }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+            className: "flex-1 flex items-center justify-center text-gray-400 text-sm",
+            children: ["Indic\xE1 el n\xFAmero de bultos y toc\xE1 ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("b", {
+              className: "mx-1",
+              children: "Generar vista"
+            }), "."]
+          })
+        })]
       })]
     })]
   });

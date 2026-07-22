@@ -1210,39 +1210,62 @@ class InventarioController extends Controller
     }
 
     /**
-     * Resuelve MUCHOS productos de una sola vez por código (de barras o proveedor).
-     * Reemplaza el patrón de 1 request por producto (que era lentísimo al armar/revisar
-     * una orden de redistribución con cientos de ítems). Una única consulta whereIn.
+     * Resuelve MUCHOS productos de una sola vez, por ID local y/o por código (barras/proveedor).
+     * Reemplaza el patrón de 1 request por producto (lentísimo con cientos de ítems). Una consulta.
      *
-     * Input:  { codigos: string[] }
-     * Output: { estado, productos:[{id,codigo_barras,codigo_proveedor,descripcion,precio_base,precio,cantidad}] }
+     * El match confiable es por ID: el inventario local reusa como `id` el `idinsucursal` del
+     * producto en central, que la premonta expone como `producto_id_master`. Si no hay id (p.ej.
+     * órdenes sembradas desde el catálogo central) se cae a match por código (tolerante a espacios).
+     *
+     * Input:  { ids?: int[], codigos?: string[] }
+     * Output: { estado, productos:[{id,codigo_barras,codigo_proveedor,descripcion,precio_base,precio,cantidad,ubicacion}] }
      */
     public function resolverProductosPorCodigos(Request $req)
     {
-        $codigos = collect($req->codigos ?? [])
-            ->map(fn ($c) => trim((string) $c))
-            ->filter(fn ($c) => $c !== '')
-            ->unique()
-            ->values()
-            ->all();
+        try {
+            $codigos = collect($req->codigos ?? [])
+                ->map(fn ($c) => trim((string) $c))
+                ->filter(fn ($c) => $c !== '')
+                ->unique()->values()->all();
+            $ids = collect($req->ids ?? [])
+                ->map(fn ($i) => (int) $i)
+                ->filter(fn ($i) => $i > 0)
+                ->unique()->values()->all();
 
-        if (empty($codigos)) {
-            return Response::json(['estado' => true, 'productos' => []]);
+            if (empty($codigos) && empty($ids)) {
+                return Response::json(['estado' => true, 'productos' => []]);
+            }
+
+            $productos = inventario::where(function ($q) use ($codigos, $ids) {
+                if (!empty($ids)) {
+                    $q->whereIn('id', $ids);
+                }
+                if (!empty($codigos)) {
+                    $q->orWhereIn('codigo_barras', $codigos)
+                        ->orWhereIn(DB::raw('TRIM(codigo_barras)'), $codigos)
+                        ->orWhereIn('codigo_proveedor', $codigos)
+                        ->orWhereIn(DB::raw('TRIM(codigo_proveedor)'), $codigos);
+                }
+            })
+                ->get(['id', 'codigo_barras', 'codigo_proveedor', 'descripcion', 'precio_base', 'precio', 'cantidad']);
+
+            // Ubicación de almacén por producto. BLINDADO: si el módulo warehouse no está o falla,
+            // NO debe tumbar la resolución de productos (antes un error acá dejaba todo "no existe").
+            $ubic = [];
+            try {
+                $ubic = \App\Models\WarehouseInventory::ubicacionesPorProductos($productos->pluck('id')->all());
+            } catch (\Throwable $e) {
+                \Log::warning('resolverProductosPorCodigos: ubicaciones warehouse no disponibles: ' . $e->getMessage());
+            }
+            $productos->each(function ($p) use ($ubic) {
+                $p->ubicacion = $ubic[$p->id] ?? null;
+            });
+
+            return Response::json(['estado' => true, 'productos' => $productos]);
+        } catch (\Throwable $e) {
+            \Log::error('resolverProductosPorCodigos: ' . $e->getMessage() . ' | ' . $e->getFile() . ':' . $e->getLine());
+            return Response::json(['estado' => false, 'msj' => 'Error al resolver productos: ' . $e->getMessage(), 'productos' => []], 200);
         }
-
-        $productos = inventario::where(function ($q) use ($codigos) {
-            $q->whereIn('codigo_barras', $codigos)
-                ->orWhereIn('codigo_proveedor', $codigos);
-        })
-            ->get(['id', 'codigo_barras', 'codigo_proveedor', 'descripcion', 'precio_base', 'precio', 'cantidad']);
-
-        // Ubicación de almacén (warehouse) por producto, si está disponible.
-        $ubic = \App\Models\WarehouseInventory::ubicacionesPorProductos($productos->pluck('id')->all());
-        $productos->each(function ($p) use ($ubic) {
-            $p->ubicacion = $ubic[$p->id] ?? null;
-        });
-
-        return Response::json(['estado' => true, 'productos' => $productos]);
     }
 
     public function index(Request $req)
