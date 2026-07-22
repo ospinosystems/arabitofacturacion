@@ -68,8 +68,9 @@ class TCDController extends Controller
         }
         
         try {
-            $productos = inventario::with(['proveedor', 'categoria'])
-                ->where(function($query) use ($buscar) {
+            // Nota: el inventario local (sinapsis) NO tiene relaciones proveedor/categoria
+            // (están centralizadas en central). Solo se usan columnas, así que no se eager-loadea nada.
+            $productos = inventario::where(function($query) use ($buscar) {
                     $query->where('codigo_barras', 'like', "%{$buscar}%")
                           ->orWhere('codigo_proveedor', 'like', "%{$buscar}%")
                           ->orWhere('descripcion', 'like', "%{$buscar}%");
@@ -1069,7 +1070,8 @@ class TCDController extends Controller
      */
     private function convertirOrdenTCDAPedido($orden)
     {
-        $orden->load(['items.inventario.proveedor', 'items.inventario.categoria']);
+        // El inventario local no tiene relaciones proveedor/categoria (centralizadas). Solo columnas.
+        $orden->load(['items.inventario']);
         
         // Generar un ID numérico único para TCD usando un offset grande
         // Usamos 9000000 como base para evitar conflictos con pedidos normales

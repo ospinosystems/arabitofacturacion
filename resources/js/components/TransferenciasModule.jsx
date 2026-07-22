@@ -113,13 +113,18 @@ const resolverLocalesDePremonta = async (items) => {
     return { porId, porBarras, porProveedor };
 };
 
-// Busca el producto local para un ítem de premonta: primero por id, luego por código.
+// Busca el producto local para un ítem de premonta. Considera el match por id (producto_id_master)
+// y por código (barras/proveedor). Prefiere el que TENGA ubicación, para que un id que apunte a un
+// producto sin ubicación no tape al match por código que sí la tiene.
 const matchLocal = (it, snap, porId, porBarras, porProveedor) => {
     const s = snap || it.producto || {};
-    return (it.producto_id_master && porId[String(it.producto_id_master)])
-        || (s.codigo_barras && porBarras[String(s.codigo_barras).trim()])
+    const porIdMatch = it.producto_id_master ? porId[String(it.producto_id_master)] : null;
+    const porCodMatch = (s.codigo_barras && porBarras[String(s.codigo_barras).trim()])
         || (s.codigo_proveedor && porProveedor[String(s.codigo_proveedor).trim()])
         || null;
+    if (porIdMatch && porIdMatch.ubicacion) return porIdMatch;
+    if (porCodMatch && porCodMatch.ubicacion) return porCodMatch;
+    return porIdMatch || porCodMatch || null;
 };
 
 // ###################################################################################
@@ -1617,6 +1622,7 @@ const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, on
                         <tr>
                             <th className="px-2 py-1.5 text-left font-semibold">Producto</th>
                             <th className="px-2 py-1.5 text-left font-semibold">Cód. Barras</th>
+                            <th className="px-2 py-1.5 text-left font-semibold">Ubicación</th>
                             <th className="px-2 py-1.5 text-center font-semibold">Solicitado</th>
                             <th className="px-2 py-1.5 text-center font-semibold">Stock local</th>
                             <th className="px-2 py-1.5 text-center font-semibold">A enviar</th>
@@ -1634,6 +1640,7 @@ const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, on
                                 <tr key={r.key} className={rowCls}>
                                     <td className="px-2 py-1.5 text-gray-800">{r.descripcion || '—'}</td>
                                     <td className="px-2 py-1.5 font-mono text-xs text-gray-600 whitespace-nowrap">{r.barras || '—'}</td>
+                                    <td className="px-2 py-1.5 font-mono text-[11px] text-emerald-700 max-w-[10rem] truncate" title={r.ubicacion || ''}>{r.ubicacion || '—'}</td>
                                     <td className="px-2 py-1.5 text-center text-gray-600">{parseFloat(r.cantidadSolicitada || 0).toFixed(2)}</td>
                                     <td className="px-2 py-1.5 text-center">{r.existe ? <span className={stock > 0 ? 'text-gray-700' : 'text-red-600 font-semibold'}>{stock.toFixed(2)}</span> : <span className="text-red-500">—</span>}</td>
                                     <td className="px-2 py-1.5 text-center">

@@ -134922,6 +134922,23 @@ function TCRModule(_ref) {
     });
   };
 
+  // Aprueba un producto (estado PENDIENTE) por escaneo. Usa tipo 'select' (toggle): solo se llama
+  // cuando aún NO está aprobado, para no desaprobarlo al re-escanear.
+  var marcarAprobado = function marcarAprobado(index) {
+    selectPedidosCentral({
+      currentTarget: {
+        attributes: {
+          'data-index': {
+            value: index
+          },
+          'data-tipo': {
+            value: 'select'
+          }
+        }
+      }
+    });
+  };
+
   // Función para buscar producto por código de barras y seleccionarlo
   var handleBuscarProducto = function handleBuscarProducto(e) {
     if (e.key === 'Enter' || e.type === 'blur') {
@@ -134946,6 +134963,29 @@ function TCRModule(_ref) {
       });
       if (productoIndex !== -1) {
         var producto = pedidoActual.items[productoIndex];
+
+        // ── Estado PENDIENTE: escanear APRUEBA el producto (chequeo código por código) ──
+        if (pedidoActual.estado === 1) {
+          if (producto.aprobado === true) {
+            setBusquedaMensaje("\u26A0\uFE0F Producto ya aprobado: ".concat(producto.producto.descripcion.substring(0, 45), "..."));
+          } else {
+            marcarAprobado(productoIndex);
+            setBusquedaMensaje("\u2705 Aprobado: ".concat(producto.producto.descripcion.substring(0, 50), "..."));
+          }
+          e.target.value = '';
+          setTimeout(function () {
+            var el = document.querySelector("[data-producto-card=\"".concat(productoIndex, "\"]"));
+            if (el) el.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            });
+            if (inputGenericoRef.current) inputGenericoRef.current.focus();
+          }, 100);
+          setTimeout(function () {
+            return setBusquedaMensaje('');
+          }, 2500);
+          return;
+        }
 
         // Si ya tiene ubicación, mostrar mensaje
         if (producto.warehouse_codigo) {
@@ -135425,7 +135465,7 @@ function TCRModule(_ref) {
                   className: "fas ".concat(!ubicacionOpcional ? 'fa-toggle-on' : 'fa-toggle-off')
                 }), !ubicacionOpcional ? 'Asignando ubicaciones' : 'Asignar ubicaciones']
               })]
-            }), pedidosCentral[indexPedidoCentral].estado === 4 && !ubicacionOpcional && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
+            }), (pedidosCentral[indexPedidoCentral].estado === 1 || pedidosCentral[indexPedidoCentral].estado === 4 && !ubicacionOpcional) && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
               className: "sticky top-0 z-50 border-b px-3 py-2 bg-white ".concat(esperandoUbicacion ? 'border-amber-500' : 'border-blue-500'),
               children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
                 className: "flex items-center gap-2",
@@ -135433,7 +135473,7 @@ function TCRModule(_ref) {
                   className: "flex items-center gap-1 text-xs font-bold whitespace-nowrap ".concat(esperandoUbicacion ? 'text-amber-700' : 'text-blue-700'),
                   children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
                     className: "fas ".concat(esperandoUbicacion ? 'fa-map-marker-alt' : 'fa-barcode')
-                  }), esperandoUbicacion ? 'Escanea ubicación' : ubicacionOpcional ? 'Escanea para chequear' : 'Busca producto']
+                  }), esperandoUbicacion ? 'Escanea ubicación' : pedidosCentral[indexPedidoCentral].estado === 1 ? 'Escanea para aprobar' : 'Busca producto']
                 }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("input", {
                   ref: inputGenericoRef,
                   type: "text",
@@ -135445,31 +135485,30 @@ function TCRModule(_ref) {
               })
             }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
               className: "p-3 space-y-3",
-              children: [pedidosCentral[indexPedidoCentral].estado === 1 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
+              children: [pedidosCentral[indexPedidoCentral].estado === 1 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("div", {
                 className: "space-y-2",
-                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("button", {
-                  onClick: function onClick(e) {
-                    e.currentTarget.setAttribute('data-index', 'all');
-                    e.currentTarget.setAttribute('data-tipo', 'selectall');
-                    selectPedidosCentral(e);
-                  },
-                  "data-index": "all",
-                  "data-tipo": "selectall",
-                  className: "w-full px-3 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg shadow transition flex items-center justify-center gap-2",
-                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
-                    className: "fas fa-check-double"
-                  }), pedidosCentral[indexPedidoCentral].items.every(function (item) {
-                    return item.aprobado === true;
-                  }) ? 'Deseleccionar Todos' : 'Seleccionar Todos']
-                }), pedidosCentral[indexPedidoCentral].items.length > 0 && pedidosCentral[indexPedidoCentral].items.every(function (item) {
-                  return item.aprobado === true;
-                }) && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("button", {
-                  onClick: checkPedidosCentral,
-                  className: "w-full px-3 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow transition flex items-center justify-center gap-2",
-                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
-                    className: "fas fa-save"
-                  }), "Guardar Pedido Revisado"]
-                })]
+                children: function () {
+                  var items = pedidosCentral[indexPedidoCentral].items;
+                  var aprobados = items.filter(function (it) {
+                    return it.aprobado === true;
+                  }).length;
+                  var total = items.length;
+                  var todos = total > 0 && aprobados === total;
+                  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.Fragment, {
+                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
+                      className: "flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold ".concat(todos ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'),
+                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                        className: "fas ".concat(todos ? 'fa-check-circle' : 'fa-barcode')
+                      }), todos ? 'Todos aprobados' : "Escane\xE1 para aprobar \xB7 ".concat(aprobados, "/").concat(total)]
+                    }), todos && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("button", {
+                      onClick: checkPedidosCentral,
+                      className: "w-full px-3 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow transition flex items-center justify-center gap-2",
+                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                        className: "fas fa-save"
+                      }), "Guardar Pedido Revisado"]
+                    })]
+                  });
+                }()
               }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("div", {
                 className: "bg-white rounded-lg p-3 shadow",
                 children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("h3", {
@@ -135928,10 +135967,16 @@ var resolverLocalesDePremonta = /*#__PURE__*/function () {
   };
 }();
 
-// Busca el producto local para un ítem de premonta: primero por id, luego por código.
+// Busca el producto local para un ítem de premonta. Considera el match por id (producto_id_master)
+// y por código (barras/proveedor). Prefiere el que TENGA ubicación, para que un id que apunte a un
+// producto sin ubicación no tape al match por código que sí la tiene.
 var matchLocal = function matchLocal(it, snap, porId, porBarras, porProveedor) {
   var s = snap || it.producto || {};
-  return it.producto_id_master && porId[String(it.producto_id_master)] || s.codigo_barras && porBarras[String(s.codigo_barras).trim()] || s.codigo_proveedor && porProveedor[String(s.codigo_proveedor).trim()] || null;
+  var porIdMatch = it.producto_id_master ? porId[String(it.producto_id_master)] : null;
+  var porCodMatch = s.codigo_barras && porBarras[String(s.codigo_barras).trim()] || s.codigo_proveedor && porProveedor[String(s.codigo_proveedor).trim()] || null;
+  if (porIdMatch && porIdMatch.ubicacion) return porIdMatch;
+  if (porCodMatch && porCodMatch.ubicacion) return porCodMatch;
+  return porIdMatch || porCodMatch || null;
 };
 
 // ###################################################################################
@@ -138100,6 +138145,9 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref10) {
               className: "px-2 py-1.5 text-left font-semibold",
               children: "C\xF3d. Barras"
             }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+              className: "px-2 py-1.5 text-left font-semibold",
+              children: "Ubicaci\xF3n"
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
               className: "px-2 py-1.5 text-center font-semibold",
               children: "Solicitado"
             }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
@@ -138130,6 +138178,10 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref10) {
               }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
                 className: "px-2 py-1.5 font-mono text-xs text-gray-600 whitespace-nowrap",
                 children: r.barras || '—'
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                className: "px-2 py-1.5 font-mono text-[11px] text-emerald-700 max-w-[10rem] truncate",
+                title: r.ubicacion || '',
+                children: r.ubicacion || '—'
               }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
                 className: "px-2 py-1.5 text-center text-gray-600",
                 children: parseFloat(r.cantidadSolicitada || 0).toFixed(2)

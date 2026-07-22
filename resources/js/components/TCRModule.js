@@ -57,6 +57,19 @@ export default function TCRModule({
         });
     };
 
+    // Aprueba un producto (estado PENDIENTE) por escaneo. Usa tipo 'select' (toggle): solo se llama
+    // cuando aún NO está aprobado, para no desaprobarlo al re-escanear.
+    const marcarAprobado = (index) => {
+        selectPedidosCentral({
+            currentTarget: {
+                attributes: {
+                    'data-index': { value: index },
+                    'data-tipo': { value: 'select' },
+                },
+            },
+        });
+    };
+
     // Función para buscar producto por código de barras y seleccionarlo
     const handleBuscarProducto = (e) => {
         if (e.key === 'Enter' || e.type === 'blur') {
@@ -83,6 +96,24 @@ export default function TCRModule({
 
             if (productoIndex !== -1) {
                 const producto = pedidoActual.items[productoIndex];
+
+                // ── Estado PENDIENTE: escanear APRUEBA el producto (chequeo código por código) ──
+                if (pedidoActual.estado === 1) {
+                    if (producto.aprobado === true) {
+                        setBusquedaMensaje(`⚠️ Producto ya aprobado: ${producto.producto.descripcion.substring(0, 45)}...`);
+                    } else {
+                        marcarAprobado(productoIndex);
+                        setBusquedaMensaje(`✅ Aprobado: ${producto.producto.descripcion.substring(0, 50)}...`);
+                    }
+                    e.target.value = '';
+                    setTimeout(() => {
+                        const el = document.querySelector(`[data-producto-card="${productoIndex}"]`);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        if (inputGenericoRef.current) inputGenericoRef.current.focus();
+                    }, 100);
+                    setTimeout(() => setBusquedaMensaje(''), 2500);
+                    return;
+                }
 
                 // Si ya tiene ubicación, mostrar mensaje
                 if (producto.warehouse_codigo) {
@@ -498,13 +529,13 @@ export default function TCRModule({
                                     )}
                                 </div>
 
-                                {/* Input de pistoleo - STICKY - Solo en REVISADO y con asignación de ubicaciones activada */}
-                                {pedidosCentral[indexPedidoCentral].estado === 4 && !ubicacionOpcional && (
+                                {/* Input de escaneo - STICKY - En PENDIENTE (aprobar) o en REVISADO con asignación de ubicaciones */}
+                                {(pedidosCentral[indexPedidoCentral].estado === 1 || (pedidosCentral[indexPedidoCentral].estado === 4 && !ubicacionOpcional)) && (
                                     <div className={`sticky top-0 z-50 border-b px-3 py-2 bg-white ${esperandoUbicacion ? 'border-amber-500' : 'border-blue-500'}`}>
                                         <div className="flex items-center gap-2">
                                             <span className={`flex items-center gap-1 text-xs font-bold whitespace-nowrap ${esperandoUbicacion ? 'text-amber-700' : 'text-blue-700'}`}>
                                                 <i className={`fas ${esperandoUbicacion ? 'fa-map-marker-alt' : 'fa-barcode'}`}></i>
-                                                {esperandoUbicacion ? 'Escanea ubicación' : (ubicacionOpcional ? 'Escanea para chequear' : 'Busca producto')}
+                                                {esperandoUbicacion ? 'Escanea ubicación' : (pedidosCentral[indexPedidoCentral].estado === 1 ? 'Escanea para aprobar' : 'Busca producto')}
                                             </span>
                                             <input
                                                 ref={inputGenericoRef}
@@ -520,35 +551,32 @@ export default function TCRModule({
 
                                 <div className="p-3 space-y-3">
 
-                                    {/* Botón seleccionar/deseleccionar todos - Solo en estado PENDIENTE */}
+                                    {/* Estado PENDIENTE: se aprueba escaneando producto por producto (sin "seleccionar todos"). */}
                                     {pedidosCentral[indexPedidoCentral].estado === 1 && (
                                         <div className="space-y-2">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.currentTarget.setAttribute('data-index', 'all');
-                                                    e.currentTarget.setAttribute('data-tipo', 'selectall');
-                                                    selectPedidosCentral(e);
-                                                }}
-                                                data-index="all"
-                                                data-tipo="selectall"
-                                                className="w-full px-3 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg shadow transition flex items-center justify-center gap-2"
-                                            >
-                                                <i className="fas fa-check-double"></i>
-                                                {pedidosCentral[indexPedidoCentral].items.every(item => item.aprobado === true)
-                                                    ? 'Deseleccionar Todos'
-                                                    : 'Seleccionar Todos'}
-                                            </button>
-
-                                            {pedidosCentral[indexPedidoCentral].items.length > 0 &&
-                                             pedidosCentral[indexPedidoCentral].items.every(item => item.aprobado === true) && (
-                                                <button
-                                                    onClick={checkPedidosCentral}
-                                                    className="w-full px-3 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow transition flex items-center justify-center gap-2"
-                                                >
-                                                    <i className="fas fa-save"></i>
-                                                    Guardar Pedido Revisado
-                                                </button>
-                                            )}
+                                            {(() => {
+                                                const items = pedidosCentral[indexPedidoCentral].items;
+                                                const aprobados = items.filter(it => it.aprobado === true).length;
+                                                const total = items.length;
+                                                const todos = total > 0 && aprobados === total;
+                                                return (
+                                                    <>
+                                                        <div className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold ${todos ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}>
+                                                            <i className={`fas ${todos ? 'fa-check-circle' : 'fa-barcode'}`}></i>
+                                                            {todos ? 'Todos aprobados' : `Escaneá para aprobar · ${aprobados}/${total}`}
+                                                        </div>
+                                                        {todos && (
+                                                            <button
+                                                                onClick={checkPedidosCentral}
+                                                                className="w-full px-3 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow transition flex items-center justify-center gap-2"
+                                                            >
+                                                                <i className="fas fa-save"></i>
+                                                                Guardar Pedido Revisado
+                                                            </button>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
                                         </div>
                                     )}
 
