@@ -1908,9 +1908,17 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     // Premontas = órdenes de redistribución 'Aprobada' de central donde ESTA sucursal es el origen.
     const [premontas, setPremontas] = useState([]);
     // Filtro común para las órdenes (premontas / borradores / despachadas).
-    const [filtroOrdenes, setFiltroOrdenes] = useState({ q: '', destino: '', desde: '', hasta: '' });
+    // Fecha local de hoy (YYYY-MM-DD), sin desfase de zona horaria.
+    const hoyLocal = () => {
+        const d = new Date();
+        return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    };
+    // Por defecto el filtro arranca en HOY (evita mostrar órdenes viejas). Limpiar quita las fechas.
+    const [filtroOrdenes, setFiltroOrdenes] = useState({ q: '', destino: '', desde: hoyLocal(), hasta: '' });
     const setFiltro = (campo, val) => setFiltroOrdenes(prev => ({ ...prev, [campo]: val }));
     const limpiarFiltros = () => setFiltroOrdenes({ q: '', destino: '', desde: '', hasta: '' });
+    // Tab activo del listado: 'enviadas' | 'redistribuciones' | 'preparacion' | 'despachadas'.
+    const [tabActiva, setTabActiva] = useState('redistribuciones');
     // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
     const [borradores, setBorradores] = useState([]);
     const [borradorEnEdicion, setBorradorEnEdicion] = useState(null);
@@ -1981,7 +1989,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     // Cargar despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
     const cargarDespachadas = useCallback(async () => {
         try {
-            const res = await db.tdGetOrdenes({ estado: 1, limit: 20 });
+            const res = await db.tdGetOrdenes({ estado: 1, limit: 100 });
             setDespachadas(res.data?.ordenes || []);
         } catch (e) { setDespachadas([]); }
     }, []);
@@ -2355,22 +2363,22 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const codDestino = (id) => { const s = sucById[id]; return s ? [s.codigo, s.nombre] : []; };
 
     // Premontas: sin borrador aún + filtro común (por # redistribución, destino, fecha).
+    // Premontas = trabajo pendiente (redistribuciones por despachar): NO se filtran por fecha
+    // (si no, el default "hoy" ocultaría redistribuciones viejas aún sin despachar). Solo texto/destino.
     const premontasFiltradas = premontas.filter(p => {
         if (odsConBorrador.has(Number(p.id_orden_distribucion))) return false;
         const destino = p.sucursal_destino || {};
         return matchDestino(destino.id)
-            && enRangoFecha(p.created_at || p.fecha_emision)
             && matchTexto([p.id_orden_distribucion, destino.codigo, destino.nombre]);
     });
 
-    // Borradores: filtro común (por # orden, # redistribución, destino, fecha).
+    // Borradores = órdenes en preparación (trabajo activo): tampoco se filtran por fecha. Solo texto/destino.
     const borradoresFiltrados = borradores.filter(b =>
         matchDestino(b.id_destino)
-        && enRangoFecha(b.created_at)
         && matchTexto([b.id, b.id_orden_distribucion, ...codDestino(b.id_destino)])
     );
 
-    // Despachadas: filtro común (por # orden, nº guía, # redistribución, destino, fecha).
+    // Despachadas: es la lista histórica (se acumula) → SÍ respeta la fecha (default hoy) + texto/destino.
     const despachadasFiltradas = despachadas.filter(d =>
         matchDestino(d.id_destino)
         && enRangoFecha(d.updated_at || d.created_at)
@@ -2407,7 +2415,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                 <SucursalCombo value={filtroOrdenes.destino} onChange={(val) => setFiltro('destino', val)} sucursales={sucursales} />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Desde</label>
+                                <label className="block text-xs font-medium text-gray-600 mb-1" title="La fecha filtra solo las Despachadas (por defecto, hoy). Premontas y borradores siempre se muestran.">Desde <i className="fas fa-circle-info text-gray-400"></i></label>
                                 <input type="date" value={filtroOrdenes.desde} onChange={e => setFiltro('desde', e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded" />
                             </div>
                             <div>
@@ -2425,13 +2433,41 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                 </button>
                             )}
                             <span className="text-xs text-gray-400 ml-auto">
-                                {premontasFiltradas.length} premonta(s) · {borradoresFiltrados.length} en preparación · {despachadasFiltradas.length} despachada(s)
+                                {premontasFiltradas.length} redistribución(es) · {borradoresFiltrados.length} en preparación · {despachadasFiltradas.length} despachada(s)
                             </span>
                         </div>
                     </div>
 
+                    {/* ── Tabs del listado ── */}
+                    <div className="mb-3 border-b border-gray-200">
+                        <div className="flex flex-wrap gap-1">
+                            {[
+                                { key: 'enviadas', label: 'Órdenes Enviadas', icon: 'fa-paper-plane', count: null, badge: 'bg-indigo-100 text-indigo-700' },
+                                { key: 'redistribuciones', label: 'Redistribuciones', icon: 'fa-random', count: premontasFiltradas.length, badge: 'bg-amber-100 text-amber-700' },
+                                { key: 'preparacion', label: 'En preparación', icon: 'fa-pen-to-square', count: borradoresFiltrados.length, badge: 'bg-blue-100 text-blue-700' },
+                                { key: 'despachadas', label: 'Despachadas', icon: 'fa-truck-fast', count: despachadasFiltradas.length, badge: 'bg-emerald-100 text-emerald-700' },
+                            ].map(t => (
+                                <button
+                                    key={t.key}
+                                    type="button"
+                                    onClick={() => setTabActiva(t.key)}
+                                    className={`px-3 py-2 text-sm font-semibold border-b-2 transition ${tabActiva === t.key ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <i className={`fas ${t.icon} mr-1`}></i>{t.label}
+                                    {t.count > 0 && <span className={`ml-1 px-1.5 py-0.5 text-xs font-bold rounded-full ${t.badge}`}>{t.count}</span>}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     {/* ── Redistribuciones por despachar (premontas de central) ── */}
-                    {(premontasFiltradas.length > 0 || (hayFiltros && premontas.length > 0)) && (
+                    {tabActiva === 'redistribuciones' && (
+                        premontasFiltradas.length === 0 && !(hayFiltros && premontas.length > 0) ? (
+                            <div className="text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg">
+                                <i className="fas fa-inbox text-4xl mb-2"></i>
+                                <p>No hay redistribuciones por despachar</p>
+                            </div>
+                        ) : (
                         <div className="mb-3 border border-amber-300 rounded-lg overflow-hidden">
                             <div className="flex items-center justify-between gap-2 bg-amber-50 px-3 py-2 flex-wrap">
                                 <h4 className="text-sm font-bold text-amber-800"><i className="fas fa-inbox mr-1"></i>Redistribuciones por despachar ({premontasFiltradas.length})</h4>
@@ -2484,10 +2520,17 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                 </table>
                             </div>
                         </div>
+                        )
                     )}
 
                     {/* ── Órdenes en preparación (borradores, sin descontar todavía) ── */}
-                    {borradoresFiltrados.length > 0 && (
+                    {tabActiva === 'preparacion' && (
+                        borradoresFiltrados.length === 0 ? (
+                            <div className="text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg">
+                                <i className="fas fa-pen-to-square text-4xl mb-2"></i>
+                                <p>No hay órdenes en preparación</p>
+                            </div>
+                        ) : (
                         <div className="mb-3 border border-blue-200 rounded-lg overflow-hidden">
                             <div className="bg-blue-50 px-3 py-2">
                                 <h4 className="text-sm font-bold text-blue-800"><i className="fas fa-pen-to-square mr-1"></i>Órdenes en preparación ({borradoresFiltrados.length})</h4>
@@ -2558,9 +2601,16 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                 </table>
                             </div>
                         </div>
+                        )
                     )}
                     {/* ── Despachadas (estado 1, inventario ya descontado) — imprimir Guía / Bultos ── */}
-                    {despachadasFiltradas.length > 0 && (
+                    {tabActiva === 'despachadas' && (
+                        despachadasFiltradas.length === 0 ? (
+                            <div className="text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg">
+                                <i className="fas fa-truck-fast text-4xl mb-2"></i>
+                                <p>No hay despachadas {hayFiltros ? 'con estos filtros' : 'hoy'} <span className="text-gray-300">(cambiá la fecha o tocá Limpiar para ver más)</span></p>
+                            </div>
+                        ) : (
                         <div className="mb-3 border border-emerald-200 rounded-lg overflow-hidden">
                             <div className="bg-emerald-50 px-3 py-2">
                                 <h4 className="text-sm font-bold text-emerald-800"><i className="fas fa-truck-fast mr-1"></i>Despachadas — listas para imprimir ({despachadasFiltradas.length})</h4>
@@ -2611,11 +2661,13 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                 </table>
                             </div>
                         </div>
+                        )
                     )}
+                    {tabActiva === 'enviadas' && (
                     <TransferenciaList
                         sucursalActualId={idOrigenReal}
                         onRequireRefresh={refreshListKey}
-                        onEdit={handleEditTransfer} 
+                        onEdit={handleEditTransfer}
                         onViewDetails={handleViewDetails}
                         sucursales={sucursales}
                         cargarTransferencias={cargarTransferencias}
@@ -2635,6 +2687,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                         mostrarFiltros={mostrarFiltros}
                         setMostrarFiltros={setMostrarFiltros}
                     />
+                    )}
                     </>
                 )}
                 {vistaActual === 'form' && (

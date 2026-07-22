@@ -138723,10 +138723,16 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
     premontas = _useState74[0],
     setPremontas = _useState74[1];
   // Filtro común para las órdenes (premontas / borradores / despachadas).
+  // Fecha local de hoy (YYYY-MM-DD), sin desfase de zona horaria.
+  var hoyLocal = function hoyLocal() {
+    var d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
+  // Por defecto el filtro arranca en HOY (evita mostrar órdenes viejas). Limpiar quita las fechas.
   var _useState75 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
       q: '',
       destino: '',
-      desde: '',
+      desde: hoyLocal(),
       hasta: ''
     }),
     _useState76 = _slicedToArray(_useState75, 2),
@@ -138745,50 +138751,55 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
       hasta: ''
     });
   };
-  // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
-  var _useState77 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+  // Tab activo del listado: 'enviadas' | 'redistribuciones' | 'preparacion' | 'despachadas'.
+  var _useState77 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('redistribuciones'),
     _useState78 = _slicedToArray(_useState77, 2),
-    borradores = _useState78[0],
-    setBorradores = _useState78[1];
-  var _useState79 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    tabActiva = _useState78[0],
+    setTabActiva = _useState78[1];
+  // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
+  var _useState79 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState80 = _slicedToArray(_useState79, 2),
-    borradorEnEdicion = _useState80[0],
-    setBorradorEnEdicion = _useState80[1];
+    borradores = _useState80[0],
+    setBorradores = _useState80[1];
   var _useState81 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState82 = _slicedToArray(_useState81, 2),
-    procesando = _useState82[0],
-    setProcesando = _useState82[1]; // id ocupado (crear/salida/eliminar)
-  // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
+    borradorEnEdicion = _useState82[0],
+    setBorradorEnEdicion = _useState82[1];
   var _useState83 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState84 = _slicedToArray(_useState83, 2),
-    conflictosPremonta = _useState84[0],
-    setConflictosPremonta = _useState84[1];
-  // Modal de opciones de impresión de la lista de picking: { titulo, subtitulo, filas } | null.
+    procesando = _useState84[0],
+    setProcesando = _useState84[1]; // id ocupado (crear/salida/eliminar)
+  // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
   var _useState85 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState86 = _slicedToArray(_useState85, 2),
-    printModal = _useState86[0],
-    setPrintModal = _useState86[1];
+    conflictosPremonta = _useState86[0],
+    setConflictosPremonta = _useState86[1];
+  // Modal de opciones de impresión de la lista de picking: { titulo, subtitulo, filas } | null.
+  var _useState87 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState88 = _slicedToArray(_useState87, 2),
+    printModal = _useState88[0],
+    setPrintModal = _useState88[1];
   var abrirPrintModal = function abrirPrintModal(payload) {
     return setPrintModal(payload);
   };
   // Órdenes ya despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
-  var _useState87 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState88 = _slicedToArray(_useState87, 2),
-    despachadas = _useState88[0],
-    setDespachadas = _useState88[1];
-  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
-  var _useState89 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+  var _useState89 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState90 = _slicedToArray(_useState89, 2),
-    bultosOrden = _useState90[0],
-    setBultosOrden = _useState90[1];
-  var _useState91 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    despachadas = _useState90[0],
+    setDespachadas = _useState90[1];
+  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
+  var _useState91 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState92 = _slicedToArray(_useState91, 2),
-    numBultosInput = _useState92[0],
-    setNumBultosInput = _useState92[1];
-  var _useState93 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    bultosOrden = _useState92[0],
+    setBultosOrden = _useState92[1];
+  var _useState93 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState94 = _slicedToArray(_useState93, 2),
-    bultosIframeUrl = _useState94[0],
-    setBultosIframeUrl = _useState94[1];
+    numBultosInput = _useState94[0],
+    setNumBultosInput = _useState94[1];
+  var _useState95 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState96 = _slicedToArray(_useState95, 2),
+    bultosIframeUrl = _useState96[0],
+    setBultosIframeUrl = _useState96[1];
   var refIframeBultos = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var cargarTransferencias = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
     var _ref14 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5(filtros) {
@@ -138932,7 +138943,7 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
           _context9.next = 3;
           return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGetOrdenes({
             estado: 1,
-            limit: 20
+            limit: 100
           });
         case 3:
           res = _context9.sent;
@@ -139614,18 +139625,20 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
   };
 
   // Premontas: sin borrador aún + filtro común (por # redistribución, destino, fecha).
+  // Premontas = trabajo pendiente (redistribuciones por despachar): NO se filtran por fecha
+  // (si no, el default "hoy" ocultaría redistribuciones viejas aún sin despachar). Solo texto/destino.
   var premontasFiltradas = premontas.filter(function (p) {
     if (odsConBorrador.has(Number(p.id_orden_distribucion))) return false;
     var destino = p.sucursal_destino || {};
-    return matchDestino(destino.id) && enRangoFecha(p.created_at || p.fecha_emision) && matchTexto([p.id_orden_distribucion, destino.codigo, destino.nombre]);
+    return matchDestino(destino.id) && matchTexto([p.id_orden_distribucion, destino.codigo, destino.nombre]);
   });
 
-  // Borradores: filtro común (por # orden, # redistribución, destino, fecha).
+  // Borradores = órdenes en preparación (trabajo activo): tampoco se filtran por fecha. Solo texto/destino.
   var borradoresFiltrados = borradores.filter(function (b) {
-    return matchDestino(b.id_destino) && enRangoFecha(b.created_at) && matchTexto([b.id, b.id_orden_distribucion].concat(_toConsumableArray(codDestino(b.id_destino))));
+    return matchDestino(b.id_destino) && matchTexto([b.id, b.id_orden_distribucion].concat(_toConsumableArray(codDestino(b.id_destino))));
   });
 
-  // Despachadas: filtro común (por # orden, nº guía, # redistribución, destino, fecha).
+  // Despachadas: es la lista histórica (se acumula) → SÍ respeta la fecha (default hoy) + texto/destino.
   var despachadasFiltradas = despachadas.filter(function (d) {
     return matchDestino(d.id_destino) && enRangoFecha(d.updated_at || d.created_at) && matchTexto([d.id, d.id_transferencia_central, d.id_orden_distribucion].concat(_toConsumableArray(codDestino(d.id_destino))));
   });
@@ -139680,9 +139693,12 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
                 sucursales: sucursales
               })]
             }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("label", {
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("label", {
                 className: "block text-xs font-medium text-gray-600 mb-1",
-                children: "Desde"
+                title: "La fecha filtra solo las Despachadas (por defecto, hoy). Premontas y borradores siempre se muestran.",
+                children: ["Desde ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                  className: "fas fa-circle-info text-gray-400"
+                })]
               }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
                 type: "date",
                 value: filtroOrdenes.desde,
@@ -139726,10 +139742,61 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
               }), "Limpiar"]
             }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
               className: "text-xs text-gray-400 ml-auto",
-              children: [premontasFiltradas.length, " premonta(s) \xB7 ", borradoresFiltrados.length, " en preparaci\xF3n \xB7 ", despachadasFiltradas.length, " despachada(s)"]
+              children: [premontasFiltradas.length, " redistribuci\xF3n(es) \xB7 ", borradoresFiltrados.length, " en preparaci\xF3n \xB7 ", despachadasFiltradas.length, " despachada(s)"]
             })]
           })]
-        }), (premontasFiltradas.length > 0 || hayFiltros && premontas.length > 0) && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+          className: "mb-3 border-b border-gray-200",
+          children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+            className: "flex flex-wrap gap-1",
+            children: [{
+              key: 'enviadas',
+              label: 'Órdenes Enviadas',
+              icon: 'fa-paper-plane',
+              count: null,
+              badge: 'bg-indigo-100 text-indigo-700'
+            }, {
+              key: 'redistribuciones',
+              label: 'Redistribuciones',
+              icon: 'fa-random',
+              count: premontasFiltradas.length,
+              badge: 'bg-amber-100 text-amber-700'
+            }, {
+              key: 'preparacion',
+              label: 'En preparación',
+              icon: 'fa-pen-to-square',
+              count: borradoresFiltrados.length,
+              badge: 'bg-blue-100 text-blue-700'
+            }, {
+              key: 'despachadas',
+              label: 'Despachadas',
+              icon: 'fa-truck-fast',
+              count: despachadasFiltradas.length,
+              badge: 'bg-emerald-100 text-emerald-700'
+            }].map(function (t) {
+              return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+                type: "button",
+                onClick: function onClick() {
+                  return setTabActiva(t.key);
+                },
+                className: "px-3 py-2 text-sm font-semibold border-b-2 transition ".concat(tabActiva === t.key ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'),
+                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                  className: "fas ".concat(t.icon, " mr-1")
+                }), t.label, t.count > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+                  className: "ml-1 px-1.5 py-0.5 text-xs font-bold rounded-full ".concat(t.badge),
+                  children: t.count
+                })]
+              }, t.key);
+            })
+          })
+        }), tabActiva === 'redistribuciones' && (premontasFiltradas.length === 0 && !(hayFiltros && premontas.length > 0) ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-inbox text-4xl mb-2"
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
+            children: "No hay redistribuciones por despachar"
+          })]
+        }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "mb-3 border border-amber-300 rounded-lg overflow-hidden",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
             className: "flex items-center justify-between gap-2 bg-amber-50 px-3 py-2 flex-wrap",
@@ -139829,7 +139896,14 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
               })]
             })
           })]
-        }), borradoresFiltrados.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        })), tabActiva === 'preparacion' && (borradoresFiltrados.length === 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-pen-to-square text-4xl mb-2"
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
+            children: "No hay \xF3rdenes en preparaci\xF3n"
+          })]
+        }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "mb-3 border border-blue-200 rounded-lg overflow-hidden",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
             className: "bg-blue-50 px-3 py-2",
@@ -139979,7 +140053,17 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
               })]
             })
           })]
-        }), despachadasFiltradas.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        })), tabActiva === 'despachadas' && (despachadasFiltradas.length === 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-truck-fast text-4xl mb-2"
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("p", {
+            children: ["No hay despachadas ", hayFiltros ? 'con estos filtros' : 'hoy', " ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+              className: "text-gray-300",
+              children: "(cambi\xE1 la fecha o toc\xE1 Limpiar para ver m\xE1s)"
+            })]
+          })]
+        }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "mb-3 border border-emerald-200 rounded-lg overflow-hidden",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
             className: "bg-emerald-50 px-3 py-2",
@@ -140099,7 +140183,7 @@ var TransferenciasModule = function TransferenciasModule(_ref13) {
               })]
             })
           })]
-        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(TransferenciaList, {
+        })), tabActiva === 'enviadas' && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(TransferenciaList, {
           sucursalActualId: idOrigenReal,
           onRequireRefresh: refreshListKey,
           onEdit: handleEditTransfer,
