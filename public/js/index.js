@@ -139044,19 +139044,24 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
     _useState100 = _slicedToArray(_useState99, 2),
     cargandoOrdenes = _useState100[0],
     setCargandoOrdenes = _useState100[1];
-  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
+  // Modal de previsualización de ítems de una orden (despachadas): la orden a mostrar.
   var _useState101 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState102 = _slicedToArray(_useState101, 2),
-    bultosOrden = _useState102[0],
-    setBultosOrden = _useState102[1];
-  var _useState103 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    itemsOrden = _useState102[0],
+    setItemsOrden = _useState102[1];
+  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
+  var _useState103 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState104 = _slicedToArray(_useState103, 2),
-    numBultosInput = _useState104[0],
-    setNumBultosInput = _useState104[1];
-  var _useState105 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    bultosOrden = _useState104[0],
+    setBultosOrden = _useState104[1];
+  var _useState105 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState106 = _slicedToArray(_useState105, 2),
-    bultosIframeUrl = _useState106[0],
-    setBultosIframeUrl = _useState106[1];
+    numBultosInput = _useState106[0],
+    setNumBultosInput = _useState106[1];
+  var _useState107 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState108 = _slicedToArray(_useState107, 2),
+    bultosIframeUrl = _useState108[0],
+    setBultosIframeUrl = _useState108[1];
   var refIframeBultos = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var cargarTransferencias = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
     var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5(filtros) {
@@ -140534,6 +140539,15 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
                         })
                       }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
                         onClick: function onClick() {
+                          return setItemsOrden(d);
+                        },
+                        className: "mr-1 px-2 py-1 text-xs font-semibold text-gray-700 border border-gray-300 rounded hover:bg-gray-50",
+                        title: "Ver todos los \xEDtems de la orden",
+                        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                          className: "fas fa-eye mr-1"
+                        }), "\xCDtems"]
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+                        onClick: function onClick() {
                           return imprimirGuiaDespacho(d);
                         },
                         className: "px-2 py-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded",
@@ -140624,7 +140638,186 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
         onClose: function onClose() {
           return setPrintModal(null);
         }
-      }), bultosOrden && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+      }), itemsOrden && function () {
+        var its = itemsOrden.items || [];
+        var totalUds = its.reduce(function (a, i) {
+          return a + (parseFloat(i.cantidad) || 0);
+        }, 0);
+        var totalMonto = its.reduce(function (a, i) {
+          return a + (parseFloat(i.cantidad) || 0) * (parseFloat(i.precio) || 0);
+        }, 0);
+        var fmt2 = function fmt2(n) {
+          return Number(n || 0).toLocaleString('es', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          });
+        };
+        return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+          className: "fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4",
+          onMouseDown: function onMouseDown() {
+            return setItemsOrden(null);
+          },
+          children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+            className: "bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col",
+            onMouseDown: function onMouseDown(e) {
+              return e.stopPropagation();
+            },
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+              className: "flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-emerald-50",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h3", {
+                  className: "text-sm font-bold text-emerald-900",
+                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                    className: "fas fa-list-ul mr-1"
+                  }), "\xCDtems de la orden #", itemsOrden.id]
+                }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("p", {
+                  className: "text-xs text-emerald-700 mt-0.5",
+                  children: [badgeDestinoPorId(itemsOrden.id_destino), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+                    className: "ml-2",
+                    children: [its.length, " producto(s) \xB7 ", fmt2(totalUds), " unidad(es)"]
+                  }), itemsOrden.central_pedido_id ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+                    className: "ml-2 font-mono",
+                    children: ["Gu\xEDa ", String(itemsOrden.central_pedido_id).padStart(8, '0')]
+                  }) : null]
+                })]
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                type: "button",
+                onClick: function onClick() {
+                  return setItemsOrden(null);
+                },
+                className: "text-gray-400 hover:text-gray-600",
+                title: "Cerrar",
+                children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                  className: "fas fa-times text-lg"
+                })
+              })]
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+              className: "flex-1 overflow-y-auto",
+              children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("table", {
+                className: "min-w-full text-sm",
+                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("thead", {
+                  className: "bg-gray-50 text-xs uppercase text-gray-500 sticky top-0",
+                  children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
+                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                      className: "px-3 py-2 text-center font-semibold w-10",
+                      children: "#"
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                      className: "px-3 py-2 text-left font-semibold",
+                      children: "Descripci\xF3n"
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                      className: "px-3 py-2 text-left font-semibold",
+                      children: "C\xF3d. Barras"
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                      className: "px-3 py-2 text-left font-semibold",
+                      children: "C\xF3d. Proveedor"
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                      className: "px-3 py-2 text-left font-semibold",
+                      children: "Ubicaci\xF3n"
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                      className: "px-3 py-2 text-right font-semibold",
+                      children: "Cantidad"
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                      className: "px-3 py-2 text-right font-semibold",
+                      children: "Precio"
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                      className: "px-3 py-2 text-right font-semibold",
+                      children: "Total"
+                    })]
+                  })
+                }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tbody", {
+                  className: "divide-y divide-gray-100",
+                  children: [its.length === 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("tr", {
+                    children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      colSpan: "8",
+                      className: "px-3 py-8 text-center text-gray-400",
+                      children: "Esta orden no tiene \xEDtems."
+                    })
+                  }), its.map(function (it, i) {
+                    return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
+                      className: "hover:bg-gray-50",
+                      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                        className: "px-3 py-1.5 text-center text-xs text-gray-400",
+                        children: i + 1
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                        className: "px-3 py-1.5 text-gray-800",
+                        children: it.descripcion || '—'
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                        className: "px-3 py-1.5 font-mono text-xs text-gray-600",
+                        children: it.codigo_barras || '—'
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                        className: "px-3 py-1.5 font-mono text-xs text-gray-600",
+                        children: it.codigo_proveedor || '—'
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                        className: "px-3 py-1.5 font-mono text-[11px] text-emerald-700",
+                        children: it.ubicacion || '—'
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                        className: "px-3 py-1.5 text-right font-semibold text-gray-800",
+                        children: fmt2(it.cantidad)
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                        className: "px-3 py-1.5 text-right text-gray-600",
+                        children: fmt2(it.precio)
+                      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                        className: "px-3 py-1.5 text-right text-gray-700",
+                        children: fmt2((parseFloat(it.cantidad) || 0) * (parseFloat(it.precio) || 0))
+                      })]
+                    }, it.id || i);
+                  })]
+                }), its.length > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("tfoot", {
+                  className: "bg-gray-50 sticky bottom-0",
+                  children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
+                    className: "font-bold text-gray-800",
+                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      colSpan: "5",
+                      className: "px-3 py-2 text-right",
+                      children: "Totales"
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2 text-right",
+                      children: fmt2(totalUds)
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {}), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2 text-right",
+                      children: fmt2(totalMonto)
+                    })]
+                  })
+                })]
+              })
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+              className: "flex-shrink-0 flex justify-end gap-2 px-4 py-3 border-t border-gray-200",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("button", {
+                type: "button",
+                onClick: function onClick() {
+                  var _sucById$itemsOrden$i, _sucById$itemsOrden$i2, _itemsOrden$id_destin;
+                  return abrirPrintModal({
+                    titulo: 'Ítems · Orden #' + itemsOrden.id,
+                    subtitulo: its.length + ' producto(s) · ' + fmt2(totalUds) + ' unidad(es)',
+                    destino: ((_sucById$itemsOrden$i = sucById[itemsOrden.id_destino]) === null || _sucById$itemsOrden$i === void 0 ? void 0 : _sucById$itemsOrden$i.codigo) || ((_sucById$itemsOrden$i2 = sucById[itemsOrden.id_destino]) === null || _sucById$itemsOrden$i2 === void 0 ? void 0 : _sucById$itemsOrden$i2.nombre) || 'Destino ' + ((_itemsOrden$id_destin = itemsOrden.id_destino) !== null && _itemsOrden$id_destin !== void 0 ? _itemsOrden$id_destin : '—'),
+                    filas: its.map(function (i) {
+                      return {
+                        barras: i.codigo_barras,
+                        codigo_proveedor: i.codigo_proveedor,
+                        descripcion: i.descripcion,
+                        ubicacion: i.ubicacion,
+                        cantidad: i.cantidad
+                      };
+                    })
+                  });
+                },
+                className: "px-3 py-2 text-sm font-semibold text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50",
+                title: "Imprimir esta lista (hoja carta)",
+                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                  className: "fas fa-print mr-1"
+                }), "Imprimir lista"]
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                type: "button",
+                onClick: function onClick() {
+                  return setItemsOrden(null);
+                },
+                className: "px-4 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-md hover:bg-emerald-700",
+                children: "Cerrar"
+              })]
+            })]
+          })
+        });
+      }(), bultosOrden && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
         className: "fixed inset-0 z-[100] flex flex-col bg-white",
         children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "flex-shrink-0 flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-amber-50 border-b border-amber-200",

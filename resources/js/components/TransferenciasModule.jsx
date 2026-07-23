@@ -2110,6 +2110,8 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const [origenCodigo, setOrigenCodigo] = useState(null);
     // Loading al cargar las órdenes (premontas + borradores + despachadas).
     const [cargandoOrdenes, setCargandoOrdenes] = useState(true);
+    // Modal de previsualización de ítems de una orden (despachadas): la orden a mostrar.
+    const [itemsOrden, setItemsOrden] = useState(null);
     // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
     const [bultosOrden, setBultosOrden] = useState(null);
     const [numBultosInput, setNumBultosInput] = useState('');
@@ -2901,6 +2903,9 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                                                 {procesando === 'reenv-' + d.id ? <><i className="fas fa-spinner fa-spin mr-1"></i>Enviando...</> : <><i className="fas fa-paper-plane mr-1"></i>Enviar a central</>}
                                                             </button>
                                                         )}
+                                                        <button onClick={() => setItemsOrden(d)} className="mr-1 px-2 py-1 text-xs font-semibold text-gray-700 border border-gray-300 rounded hover:bg-gray-50" title="Ver todos los ítems de la orden">
+                                                            <i className="fas fa-eye mr-1"></i>Ítems
+                                                        </button>
                                                         <button onClick={() => imprimirGuiaDespacho(d)} className="px-2 py-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded" title="Imprimir Guía de Despacho">
                                                             <i className="fas fa-file-invoice mr-1"></i>Guía de Despacho
                                                         </button>
@@ -2979,6 +2984,96 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                     />
                 )}
                 <PrintPickingModal payload={printModal} onClose={() => setPrintModal(null)} />
+
+                {/* Modal: previsualizar TODOS los ítems de una orden (despachadas) */}
+                {itemsOrden && (() => {
+                    const its = itemsOrden.items || [];
+                    const totalUds = its.reduce((a, i) => a + (parseFloat(i.cantidad) || 0), 0);
+                    const totalMonto = its.reduce((a, i) => a + (parseFloat(i.cantidad) || 0) * (parseFloat(i.precio) || 0), 0);
+                    const fmt2 = (n) => Number(n || 0).toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    return (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onMouseDown={() => setItemsOrden(null)}>
+                            <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col" onMouseDown={(e) => e.stopPropagation()}>
+                                <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-emerald-50">
+                                    <div>
+                                        <h3 className="text-sm font-bold text-emerald-900">
+                                            <i className="fas fa-list-ul mr-1"></i>Ítems de la orden #{itemsOrden.id}
+                                        </h3>
+                                        <p className="text-xs text-emerald-700 mt-0.5">
+                                            {badgeDestinoPorId(itemsOrden.id_destino)}
+                                            <span className="ml-2">{its.length} producto(s) · {fmt2(totalUds)} unidad(es)</span>
+                                            {itemsOrden.central_pedido_id ? <span className="ml-2 font-mono">Guía {String(itemsOrden.central_pedido_id).padStart(8, '0')}</span> : null}
+                                        </p>
+                                    </div>
+                                    <button type="button" onClick={() => setItemsOrden(null)} className="text-gray-400 hover:text-gray-600" title="Cerrar">
+                                        <i className="fas fa-times text-lg"></i>
+                                    </button>
+                                </div>
+                                <div className="flex-1 overflow-y-auto">
+                                    <table className="min-w-full text-sm">
+                                        <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0">
+                                            <tr>
+                                                <th className="px-3 py-2 text-center font-semibold w-10">#</th>
+                                                <th className="px-3 py-2 text-left font-semibold">Descripción</th>
+                                                <th className="px-3 py-2 text-left font-semibold">Cód. Barras</th>
+                                                <th className="px-3 py-2 text-left font-semibold">Cód. Proveedor</th>
+                                                <th className="px-3 py-2 text-left font-semibold">Ubicación</th>
+                                                <th className="px-3 py-2 text-right font-semibold">Cantidad</th>
+                                                <th className="px-3 py-2 text-right font-semibold">Precio</th>
+                                                <th className="px-3 py-2 text-right font-semibold">Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {its.length === 0 && (
+                                                <tr><td colSpan="8" className="px-3 py-8 text-center text-gray-400">Esta orden no tiene ítems.</td></tr>
+                                            )}
+                                            {its.map((it, i) => (
+                                                <tr key={it.id || i} className="hover:bg-gray-50">
+                                                    <td className="px-3 py-1.5 text-center text-xs text-gray-400">{i + 1}</td>
+                                                    <td className="px-3 py-1.5 text-gray-800">{it.descripcion || '—'}</td>
+                                                    <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{it.codigo_barras || '—'}</td>
+                                                    <td className="px-3 py-1.5 font-mono text-xs text-gray-600">{it.codigo_proveedor || '—'}</td>
+                                                    <td className="px-3 py-1.5 font-mono text-[11px] text-emerald-700">{it.ubicacion || '—'}</td>
+                                                    <td className="px-3 py-1.5 text-right font-semibold text-gray-800">{fmt2(it.cantidad)}</td>
+                                                    <td className="px-3 py-1.5 text-right text-gray-600">{fmt2(it.precio)}</td>
+                                                    <td className="px-3 py-1.5 text-right text-gray-700">{fmt2((parseFloat(it.cantidad) || 0) * (parseFloat(it.precio) || 0))}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        {its.length > 0 && (
+                                            <tfoot className="bg-gray-50 sticky bottom-0">
+                                                <tr className="font-bold text-gray-800">
+                                                    <td colSpan="5" className="px-3 py-2 text-right">Totales</td>
+                                                    <td className="px-3 py-2 text-right">{fmt2(totalUds)}</td>
+                                                    <td></td>
+                                                    <td className="px-3 py-2 text-right">{fmt2(totalMonto)}</td>
+                                                </tr>
+                                            </tfoot>
+                                        )}
+                                    </table>
+                                </div>
+                                <div className="flex-shrink-0 flex justify-end gap-2 px-4 py-3 border-t border-gray-200">
+                                    <button
+                                        type="button"
+                                        onClick={() => abrirPrintModal({
+                                            titulo: 'Ítems · Orden #' + itemsOrden.id,
+                                            subtitulo: its.length + ' producto(s) · ' + fmt2(totalUds) + ' unidad(es)',
+                                            destino: (sucById[itemsOrden.id_destino]?.codigo || sucById[itemsOrden.id_destino]?.nombre || ('Destino ' + (itemsOrden.id_destino ?? '—'))),
+                                            filas: its.map(i => ({ barras: i.codigo_barras, codigo_proveedor: i.codigo_proveedor, descripcion: i.descripcion, ubicacion: i.ubicacion, cantidad: i.cantidad })),
+                                        })}
+                                        className="px-3 py-2 text-sm font-semibold text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+                                        title="Imprimir esta lista (hoja carta)"
+                                    >
+                                        <i className="fas fa-print mr-1"></i>Imprimir lista
+                                    </button>
+                                    <button type="button" onClick={() => setItemsOrden(null)} className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-md hover:bg-emerald-700">
+                                        Cerrar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
 
                 {/* Modal pantalla completa: Imprimir Bultos (mismo flujo/formato que pagarMain) */}
                 {bultosOrden && (
