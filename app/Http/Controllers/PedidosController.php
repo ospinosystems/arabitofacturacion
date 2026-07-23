@@ -3113,24 +3113,18 @@ class PedidosController extends Controller
                 
                 // Sumar todos los lotes (pinpad + otros puntos) de todos los cierres de cajeros
                 foreach ($cierres_cajeros as $cierre_cajero) {
-                    // Obtener lotes pinpad
-                    $registro_pinpad = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero->id)
+                    // FIX 2026-07-22 — sumar TODOS los registros de débito del cierre
+                    // (no ->first()) para no perder el monto de una caja si existe una
+                    // fila duplicada/huérfana. Ver getTotalizarCierre.
+                    $registros_debito = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero->id)
                         ->where('tipo_pago', 2)
-                        ->where('subtipo', 'pinpad')
-                        ->first();
-                    
-                    if ($registro_pinpad && $registro_pinpad->monto_real) {
-                        $total_punto_real += floatval($registro_pinpad->monto_real);
-                    }
-                    
-                    // Obtener lotes otros puntos
-                    $registro_otros = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero->id)
-                        ->where('tipo_pago', 2)
-                        ->where('subtipo', 'otros_puntos')
-                        ->first();
-                    
-                    if ($registro_otros && $registro_otros->monto_real) {
-                        $total_punto_real += floatval($registro_otros->monto_real);
+                        ->whereIn('subtipo', ['pinpad', 'otros_puntos'])
+                        ->get();
+
+                    foreach ($registros_debito as $registro_debito) {
+                        if ($registro_debito->monto_real) {
+                            $total_punto_real += floatval($registro_debito->monto_real);
+                        }
                     }
                 }
             }
@@ -3401,23 +3395,25 @@ class PedidosController extends Controller
                     }
                     
                     // Obtener débito pinpad
-                    $registro_pinpad = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero_ver->id)
+                    // FIX 2026-07-22 — sumar TODOS los registros (no ->first()) para no
+                    // perder montos ante filas duplicadas/huérfanas. Ver getTotalizarCierre.
+                    $registros_pinpad = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero_ver->id)
                         ->where('tipo_pago', 2)
                         ->where('subtipo', 'pinpad')
-                        ->first();
-                    
-                    if ($registro_pinpad) {
+                        ->get();
+
+                    foreach ($registros_pinpad as $registro_pinpad) {
                         $suma_debito_pinpad_real += floatval($registro_pinpad->monto_real ?? 0);
                         $suma_debito_pinpad_digital += floatval($registro_pinpad->monto_digital ?? 0);
                     }
-                    
+
                     // Obtener débito otros puntos
-                    $registro_otros = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero_ver->id)
+                    $registros_otros = \App\Models\CierresMetodosPago::where('id_cierre', $cierre_cajero_ver->id)
                         ->where('tipo_pago', 2)
                         ->where('subtipo', 'otros_puntos')
-                        ->first();
-                    
-                    if ($registro_otros) {
+                        ->get();
+
+                    foreach ($registros_otros as $registro_otros) {
                         $suma_debito_otros_real += floatval($registro_otros->monto_real ?? 0);
                         $suma_debito_otros_digital += floatval($registro_otros->monto_digital ?? 0);
                     }
@@ -4113,10 +4109,14 @@ class PedidosController extends Controller
             foreach ($cierres_cajeros as $cierre) {
                 // Usar relación ya cargada (sin query adicional)
                 $metodos_pago = $cierre->metodosPago;
-                
-                // Buscar pinpad en los metodosPago ya cargados
-                $registro_pinpad = $metodos_pago->where('subtipo', 'pinpad')->first();
-                if ($registro_pinpad) {
+
+                // FIX 2026-07-22 — un mismo cierre puede tener MÁS DE UN registro
+                // pinpad/otros_puntos (p.ej. filas huérfanas por reuso de id de cierre
+                // tras un reseteo de BD). Antes se usaba ->first() y se descartaba en
+                // silencio el monto de las cajas cuyo primer registro estaba vacío
+                // (el totalizado consolidado quedaba corto por una caja). Ahora se
+                // agregan TODOS los registros, igual que la rama BD de cerrarFun (:2225).
+                foreach ($metodos_pago->where('subtipo', 'pinpad') as $registro_pinpad) {
                     $metadatos = is_string($registro_pinpad->metadatos)
                         ? json_decode($registro_pinpad->metadatos, true)
                         : $registro_pinpad->metadatos;
@@ -4130,13 +4130,11 @@ class PedidosController extends Controller
                     }
                 }
 
-                // Buscar otros_puntos en los metodosPago ya cargados
-                $registro_otros = $metodos_pago->where('subtipo', 'otros_puntos')->first();
-                if ($registro_otros) {
-                    $metadatos = is_string($registro_otros->metadatos) 
-                        ? json_decode($registro_otros->metadatos, true) 
+                foreach ($metodos_pago->where('subtipo', 'otros_puntos') as $registro_otros) {
+                    $metadatos = is_string($registro_otros->metadatos)
+                        ? json_decode($registro_otros->metadatos, true)
                         : $registro_otros->metadatos;
-                    
+
                     if (isset($metadatos['puntos'])) {
                         $lotes_otros_consolidados = array_merge($lotes_otros_consolidados, $metadatos['puntos']);
                     }
@@ -4184,23 +4182,26 @@ class PedidosController extends Controller
                 $metodos_pago = $cierre->metodosPago;
                 
                 // Obtener lotes individuales del usuario
+                // FIX 2026-07-22 — agregar TODOS los registros pinpad/otros_puntos del
+                // cierre (no ->first()) para no perder montos ante filas duplicadas.
                 $lotes_pinpad_usuario = [];
-                $registro_pinpad = $metodos_pago->where('subtipo', 'pinpad')->first();
-                if ($registro_pinpad) {
+                foreach ($metodos_pago->where('subtipo', 'pinpad') as $registro_pinpad) {
                     $metadatos = is_string($registro_pinpad->metadatos)
                         ? json_decode($registro_pinpad->metadatos, true)
                         : $registro_pinpad->metadatos;
                     // FIX 2026-05-26 — expandir lotes agrupados legacy al vuelo.
-                    $lotes_pinpad_usuario = $this->expandirLotesPinpad($metadatos['lotes'] ?? []);
+                    $lotes_pinpad_usuario = array_merge(
+                        $lotes_pinpad_usuario,
+                        $this->expandirLotesPinpad($metadatos['lotes'] ?? [])
+                    );
                 }
-                
+
                 $lotes_otros_usuario = [];
-                $registro_otros = $metodos_pago->where('subtipo', 'otros_puntos')->first();
-                if ($registro_otros) {
-                    $metadatos = is_string($registro_otros->metadatos) 
-                        ? json_decode($registro_otros->metadatos, true) 
+                foreach ($metodos_pago->where('subtipo', 'otros_puntos') as $registro_otros) {
+                    $metadatos = is_string($registro_otros->metadatos)
+                        ? json_decode($registro_otros->metadatos, true)
                         : $registro_otros->metadatos;
-                    $lotes_otros_usuario = $metadatos['puntos'] ?? [];
+                    $lotes_otros_usuario = array_merge($lotes_otros_usuario, $metadatos['puntos'] ?? []);
                 }
                 
                 // Llamar a cerrarFun para este usuario específico
