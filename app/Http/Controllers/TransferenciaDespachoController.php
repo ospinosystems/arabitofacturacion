@@ -134,22 +134,29 @@ class TransferenciaDespachoController extends Controller
             // ── Guard de disponibilidad REAL ──
             // No se puede comprometer más de lo que hay físicamente sumando TODAS las órdenes en
             // preparación. Disponible = stock − lo ya comprometido en OTROS borradores.
-            $idsProd = [];
+            // Se AGREGA por producto: si el mismo producto viniera en varias líneas, lo que cuenta
+            // contra el disponible es la SUMA, no cada línea por separado.
+            $pedidoPorProducto = [];
             foreach ($items as $it) {
                 $idp = (int) ($it['id_producto_insucursal'] ?? $it['id_producto'] ?? 0);
                 if ($idp) {
-                    $idsProd[] = $idp;
+                    $pedidoPorProducto[$idp] = ($pedidoPorProducto[$idp] ?? 0) + (float) ($it['cantidad'] ?? 0);
                 }
             }
+            $idsProd = array_keys($pedidoPorProducto);
+            // Bloquear las filas de inventario (orden ASC de id → mismo orden de locks en todos los
+            // procesos, sin deadlock) ANTES de leer lo comprometido. Sin esto, dos creaciones
+            // simultáneas del mismo producto podrían pasar ambas la validación (TOCTOU) y
+            // sobre-comprometer. Con el lock se serializan y la segunda ve lo que reservó la primera.
+            $productosLock = inventario::whereIn('id', array_unique($idsProd))
+                ->orderBy('id')->lockForUpdate()->get()->keyBy('id');
             $comprometido = $this->comprometidoEnBorradores($idsProd, $req->id ? (int) $req->id : null);
             $excedidos = [];
-            foreach ($items as $it) {
-                $idp = (int) ($it['id_producto_insucursal'] ?? $it['id_producto'] ?? 0);
-                $producto = $idp ? inventario::find($idp) : null;
+            foreach ($pedidoPorProducto as $idp => $cant) {
+                $producto = $productosLock[$idp] ?? null;
                 if (!$producto) {
                     continue;
                 }
-                $cant = (float) ($it['cantidad'] ?? 0);
                 $comp = (float) ($comprometido[$producto->id] ?? 0);
                 $disp = (float) $producto->cantidad - $comp;
                 if ($cant > $disp + 0.0001) {
