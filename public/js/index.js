@@ -138534,9 +138534,18 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref12) {
                 children: parseFloat(r.cantidadSolicitada || 0).toFixed(2)
               }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
                 className: "px-2 py-1.5 text-center",
-                children: r.existe ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
-                  className: stock > 0 ? 'text-gray-700' : 'text-red-600 font-semibold',
-                  children: stock.toFixed(2)
+                children: r.existe ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
+                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+                    className: stock > 0 ? 'text-gray-700' : 'text-red-600 font-semibold',
+                    title: r.comprometido > 0 ? "F\xEDsico ".concat(parseFloat(r.stockFisico || 0).toFixed(2), " \u2212 ").concat(parseFloat(r.comprometido).toFixed(2), " comprometido en otras \xF3rdenes en preparaci\xF3n") : 'Stock disponible',
+                    children: stock.toFixed(2)
+                  }), r.comprometido > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+                    className: "text-[10px] text-amber-600 leading-tight",
+                    title: "Unidades reservadas por otras \xF3rdenes en preparaci\xF3n",
+                    children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                      className: "fas fa-lock mr-0.5"
+                    }), parseFloat(r.comprometido).toFixed(2), " en otras \xF3rdenes"]
+                  })]
                 }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
                   className: "text-red-500",
                   children: "\u2014"
@@ -139313,7 +139322,11 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
                 cantidadSolicitada: it.cantidad,
                 local: local,
                 existe: !!local,
-                stockLocal: local ? local.cantidad : null
+                // stockLocal = disponible REAL (stock físico − lo comprometido en otras órdenes en
+                // preparación). Es el tope contra el que se ajustan y validan las cantidades.
+                stockLocal: local ? local.disponible != null ? local.disponible : local.cantidad : null,
+                stockFisico: local ? local.cantidad : null,
+                comprometido: local ? parseFloat(local.comprometido) || 0 : 0
               };
             }));
           case 8:

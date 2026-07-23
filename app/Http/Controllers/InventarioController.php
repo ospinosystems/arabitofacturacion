@@ -1258,6 +1258,24 @@ class InventarioController extends Controller
                 \Log::warning('resolverProductosPorCodigos: ubicaciones warehouse no disponibles: ' . $e->getMessage());
             }
 
+            // Cantidad ya COMPROMETIDA en órdenes en preparación (estado 0). Los borradores NO
+            // descuentan inventario, así que el disponible real = cantidad − comprometido. Sin esto
+            // se pueden armar 8 unidades entre varias órdenes teniendo solo 4 físicas. BLINDADO.
+            $comprometido = [];
+            try {
+                $borradores = \App\Models\transferencias_inventario::where('estado', 0)->select('id');
+                $comprometido = \App\Models\transferencias_inventario_items::query()
+                    ->select('id_producto', DB::raw('SUM(cantidad) as total'))
+                    ->whereIn('id_producto', $productos->pluck('id')->all())
+                    ->whereIn('id_transferencia', $borradores)
+                    ->groupBy('id_producto')
+                    ->pluck('total', 'id_producto')
+                    ->map(fn ($v) => (float) $v)
+                    ->all();
+            } catch (\Throwable $e) {
+                \Log::warning('resolverProductosPorCodigos: comprometido en borradores no disponible: ' . $e->getMessage());
+            }
+
             // Arrays planos con `ubicacion` EXPLÍCITA (sin depender de atributos mágicos del modelo).
             $out = $productos->map(fn ($p) => [
                 'id' => $p->id,
@@ -1266,7 +1284,9 @@ class InventarioController extends Controller
                 'descripcion' => $p->descripcion,
                 'precio_base' => $p->precio_base,
                 'precio' => $p->precio,
-                'cantidad' => $p->cantidad,
+                'cantidad' => $p->cantidad, // stock físico
+                'comprometido' => (float) ($comprometido[$p->id] ?? 0),
+                'disponible' => max(0, (float) $p->cantidad - (float) ($comprometido[$p->id] ?? 0)),
                 'ubicacion' => $ubic[$p->id] ?? null,
             ])->values();
 

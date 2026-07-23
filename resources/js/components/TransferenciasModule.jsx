@@ -1867,7 +1867,18 @@ const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, on
                                     <td className="px-2 py-1.5 font-mono text-xs text-gray-600 whitespace-nowrap">{r.barras || '—'}</td>
                                     <td className="px-2 py-1.5 font-mono text-[11px] text-emerald-700 max-w-[10rem] truncate" title={r.ubicacion || ''}>{r.ubicacion || '—'}</td>
                                     <td className="px-2 py-1.5 text-center text-gray-600">{parseFloat(r.cantidadSolicitada || 0).toFixed(2)}</td>
-                                    <td className="px-2 py-1.5 text-center">{r.existe ? <span className={stock > 0 ? 'text-gray-700' : 'text-red-600 font-semibold'}>{stock.toFixed(2)}</span> : <span className="text-red-500">—</span>}</td>
+                                    <td className="px-2 py-1.5 text-center">
+                                        {r.existe ? (
+                                            <>
+                                                <span className={stock > 0 ? 'text-gray-700' : 'text-red-600 font-semibold'} title={r.comprometido > 0 ? `Físico ${parseFloat(r.stockFisico || 0).toFixed(2)} − ${parseFloat(r.comprometido).toFixed(2)} comprometido en otras órdenes en preparación` : 'Stock disponible'}>{stock.toFixed(2)}</span>
+                                                {r.comprometido > 0 && (
+                                                    <div className="text-[10px] text-amber-600 leading-tight" title="Unidades reservadas por otras órdenes en preparación">
+                                                        <i className="fas fa-lock mr-0.5"></i>{parseFloat(r.comprometido).toFixed(2)} en otras órdenes
+                                                    </div>
+                                                )}
+                                            </>
+                                        ) : <span className="text-red-500">—</span>}
+                                    </td>
                                     <td className="px-2 py-1.5 text-center">
                                         {r.existe ? (
                                             <div className="flex items-center justify-center gap-1">
@@ -2223,7 +2234,11 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                 cantidadSolicitada: it.cantidad,
                 local,
                 existe: !!local,
-                stockLocal: local ? local.cantidad : null,
+                // stockLocal = disponible REAL (stock físico − lo comprometido en otras órdenes en
+                // preparación). Es el tope contra el que se ajustan y validan las cantidades.
+                stockLocal: local ? (local.disponible != null ? local.disponible : local.cantidad) : null,
+                stockFisico: local ? local.cantidad : null,
+                comprometido: local ? (parseFloat(local.comprometido) || 0) : 0,
             };
         });
     };

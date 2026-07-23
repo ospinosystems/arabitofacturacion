@@ -81,6 +81,37 @@ class TransferenciaDespachoController extends Controller
         return max(0, $tope - $this->empacadoPorItem($item->id));
     }
 
+    /**
+     * Cantidad ya COMPROMETIDA por producto en órdenes que están en preparación (estado 0).
+     *
+     * Los borradores NO descuentan inventario, así que sin esto se pueden comprometer 8 unidades
+     * cuando físicamente hay 4: cada orden ve el stock completo. El disponible REAL de un producto
+     * para una orden es: `inventarios.cantidad − comprometido en las OTRAS órdenes en preparación`.
+     *
+     * @param  int[]     $idsProducto
+     * @param  int|null  $excluirOrden  Orden que se está editando (su propia reserva no cuenta).
+     * @return array<int,float>  [id_producto => cantidad comprometida]
+     */
+    private function comprometidoEnBorradores(array $idsProducto, ?int $excluirOrden = null): array
+    {
+        $idsProducto = array_values(array_unique(array_filter(array_map('intval', $idsProducto))));
+        if (empty($idsProducto)) {
+            return [];
+        }
+        $borradores = transferencias_inventario::where('estado', 0)->select('id');
+        if ($excluirOrden) {
+            $borradores->where('id', '!=', $excluirOrden);
+        }
+        return transferencias_inventario_items::query()
+            ->select('id_producto', DB::raw('SUM(cantidad) as total'))
+            ->whereIn('id_producto', $idsProducto)
+            ->whereIn('id_transferencia', $borradores)
+            ->groupBy('id_producto')
+            ->pluck('total', 'id_producto')
+            ->map(fn ($v) => (float) $v)
+            ->all();
+    }
+
     // ───────────────────── Fase 0: orden pendiente ─────────────────────
 
     /**
@@ -98,6 +129,43 @@ class TransferenciaDespachoController extends Controller
             if (!count($items)) {
                 DB::rollBack();
                 return Response::json(['estado' => false, 'msj' => 'La orden no tiene ítems.']);
+            }
+
+            // ── Guard de disponibilidad REAL ──
+            // No se puede comprometer más de lo que hay físicamente sumando TODAS las órdenes en
+            // preparación. Disponible = stock − lo ya comprometido en OTROS borradores.
+            $idsProd = [];
+            foreach ($items as $it) {
+                $idp = (int) ($it['id_producto_insucursal'] ?? $it['id_producto'] ?? 0);
+                if ($idp) {
+                    $idsProd[] = $idp;
+                }
+            }
+            $comprometido = $this->comprometidoEnBorradores($idsProd, $req->id ? (int) $req->id : null);
+            $excedidos = [];
+            foreach ($items as $it) {
+                $idp = (int) ($it['id_producto_insucursal'] ?? $it['id_producto'] ?? 0);
+                $producto = $idp ? inventario::find($idp) : null;
+                if (!$producto) {
+                    continue;
+                }
+                $cant = (float) ($it['cantidad'] ?? 0);
+                $comp = (float) ($comprometido[$producto->id] ?? 0);
+                $disp = (float) $producto->cantidad - $comp;
+                if ($cant > $disp + 0.0001) {
+                    $excedidos[] = trim(($producto->codigo_barras ? $producto->codigo_barras . ' ' : '') . $producto->descripcion)
+                        . ": pedís {$cant}, disponible " . max(0, $disp)
+                        . " (stock {$producto->cantidad}" . ($comp > 0 ? ", {$comp} ya comprometido en otras órdenes en preparación" : '') . ')';
+                }
+            }
+            if (!empty($excedidos)) {
+                DB::rollBack();
+                return Response::json([
+                    'estado' => false,
+                    'msj' => "No es posible preparar esta orden por falta de cantidades:\n\n• " . implode("\n• ", $excedidos)
+                        . "\n\nEsas unidades ya están comprometidas en otras órdenes en preparación. Ajustá o eliminá esas órdenes para continuar.",
+                    'excedidos' => $excedidos,
+                ]);
             }
 
             if ($req->id) {
@@ -249,7 +317,10 @@ class TransferenciaDespachoController extends Controller
         } catch (\Throwable $e) {
             \Log::warning('ordenConDetalle: ubicaciones warehouse no disponibles: ' . $e->getMessage());
         }
-        $items = $orden->items->map(function ($it) use ($ubic) {
+        // Disponible REAL = stock físico − lo comprometido en las OTRAS órdenes en preparación
+        // (los borradores no descuentan inventario; ver comprometidoEnBorradores()).
+        $comprometido = $this->comprometidoEnBorradores($orden->items->pluck('id_producto')->all(), $orden->id);
+        $items = $orden->items->map(function ($it) use ($ubic, $comprometido) {
             return [
                 'id' => $it->id,
                 'id_producto' => $it->id_producto,
@@ -260,8 +331,10 @@ class TransferenciaDespachoController extends Controller
                 'precio' => (float) ($it->producto->precio ?? 0),
                 'base' => (float) ($it->producto->precio_base ?? 0),
                 'cantidad' => (float) $it->cantidad,
-                // Stock disponible ACTUAL del producto en el inventario local (para el editor).
-                'stock_disponible' => (float) ($it->producto->cantidad ?? 0),
+                // Stock disponible REAL para esta orden = físico − comprometido en otros borradores.
+                'stock_disponible' => max(0, (float) ($it->producto->cantidad ?? 0) - (float) ($comprometido[$it->id_producto] ?? 0)),
+                'stock_fisico' => (float) ($it->producto->cantidad ?? 0),
+                'comprometido_otros' => (float) ($comprometido[$it->id_producto] ?? 0),
                 'revisado' => (bool) $it->revisado,
                 'recolectado' => $this->recolectadoPorItem($it->id),
                 'empacado' => $this->empacadoPorItem($it->id),
