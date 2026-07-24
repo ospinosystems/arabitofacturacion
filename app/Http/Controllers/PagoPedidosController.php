@@ -287,8 +287,103 @@ class PagoPedidosController extends Controller
             $cuadra = true;
         }
 
+        // ─────────────────────────────────────────────────────────────────────────────
+        // COBERTURA-TRANSFERENCIA 2026-07-24 — El cuadre compara items vs pago_pedidos, pero NO
+        // verificaba que el pago de TRANSFERENCIA esté respaldado por referencias bancarias
+        // validadas que lo cubran. Caso real (pedido #399886, caja1): pago transferencia $44.15,
+        // pero la única referencia aprobada era Bs 2.042,85 (≈$2.75, banco 0134 Banesco) → el
+        // cliente pagó $2.75 y el pedido cerró como pagado $44.15 (pérdida de $41.40). autovalidar
+        // valida la referencia contra SU PROPIO monto (correcto), pero nada ataba el pago del
+        // pedido al total de referencias. Verificado en data local: en decenas de pedidos legítimos
+        // Σ(refs Bs)/tasa == pago transferencia USD exacto; solo 399886 rompió el patrón.
+        //
+        // Regla: Σ(referencias tipo=1 aprobadas, convertidas a USD según la moneda del banco) debe
+        // CUBRIR el pago de transferencia (cuenta=1, tipo=1). Si falta plata más allá de la
+        // tolerancia → NO cuadra (bloquea el cierre en el interceptor y en setPagoPedido).
+        //
+        // Alcance SEGURO: solo actúa si (a) hay un pago de transferencia POSITIVO y (b) el pedido
+        // tiene ≥1 referencia bancaria aprobada (banco not null). Sin referencias (modo 'codigo',
+        // efectivo, POS) no se toca nada. Solo bloquea el FALTANTE (pago > refs); un sobrante
+        // (refs ≥ pago) no bloquea. Envuelto en try/catch: si algo falla, NO bloquea (fail-open),
+        // la protección base (items vs pagos) sigue intacta.
+        $coberturaTransferencia = null;
+        $motivoBloqueo = null;
+        try {
+            $pagoTransferenciaUsd = (float) pago_pedidos::where('id_pedido', $idPedido)
+                ->where('cuenta', 1)
+                ->where('tipo', 1)
+                ->whereRaw('ABS(monto) > 0.001')
+                ->sum('monto');
+
+            if ($pagoTransferenciaUsd > max($toleranciaUsd, 0.5) && $tasaItemCuadre > 1) {
+                $refsTransfer = pagos_referencias::where('id_pedido', $idPedido)
+                    ->where('tipo', 1)
+                    ->whereIn('estatus', ['aprobada', 'aprobado'])
+                    ->whereNotNull('banco')
+                    ->whereRaw('ABS(monto) > 0.001')
+                    ->get(['monto', 'banco']);
+
+                if ($refsTransfer->isNotEmpty()) {
+                    // Resuelve si la referencia es en divisa (USD) para NO dividirla por la tasa.
+                    $esRefDivisa = function ($banco) {
+                        if ($banco === null || $banco === '') return false;
+                        if (\App\Support\BancoMoneda::esDivisa($banco)) return true;
+                        // "0134 BANESCO OMAR PERSONAL 0823" → probar el código de 4 dígitos inicial.
+                        if (preg_match('/^\s*(\d{4})\b/', $banco, $m) && \App\Support\BancoMoneda::esDivisa($m[1])) {
+                            return true;
+                        }
+                        // Palabras clave de divisa por si el banco no está en el catálogo.
+                        $u = strtoupper($banco);
+                        foreach (['ZELLE', 'BINANCE', 'AIRTM', 'ZINLI', 'PAYPAL', 'USD', 'DOLAR', 'DÓLAR', 'DIVISA'] as $kw) {
+                            if (str_contains($u, $kw)) return true;
+                        }
+                        return false; // asumir Bs (caso común: pago móvil / Banesco)
+                    };
+
+                    $refsUsd = 0.0;
+                    foreach ($refsTransfer as $r) {
+                        $m = abs((float) $r->monto);
+                        $refsUsd += $esRefDivisa($r->banco) ? $m : ($m / $tasaItemCuadre);
+                    }
+                    $refsUsd = round($refsUsd, 4);
+
+                    // Tasa BCV es constante intradía (todas las sucursales usan la de central), así
+                    // que refs y pago se convierten a la MISMA tasa → sin drift. Tolerancia amplia
+                    // igual (1% + piso $0.5) para redondeos de Bs entero del banco.
+                    $tolCobertura = max($toleranciaUsd, round($pagoTransferenciaUsd * 0.01, 2), 0.5);
+                    $faltanteUsd = round($pagoTransferenciaUsd - $refsUsd, 4);
+                    $cubre = $faltanteUsd <= $tolCobertura;
+
+                    $coberturaTransferencia = [
+                        'pago_transferencia_usd' => round($pagoTransferenciaUsd, 4),
+                        'refs_transferencia_usd' => $refsUsd,
+                        'refs_count' => $refsTransfer->count(),
+                        'faltante_usd' => $faltanteUsd,
+                        'tolerancia_cobertura' => $tolCobertura,
+                        'cubre' => $cubre,
+                    ];
+
+                    if (!$cubre) {
+                        $cuadra = false;
+                        $motivoBloqueo = "Transferencia registrada $" . number_format($pagoTransferenciaUsd, 2) .
+                            " pero las referencias aprobadas solo respaldan $" . number_format($refsUsd, 2) .
+                            " (faltan $" . number_format($faltanteUsd, 2) . "). " .
+                            "Verificá el monto de la transferencia contra el comprobante del banco.";
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Fail-open: nunca romper el cierre por un error de este chequeo.
+            \Log::warning('[CUADRE] cobertura transferencia: error (NO bloquea)', [
+                'id_pedido' => $idPedido,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         return [
             'cuadra' => $cuadra,
+            'motivo_bloqueo' => $motivoBloqueo,
+            'cobertura_transferencia' => $coberturaTransferencia,
             // Combinados (venta + abono) para mensajes y compatibilidad con callers existentes.
             'total_pedido_usd' => round($totalVentaUsd + $totalAbonoUsd, 4),
             'total_pagos_usd' => round($totalPagosUsd + $totalPagosAbonoUsd, 4),
@@ -1501,10 +1596,11 @@ class PagoPedidosController extends Controller
                         ]);
                         return Response::json([
                             "msj" => "BLOQUEADO: El pedido #{$pedido->id} no cuadra al cerrar. " .
-                                    "Pedido USD " . $cuadreFinal['total_pedido_usd'] .
-                                    " vs Pagos USD " . $cuadreFinal['total_pagos_usd'] .
-                                    " (diferencia " . $cuadreFinal['diferencia_usd'] . " USD). " .
-                                    "Contactar admin si esto persiste.",
+                                    ($cuadreFinal['motivo_bloqueo'] ??
+                                        ("Pedido USD " . $cuadreFinal['total_pedido_usd'] .
+                                         " vs Pagos USD " . $cuadreFinal['total_pagos_usd'] .
+                                         " (diferencia " . $cuadreFinal['diferencia_usd'] . " USD).")
+                                    ) . " Contactar admin si esto persiste.",
                             "estado" => false,
                             "cuadre_detalle" => $cuadreFinal,
                         ]);

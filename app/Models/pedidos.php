@@ -80,10 +80,11 @@ class pedidos extends Model
 
                     throw new \RuntimeException(
                         "BLOQUEADO: Pedido #{$pedido->id} no cuadra. " .
-                        "Total USD " . $cuadre['total_pedido_usd'] .
-                        " vs Pagos USD " . $cuadre['total_pagos_usd'] .
-                        " (diff " . $cuadre['diferencia_usd'] . "). " .
-                        "Verificá pagos antes de cerrar."
+                        ($cuadre['motivo_bloqueo'] ??
+                            ("Total USD " . $cuadre['total_pedido_usd'] .
+                             " vs Pagos USD " . $cuadre['total_pagos_usd'] .
+                             " (diff " . $cuadre['diferencia_usd'] . ").")
+                        ) . " Verificá pagos antes de cerrar."
                     );
                 }
 
