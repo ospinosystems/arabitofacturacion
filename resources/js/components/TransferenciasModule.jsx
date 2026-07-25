@@ -3,6 +3,14 @@ import { format } from 'date-fns';
 import es from 'date-fns/locale/es';
 import db from '../database/database';
 
+// ── Márgenes de impresión (FIJOS en la hoja vía @page; NO dependen de lo que
+//    tenga configurado la impresora ni de que el usuario los ajuste). Para
+//    cambiarlos a futuro, editar acá. Formato CSS shorthand: "TOP RIGHT BOTTOM LEFT".
+const MARGENES_IMPRESION = {
+    // Guía de Despacho: T:40mm, B:35mm, L:5mm, R:5mm.
+    guiaDespacho: '40mm 5mm 35mm 5mm',
+};
+
 // Imprime una lista de picking en HOJA CARTA (para buscar físicamente los productos en almacén).
 // Acepta `grupos` = [{titulo, filas}] para dividir en varias sublistas (una por sección, con salto
 // de página), o `filas` sueltas (una sola lista). filas: [{ barras, codigo_proveedor, descripcion, ubicacion, cantidad }]
@@ -2460,7 +2468,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
         if (!ventana) { alert('Habilitá las ventanas emergentes para poder imprimir la guía.'); return; }
         ventana.document.write(`
             <!DOCTYPE html><html><head><title>Guía de Despacho N° ${id}</title>
-            <style>body{font-family:sans-serif;padding:1rem;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;} .titulo-guia{text-align:left;font-weight:bold;margin-bottom:1rem;}</style>
+            <style>@page{size:letter portrait;margin:${MARGENES_IMPRESION.guiaDespacho};} html,body{margin:0;padding:0;} body{font-family:sans-serif;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;} .titulo-guia{text-align:left;font-weight:bold;margin-bottom:1rem;}</style>
             </head><body>
             <div class="titulo-guia">Guía de Despacho N°: ${id}</div>
             <div class="header">
