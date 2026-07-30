@@ -422,30 +422,6 @@ class Login extends Component{
 									onChange={(event) => {
 										this.changeUniqueState({ clave: event.target.value });
 									}}
-									/* onPaste={(e) => {
-										e.preventDefault();
-										return false;
-									}} */
-									onCopy={(e) => {
-										e.preventDefault();
-										return false;
-									}}
-									onCut={(e) => {
-										e.preventDefault();
-										return false;
-									}}
-									onContextMenu={(e) => {
-										e.preventDefault();
-										return false;
-									}}
-									onDrag={(e) => {
-										e.preventDefault();
-										return false;
-									}}
-									onDrop={(e) => {
-										e.preventDefault();
-										return false;
-									}}
 									data-lpignore="true"
 									data-form-type="other"
 									data-1p-ignore="true"
