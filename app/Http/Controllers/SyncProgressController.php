@@ -616,7 +616,10 @@ class SyncProgressController extends Controller
                         'banco' => $registro['banco'],
                         'loteserial' => $registro['descripcion'], // descripcion = referencia
                         'fecha' => substr($registro['created_at'], 0, 10), // Solo fecha YYYY-MM-DD
-                        'id_usuario' => $registro['id'], // En el original usa id del registro
+                        // pagos_referencias NO tiene usuario; se manda el id del propio
+                        // movimiento desplazado al namespace 9M+ para que en central no
+                        // colisione con ids de usuarios reales (antes iba el id crudo).
+                        'id_usuario' => 9000000 + (int) $registro['id'],
                         'tipo' => $tipoTexto,
                         'origen' => 1,
                         'id_pedido' => $registro['id_pedido'],

@@ -1167,10 +1167,22 @@ class InventarioController extends Controller
                                 ->where('codigo_barras', $q)
                                 ->orWhere('codigo_proveedor', $q);
                         } else {
-                            $e
-                                ->where('descripcion', 'LIKE', "%$q%")
-                                ->orWhere('codigo_proveedor', 'LIKE', "%$q%")
-                                ->orWhere('codigo_barras', 'LIKE', "%$q%");
+                            // Búsqueda por palabras sueltas: cada palabra debe aparecer
+                            // (AND entre palabras), en cualquier columna (OR entre columnas).
+                            // Ej.: "interruptor thrown" encuentra "INTERRUPTOR DOBLE THROWN".
+                            $palabras = array_slice(
+                                array_filter(preg_split('/\s+/', trim($q)), fn ($p) => $p !== ''),
+                                0,
+                                6
+                            );
+                            foreach ($palabras as $palabra) {
+                                $like = '%' . $palabra . '%';
+                                $e->where(function ($sub) use ($like) {
+                                    $sub->where('descripcion', 'LIKE', $like)
+                                        ->orWhere('codigo_proveedor', 'LIKE', $like)
+                                        ->orWhere('codigo_barras', 'LIKE', $like);
+                                });
+                            }
                         }
                     });
                 }

@@ -1621,30 +1621,27 @@ class sendCentral extends Controller
     public function getSucursales()
     {
         try {
-            return Cache::remember('sucursales', now()->addHours(6), function () {
-                $response = $this->requestToCentral('get', "/getSucursales");
-                if ($response->ok()) {
-                    //Retorna respuesta solo si es Array 
-                    if ($response->json()) {
-                        return Response::json([
-                            "msj" => $response->json(),
-                            "estado" => true,
-                        ]);
-                    } else {
-                        return Response::json([
-                            "msj" => $response,
-                            "estado" => false,
-                        ]);
-                    }
-                } else {
-                    return Response::json([
-                        "msj" => $response->body(),
-                        "estado" => false,
-                    ]);
-                }
-            });
+            // Solo se cachea (6h) un ARRAY válido. Antes se cacheaba también la
+            // respuesta de error (msj = string/objeto), y como el front hace
+            // forEach/map sobre `msj`, quedaba reventado 6h. Ahora `msj` es
+            // SIEMPRE un array y la caché envenenada se auto-sana.
+            $cached = Cache::get('sucursales');
+            if (is_array($cached)) {
+                return Response::json(["msj" => $cached, "estado" => true]);
+            }
+
+            $response = $this->requestToCentral('get', "/getSucursales");
+            $data = $response->ok() ? $response->json() : null;
+
+            if (is_array($data)) {
+                Cache::put('sucursales', $data, now()->addHours(6));
+                return Response::json(["msj" => $data, "estado" => true]);
+            }
+
+            // Sin datos válidos: NO cachear y devolver array vacío (nunca un no-array).
+            return Response::json(["msj" => [], "estado" => false]);
         } catch (\Exception $e) {
-            return Response::json(["msj" => "Error: " . $e->getMessage(), "estado" => false]);
+            return Response::json(["msj" => [], "estado" => false]);
         }
     }
     public function getInventarioSucursalFromCentral(Request $req)
@@ -2995,7 +2992,9 @@ class sendCentral extends Controller
                         "lote" => $ref["descripcion"],
                         "banco" => $ref["banco"],
                         "fecha" => $today,
-                        "id_usuario" => $ref["id"],
+                        // pagos_referencias no tiene usuario: id del movimiento en
+                        // namespace 9M+ para no chocar con usuarios reales de central.
+                        "id_usuario" => 9000000 + (int) $ref["id"],
                         "tipo" => $this->retpago($ref["tipo"])
                     ]);
                 }

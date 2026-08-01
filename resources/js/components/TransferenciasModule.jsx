@@ -1473,13 +1473,14 @@ const TransferenciaDetailView = ({ transferencia, onBack, sucursales }) => {
 };
 
 
-const TransferenciaList = ({ 
-    sucursalActualId, 
-    onRequireRefresh, 
-    onEdit, 
-    onViewDetails, 
-    sucursales, 
+const TransferenciaList = ({
+    sucursalActualId,
+    onRequireRefresh,
+    onEdit,
+    onViewDetails,
+    sucursales,
     cargarTransferencias,
+    readOnly = false, // gerente: solo lectura → sin Editar/Eliminar
     // Props de estado recibidas
     transferencias,
     setTransferencias,
@@ -1707,7 +1708,7 @@ const TransferenciaList = ({
                                             >
                                                 <i className="fas fa-eye"></i>
                                             </button>
-                                            {t.estado === ESTADO_STRING_A_NUMERICO['PENDIENTE'] && (
+                                            {!readOnly && t.estado === ESTADO_STRING_A_NUMERICO['PENDIENTE'] && (
                                                 <button
                                                     onClick={() => onEdit(t)}
                                                     className="ml-1 text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
@@ -1716,7 +1717,7 @@ const TransferenciaList = ({
                                                     <i className="fas fa-edit"></i>
                                                 </button>
                                             )}
-                                            {t.estado !== ESTADO_STRING_A_NUMERICO['PROCESADO'] && (
+                                            {!readOnly && t.estado !== ESTADO_STRING_A_NUMERICO['PROCESADO'] && (
                                                 <button
                                                     onClick={() => handleDelete(t)}
                                                     className="ml-1 text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50"
@@ -2068,7 +2069,7 @@ const PrintPickingModal = ({ payload, onClose }) => {
     );
 };
 
-const TransferenciasModule = ({ sucursalActualId }) => {
+const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
     const [vistaActual, setVistaActual] = useState('list'); // 'list', 'form', 'detail'
     const [transferenciaSeleccionada, setTransferenciaSeleccionada] = useState(null);
     const [refreshListKey, setRefreshListKey] = useState(0);
@@ -2102,7 +2103,8 @@ const TransferenciasModule = ({ sucursalActualId }) => {
     const setFiltro = (campo, val) => setFiltroOrdenes(prev => ({ ...prev, [campo]: val }));
     const limpiarFiltros = () => setFiltroOrdenes({ q: '', destino: '', desde: '', hasta: '' });
     // Tab activo del listado: 'enviadas' | 'redistribuciones' | 'preparacion' | 'despachadas'.
-    const [tabActiva, setTabActiva] = useState('redistribuciones');
+    // En modo solo-lectura (gerente) se arranca en "Órdenes Enviadas".
+    const [tabActiva, setTabActiva] = useState(readOnly ? 'enviadas' : 'redistribuciones');
     // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
     const [borradores, setBorradores] = useState([]);
     const [borradorEnEdicion, setBorradorEnEdicion] = useState(null);
@@ -2159,11 +2161,14 @@ const TransferenciasModule = ({ sucursalActualId }) => {
 
     useEffect(() => {
         const cargarSucursales = async () => {
-            try { 
+            try {
                 const res = await db.getSucursales();
-                if (res.data.msj) setSucursales(res.data.msj);
+                const data = res?.data?.msj;
+                // Blindaje: central puede devolver (o cachear) un no-array ante un
+                // error; el render hace forEach/map sobre sucursales y reventaba.
+                setSucursales(Array.isArray(data) ? data : (data && typeof data === 'object' ? Object.values(data) : []));
             }
-            catch (error) { console.error("Error cargando sucursales:", error); }
+            catch (error) { console.error("Error cargando sucursales:", error); setSucursales([]); }
         };
         cargarSucursales();
     }, []);
@@ -2628,7 +2633,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
             <header className="mb-3 pb-2 border-b border-gray-200">
                 <div className="flex flex-col sm:flex-row justify-between items-center">
                     <h3 className="text-lg sm:text-xl font-bold text-gray-800">Gestión de Transferencias</h3>
-                    {vistaActual === 'list' && (<button onClick={handleGoToCreate} className="mt-3 sm:mt-0 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">+ Nueva Transferencia</button>)}
+                    {!readOnly && vistaActual === 'list' && (<button onClick={handleGoToCreate} className="mt-3 sm:mt-0 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">+ Nueva Transferencia</button>)}
                     {(vistaActual === 'form' || vistaActual === 'detail' || vistaActual === 'conflictos') && (<button onClick={handleCancelForm} className="mt-3 sm:mt-0 bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm transition">&larr; Volver al Listado</button>)}
                 </div>
             </header>
@@ -2684,7 +2689,10 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                 { key: 'redistribuciones', label: 'Redistribuciones', icon: 'fa-random', count: premontasFiltradas.length, badge: 'bg-amber-100 text-amber-700' },
                                 { key: 'preparacion', label: 'En preparación', icon: 'fa-pen-to-square', count: borradoresFiltrados.length, badge: 'bg-blue-100 text-blue-700' },
                                 { key: 'despachadas', label: 'Despachadas', icon: 'fa-truck-fast', count: despachadasFiltradas.length, badge: 'bg-emerald-100 text-emerald-700' },
-                            ].map(t => (
+                            ]
+                            // Solo lectura (gerente): únicamente Enviadas y Despachadas.
+                            .filter(t => !readOnly || t.key === 'enviadas' || t.key === 'despachadas')
+                            .map(t => (
                                 <button
                                     key={t.key}
                                     type="button"
@@ -2906,7 +2914,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                                     <td className="px-3 py-2">{badgeDestinoPorId(d.id_destino)}</td>
                                                     <td className="px-3 py-2 text-center text-gray-600">{nItems}</td>
                                                     <td className="px-3 py-2 text-center whitespace-nowrap">
-                                                        {!d.central_existe && (
+                                                        {!readOnly && !d.central_existe && (
                                                             <button onClick={() => reenviarACentral(d)} disabled={procesando === 'reenv-' + d.id} className="mr-1 px-2 py-1 text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded disabled:opacity-50" title="El envío a central no se completó. Reintentar (no re-descuenta inventario).">
                                                                 {procesando === 'reenv-' + d.id ? <><i className="fas fa-spinner fa-spin mr-1"></i>Enviando...</> : <><i className="fas fa-paper-plane mr-1"></i>Enviar a central</>}
                                                             </button>
@@ -2920,9 +2928,11 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                                                         <button onClick={() => abrirBultosModal(d)} className="ml-1 px-2 py-1 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded" title="Imprimir etiquetas de bultos">
                                                             <i className="fas fa-box mr-1"></i>Bultos
                                                         </button>
+                                                        {!readOnly && (
                                                         <button onClick={() => reversarSalida(d)} disabled={procesando === 'rev-' + d.id} className="ml-1 px-2 py-1 text-xs font-semibold text-red-700 border border-red-300 rounded hover:bg-red-50 disabled:opacity-50" title="Reintegrar inventario y volver a preparación para corregir">
                                                             {procesando === 'rev-' + d.id ? <><i className="fas fa-spinner fa-spin mr-1"></i>Reversando...</> : <><i className="fas fa-rotate-left mr-1"></i>Reversar</>}
                                                         </button>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             );
@@ -2935,6 +2945,7 @@ const TransferenciasModule = ({ sucursalActualId }) => {
                     )}
                     {tabActiva === 'enviadas' && (
                     <TransferenciaList
+                        readOnly={readOnly}
                         sucursalActualId={idOrigenReal}
                         onRequireRefresh={refreshListKey}
                         onEdit={handleEditTransfer}

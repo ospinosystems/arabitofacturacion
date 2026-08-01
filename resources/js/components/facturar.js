@@ -9891,6 +9891,7 @@ export default function Facturar({
                     {view == "pedidosCentral" ? (
                         <>
                         <PedidosCentralComponent
+                            esGerente={user && Number(user.tipo_usuario) === 1}
                             permitirPaste={permitirPasteCentral}
                             openBarcodeScan={openBarcodeScan}
                             buscarDatosFact={buscarDatosFact}

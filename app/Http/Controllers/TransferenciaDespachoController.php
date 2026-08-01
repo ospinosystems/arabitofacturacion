@@ -58,7 +58,11 @@ class TransferenciaDespachoController extends Controller
 
     private function esDici(): bool
     {
-        return (int) session('tipo_usuario') === 7 || in_array((int) session('tipo_usuario'), [1, 6]);
+        // Escritura en TCD: DICI (7) y superadmin (6). El GERENTE (1) tiene acceso SOLO LECTURA a las
+        // transferencias (ver Enviadas/Despachadas), por eso ya NO está en esta lista: no puede crear,
+        // dar salida, reversar, ni borrar. Las rutas de lectura (getOrdenes, verificarEspejos) no usan
+        // este guard, así que el gerente sí puede consultar.
+        return in_array((int) session('tipo_usuario'), [6, 7], true);
     }
 
     /** Cantidad total empacada en bultos para una línea (item) de la orden. */
@@ -288,6 +292,9 @@ class TransferenciaDespachoController extends Controller
     /** Elimina una orden en preparación (estado 0). No tocó inventario, así que solo se borra. */
     public function eliminarOrden(Request $req)
     {
+        if (!$this->esDici()) {
+            return Response::json(['estado' => false, 'msj' => 'Solo el checkeador (DICI) puede eliminar órdenes.']);
+        }
         $orden = transferencias_inventario::find($req->id);
         if (!$orden) {
             return Response::json(['estado' => false, 'msj' => 'Orden no encontrada.']);

@@ -69,7 +69,8 @@ export default function PedidosCentralComponent({
 	openBarcodeScan,
 	buscarDatosFact,
 	setbuscarDatosFact,
-	permitirPaste = false
+	permitirPaste = false,
+	esGerente = false // gerente (tipo 1): acceso SOLO LECTURA al TCD (ver Enviadas/Despachadas)
 }){
 
 	const [subviewcentral, setsubviewcentral] = useState("tcr")
@@ -876,8 +877,8 @@ export default function PedidosCentralComponent({
 				
 				{subviewcentral == "pedidos_send" ? (
 					<>
-						{/* Selector de modo: Simple (crear transferencia directa) vs Avanzado (pasilleros + bultos) */}
-						<div className="flex items-center gap-2 mb-3 px-1">
+						{/* Selector de modo: Simple vs Avanzado. Oculto para el gerente (solo lectura). */}
+						<div className={`flex items-center gap-2 mb-3 px-1 ${esGerente ? "hidden" : ""}`}>
 							<span className="text-xs font-semibold text-gray-500">Modo de despacho:</span>
 							<div className="inline-flex rounded-lg border border-gray-300 overflow-hidden">
 								<button
@@ -896,9 +897,9 @@ export default function PedidosCentralComponent({
 								</button>
 							</div>
 						</div>
-						{modoDespacho === "avanzado"
+						{(!esGerente && modoDespacho === "avanzado")
 							? <DespachoBultosModule sucursales={sucursalesCentral} />
-							: <TransferenciasModule />}
+							: <TransferenciasModule readOnly={esGerente} />}
 					</>
 				) : null}
 

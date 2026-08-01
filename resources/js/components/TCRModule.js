@@ -25,6 +25,55 @@ export default function TCRModule({
     const [busquedaMensaje, setBusquedaMensaje] = useState('');
     const inputGenericoRef = useRef(null);
     const [esperandoUbicacion, setEsperandoUbicacion] = useState(false);
+    // Texto que se está tecleando/escaneando en el input, para RESALTAR en vivo el producto que hace
+    // match (útil con cientos de productos). No aprueba: la aprobación sigue siendo al Enter/botón.
+    const [escaneoTexto, setEscaneoTexto] = useState('');
+
+    // Índice del primer producto cuyo código de barras/proveedor coincide con lo tecleado (match en
+    // vivo, frontend). Coincidencia por prefijo o por "contiene". Devuelve -1 si no hay o texto vacío.
+    const matchEscaneoIndex = (() => {
+        const q = (escaneoTexto || '').trim().toLowerCase();
+        if (!q) return -1;
+        const items = (pedidosCentral[indexPedidoCentral] && pedidosCentral[indexPedidoCentral].items) || [];
+        const norm = (v) => (v == null ? '' : v.toString().trim().toLowerCase());
+        let idx = items.findIndex(it => norm(it.producto?.codigo_barras) === q || norm(it.producto?.codigo_proveedor) === q);
+        if (idx === -1) idx = items.findIndex(it => norm(it.producto?.codigo_barras).startsWith(q) || norm(it.producto?.codigo_proveedor).startsWith(q));
+        if (idx === -1) idx = items.findIndex(it => norm(it.producto?.codigo_barras).includes(q) || norm(it.producto?.codigo_proveedor).includes(q));
+        return idx;
+    })();
+
+    // onChange del input: guarda el texto y hace scroll al producto que va matcheando.
+    const onEscaneoChange = (e) => {
+        const val = e.target.value;
+        setEscaneoTexto(val);
+        const q = val.trim().toLowerCase();
+        if (!q) return;
+        setTimeout(() => {
+            const items = (pedidosCentral[indexPedidoCentral] && pedidosCentral[indexPedidoCentral].items) || [];
+            const norm = (v) => (v == null ? '' : v.toString().trim().toLowerCase());
+            let idx = items.findIndex(it => norm(it.producto?.codigo_barras).startsWith(q) || norm(it.producto?.codigo_proveedor).startsWith(q));
+            if (idx === -1) idx = items.findIndex(it => norm(it.producto?.codigo_barras).includes(q) || norm(it.producto?.codigo_proveedor).includes(q));
+            if (idx !== -1) {
+                const el = document.querySelector(`[data-producto-card="${idx}"]`);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 0);
+    };
+
+    // Enter real del input: procesa el escaneo y limpia el resaltado en vivo.
+    const onEscaneoKeyPress = (e) => {
+        handleBuscarProducto(e);
+        if (e.key === 'Enter') setEscaneoTexto('');
+    };
+
+    // Simula el Enter del escáner (para el botón "Chequear" junto al input).
+    const simularEnterEscaneo = () => {
+        if (inputGenericoRef.current) {
+            handleBuscarProducto({ key: 'Enter', target: inputGenericoRef.current });
+            setEscaneoTexto('');
+            inputGenericoRef.current.focus();
+        }
+    };
     // Ubicación opcional (por defecto ON): al escanear un producto solo se CHEQUEA, sin pedir
     // el segundo escaneo de ubicación. Se recuerda entre sesiones.
     const [ubicacionOpcional, setUbicacionOpcional] = useState(() => {
@@ -540,12 +589,35 @@ export default function TCRModule({
                                             <input
                                                 ref={inputGenericoRef}
                                                 type="text"
+                                                value={escaneoTexto}
                                                 placeholder={esperandoUbicacion ? "Escanea ubicación" : "Código de barras o proveedor"}
-                                                onKeyPress={handleBuscarProducto}
+                                                onChange={onEscaneoChange}
+                                                onKeyPress={onEscaneoKeyPress}
                                                 className={`flex-1 px-2 py-1 text-sm font-mono rounded border focus:ring-1 transition ${esperandoUbicacion ? 'border-amber-500 focus:ring-amber-500' : 'border-blue-400 focus:ring-blue-400'}`}
                                                 autoFocus
                                             />
+                                            <button
+                                                type="button"
+                                                onClick={simularEnterEscaneo}
+                                                className={`flex items-center gap-1 px-3 py-1 text-sm font-bold text-white rounded transition whitespace-nowrap ${esperandoUbicacion ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                                                title="Chequear (equivale a presionar Enter)"
+                                            >
+                                                <i className="fas fa-check"></i>
+                                                Chequear
+                                            </button>
                                         </div>
+                                        {/* Match en vivo: muestra qué producto coincide con lo tecleado (frontend). */}
+                                        {escaneoTexto.trim() !== '' && !esperandoUbicacion && (() => {
+                                            const items = (pedidosCentral[indexPedidoCentral] && pedidosCentral[indexPedidoCentral].items) || [];
+                                            const m = matchEscaneoIndex;
+                                            return (
+                                                <div className={`mt-1 text-xs font-semibold ${m !== -1 ? 'text-emerald-700' : 'text-red-600'}`}>
+                                                    {m !== -1
+                                                        ? <><i className="fas fa-magnifying-glass mr-1"></i>#{m + 1} · {items[m].producto.descripcion.substring(0, 55)}</>
+                                                        : <><i className="fas fa-triangle-exclamation mr-1"></i>Sin coincidencia en este pedido</>}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 )}
 
@@ -600,9 +672,6 @@ export default function TCRModule({
                                             <table className="w-full text-xs border-collapse">
                                                 <thead className="sticky top-0 z-10 bg-gray-100">
                                                     <tr className="text-gray-500 uppercase text-[10px] tracking-wide">
-                                                        {pedidosCentral[indexPedidoCentral].estado === 1 && (
-                                                            <th className="px-2 py-1.5 text-center w-8"></th>
-                                                        )}
                                                         <th className="px-2 py-1.5 text-center w-10">#</th>
                                                         <th className="px-2 py-1.5 text-left">Descripción</th>
                                                         <th className="px-2 py-1.5 text-left whitespace-nowrap">Cód. Barras</th>
@@ -644,25 +713,11 @@ export default function TCRModule({
                                                             <tr
                                                                 key={e.id}
                                                                 data-producto-card={i}
-                                                                className={`transition-colors ${rowBg}`}
+                                                                className={`transition-colors ${rowBg} ${escaneoTexto.trim() !== '' && i === matchEscaneoIndex ? 'ring-2 ring-inset ring-indigo-500 bg-indigo-50' : ''}`}
                                                             >
-                                                                {estado === 1 && (
-                                                                    <td className="px-2 py-1.5 text-center align-middle">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={e.aprobado === true}
-                                                                            onChange={() => {}}
-                                                                            onClick={(event) => {
-                                                                                event.currentTarget.setAttribute('data-index', i);
-                                                                                event.currentTarget.setAttribute('data-tipo', 'select');
-                                                                                selectPedidosCentral(event);
-                                                                            }}
-                                                                            data-index={i}
-                                                                            data-tipo="select"
-                                                                            className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 cursor-pointer align-middle"
-                                                                        />
-                                                                    </td>
-                                                                )}
+                                                                {/* Sin checkbox manual en PENDIENTE: el producto se APRUEBA únicamente al
+                                                                    escanearlo (código por código). Quitarlo obliga a pistolear uno por uno
+                                                                    y evita que se salten el escaneo marcando a mano. */}
                                                                 <td className="px-2 py-1.5 text-center align-middle">
                                                                     <span className={`inline-block px-1.5 py-0.5 font-bold text-white rounded ${numBadge}`}>
                                                                         {i + 1}

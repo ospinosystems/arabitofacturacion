@@ -4,6 +4,53 @@ import { useApp } from '../contexts/AppContext';
 import db from "../database/database";
 import ModalScanCarnetAprobacion from "./modalScanCarnetAprobacion";
 
+// --- Resaltado de las palabras buscadas (case/acento-insensible) ---
+// Normaliza carácter a carácter preservando la longitud, para poder mapear
+// los índices del texto normalizado de vuelta al texto original.
+const normalizarChar = (ch) => {
+    const n = ch.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    return n.length ? n[0] : ch.toLowerCase();
+};
+const normalizarTexto = (s) => Array.from((s || "").toString()).map(normalizarChar).join("");
+
+const resaltarCoincidencias = (texto, tokens) => {
+    if (texto === null || texto === undefined) return "";
+    const original = texto.toString();
+    if (!tokens || !tokens.length) return original;
+    const chars = Array.from(original);
+    const norm = chars.map(normalizarChar).join("");
+    let ranges = [];
+    tokens.forEach((tk) => {
+        if (!tk) return;
+        let idx = 0;
+        while ((idx = norm.indexOf(tk, idx)) !== -1) {
+            ranges.push([idx, idx + tk.length]);
+            idx += tk.length;
+        }
+    });
+    if (!ranges.length) return original;
+    ranges.sort((a, b) => a[0] - b[0]);
+    const merged = [];
+    ranges.forEach((r) => {
+        const last = merged[merged.length - 1];
+        if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1]);
+        else merged.push([r[0], r[1]]);
+    });
+    const out = [];
+    let cursor = 0;
+    merged.forEach(([s, e], k) => {
+        if (s > cursor) out.push(chars.slice(cursor, s).join(""));
+        out.push(
+            <mark key={k} className="rounded-sm px-0.5 font-bold" style={{ background: "#FDE68A", color: "#92400E" }}>
+                {chars.slice(s, e).join("")}
+            </mark>
+        );
+        cursor = e;
+    });
+    if (cursor < chars.length) out.push(chars.slice(cursor).join(""));
+    return out;
+};
+
 export default function ListProductosInterno({
   setLastDbRequest,
   lastDbRequest,
@@ -872,6 +919,12 @@ export default function ListProductosInterno({
     },
     [productos, tbodyproducInterref, setCountListInter, searchCompleted]
   );
+
+  // Palabras buscadas (para resaltar coincidencias en los resultados)
+  const tokensBusqueda = normalizarTexto((qProductosMain || "").trim())
+    .split(/\s+/)
+    .filter(Boolean);
+
   return (
       <div className="flex flex-col h-100">
           {/* Barra de búsqueda responsive */}
@@ -1017,13 +1070,13 @@ export default function ListProductosInterno({
                                           className="text-xs break-words"
                                           title={e.codigo_barras}
                                       >
-                                          {e.codigo_barras}
+                                          {resaltarCoincidencias(e.codigo_barras, tokensBusqueda)}
                                       </div>
                                       <div
                                           className="text-xs text-gray-500 break-words"
                                           title={e.codigo_proveedor}
                                       >
-                                          {e.codigo_proveedor}
+                                          {resaltarCoincidencias(e.codigo_proveedor, tokensBusqueda)}
                                       </div>
                                   </td>
                                   <td className="px-2 py-1 text-xs font-medium text-gray-900">
@@ -1032,7 +1085,7 @@ export default function ListProductosInterno({
                                               className="break-words"
                                               title={e.descripcion}
                                           >
-                                              {e.descripcion}
+                                              {resaltarCoincidencias(e.descripcion, tokensBusqueda)}
                                           </div>
                                           {isProductInCart(e.id) && (
                                               <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 flex-shrink-0">

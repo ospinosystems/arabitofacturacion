@@ -188,7 +188,7 @@ function Header({
                                                 <button className={itemCls(false)} onClick={() => { sincInventario && sincInventario(); setSidebarOpen(false); }}><i className="w-4 mr-2 fa fa-sync"></i>Sincronizar</button>
                                                 <button className={itemCls(view === "inventario" && subViewInventario === "facturasItems")} onClick={() => irInventario("facturasItems")}><i className="w-4 mr-2 fa fa-file-invoice"></i>Facturas e Items</button>
                                                 <div className="my-1 border-t border-gray-100"></div>
-                                                <button className={itemCls(view === "pedidosCentral")} onClick={() => irVista("pedidosCentral")}><i className="w-4 mr-2 fa fa-tower-broadcast"></i>Torre de transferencias</button>
+                                                <button className={itemCls(view === "pedidosCentral")} onClick={() => irVista("pedidosCentral")}><i className="w-4 mr-2 fa fa-tower-broadcast"></i>Torre de transferencias (TCD, TCR)</button>
                                                 <button className={itemCls(view === "garantias")} onClick={() => irVista("garantias")}><i className="w-4 mr-2 fa fa-shield-alt"></i>Garantías</button>
                                             </div>
                                         )}
@@ -208,6 +208,7 @@ function Header({
                                         {openAdmin && (
                                             <div className="pl-2 ml-3 space-y-1 border-l border-gray-200">
                                                 <button className={itemCls(view === "historialVentasCierre")} onClick={() => irVista("historialVentasCierre")}><i className="w-4 mr-2 fa fa-history"></i>Historial ventas por cierre</button>
+                                                <button className={itemCls(view === "pedidosCentral")} onClick={() => irVista("pedidosCentral")}><i className="w-4 mr-2 fa fa-tower-broadcast"></i>Torre de transferencias (TCD, TCR) — solo ver</button>
                                                 <button className={itemCls(view === "inventario" && subViewInventario === "efectivo")} onClick={() => irInventario("efectivo")}><i className="w-4 mr-2 fa fa-money-bill-wave"></i>Control de Efectivo</button>
                                                 <button className={itemCls(view === "inventario" && subViewInventario === "estadisticas")} onClick={() => irInventario("estadisticas")}><i className="w-4 mr-2 fa fa-chart-bar"></i>Estadísticas</button>
                                                 <button className={itemCls(view === "inventario" && subViewInventario === "suministros")} onClick={() => irInventario("suministros")}><i className="w-4 mr-2 fa fa-box-open"></i>Suministros</button>
