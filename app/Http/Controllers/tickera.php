@@ -339,6 +339,11 @@ class tickera extends Controller
                     // Si hay items con cantidad negativa, imprimir ticket de devolución
                     if ($hasNegativeItems) {
                         $this->imprimirTicketDevolucion($printer, $pedido, $negativeItems, $positiveItems, $nombres, $identificacion, $sucursal, $dolar, $totalDevolucion, $totalEntrada, $saldoFinal, $tieneProductosMixtos);
+                    } elseif ($this->esPedidoAbonoCredito($pedido)) {
+                        // PAGO A CRÉDITO (abono a deuda): todos los items son abonos (sin producto).
+                        // No es orden de despacho ni factura → comprobante de pago con su referencia,
+                        // sin renderizar el abono como producto ni sumarlo a los totales de venta.
+                        $this->imprimirTicketAbono($printer, $pedido, $nombres, $identificacion, $sucursal, $dolar, $telefono);
                     } elseif ($fromPpr && !empty($req->ppr_detalle) && is_array($req->ppr_detalle)) {
                         // PPR: solo ticket PPR. Si 2 copias: 1ª DICI, 2ª CLIENTE; si 1 copia: sin etiqueta.
                         $copias = (int) ($req->ppr_copias ?? 0);
@@ -1374,6 +1379,202 @@ class tickera extends Controller
         $printer->text("\n");
         $printer->text("\n");
 
+        $updateprint = pedidos::find($pedido->id);
+        $updateprint->ticked = !$updateprint->ticked ? 1 : $updateprint->ticked + 1;
+        $updateprint->is_printing = false;
+        $updateprint->save();
+    }
+
+    /**
+     * ¿El pedido es un PAGO A CRÉDITO (abono a deuda) puro? True si todos sus items son
+     * abonos (sin producto asociado). En ese caso NO es una venta ni orden de despacho:
+     * se imprime como comprobante de pago (imprimirTicketAbono), no como el ticket normal.
+     */
+    private function esPedidoAbonoCredito($pedido): bool
+    {
+        if (!isset($pedido->items) || $pedido->items->count() === 0) {
+            return false;
+        }
+        // Marcador canónico del abono a deuda: id_producto NULL (igual que checkIfAbono del
+        // cuadre). Usamos id_producto y no la relación `producto` por si el producto fue borrado.
+        foreach ($pedido->items as $it) {
+            if (!empty($it->id_producto)) {
+                return false; // hay mercancía → es venta, no abono puro
+            }
+        }
+        return true;
+    }
+
+    /**
+     * COMPROBANTE DE PAGO A CRÉDITO (abono a deuda).
+     *
+     * Antes estos pedidos caían en imprimirTicketNormal: el abono se renderizaba como si
+     * fuera un PRODUCTO (línea con P/U, Ct, Sub-Total, Total) y se sumaba a los totales de
+     * venta → errores de suma, y con encabezado "ORDEN DE DESPACHO". Además, en
+     * transferencias la referencia real vive en `pagos_referencias` (no en
+     * `pago_pedidos.referencia`, que viene NULL) y no se mostraba; el Bs salía como
+     * "=Bs<monto USD>" (incorrecto).
+     *
+     * Este comprobante muestra: concepto(s) del abono, monto en USD y en Bs, y la(s)
+     * referencia(s) bancaria(s) con su banco. Sin formato de factura ni totales de producto.
+     */
+    private function imprimirTicketAbono($printer, $pedido, $nombres, $identificacion, $sucursal, $dolar, $telefono = '')
+    {
+        // Nombre legible del banco desde el catálogo (bid:X / codigo). Fallback al crudo.
+        $bancoNombre = function ($banco) {
+            if (empty($banco)) return '';
+            try {
+                $b = \App\Support\BancoMoneda::resolverBanco($banco);
+                if ($b && !empty($b['descripcion'])) return $b['descripcion'];
+            } catch (\Throwable $e) {}
+            return strpos((string) $banco, 'bid:') === 0 ? '' : (string) $banco; // no mostrar "bid:X" crudo
+        };
+
+        // ── Encabezado de la sucursal ──
+        $printer->setJustification(Printer::JUSTIFY_CENTER);
+        $printer->text("\n");
+        $printer->text($sucursal->nombre_registro);
+        $printer->text("\n");
+        $printer->text($sucursal->rif);
+        $printer->text("\n");
+        $printer->text($sucursal->telefono1 . " | " . $sucursal->telefono2);
+        $printer->text("\n");
+
+        $printer->setTextSize(1, 1);
+        $printer->text("\n");
+        if (!$pedido->ticked) {
+            $printer->setTextSize(2, 2);
+            $printer->setEmphasis(true);
+            $printer->text("ORIGINAL");
+        } else {
+            $printer->setTextSize(1, 1);
+            $printer->setEmphasis(true);
+            $printer->text("COPIA " . $pedido->ticked);
+        }
+        $printer->setEmphasis(false);
+        $printer->setTextSize(1, 1);
+        $printer->text("\n");
+
+        $printer->setEmphasis(true);
+        $printer->text("COMPROBANTE DE PAGO");
+        $printer->text("\n");
+        $printer->text("A CREDITO");
+        $printer->text("\n");
+        $printer->text($sucursal->sucursal);
+        $printer->text("\n");
+        $printer->text("#" . $pedido->id);
+        $printer->setEmphasis(false);
+        $printer->text("\n");
+
+        // ── Cliente ──
+        if ($nombres != "") {
+            $printer->setJustification(Printer::JUSTIFY_LEFT);
+            $printer->text("Nombre y Apellido: " . $nombres);
+            $printer->text("\n");
+            $printer->text("ID: " . $identificacion);
+            $printer->text("\n");
+            if ($telefono !== null && $telefono !== '') {
+                $printer->text("Telefono: " . $telefono);
+                $printer->text("\n");
+            }
+        }
+        $printer->setJustification(Printer::JUSTIFY_LEFT);
+        $printer->feed();
+
+        // ── Concepto(s) del abono ──
+        // Leemos los items CRUDOS de la BD (no $pedido->items de getPedido, que transforma el
+        // `monto` según la moneda del request). En la BD, el abono guarda monto en USD y tasa
+        // Bs/USD; monto*tasa = Bs.
+        $totalUsd = 0.0;
+        $totalBsItems = 0.0;
+        $abonoItems = \App\Models\items_pedidos::where('id_pedido', $pedido->id)
+            ->whereNull('id_producto')
+            ->get();
+        $printer->setEmphasis(true);
+        $printer->text("CONCEPTO");
+        $printer->setEmphasis(false);
+        $printer->text("\n");
+        foreach ($abonoItems as $val) {
+            $usd = abs(floatval($val->monto));
+            $bs  = abs(floatval($val->monto) * floatval($val->tasa));
+            $totalUsd += $usd;
+            $totalBsItems += $bs;
+            $printer->text($val->abono ?: "ABONO A CREDITO");
+            $printer->text("\n");
+            $printer->text(" $" . number_format($usd, 2) . "  (Bs " . number_format($bs, 2) . ")");
+            $printer->text("\n");
+        }
+
+        // ── Referencias bancarias del pedido (pagos_referencias) ──
+        $refs = \App\Models\pagos_referencias::where('id_pedido', $pedido->id)->get();
+        $totalBsRefs = 0.0;
+        foreach ($refs as $r) {
+            $totalBsRefs += abs(floatval($r->monto));
+        }
+
+        $printer->feed();
+        $printer->setEmphasis(true);
+        $printer->text("FORMA DE PAGO");
+        $printer->setEmphasis(false);
+        $printer->text("\n");
+
+        // Método(s) de pago con su monto en USD
+        if (isset($pedido->pagos) && !empty($pedido->pagos)) {
+            foreach ($pedido->pagos as $pago) {
+                $tipoPago = $this->getTipoPagoDescripcion($pago->tipo);
+                $mon = $pago->moneda ?? '$';
+                $montoRaw = abs(floatval($pago->monto_original ?? $pago->monto));
+                $montoUsd = ($mon === 'bs' && $dolar > 0) ? ($montoRaw / $dolar) : $montoRaw;
+                $printer->setEmphasis(true);
+                $printer->text($tipoPago . "  $" . number_format($montoUsd, 2));
+                $printer->setEmphasis(false);
+                $printer->text("\n");
+            }
+        }
+
+        // Referencia(s): Bs + número de referencia + banco (lo que faltaba en transferencias)
+        foreach ($refs as $r) {
+            $bs = abs(floatval($r->monto));
+            $printer->text(" Bs " . number_format($bs, 2));
+            $printer->text("\n");
+            if (!empty($r->descripcion)) {
+                $printer->text(" REF: " . $r->descripcion);
+                $printer->text("\n");
+            }
+            $bn = $bancoNombre($r->banco);
+            if ($bn !== '') {
+                $printer->text(" Banco: " . $bn);
+                $printer->text("\n");
+            }
+        }
+
+        // ── Total pagado ── (Bs real desde referencias si existen; si no, desde items)
+        $totalBs = $totalBsRefs > 0 ? $totalBsRefs : $totalBsItems;
+        $printer->feed();
+        $printer->setEmphasis(true);
+        $printer->text("TOTAL PAGADO");
+        $printer->text("\n");
+        $printer->text(" $" . number_format($totalUsd, 2));
+        $printer->text("\n");
+        $printer->text(" Bs " . number_format($totalBs, 2));
+        $printer->setEmphasis(false);
+        $printer->text("\n");
+
+        // ── Pie ──
+        $printer->feed();
+        $printer->setJustification(Printer::JUSTIFY_CENTER);
+        $printer->text("Fecha: " . ($pedido->fecha_factura ?? $pedido->created_at));
+        $printer->text("\n");
+        $printer->text("Por: " . (session("usuario") ?? ($pedido->vendedor->usuario ?? '')));
+        $printer->text("\n");
+        $printer->text("*COMPROBANTE DE ABONO A CREDITO*");
+        $printer->text("\n");
+        $printer->text("*NO ES FACTURA FISCAL*");
+        $printer->text("\n");
+        $printer->feed(2);
+        $printer->setJustification(Printer::JUSTIFY_LEFT);
+
+        // Marcar impresión (igual que el ticket normal: incrementa COPIA / libera is_printing)
         $updateprint = pedidos::find($pedido->id);
         $updateprint->ticked = !$updateprint->ticked ? 1 : $updateprint->ticked + 1;
         $updateprint->is_printing = false;
