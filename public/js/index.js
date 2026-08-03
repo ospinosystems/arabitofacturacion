@@ -139128,38 +139128,62 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
     return setPrintModal(payload);
   };
   // Órdenes ya despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
+  // Se cargan PAGINADAS y filtradas EN EL SERVIDOR (fecha/destino/texto operan sobre toda la BD).
   var _useState95 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState96 = _slicedToArray(_useState95, 2),
     despachadas = _useState96[0],
     setDespachadas = _useState96[1];
-  // Código de la sucursal ORIGEN (este galpón), para resolver sus datos fiscales en la guía.
-  var _useState97 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+  var _useState97 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(1),
     _useState98 = _slicedToArray(_useState97, 2),
-    origenCodigo = _useState98[0],
-    setOrigenCodigo = _useState98[1];
-  // Loading al cargar las órdenes (premontas + borradores + despachadas).
-  var _useState99 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
+    despPage = _useState98[0],
+    setDespPage = _useState98[1];
+  var _useState99 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(20),
     _useState100 = _slicedToArray(_useState99, 2),
-    cargandoOrdenes = _useState100[0],
-    setCargandoOrdenes = _useState100[1];
-  // Modal de previsualización de ítems de una orden (despachadas): la orden a mostrar.
-  var _useState101 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    despPorPagina = _useState100[0],
+    setDespPorPagina = _useState100[1];
+  var _useState101 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+      current_page: 1,
+      last_page: 1,
+      per_page: 20,
+      total: 0,
+      from: 0,
+      to: 0
+    }),
     _useState102 = _slicedToArray(_useState101, 2),
-    itemsOrden = _useState102[0],
-    setItemsOrden = _useState102[1];
-  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
-  var _useState103 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    despPag = _useState102[0],
+    setDespPag = _useState102[1];
+  var _useState103 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState104 = _slicedToArray(_useState103, 2),
-    bultosOrden = _useState104[0],
-    setBultosOrden = _useState104[1];
-  var _useState105 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    cargandoDespachadas = _useState104[0],
+    setCargandoDespachadas = _useState104[1];
+  // Código de la sucursal ORIGEN (este galpón), para resolver sus datos fiscales en la guía.
+  var _useState105 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState106 = _slicedToArray(_useState105, 2),
-    numBultosInput = _useState106[0],
-    setNumBultosInput = _useState106[1];
-  var _useState107 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    origenCodigo = _useState106[0],
+    setOrigenCodigo = _useState106[1];
+  // Loading al cargar las órdenes (premontas + borradores).
+  var _useState107 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
     _useState108 = _slicedToArray(_useState107, 2),
-    bultosIframeUrl = _useState108[0],
-    setBultosIframeUrl = _useState108[1];
+    cargandoOrdenes = _useState108[0],
+    setCargandoOrdenes = _useState108[1];
+  // Modal de previsualización de ítems de una orden (despachadas): la orden a mostrar.
+  var _useState109 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState110 = _slicedToArray(_useState109, 2),
+    itemsOrden = _useState110[0],
+    setItemsOrden = _useState110[1];
+  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
+  var _useState111 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState112 = _slicedToArray(_useState111, 2),
+    bultosOrden = _useState112[0],
+    setBultosOrden = _useState112[1];
+  var _useState113 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    _useState114 = _slicedToArray(_useState113, 2),
+    numBultosInput = _useState114[0],
+    setNumBultosInput = _useState114[1];
+  var _useState115 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState116 = _slicedToArray(_useState115, 2),
+    bultosIframeUrl = _useState116[0],
+    setBultosIframeUrl = _useState116[1];
   var refIframeBultos = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var cargarTransferencias = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
     var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5(filtros) {
@@ -139297,28 +139321,35 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
     }, _callee8, null, [[0, 8]]);
   })), []);
 
-  // Cargar despachadas (estado 1). Además verifica contra central el Nº de Guía REAL (el id local
-  // guardado puede estar stale). Anota central_pedido_id / central_existe / central_estado.
+  // Cargar despachadas (estado 1) PAGINADAS + filtradas EN SERVIDOR (fecha/destino/texto). Además
+  // verifica contra central el Nº de Guía REAL (el id local guardado puede estar stale).
   var cargarDespachadas = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/_asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee9() {
-    var _res$data4, _res$data5, res, ordenes, ids, verificado, mapa, _v$data, v;
+    var _res$data4, _res$data5, _res$data6, res, ordenes, ids, verificado, mapa, _v$data, v;
     return _regeneratorRuntime().wrap(function _callee9$(_context9) {
       while (1) switch (_context9.prev = _context9.next) {
         case 0:
-          _context9.prev = 0;
-          _context9.next = 3;
+          setCargandoDespachadas(true);
+          _context9.prev = 1;
+          _context9.next = 4;
           return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGetOrdenes({
             estado: 1,
-            limit: 100
+            por_pagina: despPorPagina,
+            page: despPage,
+            q: filtroOrdenes.q || '',
+            id_destino: filtroOrdenes.destino || '',
+            desde: filtroOrdenes.desde || '',
+            hasta: filtroOrdenes.hasta || ''
           });
-        case 3:
+        case 4:
           res = _context9.sent;
           ordenes = ((_res$data4 = res.data) === null || _res$data4 === void 0 ? void 0 : _res$data4.ordenes) || [];
           if ((_res$data5 = res.data) !== null && _res$data5 !== void 0 && _res$data5.origen_codigo) setOrigenCodigo(res.data.origen_codigo);
+          if ((_res$data6 = res.data) !== null && _res$data6 !== void 0 && _res$data6.paginacion) setDespPag(res.data.paginacion);
           ids = ordenes.map(function (o) {
             return o.id;
           });
           if (!ids.length) {
-            _context9.next = 22;
+            _context9.next = 24;
             break;
           }
           // Verificación contra central: distingue "verificado y presente" / "verificado y
@@ -139327,22 +139358,22 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
           // guardado, que hoy es confiable (se setea al id real de central al enviar).
           verificado = false;
           mapa = {};
-          _context9.prev = 10;
-          _context9.next = 13;
+          _context9.prev = 12;
+          _context9.next = 15;
           return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdVerificarEspejos({
             ids: ids
           });
-        case 13:
+        case 15:
           v = _context9.sent;
           verificado = !!(v.data && v.data.estado);
           mapa = ((_v$data = v.data) === null || _v$data === void 0 ? void 0 : _v$data.espejos) || {};
-          _context9.next = 21;
+          _context9.next = 23;
           break;
-        case 18:
-          _context9.prev = 18;
-          _context9.t0 = _context9["catch"](10);
+        case 20:
+          _context9.prev = 20;
+          _context9.t0 = _context9["catch"](12);
           verificado = false;
-        case 21:
+        case 23:
           ordenes = ordenes.map(function (o) {
             var c = mapa[String(o.id)];
             if (verificado) {
@@ -139362,40 +139393,61 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
               central_verificado: false
             });
           });
-        case 22:
+        case 24:
           setDespachadas(ordenes);
-          _context9.next = 28;
+          _context9.next = 30;
           break;
-        case 25:
-          _context9.prev = 25;
-          _context9.t1 = _context9["catch"](0);
+        case 27:
+          _context9.prev = 27;
+          _context9.t1 = _context9["catch"](1);
           setDespachadas([]);
-        case 28:
+        case 30:
+          _context9.prev = 30;
+          setCargandoDespachadas(false);
+          return _context9.finish(30);
+        case 33:
         case "end":
           return _context9.stop();
       }
-    }, _callee9, null, [[0, 25], [10, 18]]);
-  })), []);
+    }, _callee9, null, [[1, 27, 30, 33], [12, 20]]);
+  })), [despPage, despPorPagina, filtroOrdenes]);
 
   // Cargar premontas (redistribuciones aprobadas para esta sucursal origen) + borradores.
+  // (Despachadas se carga aparte, paginado/filtrado en servidor.)
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     var vivo = true;
     setCargandoOrdenes(true);
     var cargarPremontas = _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].getPremontadas({
       limit: 50
     }).then(function (res) {
-      var _res$data6;
-      if (vivo) setPremontas(((_res$data6 = res.data) === null || _res$data6 === void 0 ? void 0 : _res$data6.premontadas) || []);
+      var _res$data7;
+      if (vivo) setPremontas(((_res$data7 = res.data) === null || _res$data7 === void 0 ? void 0 : _res$data7.premontadas) || []);
     })["catch"](function () {
       if (vivo) setPremontas([]);
     });
-    Promise.all([cargarPremontas, cargarBorradores(), cargarDespachadas()])["finally"](function () {
+    Promise.all([cargarPremontas, cargarBorradores()])["finally"](function () {
       if (vivo) setCargandoOrdenes(false);
     });
     return function () {
       vivo = false;
     };
-  }, [refreshListKey, cargarBorradores, cargarDespachadas]);
+  }, [refreshListKey, cargarBorradores]);
+
+  // Recarga de despachadas: al cambiar filtros (fecha/destino/texto), página o tamaño de página, o
+  // al refrescar la lista. El texto (q) se debouncea para no pegarle al servidor en cada tecla.
+  (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
+    var t = setTimeout(function () {
+      cargarDespachadas();
+    }, 300);
+    return function () {
+      return clearTimeout(t);
+    };
+  }, [cargarDespachadas, refreshListKey]);
+
+  // Al cambiar cualquier filtro, volver a la página 1 (evita quedar en una página inexistente).
+  (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
+    setDespPage(1);
+  }, [filtroOrdenes.q, filtroOrdenes.destino, filtroOrdenes.desde, filtroOrdenes.hasta, despPorPagina]);
 
   // Coteja los productos de la redistribución contra el inventario local en UNA sola petición
   // (antes se hacía 1 request por producto → lentísimo con cientos de ítems). Arma las filas de
@@ -139545,7 +139597,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
   // usuario, ligada a la redistribución. La redistribución original de central queda intacta.
   var confirmarOrdenConflictos = /*#__PURE__*/function () {
     var _ref23 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(items) {
-      var prem, _prem$sucursal_destin5, _res$data7, res, _res$data8;
+      var prem, _prem$sucursal_destin5, _res$data8, res, _res$data9;
       return _regeneratorRuntime().wrap(function _callee11$(_context11) {
         while (1) switch (_context11.prev = _context11.next) {
           case 0:
@@ -139574,7 +139626,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
             });
           case 10:
             res = _context11.sent;
-            if (!((_res$data7 = res.data) !== null && _res$data7 !== void 0 && _res$data7.estado)) {
+            if (!((_res$data8 = res.data) !== null && _res$data8 !== void 0 && _res$data8.estado)) {
               _context11.next = 19;
               break;
             }
@@ -139591,7 +139643,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
             _context11.next = 20;
             break;
           case 19:
-            alert(((_res$data8 = res.data) === null || _res$data8 === void 0 ? void 0 : _res$data8.msj) || 'No se pudo crear la orden.');
+            alert(((_res$data9 = res.data) === null || _res$data9 === void 0 ? void 0 : _res$data9.msj) || 'No se pudo crear la orden.');
           case 20:
             _context11.next = 25;
             break;
@@ -139656,7 +139708,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
   // Dar salida a un borrador: descuenta inventario + crea el espejo en central.
   var darSalida = /*#__PURE__*/function () {
     var _ref25 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee13(borrador) {
-      var nItems, _res$data9, res, _res$data0;
+      var nItems, _res$data0, res, _res$data1;
       return _regeneratorRuntime().wrap(function _callee13$(_context13) {
         while (1) switch (_context13.prev = _context13.next) {
           case 0:
@@ -139677,7 +139729,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
             });
           case 7:
             res = _context13.sent;
-            if (!((_res$data9 = res.data) !== null && _res$data9 !== void 0 && _res$data9.estado)) {
+            if (!((_res$data0 = res.data) !== null && _res$data0 !== void 0 && _res$data0.estado)) {
               _context13.next = 15;
               break;
             }
@@ -139691,7 +139743,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
             _context13.next = 16;
             break;
           case 15:
-            alert(((_res$data0 = res.data) === null || _res$data0 === void 0 ? void 0 : _res$data0.msj) || 'No se pudo dar salida.');
+            alert(((_res$data1 = res.data) === null || _res$data1 === void 0 ? void 0 : _res$data1.msj) || 'No se pudo dar salida.');
           case 16:
             _context13.next = 21;
             break;
@@ -139717,7 +139769,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
   // Eliminar un borrador (no tocó inventario).
   var eliminarBorrador = /*#__PURE__*/function () {
     var _ref26 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee14(borrador) {
-      var _res$data1, res, _res$data10;
+      var _res$data10, res, _res$data11;
       return _regeneratorRuntime().wrap(function _callee14$(_context14) {
         while (1) switch (_context14.prev = _context14.next) {
           case 0:
@@ -139735,7 +139787,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
             });
           case 6:
             res = _context14.sent;
-            if (!((_res$data1 = res.data) !== null && _res$data1 !== void 0 && _res$data1.estado)) {
+            if (!((_res$data10 = res.data) !== null && _res$data10 !== void 0 && _res$data10.estado)) {
               _context14.next = 13;
               break;
             }
@@ -139748,7 +139800,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
             _context14.next = 14;
             break;
           case 13:
-            alert(((_res$data10 = res.data) === null || _res$data10 === void 0 ? void 0 : _res$data10.msj) || 'No se pudo eliminar.');
+            alert(((_res$data11 = res.data) === null || _res$data11 === void 0 ? void 0 : _res$data11.msj) || 'No se pudo eliminar.');
           case 14:
             _context14.next = 19;
             break;
@@ -139775,7 +139827,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
   // darSalidaSimple: para estado=1 sin central, solo reintenta el envío (NO re-descuenta).
   var reenviarACentral = /*#__PURE__*/function () {
     var _ref27 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee15(d) {
-      var _res$data11, res, _res$data12;
+      var _res$data12, res, _res$data13;
       return _regeneratorRuntime().wrap(function _callee15$(_context15) {
         while (1) switch (_context15.prev = _context15.next) {
           case 0:
@@ -139787,7 +139839,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
             });
           case 4:
             res = _context15.sent;
-            if (!((_res$data11 = res.data) !== null && _res$data11 !== void 0 && _res$data11.estado)) {
+            if (!((_res$data12 = res.data) !== null && _res$data12 !== void 0 && _res$data12.estado)) {
               _context15.next = 12;
               break;
             }
@@ -139801,7 +139853,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
             _context15.next = 13;
             break;
           case 12:
-            alert(((_res$data12 = res.data) === null || _res$data12 === void 0 ? void 0 : _res$data12.msj) || 'No se pudo enviar a central.');
+            alert(((_res$data13 = res.data) === null || _res$data13 === void 0 ? void 0 : _res$data13.msj) || 'No se pudo enviar a central.');
           case 13:
             _context15.next = 18;
             break;
@@ -139828,7 +139880,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
   // a "en preparación" (estado 0) para corregir y volver a dar salida.
   var reversarSalida = /*#__PURE__*/function () {
     var _ref28 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee16(d) {
-      var _res$data13, res, _res$data14;
+      var _res$data14, res, _res$data15;
       return _regeneratorRuntime().wrap(function _callee16$(_context16) {
         while (1) switch (_context16.prev = _context16.next) {
           case 0:
@@ -139846,7 +139898,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
             });
           case 6:
             res = _context16.sent;
-            if (!((_res$data13 = res.data) !== null && _res$data13 !== void 0 && _res$data13.estado)) {
+            if (!((_res$data14 = res.data) !== null && _res$data14 !== void 0 && _res$data14.estado)) {
               _context16.next = 14;
               break;
             }
@@ -139860,7 +139912,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
             _context16.next = 15;
             break;
           case 14:
-            alert(((_res$data14 = res.data) === null || _res$data14 === void 0 ? void 0 : _res$data14.msj) || 'No se pudo reversar.');
+            alert(((_res$data15 = res.data) === null || _res$data15 === void 0 ? void 0 : _res$data15.msj) || 'No se pudo reversar.');
           case 15:
             _context16.next = 20;
             break;
@@ -140081,10 +140133,9 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
     return matchDestino(b.id_destino) && enRangoFecha(b.created_at) && matchTexto([b.id, b.id_orden_distribucion].concat(_toConsumableArray(codDestino(b.id_destino))));
   });
 
-  // Despachadas: lista histórica → fecha (default hoy) + texto/destino.
-  var despachadasFiltradas = despachadas.filter(function (d) {
-    return matchDestino(d.id_destino) && enRangoFecha(d.updated_at || d.created_at) && matchTexto([d.id, d.id_transferencia_central, d.id_orden_distribucion].concat(_toConsumableArray(codDestino(d.id_destino))));
-  });
+  // Despachadas: la lista ya viene FILTRADA y PAGINADA por el servidor (fecha/destino/texto operan
+  // sobre toda la BD, no solo sobre una ventana reciente). No se re-filtra en el cliente.
+  var despachadasFiltradas = despachadas;
   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
     className: "mx-auto px-2 pt-1 pb-2 sm:px-4 md:px-6",
     children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("header", {
@@ -140185,7 +140236,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
               }), "Limpiar"]
             }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
               className: "text-xs text-gray-400 ml-auto",
-              children: [premontasFiltradas.length, " redistribuci\xF3n(es) \xB7 ", borradoresFiltrados.length, " en preparaci\xF3n \xB7 ", despachadasFiltradas.length, " despachada(s)"]
+              children: [premontasFiltradas.length, " redistribuci\xF3n(es) \xB7 ", borradoresFiltrados.length, " en preparaci\xF3n \xB7 ", despPag.total, " despachada(s)"]
             })]
           })]
         }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
@@ -140214,7 +140265,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
               key: 'despachadas',
               label: 'Despachadas',
               icon: 'fa-truck-fast',
-              count: despachadasFiltradas.length,
+              count: despPag.total,
               badge: 'bg-emerald-100 text-emerald-700'
             }]
             // Solo lectura (gerente): únicamente Enviadas y Despachadas.
@@ -140236,7 +140287,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
               }, t.key);
             })
           })
-        }), cargandoOrdenes && tabActiva !== 'enviadas' && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        }), cargandoOrdenes && tabActiva !== 'enviadas' && tabActiva !== 'despachadas' && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "text-center py-16 text-gray-400",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
             className: "fas fa-circle-notch fa-spin text-4xl mb-3 text-indigo-400"
@@ -140532,7 +140583,15 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
               })]
             })
           })]
-        })), !cargandoOrdenes && tabActiva === 'despachadas' && (despachadasFiltradas.length === 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+        })), tabActiva === 'despachadas' && (cargandoDespachadas ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+          className: "text-center py-16 text-gray-400",
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+            className: "fas fa-circle-notch fa-spin text-4xl mb-3 text-emerald-400"
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
+            className: "text-sm font-medium",
+            children: "Cargando despachadas\u2026"
+          })]
+        }) : despachadasFiltradas.length === 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
             className: "fas fa-truck-fast text-4xl mb-2"
@@ -140545,15 +140604,32 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
         }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "mb-3 border border-emerald-200 rounded-lg overflow-hidden",
           children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
-            className: "bg-emerald-50 px-3 py-2",
-            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h4", {
-              className: "text-sm font-bold text-emerald-800",
-              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
-                className: "fas fa-truck-fast mr-1"
-              }), "Despachadas \u2014 listas para imprimir (", despachadasFiltradas.length, ")"]
-            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
-              className: "text-xs text-emerald-600",
-              children: "Inventario ya descontado. Imprim\xED la Gu\xEDa de Despacho y las etiquetas de bultos."
+            className: "bg-emerald-50 px-3 py-2 flex flex-wrap items-center justify-between gap-2",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h4", {
+                className: "text-sm font-bold text-emerald-800",
+                children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                  className: "fas fa-truck-fast mr-1"
+                }), "Despachadas \u2014 listas para imprimir (", despPag.total, ")"]
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("p", {
+                className: "text-xs text-emerald-600",
+                children: "Inventario ya descontado. Imprim\xED la Gu\xEDa de Despacho y las etiquetas de bultos."
+              })]
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("label", {
+              className: "text-xs text-emerald-700 flex items-center gap-1 whitespace-nowrap",
+              children: ["Por p\xE1gina:", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("select", {
+                value: despPorPagina,
+                onChange: function onChange(e) {
+                  return setDespPorPagina(Number(e.target.value));
+                },
+                className: "px-1.5 py-1 text-xs border border-emerald-300 rounded bg-white",
+                children: [10, 20, 50, 100].map(function (n) {
+                  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("option", {
+                    value: n,
+                    children: n
+                  }, n);
+                })
+              })]
             })]
           }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
             className: "overflow-x-auto",
@@ -140691,6 +140767,59 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
                 })
               })]
             })
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+            className: "flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-emerald-50/60 border-t border-emerald-100 text-xs text-emerald-700",
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+              children: ["Mostrando ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("b", {
+                children: despPag.from
+              }), "\u2013", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("b", {
+                children: despPag.to
+              }), " de ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("b", {
+                children: despPag.total
+              })]
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+              className: "flex items-center gap-1",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                onClick: function onClick() {
+                  return setDespPage(1);
+                },
+                disabled: despPag.current_page <= 1,
+                className: "px-2 py-1 rounded border border-emerald-300 bg-white disabled:opacity-40 hover:bg-emerald-100",
+                title: "Primera",
+                children: "\xAB"
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                onClick: function onClick() {
+                  return setDespPage(function (p) {
+                    return Math.max(1, p - 1);
+                  });
+                },
+                disabled: despPag.current_page <= 1,
+                className: "px-2 py-1 rounded border border-emerald-300 bg-white disabled:opacity-40 hover:bg-emerald-100",
+                title: "Anterior",
+                children: "\u2039"
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+                className: "px-2 font-semibold",
+                children: ["P\xE1g. ", despPag.current_page, " de ", despPag.last_page]
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                onClick: function onClick() {
+                  return setDespPage(function (p) {
+                    return Math.min(despPag.last_page, p + 1);
+                  });
+                },
+                disabled: despPag.current_page >= despPag.last_page,
+                className: "px-2 py-1 rounded border border-emerald-300 bg-white disabled:opacity-40 hover:bg-emerald-100",
+                title: "Siguiente",
+                children: "\u203A"
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                onClick: function onClick() {
+                  return setDespPage(despPag.last_page);
+                },
+                disabled: despPag.current_page >= despPag.last_page,
+                className: "px-2 py-1 rounded border border-emerald-300 bg-white disabled:opacity-40 hover:bg-emerald-100",
+                title: "\xDAltima",
+                children: "\xBB"
+              })]
+            })]
           })]
         })), tabActiva === 'enviadas' && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)(TransferenciaList, {
           readOnly: readOnly,

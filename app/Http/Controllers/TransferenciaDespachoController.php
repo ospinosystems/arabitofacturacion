@@ -272,20 +272,76 @@ class TransferenciaDespachoController extends Controller
         ]);
     }
 
-    /** Lista las órdenes locales de despacho (por estado, default preparación=0). */
+    /**
+     * Lista las órdenes locales de despacho (por estado, default preparación=0).
+     *
+     * Filtros SERVER-SIDE (para que el rango de fecha y el destino operen sobre TODA la BD, no solo
+     * sobre una ventana reciente): id_destino, desde/hasta (por la fecha relevante del estado), y q
+     * (texto: id local / id_transferencia_central / id_orden_distribucion).
+     *
+     * Paginación: si viene `por_pagina`, devuelve además `paginacion` {current_page,last_page,per_page,
+     * total,from,to}. Si no, mantiene el comportamiento viejo (limit).
+     */
     public function getOrdenes(Request $req)
     {
         $estado = $req->has('estado') && $req->estado !== '' ? (int) $req->estado : 0;
+        // La fecha "relevante": despachadas (1) por updated_at (cuándo salió); resto por created_at.
+        $fechaCol = $estado === 1 ? 'updated_at' : 'created_at';
+
         $q = transferencias_inventario::where('estado', $estado);
-        if ($req->q) {
-            $q->where('id', $req->q);
+
+        if ($req->filled('id_destino')) {
+            $q->where('id_destino', (int) $req->id_destino);
         }
-        $ordenes = $q->orderByDesc('id')->limit($req->limit ? (int) $req->limit : 50)->get()
-            ->map(fn ($o) => $this->ordenConDetalle($o->id));
-        // Código de la sucursal ORIGEN (este galpón) para que el front resuelva sus datos fiscales
-        // (razón social/RIF/estado viven en central, ya llegan en getSucursales) al imprimir la guía.
+        if ($req->filled('desde')) {
+            $q->whereDate($fechaCol, '>=', $req->desde);
+        }
+        if ($req->filled('hasta')) {
+            $q->whereDate($fechaCol, '<=', $req->hasta);
+        }
+        // Texto: id local exacto o LIKE sobre ids de trazabilidad.
+        if ($req->filled('q')) {
+            $texto = trim((string) $req->q);
+            $q->where(function ($w) use ($texto) {
+                $w->where('id', $texto)
+                    ->orWhere('id_transferencia_central', 'like', "%{$texto}%")
+                    ->orWhere('id_orden_distribucion', 'like', "%{$texto}%");
+            });
+        }
+
         $origenCodigo = null;
         try { $origenCodigo = (new sendCentral())->getOrigen(); } catch (\Throwable $e) {}
+
+        // ── Con paginación (por_pagina presente) ──
+        if ($req->filled('por_pagina')) {
+            $porPagina = max(1, min(200, (int) $req->por_pagina));
+            $page = max(1, (int) ($req->page ?: 1));
+            $total = (clone $q)->count();
+            $lastPage = max(1, (int) ceil($total / $porPagina));
+            if ($page > $lastPage) { $page = $lastPage; }
+            $ordenes = $q->orderByDesc('id')
+                ->forPage($page, $porPagina)->get()
+                ->map(fn ($o) => $this->ordenConDetalle($o->id));
+            $from = $total === 0 ? 0 : (($page - 1) * $porPagina) + 1;
+            $to = min($page * $porPagina, $total);
+            return Response::json([
+                'estado' => true,
+                'ordenes' => $ordenes,
+                'origen_codigo' => $origenCodigo,
+                'paginacion' => [
+                    'current_page' => $page,
+                    'last_page' => $lastPage,
+                    'per_page' => $porPagina,
+                    'total' => $total,
+                    'from' => $from,
+                    'to' => $to,
+                ],
+            ]);
+        }
+
+        // ── Sin paginación (comportamiento viejo: limit) ──
+        $ordenes = $q->orderByDesc('id')->limit($req->limit ? (int) $req->limit : 50)->get()
+            ->map(fn ($o) => $this->ordenConDetalle($o->id));
         return Response::json(['estado' => true, 'ordenes' => $ordenes, 'origen_codigo' => $origenCodigo]);
     }
 

@@ -2115,10 +2115,15 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
     const [printModal, setPrintModal] = useState(null);
     const abrirPrintModal = (payload) => setPrintModal(payload);
     // Órdenes ya despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
+    // Se cargan PAGINADAS y filtradas EN EL SERVIDOR (fecha/destino/texto operan sobre toda la BD).
     const [despachadas, setDespachadas] = useState([]);
+    const [despPage, setDespPage] = useState(1);
+    const [despPorPagina, setDespPorPagina] = useState(20);
+    const [despPag, setDespPag] = useState({ current_page: 1, last_page: 1, per_page: 20, total: 0, from: 0, to: 0 });
+    const [cargandoDespachadas, setCargandoDespachadas] = useState(false);
     // Código de la sucursal ORIGEN (este galpón), para resolver sus datos fiscales en la guía.
     const [origenCodigo, setOrigenCodigo] = useState(null);
-    // Loading al cargar las órdenes (premontas + borradores + despachadas).
+    // Loading al cargar las órdenes (premontas + borradores).
     const [cargandoOrdenes, setCargandoOrdenes] = useState(true);
     // Modal de previsualización de ítems de una orden (despachadas): la orden a mostrar.
     const [itemsOrden, setItemsOrden] = useState(null);
@@ -2182,13 +2187,23 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
         } catch (e) { setBorradores([]); }
     }, []);
 
-    // Cargar despachadas (estado 1). Además verifica contra central el Nº de Guía REAL (el id local
-    // guardado puede estar stale). Anota central_pedido_id / central_existe / central_estado.
+    // Cargar despachadas (estado 1) PAGINADAS + filtradas EN SERVIDOR (fecha/destino/texto). Además
+    // verifica contra central el Nº de Guía REAL (el id local guardado puede estar stale).
     const cargarDespachadas = useCallback(async () => {
+        setCargandoDespachadas(true);
         try {
-            const res = await db.tdGetOrdenes({ estado: 1, limit: 100 });
+            const res = await db.tdGetOrdenes({
+                estado: 1,
+                por_pagina: despPorPagina,
+                page: despPage,
+                q: filtroOrdenes.q || '',
+                id_destino: filtroOrdenes.destino || '',
+                desde: filtroOrdenes.desde || '',
+                hasta: filtroOrdenes.hasta || '',
+            });
             let ordenes = res.data?.ordenes || [];
             if (res.data?.origen_codigo) setOrigenCodigo(res.data.origen_codigo);
+            if (res.data?.paginacion) setDespPag(res.data.paginacion);
             const ids = ordenes.map(o => o.id);
             if (ids.length) {
                 // Verificación contra central: distingue "verificado y presente" / "verificado y
@@ -2214,19 +2229,33 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
             }
             setDespachadas(ordenes);
         } catch (e) { setDespachadas([]); }
-    }, []);
+        finally { setCargandoDespachadas(false); }
+    }, [despPage, despPorPagina, filtroOrdenes]);
 
     // Cargar premontas (redistribuciones aprobadas para esta sucursal origen) + borradores.
+    // (Despachadas se carga aparte, paginado/filtrado en servidor.)
     useEffect(() => {
         let vivo = true;
         setCargandoOrdenes(true);
         const cargarPremontas = db.getPremontadas({ limit: 50 })
             .then(res => { if (vivo) setPremontas(res.data?.premontadas || []); })
             .catch(() => { if (vivo) setPremontas([]); });
-        Promise.all([cargarPremontas, cargarBorradores(), cargarDespachadas()])
+        Promise.all([cargarPremontas, cargarBorradores()])
             .finally(() => { if (vivo) setCargandoOrdenes(false); });
         return () => { vivo = false; };
-    }, [refreshListKey, cargarBorradores, cargarDespachadas]);
+    }, [refreshListKey, cargarBorradores]);
+
+    // Recarga de despachadas: al cambiar filtros (fecha/destino/texto), página o tamaño de página, o
+    // al refrescar la lista. El texto (q) se debouncea para no pegarle al servidor en cada tecla.
+    useEffect(() => {
+        const t = setTimeout(() => { cargarDespachadas(); }, 300);
+        return () => clearTimeout(t);
+    }, [cargarDespachadas, refreshListKey]);
+
+    // Al cambiar cualquier filtro, volver a la página 1 (evita quedar en una página inexistente).
+    useEffect(() => {
+        setDespPage(1);
+    }, [filtroOrdenes.q, filtroOrdenes.destino, filtroOrdenes.desde, filtroOrdenes.hasta, despPorPagina]);
 
     // Coteja los productos de la redistribución contra el inventario local en UNA sola petición
     // (antes se hacía 1 request por producto → lentísimo con cientos de ítems). Arma las filas de
@@ -2621,12 +2650,9 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
         && matchTexto([b.id, b.id_orden_distribucion, ...codDestino(b.id_destino)])
     );
 
-    // Despachadas: lista histórica → fecha (default hoy) + texto/destino.
-    const despachadasFiltradas = despachadas.filter(d =>
-        matchDestino(d.id_destino)
-        && enRangoFecha(d.updated_at || d.created_at)
-        && matchTexto([d.id, d.id_transferencia_central, d.id_orden_distribucion, ...codDestino(d.id_destino)])
-    );
+    // Despachadas: la lista ya viene FILTRADA y PAGINADA por el servidor (fecha/destino/texto operan
+    // sobre toda la BD, no solo sobre una ventana reciente). No se re-filtra en el cliente.
+    const despachadasFiltradas = despachadas;
 
     return (
         <div className="mx-auto px-2 pt-1 pb-2 sm:px-4 md:px-6">
@@ -2676,7 +2702,7 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
                                 </button>
                             )}
                             <span className="text-xs text-gray-400 ml-auto">
-                                {premontasFiltradas.length} redistribución(es) · {borradoresFiltrados.length} en preparación · {despachadasFiltradas.length} despachada(s)
+                                {premontasFiltradas.length} redistribución(es) · {borradoresFiltrados.length} en preparación · {despPag.total} despachada(s)
                             </span>
                         </div>
                     </div>
@@ -2688,7 +2714,7 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
                                 { key: 'enviadas', label: 'Órdenes Enviadas', icon: 'fa-paper-plane', count: null, badge: 'bg-indigo-100 text-indigo-700' },
                                 { key: 'redistribuciones', label: 'Redistribuciones', icon: 'fa-random', count: premontasFiltradas.length, badge: 'bg-amber-100 text-amber-700' },
                                 { key: 'preparacion', label: 'En preparación', icon: 'fa-pen-to-square', count: borradoresFiltrados.length, badge: 'bg-blue-100 text-blue-700' },
-                                { key: 'despachadas', label: 'Despachadas', icon: 'fa-truck-fast', count: despachadasFiltradas.length, badge: 'bg-emerald-100 text-emerald-700' },
+                                { key: 'despachadas', label: 'Despachadas', icon: 'fa-truck-fast', count: despPag.total, badge: 'bg-emerald-100 text-emerald-700' },
                             ]
                             // Solo lectura (gerente): únicamente Enviadas y Despachadas.
                             .filter(t => !readOnly || t.key === 'enviadas' || t.key === 'despachadas')
@@ -2706,8 +2732,8 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
                         </div>
                     </div>
 
-                    {/* Loading mientras se cargan las órdenes (premontas + borradores + despachadas) */}
-                    {cargandoOrdenes && tabActiva !== 'enviadas' && (
+                    {/* Loading de premontas + borradores (despachadas tiene su propio loading paginado) */}
+                    {cargandoOrdenes && tabActiva !== 'enviadas' && tabActiva !== 'despachadas' && (
                         <div className="text-center py-16 text-gray-400">
                             <i className="fas fa-circle-notch fa-spin text-4xl mb-3 text-indigo-400"></i>
                             <p className="text-sm font-medium">Cargando órdenes…</p>
@@ -2867,17 +2893,30 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
                         )
                     )}
                     {/* ── Despachadas (estado 1, inventario ya descontado) — imprimir Guía / Bultos ── */}
-                    {!cargandoOrdenes && tabActiva === 'despachadas' && (
-                        despachadasFiltradas.length === 0 ? (
+                    {tabActiva === 'despachadas' && (
+                        cargandoDespachadas ? (
+                            <div className="text-center py-16 text-gray-400">
+                                <i className="fas fa-circle-notch fa-spin text-4xl mb-3 text-emerald-400"></i>
+                                <p className="text-sm font-medium">Cargando despachadas…</p>
+                            </div>
+                        ) : despachadasFiltradas.length === 0 ? (
                             <div className="text-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg">
                                 <i className="fas fa-truck-fast text-4xl mb-2"></i>
                                 <p>No hay despachadas {hayFiltros ? 'con estos filtros' : 'hoy'} <span className="text-gray-300">(cambiá la fecha o tocá Limpiar para ver más)</span></p>
                             </div>
                         ) : (
                         <div className="mb-3 border border-emerald-200 rounded-lg overflow-hidden">
-                            <div className="bg-emerald-50 px-3 py-2">
-                                <h4 className="text-sm font-bold text-emerald-800"><i className="fas fa-truck-fast mr-1"></i>Despachadas — listas para imprimir ({despachadasFiltradas.length})</h4>
-                                <p className="text-xs text-emerald-600">Inventario ya descontado. Imprimí la Guía de Despacho y las etiquetas de bultos.</p>
+                            <div className="bg-emerald-50 px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <h4 className="text-sm font-bold text-emerald-800"><i className="fas fa-truck-fast mr-1"></i>Despachadas — listas para imprimir ({despPag.total})</h4>
+                                    <p className="text-xs text-emerald-600">Inventario ya descontado. Imprimí la Guía de Despacho y las etiquetas de bultos.</p>
+                                </div>
+                                <label className="text-xs text-emerald-700 flex items-center gap-1 whitespace-nowrap">
+                                    Por página:
+                                    <select value={despPorPagina} onChange={e => setDespPorPagina(Number(e.target.value))} className="px-1.5 py-1 text-xs border border-emerald-300 rounded bg-white">
+                                        {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                                    </select>
+                                </label>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="min-w-full text-sm divide-y divide-emerald-100">
@@ -2939,6 +2978,17 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
                                         })}
                                     </tbody>
                                 </table>
+                            </div>
+                            {/* Paginación server-side */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-emerald-50/60 border-t border-emerald-100 text-xs text-emerald-700">
+                                <span>Mostrando <b>{despPag.from}</b>–<b>{despPag.to}</b> de <b>{despPag.total}</b></span>
+                                <div className="flex items-center gap-1">
+                                    <button onClick={() => setDespPage(1)} disabled={despPag.current_page <= 1} className="px-2 py-1 rounded border border-emerald-300 bg-white disabled:opacity-40 hover:bg-emerald-100" title="Primera">«</button>
+                                    <button onClick={() => setDespPage(p => Math.max(1, p - 1))} disabled={despPag.current_page <= 1} className="px-2 py-1 rounded border border-emerald-300 bg-white disabled:opacity-40 hover:bg-emerald-100" title="Anterior">‹</button>
+                                    <span className="px-2 font-semibold">Pág. {despPag.current_page} de {despPag.last_page}</span>
+                                    <button onClick={() => setDespPage(p => Math.min(despPag.last_page, p + 1))} disabled={despPag.current_page >= despPag.last_page} className="px-2 py-1 rounded border border-emerald-300 bg-white disabled:opacity-40 hover:bg-emerald-100" title="Siguiente">›</button>
+                                    <button onClick={() => setDespPage(despPag.last_page)} disabled={despPag.current_page >= despPag.last_page} className="px-2 py-1 rounded border border-emerald-300 bg-white disabled:opacity-40 hover:bg-emerald-100" title="Última">»</button>
+                                </div>
                             </div>
                         </div>
                         )
