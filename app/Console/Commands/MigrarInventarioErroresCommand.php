@@ -26,7 +26,7 @@ use Illuminate\Console\Command;
 class MigrarInventarioErroresCommand extends Command
 {
     protected $signature = 'inventario:migrar-errores
-        {--referencia= : referencia que imprimió inventario:migrar}
+        {--referencia= : referencia que imprimió inventario:migrar (default: la última corrida)}
         {--id= : id de la migración (alternativa a la referencia)}
         {--salida= : ruta del CSV (default: storage/app/…)}';
 
@@ -34,24 +34,39 @@ class MigrarInventarioErroresCommand extends Command
 
     public function handle(): int
     {
+        // Sin --referencia se consulta la ÚLTIMA migración de esta tienda: cada
+        // `inventario:migrar` sin --referencia crea una corrida nueva, y es fácil
+        // terminar mirando una vieja.
         $ref = $this->option('referencia');
         $id  = $this->option('id');
-        if (! $ref && ! $id) {
-            $this->error('Indica --referencia= (la que imprimió inventario:migrar) o --id=');
-            return self::INVALID;
-        }
 
         $sc = new sendCentral();
         $r = $sc->requestToCentral('POST', '/migracion/inventario/errores',
             array_filter(['referencia' => $ref, 'id' => $id]),
             ['timeout' => 180]);
 
-        if (! $r->successful() || ! ($r->json()['estado'] ?? false)) {
-            $this->error('Central respondió: ' . mb_substr($r->body(), 0, 300));
+        $d = $r->json();
+
+        // Siempre que central las mande, se muestran las corridas recientes.
+        if (is_array($d) && ! empty($d['recientes'])) {
+            $this->line('Migraciones recientes de esta tienda:');
+            $this->table(
+                ['id', 'referencia', 'estado', 'TitanioPOS', 'enviados', 'fecha'],
+                collect($d['recientes'])->map(fn ($m) => [
+                    $m['id'], $m['referencia'], $m['estado'], $m['titanio'] ?? '—', $m['enviados'], $m['fecha'],
+                ])->all()
+            );
+        }
+
+        if (! $r->successful() || ! ($d['estado'] ?? false)) {
+            $this->error('Central respondió: ' . ($d['msj'] ?? mb_substr($r->body(), 0, 300)));
+            if (! empty($d['recientes'])) {
+                $this->comment('Elige una de arriba:  php artisan inventario:migrar-errores --referencia=…');
+            }
             return self::FAILURE;
         }
 
-        $d = $r->json();
+        $this->newLine();
         $this->info("Migración {$d['referencia']} · estado: {$d['estado_migracion']}"
             . ' · TitanioPOS: ' . ($d['titanio_status'] ?? '—'));
         $this->line('  productos enviados: ' . $d['total_enviado']);
