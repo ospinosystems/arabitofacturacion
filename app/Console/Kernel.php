@@ -28,14 +28,23 @@ class Kernel extends ConsoleKernel
 
         $schedule->call(function () {
             (new sendCentral)->sendComovamos();
-            
+
         })->everyTwoHours();
 
         // $schedule->command('database:backup')->daily();
 
 
         $schedule->command('database:backup')->twiceDaily(8, 18);
-        
+
+        // Sincronización automática de inventario contra central, cada 2 horas.
+        // withoutOverlapping(110): si una corrida sigue viva (o crasheó), no arranca otra encima; el
+        // lock expira a los 110 min para no quedar trabado antes de la siguiente ventana de 2 h.
+        // runInBackground: no bloquea otras tareas agendadas del mismo minuto.
+        $schedule->command('inventario:sincronizar')
+            ->everyTwoHours()
+            ->withoutOverlapping(110)
+            ->runInBackground();
+
     }
 
     /**

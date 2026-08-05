@@ -41,8 +41,27 @@ class InventarioController extends Controller
         // false NORMAL, SIN PERMISO
     }
 
+    /**
+     * El GERENTE (tipo_usuario = 1) tiene acceso de SOLO LECTURA al inventario: puede ver la lista,
+     * reportes, movimientos (ojito) e imprimir precios, pero NO crear/editar/borrar/reemplazar
+     * productos. El middleware `admin` deja pasar al gerente (hasAdminAccess incluye [1,6]) y ningún
+     * método valida el rol, así que se bloquea acá, en cada endpoint de escritura. Devuelve una
+     * Response JSON de rechazo si es gerente, o null si puede continuar.
+     */
+    private function bloquearGerenteEscritura()
+    {
+        if ((int) session('tipo_usuario') === 1) {
+            return Response::json([
+                'estado' => false,
+                'msj' => 'El gerente tiene acceso de solo lectura al inventario. No puede crear ni editar productos.',
+            ]);
+        }
+        return null;
+    }
+
     public function guardarDeSucursalEnCentral(Request $req)
     {
+        if ($r = $this->bloquearGerenteEscritura()) return $r;
         $producto = $req->producto;
         try {
             $id = $this->guardarProducto([
@@ -118,6 +137,7 @@ class InventarioController extends Controller
 
     public function setCtxBulto(Request $req)
     {
+        if ($r = $this->bloquearGerenteEscritura()) return $r;
         try {
             $id = $req->id;
             $bulto = $req->bulto;
@@ -133,6 +153,7 @@ class InventarioController extends Controller
 
     public function setStockMin(Request $req)
     {
+        if ($r = $this->bloquearGerenteEscritura()) return $r;
         try {
             $id = $req->id;
             $min = $req->min;
@@ -147,6 +168,7 @@ class InventarioController extends Controller
 
     public function setPrecioAlterno(Request $req)
     {
+        if ($r = $this->bloquearGerenteEscritura()) return $r;
         try {
             $id = $req->id;
             $type = $req->type;
@@ -1516,6 +1538,7 @@ class InventarioController extends Controller
 
     public function guardarNuevoProductoLote(Request $req)
     {
+        if ($r = $this->bloquearGerenteEscritura()) return $r;
         try {
             $motivo = $req->motivo;
             foreach ($req->lotes as $key => $ee) {
@@ -1575,6 +1598,7 @@ class InventarioController extends Controller
 
     public function guardarNuevoProductoLoteFact(Request $req)
     {
+        if ($r = $this->bloquearGerenteEscritura()) return $r;
         try {
             $sumTotFact = 0;
             $totFact = 0;
@@ -1670,6 +1694,7 @@ class InventarioController extends Controller
 
     function saveReplaceProducto(Request $req)
     {
+        if ($r = $this->bloquearGerenteEscritura()) return $r;
         try {
             $replaceProducto = $req->replaceProducto;
             $este = $replaceProducto['este'];

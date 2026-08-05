@@ -15,6 +15,7 @@ import React, { useEffect } from 'react';
 import { useHotkeys } from "react-hotkeys-hook";
 
 function Inventario({
+  readOnly = false,
   getFacturas,
   openBarcodeScan,
   exportPendientes,
@@ -543,6 +544,7 @@ function Inventario({
               {subViewInventario === "inventario" && (
                 <>
                   <InventarioForzado
+                    readOnly={readOnly}
                     openBarcodeScan={openBarcodeScan}
                     exportPendientes={exportPendientes}
                     getPorcentajeInventario={getPorcentajeInventario}

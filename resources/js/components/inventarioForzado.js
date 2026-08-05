@@ -1,6 +1,7 @@
 import { useHotkeys } from "react-hotkeys-hook";
 
 export default function InventarioForzado({
+    readOnly = false, // gerente: solo lectura → sin crear/editar/borrar/reemplazar
     setporcenganancia,
     productosInventario,
     qBuscarInventario,
@@ -537,8 +538,8 @@ export default function InventarioForzado({
                                     <i className="fas fa-file-alt me-2"></i>
                                     Reporte
                                 </button>
-                                {user.iscentral && (
-                                    <button 
+                                {!readOnly && user.iscentral && (
+                                    <button
                                         className="mb-2 btn btn-primary w-100 w-md-auto mb-md-0"
                                         onClick={() => changeInventario(null, null, null, "add")}
                                     >
@@ -555,8 +556,8 @@ export default function InventarioForzado({
                                         Buscar
                                     </button>
                                 )}
-                                {user.iscentral && (
-                                    <button 
+                                {!readOnly && user.iscentral && (
+                                    <button
                                         className="btn btn-success w-100 w-md-auto"
                                         onClick={guardarNuevoProductoLote}
                                     >
@@ -673,24 +674,28 @@ export default function InventarioForzado({
                         </thead>
                         <tbody>
                             {productosInventario.map((e, i) => (
-                                <tr 
+                                <tr
                                     key={i}
                                     className={`${e.push ? 'table-success' : 'table-danger'} align-middle`}
                                     onDoubleClick={() => {
-                                        if (!e.push) {
+                                        if (!readOnly && !e.push) {
                                             changeInventario(null, i, e.id, "update");
                                         }
                                     }}
                                 >
                                     <td>
-                                        <span 
-                                            className="cursor-pointer text-primary"
-                                            onClick={() => selectRepleceProducto(e.id)}
-                                        >
-                                            {e.id}
-                                        </span>
+                                        {readOnly ? (
+                                            <span>{e.id}</span>
+                                        ) : (
+                                            <span
+                                                className="cursor-pointer text-primary"
+                                                onClick={() => selectRepleceProducto(e.id)}
+                                            >
+                                                {e.id}
+                                            </span>
+                                        )}
                                     </td>
-                                    {type(e.type) ? (
+                                    {(readOnly || type(e.type)) ? (
                                         <>
                                             <td>{e.codigo_proveedor}</td>
                                             <td>{e.codigo_barras}</td>
@@ -831,18 +836,22 @@ export default function InventarioForzado({
                                     )}
                                     <td>
                                         <div className="btn-group">
-                                            <button
-                                                className="btn btn-sm btn-outline-primary"
-                                                onClick={() => changeInventario(null, i, e.id, "update")}
-                                            >
-                                                <i className="fas fa-edit"></i>
-                                            </button>
-                                            <button
-                                                className="btn btn-sm btn-outline-danger"
-                                                onClick={() => changeInventario(null, i, e.id, "delete")}
-                                            >
-                                                <i className="fas fa-trash"></i>
-                                            </button>
+                                            {!readOnly && (
+                                                <button
+                                                    className="btn btn-sm btn-outline-primary"
+                                                    onClick={() => changeInventario(null, i, e.id, "update")}
+                                                >
+                                                    <i className="fas fa-edit"></i>
+                                                </button>
+                                            )}
+                                            {!readOnly && (
+                                                <button
+                                                    className="btn btn-sm btn-outline-danger"
+                                                    onClick={() => changeInventario(null, i, e.id, "delete")}
+                                                >
+                                                    <i className="fas fa-trash"></i>
+                                                </button>
+                                            )}
                                             <span className="btn-sm btn btn-warning" onClick={() => printTickedPrecio(e.id)}><i className="fa fa-print"></i></span>
                                         </div>
                                     </td>
@@ -855,48 +864,56 @@ export default function InventarioForzado({
                 {/* Mobile Card View */}
                 <div className="d-md-none">
                     {productosInventario.map((e, i) => (
-                        <div 
+                        <div
                             key={i}
-                            className={`card mb-3 ${e.push ? 'border-success' : 'border-danger'} ${!type(e.type) ? 'edit-mode' : ''}`}
+                            className={`card mb-3 ${e.push ? 'border-success' : 'border-danger'} ${(!readOnly && !type(e.type)) ? 'edit-mode' : ''}`}
                             onDoubleClick={() => {
-                                if (!e.push) {
+                                if (!readOnly && !e.push) {
                                     changeInventario(null, i, e.id, "update");
                                 }
                             }}
                         >
-                            <div className={`card-header d-flex justify-content-between align-items-center ${!type(e.type) ? 'bg-primary bg-opacity-10' : ''}`}>
-                                <span 
-                                    className="cursor-pointer text-primary"
-                                    onClick={() => selectRepleceProducto(e.id)}
-                                >
-                                    {e.id}
-                                </span>
+                            <div className={`card-header d-flex justify-content-between align-items-center ${(!readOnly && !type(e.type)) ? 'bg-primary bg-opacity-10' : ''}`}>
+                                {readOnly ? (
+                                    <span>{e.id}</span>
+                                ) : (
+                                    <span
+                                        className="cursor-pointer text-primary"
+                                        onClick={() => selectRepleceProducto(e.id)}
+                                    >
+                                        {e.id}
+                                    </span>
+                                )}
                                 <div className="gap-1 d-flex">
                                     <span className="btn-sm btn btn-warning" onClick={() => printTickedPrecio(e.id)}>
                                         <i className="fa fa-print"></i>
                                     </span>
-                                    <button 
+                                    <button
                                         className="btn btn-sm btn-outline-primary"
                                         onClick={() => openmodalhistoricoproducto(e.id)}
                                     >
                                         <i className="fas fa-history"></i>
                                     </button>
-                                    <button
-                                        className="btn btn-sm btn-outline-danger"
-                                        onClick={() => changeInventario(null, i, e.id, "delete")}
-                                    >
-                                        <i className="fas fa-trash"></i>
-                                    </button>
-                                    <button
-                                        className="btn btn-sm btn-outline-primary"
-                                        onClick={() => changeInventario(null, i, e.id, "update")}
-                                    >
-                                        <i className="fas fa-edit"></i>
-                                    </button>
+                                    {!readOnly && (
+                                        <button
+                                            className="btn btn-sm btn-outline-danger"
+                                            onClick={() => changeInventario(null, i, e.id, "delete")}
+                                        >
+                                            <i className="fas fa-trash"></i>
+                                        </button>
+                                    )}
+                                    {!readOnly && (
+                                        <button
+                                            className="btn btn-sm btn-outline-primary"
+                                            onClick={() => changeInventario(null, i, e.id, "update")}
+                                        >
+                                            <i className="fas fa-edit"></i>
+                                        </button>
+                                    )}
                                 </div>
                             </div>
-                            <div className={`card-body ${!type(e.type) ? 'bg-light border-top border-primary border-opacity-25' : ''}`}>
-                                {type(e.type) ? (
+                            <div className={`card-body ${(!readOnly && !type(e.type)) ? 'bg-light border-top border-primary border-opacity-25' : ''}`}>
+                                {(readOnly || type(e.type)) ? (
                                     <>
                                         <div className="mb-2 row g-2">
                                             <div className="col-6">

@@ -10273,6 +10273,7 @@ export default function Facturar({
                     {view == "inventario" ? (
                         <>
                         <Inventario
+                            readOnly={user && Number(user.tipo_usuario) === 1}
                             buscarInventario={buscarInventario}
                             getFacturas={getFacturas}
                             openBarcodeScan={openBarcodeScan}
