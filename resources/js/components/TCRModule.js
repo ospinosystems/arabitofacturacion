@@ -42,6 +42,17 @@ export default function TCRModule({
         return idx;
     })();
 
+    // ¿El producto coincide con lo tecleado/escaneado? (barras o proveedor, por "contiene").
+    // Con esto se FILTRA la lista para mostrar SOLO el/los que matchean y no hacer scroll a mano.
+    const coincideEscaneo = (item) => {
+        const q = (escaneoTexto || '').trim().toLowerCase();
+        if (!q) return true;
+        const norm = (v) => (v == null ? '' : v.toString().trim().toLowerCase());
+        return norm(item.producto?.codigo_barras).includes(q) || norm(item.producto?.codigo_proveedor).includes(q);
+    };
+    // ¿Está activo el filtro por escaneo? (hay texto y no se está esperando ubicación).
+    const filtrandoPorEscaneo = escaneoTexto.trim() !== '' && !esperandoUbicacion;
+
     // onChange del input: guarda el texto y hace scroll al producto que va matcheando.
     const onEscaneoChange = (e) => {
         const val = e.target.value;
@@ -688,6 +699,9 @@ export default function TCRModule({
                                                 </thead>
                                                 <tbody className="divide-y divide-gray-100">
                                                     {pedidosCentral[indexPedidoCentral].items.map((e, i) => {
+                                                        // Filtro por escaneo: mostrar SOLO el/los productos que coinciden con lo
+                                                        // tecleado (se conserva el índice `i` original para los handlers).
+                                                        if (filtrandoPorEscaneo && !coincideEscaneo(e)) return null;
                                                         const estado = pedidosCentral[indexPedidoCentral].estado;
                                                         const seleccionado = estado === 4 && productoSeleccionado === i;
                                                         const listo = itemListo(e);
@@ -814,6 +828,14 @@ export default function TCRModule({
                                                             </tr>
                                                         );
                                                     })}
+                                                    {filtrandoPorEscaneo && !pedidosCentral[indexPedidoCentral].items.some(coincideEscaneo) && (
+                                                        <tr>
+                                                            <td colSpan={8} className="px-3 py-6 text-center text-red-500 font-semibold">
+                                                                <i className="fas fa-triangle-exclamation mr-1"></i>
+                                                                Ningún producto de este pedido coincide con “{escaneoTexto.trim()}”
+                                                            </td>
+                                                        </tr>
+                                                    )}
                                                 </tbody>
                                             </table>
                                         </div>

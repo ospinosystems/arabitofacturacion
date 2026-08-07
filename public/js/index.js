@@ -134907,6 +134907,20 @@ function TCRModule(_ref) {
     return idx;
   }();
 
+  // ¿El producto coincide con lo tecleado/escaneado? (barras o proveedor, por "contiene").
+  // Con esto se FILTRA la lista para mostrar SOLO el/los que matchean y no hacer scroll a mano.
+  var coincideEscaneo = function coincideEscaneo(item) {
+    var _item$producto, _item$producto2;
+    var q = (escaneoTexto || '').trim().toLowerCase();
+    if (!q) return true;
+    var norm = function norm(v) {
+      return v == null ? '' : v.toString().trim().toLowerCase();
+    };
+    return norm((_item$producto = item.producto) === null || _item$producto === void 0 ? void 0 : _item$producto.codigo_barras).includes(q) || norm((_item$producto2 = item.producto) === null || _item$producto2 === void 0 ? void 0 : _item$producto2.codigo_proveedor).includes(q);
+  };
+  // ¿Está activo el filtro por escaneo? (hay texto y no se está esperando ubicación).
+  var filtrandoPorEscaneo = escaneoTexto.trim() !== '' && !esperandoUbicacion;
+
   // onChange del input: guarda el texto y hace scroll al producto que va matcheando.
   var onEscaneoChange = function onEscaneoChange(e) {
     var val = e.target.value;
@@ -135033,9 +135047,9 @@ function TCRModule(_ref) {
 
       // Buscar el producto por código de barras o proveedor
       var productoIndex = pedidoActual.items.findIndex(function (item) {
-        var _item$producto, _item$producto2;
-        var codigoBarras = (_item$producto = item.producto) === null || _item$producto === void 0 || (_item$producto = _item$producto.codigo_barras) === null || _item$producto === void 0 ? void 0 : _item$producto.toString().trim();
-        var codigoProveedor = (_item$producto2 = item.producto) === null || _item$producto2 === void 0 || (_item$producto2 = _item$producto2.codigo_proveedor) === null || _item$producto2 === void 0 ? void 0 : _item$producto2.toString().trim();
+        var _item$producto3, _item$producto4;
+        var codigoBarras = (_item$producto3 = item.producto) === null || _item$producto3 === void 0 || (_item$producto3 = _item$producto3.codigo_barras) === null || _item$producto3 === void 0 ? void 0 : _item$producto3.toString().trim();
+        var codigoProveedor = (_item$producto4 = item.producto) === null || _item$producto4 === void 0 || (_item$producto4 = _item$producto4.codigo_proveedor) === null || _item$producto4 === void 0 ? void 0 : _item$producto4.toString().trim();
         return codigoBarras === codigo || codigoProveedor === codigo;
       });
       if (productoIndex !== -1) {
@@ -135654,9 +135668,12 @@ function TCRModule(_ref) {
                           className: "px-2 py-1.5 text-center w-10"
                         })]
                       })
-                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("tbody", {
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("tbody", {
                       className: "divide-y divide-gray-100",
-                      children: pedidosCentral[indexPedidoCentral].items.map(function (e, i) {
+                      children: [pedidosCentral[indexPedidoCentral].items.map(function (e, i) {
+                        // Filtro por escaneo: mostrar SOLO el/los productos que coinciden con lo
+                        // tecleado (se conserva el índice `i` original para los handlers).
+                        if (filtrandoPorEscaneo && !coincideEscaneo(e)) return null;
                         var estado = pedidosCentral[indexPedidoCentral].estado;
                         var seleccionado = estado === 4 && productoSeleccionado === i;
                         var listo = itemListo(e);
@@ -135769,7 +135786,15 @@ function TCRModule(_ref) {
                             })
                           })]
                         }, e.id);
-                      })
+                      }), filtrandoPorEscaneo && !pedidosCentral[indexPedidoCentral].items.some(coincideEscaneo) && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("tr", {
+                        children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsxs)("td", {
+                          colSpan: 8,
+                          className: "px-3 py-6 text-center text-red-500 font-semibold",
+                          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_1__.jsx)("i", {
+                            className: "fas fa-triangle-exclamation mr-1"
+                          }), "Ning\xFAn producto de este pedido coincide con \u201C", escaneoTexto.trim(), "\u201D"]
+                        })
+                      })]
                     })]
                   })
                 })]
