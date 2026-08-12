@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -9,17 +10,22 @@ use Illuminate\Support\Facades\Schema;
  * Es la "orden de recolección": qué producto/cantidad debe ir a buscar cada pasillero,
  * y cuánto realmente recolectó (cantidad_recolectada).
  *
- * Nota de tipos: transferencias_inventarios.id es int(11) SIGNED (no unsigned), por eso
- * la FK usa integer(); las demás referencias quedan como integer indexado sin FK.
+ * Nota de tipos: en producción transferencias_inventarios.id es int(11) SIGNED, pero una DB
+ * creada desde cero por las migraciones lo deja int UNSIGNED (viene de increments()). MySQL 8
+ * exige que la FK use exactamente el mismo signo, así que el tipo se detecta en runtime.
  */
 return new class extends Migration
 {
     public function up()
     {
-        Schema::create('transferencia_asignaciones', function (Blueprint $table) {
+        $refUnsigned = $this->referenciaEsUnsigned();
+
+        Schema::create('transferencia_asignaciones', function (Blueprint $table) use ($refUnsigned) {
             $table->increments('id');
 
-            $table->integer('id_transferencia');
+            $refUnsigned
+                ? $table->unsignedInteger('id_transferencia')
+                : $table->integer('id_transferencia');
             $table->foreign('id_transferencia')->references('id')->on('transferencias_inventarios')
                 ->onDelete('cascade')->onUpdate('cascade');
 
@@ -41,5 +47,19 @@ return new class extends Migration
     public function down()
     {
         Schema::dropIfExists('transferencia_asignaciones');
+    }
+
+    /**
+     * ¿transferencias_inventarios.id es UNSIGNED? (true en DB nueva, false en la de producción)
+     */
+    private function referenciaEsUnsigned(): bool
+    {
+        $columna = DB::selectOne(
+            'select column_type as tipo from information_schema.columns
+             where table_schema = database() and table_name = ? and column_name = ?',
+            ['transferencias_inventarios', 'id']
+        );
+
+        return $columna ? str_contains(strtolower($columna->tipo), 'unsigned') : false;
     }
 };
