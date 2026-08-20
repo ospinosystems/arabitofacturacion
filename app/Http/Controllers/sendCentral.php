@@ -769,34 +769,46 @@ class sendCentral extends Controller
     }
 
     function getPedidoCentralImport($id_pedido) {
-        $response = $this->requestToCentral('post', "/getPedidoCentralImport", [
-            "id_pedido" => $id_pedido,
-        ]);
-        if ($response->ok()) {
-            //Retorna respuesta solo si es Array
-            if ($response->json()) {
-                $res = $response->json();
-                return $res;
+        // FIX 2026-08-20 - SIEMPRE array (ver comoArrayCentral): el llamador hace $res['estado'].
+        try {
+            $response = $this->requestToCentral('post', "/getPedidoCentralImport", [
+                "id_pedido" => $id_pedido,
+            ], ['timeout' => 120]);
+            if ($response->ok()) {
+                //Retorna respuesta solo si es Array
+                if ($response->json()) {
+                    $res = $response->json();
+                    return $res;
+                }
             }
-        } 
-        return $response;
+            return $this->comoArrayCentral($response, 'getPedidoCentralImport');
+        } catch (\Throwable $e) {
+            \Log::error('getPedidoCentralImport: fallo contactando a central (pedido #' . $id_pedido . '): ' . $e->getMessage());
+            return ['estado' => false, 'msj' => 'No se pudo contactar a central: ' . $e->getMessage()];
+        }
     }
 
     function sendTareasPendientesCentral($data) {
-        $codigo_origen = $this->getOrigen();
-        
-        $response = $this->requestToCentral('post', "/sendTareasPendientesCentral", [
-                "codigo_origen" => $codigo_origen,
-                "data" => $data,
-        ]);
-        if ($response->ok()) {
-            //Retorna respuesta solo si es Array
-            if ($response->json()) {
-                $res = $response->json();
-                return $res;
+        // FIX 2026-08-20 - SIEMPRE array (ver comoArrayCentral): el llamador hace $res['estado'].
+        try {
+            $codigo_origen = $this->getOrigen();
+
+            $response = $this->requestToCentral('post', "/sendTareasPendientesCentral", [
+                    "codigo_origen" => $codigo_origen,
+                    "data" => $data,
+            ], ['timeout' => 120]);
+            if ($response->ok()) {
+                //Retorna respuesta solo si es Array
+                if ($response->json()) {
+                    $res = $response->json();
+                    return $res;
+                }
             }
-        } 
-        return $response;
+            return $this->comoArrayCentral($response, 'sendTareasPendientesCentral');
+        } catch (\Throwable $e) {
+            \Log::error('sendTareasPendientesCentral: fallo contactando a central: ' . $e->getMessage());
+            return ['estado' => false, 'msj' => 'No se pudo contactar a central: ' . $e->getMessage()];
+        }
     }
 
     function getCatCajas()
@@ -1078,6 +1090,48 @@ class sendCentral extends Controller
         if ($waitMs > 0) {
             usleep((int) (min($waitMs, 5000) * 1000));
         }
+    }
+
+    /**
+     * FIX 2026-08-20 - normaliza CUALQUIER retorno de una llamada a central a array.
+     * Los llamadores hacen $res['estado'] / isset($res['estado']); si les llega un
+     * objeto (JsonResponse del catch, o Http\Client\Response de un HTTP != 2xx)
+     * PHP 8 revienta con "Cannot use object of type ... as array" y ademas mata el
+     * catch (\Exception) del llamador (es un \Error, no una \Exception), dejando
+     * la transaccion abierta.
+     */
+    public function comoArrayCentral($res, string $contexto = ''): array
+    {
+        if (is_array($res)) {
+            return $res;
+        }
+
+        if ($res instanceof \Illuminate\Http\Client\Response) {
+            $json = $res->json();
+            if (is_array($json)) {
+                return $json;
+            }
+            \Log::warning("sendCentral[$contexto]: central respondio HTTP " . $res->status() . ' sin JSON. Cuerpo: ' . substr((string) $res->body(), 0, 500));
+            return ['estado' => false, 'msj' => 'Central respondio HTTP ' . $res->status() . ' (sin JSON valido).'];
+        }
+
+        if ($res instanceof \Illuminate\Http\JsonResponse) {
+            $data = $res->getData(true);
+            return is_array($data) ? $data : ['estado' => false, 'msj' => 'Respuesta invalida de central.'];
+        }
+
+        if ($res === null) {
+            \Log::warning("sendCentral[$contexto]: central no devolvio nada.");
+            return ['estado' => false, 'msj' => 'Central no respondio.'];
+        }
+
+        if (is_string($res)) {
+            $decoded = json_decode($res, true);
+            return is_array($decoded) ? $decoded : ['estado' => false, 'msj' => $res];
+        }
+
+        \Log::warning("sendCentral[$contexto]: respuesta inesperada de tipo " . gettype($res));
+        return ['estado' => false, 'msj' => 'Respuesta inesperada de central.'];
     }
 
     /**
@@ -2163,22 +2217,30 @@ class sendCentral extends Controller
     }
 
     function sendItemsPedidosChecked($items) {
+        // FIX 2026-08-20 - SIEMPRE array (ver comoArrayCentral). Antes, ante timeout o
+        // HTTP != 2xx devolvia un OBJETO y checkPedidosCentral moria con
+        // "Cannot use object of type Illuminate\Http\JsonResponse as array".
+        // timeout largo: central guarda item por item; un pedido grande pasa de 30s.
         try {
             $codigo_origen = $this->getOrigen();
             $response = $this->requestToCentral('post', "/sendItemsPedidosChecked", [
                     "codigo_origen" => $codigo_origen,
                     "items" => $items,
-                ]
+                ],
+                ['timeout' => 180]
             );
 
             if ($response->ok()) {
                 $resretur = $response->json();
-                return $resretur;
+                if (is_array($resretur)) {
+                    return $resretur;
+                }
             }
-            return $response;
+            return $this->comoArrayCentral($response, 'sendItemsPedidosChecked');
 
-        } catch (\Exception $e) {
-            return Response::json(["msj" => "Error: " . $e->getMessage(), "estado" => false]);
+        } catch (\Throwable $e) {
+            \Log::error('sendItemsPedidosChecked: fallo contactando a central: ' . $e->getMessage());
+            return ["msj" => "No se pudo contactar a central: " . $e->getMessage(), "estado" => false];
         }
     }
     function importarusers() {

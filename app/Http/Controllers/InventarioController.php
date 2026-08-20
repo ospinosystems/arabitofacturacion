@@ -790,7 +790,9 @@ class InventarioController extends Controller
                     if ($vinculo_quetengo) {
                         if ($item['idinsucursal_vinculo'] != $vinculo_quetengo->id) {
                             if (!$vinculo_real) {
-                                return ['msj' => '#' . ($i + 1) . ' -> ERROR VINCULO CENTRAL, SUGIERA UN VINCULO NUEVO =  ' . $item['producto']['codigo_barras'], 'estado' => false, 'id_item' => $item['id']];
+                                DB::rollback();  // FIX: no dejar la transaccion abierta en el return temprano
+
+                                return Response::json(['msj' => '#' . ($i + 1) . ' -> ERROR VINCULO CENTRAL, SUGIERA UN VINCULO NUEVO =  ' . $item['producto']['codigo_barras'], 'estado' => false, 'id_item' => $item['id']]);
                             }
                         }
                     }
@@ -805,15 +807,28 @@ class InventarioController extends Controller
             }
 
             // ENVIAR LAS 5 SUGERENCIAs A CENTRAL
-            $chekedPedidoByCentral = (new sendCentral)->sendItemsPedidosChecked($ped_id['items']);
+            // comoArrayCentral: blindaje por si algun dia vuelve a colarse un objeto
+            // (timeout / HTTP != 2xx). Antes reventaba aqui con
+            // "Cannot use object of type Illuminate\Http\JsonResponse as array".
+            $sc = new sendCentral;
+            $chekedPedidoByCentral = $sc->comoArrayCentral(
+                $sc->sendItemsPedidosChecked($ped_id['items']),
+                'sendItemsPedidosChecked'
+            );
             if (isset($chekedPedidoByCentral['estado'])) {
                 if ($chekedPedidoByCentral['estado'] === false) {
-                    return $chekedPedidoByCentral['msj'];  // ESTADO 3
+                    // ESTADO 3 (en revision) o error de central. Devolver el JSON COMPLETO:
+                    // el front necesita 'proceso' => 'enrevision' para refrescar la lista.
+                    DB::rollback();  // FIX: no dejar la transaccion abierta en el return temprano
+
+                    return Response::json($chekedPedidoByCentral);
                 } else if ($chekedPedidoByCentral['estado'] === true) {
                     // YA REVISADO...Procede ESTADO 4
                 }
             } else {
-                return $chekedPedidoByCentral;
+                DB::rollback();
+
+                return Response::json($chekedPedidoByCentral);
             }
 
             // IMPORTAR AL SISTEMA YA CHECKEADO POR CENTRAL 4
@@ -821,8 +836,9 @@ class InventarioController extends Controller
             $checkIfExitsFact = factura::where('id_pedido_central', $id_pedido)->first();
             if ($checkIfExitsFact) {
                 // LÓGICA DE RECUPERACIÓN: Intentar notificar a Central nuevamente si es necesario
-                $getPedido = (new sendCentral)->getPedidoCentralImport($id_pedido);
-                
+                $sc = new sendCentral;
+                $getPedido = $sc->comoArrayCentral($sc->getPedidoCentralImport($id_pedido), 'getPedidoCentralImport');
+
                 // Si devuelve estado true, significa que Central todavía lo tiene en estado 4 (Pendiente de Importar)
                 // Si devuelve false, probablemente ya está en estado 2 (Procesado)
                 if (isset($getPedido['estado']) && $getPedido['estado'] === true) {
@@ -852,8 +868,8 @@ class InventarioController extends Controller
                         }
                         
                         // Reenviar notificación a Central
-                        $tareaSend = (new sendCentral)->sendTareasPendientesCentral($tareaspendientescentralArr);
-                        
+                        $tareaSend = $sc->comoArrayCentral($sc->sendTareasPendientesCentral($tareaspendientescentralArr), 'sendTareasPendientesCentral');
+
                         if (isset($tareaSend['estado']) && $tareaSend['estado'] === true) {
                              DB::commit(); // Commit de la transacción actual (aunque no hay cambios locales nuevos, cierra el proceso limpiamente)
                              return Response::json(['msj' => '¡Factura ya existía, se recuperó la conexión y se notificó a Central con éxito!', 'estado' => true]);
@@ -870,7 +886,8 @@ class InventarioController extends Controller
                 throw new \Exception('¡Factura ya existe! No se pudo resincronizar.', 1);
             }
             $ids_to_csv = [];
-            $getPedido = (new sendCentral)->getPedidoCentralImport($id_pedido);
+            $sc = new sendCentral;
+            $getPedido = $sc->comoArrayCentral($sc->getPedidoCentralImport($id_pedido), 'getPedidoCentralImport');
             if (isset($getPedido['estado'])) {
                 if ($getPedido['estado'] === true) {
                     if (isset($getPedido['pedido'])) {
@@ -1093,7 +1110,7 @@ class InventarioController extends Controller
                             // Post-commit: la transacción local ya está cerrada, así que un fallo aquí
                             // (central caído, etc.) NO debe disparar el rollback del catch externo.
                             try {
-                                $tareaSend = (new sendCentral)->sendTareasPendientesCentral($tareaspendientescentralArr);
+                                $tareaSend = $sc->comoArrayCentral($sc->sendTareasPendientesCentral($tareaspendientescentralArr), 'sendTareasPendientesCentral');
                             } catch (\Throwable $eNotify) {
                                 $tareaSend = ['estado' => false, 'msj' => $eNotify->getMessage()];
                             }
@@ -1111,8 +1128,12 @@ class InventarioController extends Controller
             }
             // END IMPORTAR AL SISTEMA
 
-            return $getPedido;
-        } catch (\Exception $e) {
+            DB::rollback();  // FIX: nada que confirmar por este camino; no dejar la transaccion abierta
+
+            return Response::json($getPedido);
+            // \Throwable y no \Exception: un \Error (p.ej. "Cannot use object of type
+            // ... as array") NO es \Exception, se escapaba sin rollback ni log.
+        } catch (\Throwable $e) {
             DB::rollback();
             \Log::error('checkPedidosCentral: ROLLBACK completo. Error: ' . $e->getMessage() . ' | Archivo: ' . $e->getFile() . ':' . $e->getLine() . ' | Trace: ' . $e->getTraceAsString());
 
