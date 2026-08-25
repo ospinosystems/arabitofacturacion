@@ -2463,6 +2463,29 @@ class sendCentral extends Controller
         }
     }
 
+    /**
+     * Fusiona en central varias redistribuciones (OrdenDistribucion) del MISMO destino en una sola,
+     * sumando cantidades de productos duplicados. Scoped por codigo_origen (este galpón). Solo elegibles
+     * las Aprobadas sin espejo. Devuelve el resultado tal cual de central.
+     */
+    function fusionarPremontas(Request $req) {
+        try {
+            $ids = collect((array) ($req->ids_orden_distribucion ?? $req->ids ?? []))
+                ->map(fn ($v) => (int) $v)->filter()->unique()->values()->all();
+            $response = $this->requestToCentral('post', '/fusionarPremontas', [
+                'codigo_origen' => $this->getOrigen(),
+                'ids_orden_distribucion' => $ids,
+            ]);
+            if ($response->ok()) {
+                $res = $this->jsonFromCentral($response);
+                return Response::json($res !== null ? $res : ['estado' => false, 'msj' => 'Respuesta no válida de central.']);
+            }
+            return Response::json(['estado' => false, 'msj' => 'Central respondió ' . $response->status()]);
+        } catch (\Throwable $e) {
+            return Response::json(['estado' => false, 'msj' => 'Error al fusionar: ' . $e->getMessage()]);
+        }
+    }
+
     function settransferenciaDici(Request $req) {
         DB::beginTransaction();
         try {

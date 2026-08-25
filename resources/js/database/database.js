@@ -239,6 +239,7 @@ const db = {
   reqpedidos: data => axios.post(host + "reqpedidos", data),
   reqMipedidos: data => axios.post(host + "reqMipedidos", data),
   getPremontadas: data => axios.post(host + "getPremontadas", data),
+  fusionarPremontas: data => axios.post(host + "fusionarPremontas", data),
   settransferenciaDici: data => axios.post(host + "settransferenciaDici", data),
   delTransferenciaDici: data => axios.post(host + "delTransferenciaDici", data),
 

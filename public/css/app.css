@@ -26868,6 +26868,9 @@ body{
 .placeholder-transparent::placeholder{
   color: transparent;
 }
+.accent-indigo-600{
+  accent-color: #4f46e5;
+}
 .opacity-0{
   opacity: 0;
 }

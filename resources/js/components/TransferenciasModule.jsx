@@ -2102,6 +2102,13 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
     const [filtroOrdenes, setFiltroOrdenes] = useState({ q: '', destino: '', desde: hoyLocal(), hasta: '' });
     const setFiltro = (campo, val) => setFiltroOrdenes(prev => ({ ...prev, [campo]: val }));
     const limpiarFiltros = () => setFiltroOrdenes({ q: '', destino: '', desde: '', hasta: '' });
+    // Selección de redistribuciones (por id_orden_distribucion) para FUSIONAR en una sola.
+    const [seleccionFusion, setSeleccionFusion] = useState(() => new Set());
+    const toggleSeleccionFusion = (idOD) => setSeleccionFusion(prev => {
+        const s = new Set(prev);
+        if (s.has(idOD)) s.delete(idOD); else s.add(idOD);
+        return s;
+    });
     // Tab activo del listado: 'enviadas' | 'redistribuciones' | 'preparacion' | 'despachadas'.
     // En modo solo-lectura (gerente) se arranca en "Órdenes Enviadas".
     const [tabActiva, setTabActiva] = useState(readOnly ? 'enviadas' : 'redistribuciones');
@@ -2329,6 +2336,28 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
             setVistaActual('conflictos');
         } catch (e) {
             alert('Error al cotejar la redistribución: ' + (e.message || e));
+        } finally {
+            setProcesando(null);
+        }
+    };
+
+    // Fusiona en central las redistribuciones seleccionadas (mismo destino) en una sola, sumando
+    // cantidades de productos duplicados. Deja auditoría en central. Recarga las premontas.
+    const fusionarSeleccionadas = async (ids) => {
+        if (!ids || ids.length < 2) { alert('Seleccioná al menos 2 redistribuciones del mismo destino.'); return; }
+        if (!window.confirm(`¿Fusionar ${ids.length} redistribuciones en una sola? Se suman las cantidades de productos duplicados y las originales quedan canceladas. Esto se registra en central.`)) return;
+        setProcesando('fusion');
+        try {
+            const res = await db.fusionarPremontas({ ids_orden_distribucion: ids });
+            if (res.data?.estado) {
+                setSeleccionFusion(new Set());
+                setRefreshListKey(k => k + 1); // recarga premontas (la fusionada aparece, las originales ya no)
+                alert(res.data.msj || 'Redistribuciones fusionadas.');
+            } else {
+                alert(res.data?.msj || 'No se pudieron fusionar.');
+            }
+        } catch (e) {
+            alert('Error al fusionar: ' + (e.message || e));
         } finally {
             setProcesando(null);
         }
@@ -2643,6 +2672,12 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
             && matchTexto([p.id_orden_distribucion, destino.codigo, destino.nombre]);
     });
 
+    // Selección para FUSIONAR: solo cuentan las visibles. Se exige mismo destino.
+    const premontasSeleccionadas = premontasFiltradas.filter(p => seleccionFusion.has(p.id_orden_distribucion));
+    const destinosSeleccion = new Set(premontasSeleccionadas.map(p => p.sucursal_destino?.id));
+    const seleccionMismoDestino = destinosSeleccion.size === 1;
+    const puedeFusionar = premontasSeleccionadas.length >= 2 && seleccionMismoDestino;
+
     // Borradores (en preparación): filtro por fecha de creación + destino + texto.
     const borradoresFiltrados = borradores.filter(b =>
         matchDestino(b.id_destino)
@@ -2753,11 +2788,31 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
                         <div className="mb-3 border border-amber-300 rounded-lg overflow-hidden">
                             <div className="flex items-center justify-between gap-2 bg-amber-50 px-3 py-2 flex-wrap">
                                 <h4 className="text-sm font-bold text-amber-800"><i className="fas fa-inbox mr-1"></i>Redistribuciones por despachar ({premontasFiltradas.length})</h4>
+                                <div className="flex items-center gap-2">
+                                    {seleccionFusion.size > 0 && (
+                                        <span className="text-xs text-amber-700">
+                                            {premontasSeleccionadas.length} seleccionada(s)
+                                            {premontasSeleccionadas.length >= 2 && !seleccionMismoDestino && <span className="text-red-600 font-semibold ml-1">· deben ser del mismo destino</span>}
+                                        </span>
+                                    )}
+                                    {seleccionFusion.size > 0 && (
+                                        <button onClick={() => setSeleccionFusion(new Set())} className="text-xs px-2 py-1 border border-gray-300 rounded text-gray-600 hover:bg-gray-50">Limpiar</button>
+                                    )}
+                                    <button
+                                        onClick={() => fusionarSeleccionadas(premontasSeleccionadas.map(p => p.id_orden_distribucion))}
+                                        disabled={!puedeFusionar || procesando === 'fusion'}
+                                        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                                        title={puedeFusionar ? 'Fusionar las redistribuciones seleccionadas en una sola' : 'Seleccioná 2+ redistribuciones del mismo destino'}
+                                    >
+                                        {procesando === 'fusion' ? <><i className="fas fa-spinner fa-spin"></i>Fusionando…</> : <><i className="fas fa-object-group"></i>Fusionar seleccionadas</>}
+                                    </button>
+                                </div>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="min-w-full text-sm divide-y divide-amber-100">
                                     <thead className="bg-amber-50/60 text-xs uppercase tracking-wide text-amber-700">
                                         <tr>
+                                            <th className="px-3 py-2 text-center font-semibold w-8"></th>
                                             <th className="px-3 py-2 text-left font-semibold">Origen</th>
                                             <th className="px-3 py-2 text-left font-semibold">Redistribución</th>
                                             <th className="px-3 py-2 text-left font-semibold">Fecha</th>
@@ -2768,9 +2823,18 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-100">
                                         {premontasFiltradas.length === 0 ? (
-                                            <tr><td colSpan={6} className="px-3 py-4 text-center text-gray-400">Sin coincidencias</td></tr>
+                                            <tr><td colSpan={7} className="px-3 py-4 text-center text-gray-400">Sin coincidencias</td></tr>
                                         ) : premontasFiltradas.map(prem => (
-                                            <tr key={prem.id_orden_distribucion} className="hover:bg-amber-50/40">
+                                            <tr key={prem.id_orden_distribucion} className={`hover:bg-amber-50/40 ${seleccionFusion.has(prem.id_orden_distribucion) ? 'bg-indigo-50' : ''}`}>
+                                                <td className="px-3 py-2 text-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="w-4 h-4 accent-indigo-600 cursor-pointer"
+                                                        checked={seleccionFusion.has(prem.id_orden_distribucion)}
+                                                        onChange={() => toggleSeleccionFusion(prem.id_orden_distribucion)}
+                                                        title="Seleccionar para fusionar (mismo destino)"
+                                                    />
+                                                </td>
                                                 <td className="px-3 py-2">
                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800"><i className="fas fa-random"></i>REDISTRIBUCIÓN</span>
                                                 </td>

@@ -34518,6 +34518,9 @@ var db = {
   getPremontadas: function getPremontadas(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "getPremontadas", data);
   },
+  fusionarPremontas: function fusionarPremontas(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "fusionarPremontas", data);
+  },
   settransferenciaDici: function settransferenciaDici(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "settransferenciaDici", data);
   },

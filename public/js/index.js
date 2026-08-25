@@ -139120,53 +139120,67 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       hasta: ''
     });
   };
+  // Selección de redistribuciones (por id_orden_distribucion) para FUSIONAR en una sola.
+  var _useState83 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(function () {
+      return new Set();
+    }),
+    _useState84 = _slicedToArray(_useState83, 2),
+    seleccionFusion = _useState84[0],
+    setSeleccionFusion = _useState84[1];
+  var toggleSeleccionFusion = function toggleSeleccionFusion(idOD) {
+    return setSeleccionFusion(function (prev) {
+      var s = new Set(prev);
+      if (s.has(idOD)) s["delete"](idOD);else s.add(idOD);
+      return s;
+    });
+  };
   // Tab activo del listado: 'enviadas' | 'redistribuciones' | 'preparacion' | 'despachadas'.
   // En modo solo-lectura (gerente) se arranca en "Órdenes Enviadas".
-  var _useState83 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(readOnly ? 'enviadas' : 'redistribuciones'),
-    _useState84 = _slicedToArray(_useState83, 2),
-    tabActiva = _useState84[0],
-    setTabActiva = _useState84[1];
-  // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
-  var _useState85 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
+  var _useState85 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(readOnly ? 'enviadas' : 'redistribuciones'),
     _useState86 = _slicedToArray(_useState85, 2),
-    borradores = _useState86[0],
-    setBorradores = _useState86[1];
-  var _useState87 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    tabActiva = _useState86[0],
+    setTabActiva = _useState86[1];
+  // Borradores = órdenes de despacho locales "en preparación" (estado 0), aún sin descontar.
+  var _useState87 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState88 = _slicedToArray(_useState87, 2),
-    borradorEnEdicion = _useState88[0],
-    setBorradorEnEdicion = _useState88[1];
+    borradores = _useState88[0],
+    setBorradores = _useState88[1];
   var _useState89 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState90 = _slicedToArray(_useState89, 2),
-    procesando = _useState90[0],
-    setProcesando = _useState90[1]; // id ocupado (crear/salida/eliminar)
-  // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
+    borradorEnEdicion = _useState90[0],
+    setBorradorEnEdicion = _useState90[1];
   var _useState91 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState92 = _slicedToArray(_useState91, 2),
-    conflictosPremonta = _useState92[0],
-    setConflictosPremonta = _useState92[1];
-  // Modal de opciones de impresión de la lista de picking: { titulo, subtitulo, filas } | null.
+    procesando = _useState92[0],
+    setProcesando = _useState92[1]; // id ocupado (crear/salida/eliminar)
+  // Resolución de conflictos de una redistribución antes de crear la orden: { prem, filas }.
   var _useState93 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState94 = _slicedToArray(_useState93, 2),
-    printModal = _useState94[0],
-    setPrintModal = _useState94[1];
+    conflictosPremonta = _useState94[0],
+    setConflictosPremonta = _useState94[1];
+  // Modal de opciones de impresión de la lista de picking: { titulo, subtitulo, filas } | null.
+  var _useState95 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState96 = _slicedToArray(_useState95, 2),
+    printModal = _useState96[0],
+    setPrintModal = _useState96[1];
   var abrirPrintModal = function abrirPrintModal(payload) {
     return setPrintModal(payload);
   };
   // Órdenes ya despachadas (estado 1) — para imprimir Guía de Despacho / Bultos.
   // Se cargan PAGINADAS y filtradas EN EL SERVIDOR (fecha/destino/texto operan sobre toda la BD).
-  var _useState95 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
-    _useState96 = _slicedToArray(_useState95, 2),
-    despachadas = _useState96[0],
-    setDespachadas = _useState96[1];
-  var _useState97 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(1),
+  var _useState97 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState98 = _slicedToArray(_useState97, 2),
-    despPage = _useState98[0],
-    setDespPage = _useState98[1];
-  var _useState99 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(20),
+    despachadas = _useState98[0],
+    setDespachadas = _useState98[1];
+  var _useState99 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(1),
     _useState100 = _slicedToArray(_useState99, 2),
-    despPorPagina = _useState100[0],
-    setDespPorPagina = _useState100[1];
-  var _useState101 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+    despPage = _useState100[0],
+    setDespPage = _useState100[1];
+  var _useState101 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(20),
+    _useState102 = _slicedToArray(_useState101, 2),
+    despPorPagina = _useState102[0],
+    setDespPorPagina = _useState102[1];
+  var _useState103 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
       current_page: 1,
       last_page: 1,
       per_page: 20,
@@ -139174,41 +139188,41 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       from: 0,
       to: 0
     }),
-    _useState102 = _slicedToArray(_useState101, 2),
-    despPag = _useState102[0],
-    setDespPag = _useState102[1];
-  var _useState103 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState104 = _slicedToArray(_useState103, 2),
-    cargandoDespachadas = _useState104[0],
-    setCargandoDespachadas = _useState104[1];
-  // Código de la sucursal ORIGEN (este galpón), para resolver sus datos fiscales en la guía.
-  var _useState105 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    despPag = _useState104[0],
+    setDespPag = _useState104[1];
+  var _useState105 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState106 = _slicedToArray(_useState105, 2),
-    origenCodigo = _useState106[0],
-    setOrigenCodigo = _useState106[1];
-  // Loading al cargar las órdenes (premontas + borradores).
-  var _useState107 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
+    cargandoDespachadas = _useState106[0],
+    setCargandoDespachadas = _useState106[1];
+  // Código de la sucursal ORIGEN (este galpón), para resolver sus datos fiscales en la guía.
+  var _useState107 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState108 = _slicedToArray(_useState107, 2),
-    cargandoOrdenes = _useState108[0],
-    setCargandoOrdenes = _useState108[1];
-  // Modal de previsualización de ítems de una orden (despachadas): la orden a mostrar.
-  var _useState109 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    origenCodigo = _useState108[0],
+    setOrigenCodigo = _useState108[1];
+  // Loading al cargar las órdenes (premontas + borradores).
+  var _useState109 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
     _useState110 = _slicedToArray(_useState109, 2),
-    itemsOrden = _useState110[0],
-    setItemsOrden = _useState110[1];
-  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
+    cargandoOrdenes = _useState110[0],
+    setCargandoOrdenes = _useState110[1];
+  // Modal de previsualización de ítems de una orden (despachadas): la orden a mostrar.
   var _useState111 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState112 = _slicedToArray(_useState111, 2),
-    bultosOrden = _useState112[0],
-    setBultosOrden = _useState112[1];
-  var _useState113 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    itemsOrden = _useState112[0],
+    setItemsOrden = _useState112[1];
+  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
+  var _useState113 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState114 = _slicedToArray(_useState113, 2),
-    numBultosInput = _useState114[0],
-    setNumBultosInput = _useState114[1];
-  var _useState115 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    bultosOrden = _useState114[0],
+    setBultosOrden = _useState114[1];
+  var _useState115 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState116 = _slicedToArray(_useState115, 2),
-    bultosIframeUrl = _useState116[0],
-    setBultosIframeUrl = _useState116[1];
+    numBultosInput = _useState116[0],
+    setNumBultosInput = _useState116[1];
+  var _useState117 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState118 = _slicedToArray(_useState117, 2),
+    bultosIframeUrl = _useState118[0],
+    setBultosIframeUrl = _useState118[1];
   var refIframeBultos = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var cargarTransferencias = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
     var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5(filtros) {
@@ -139618,31 +139632,90 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
     };
   }();
 
-  // Crea la orden en preparación (estado 0, SIN descontar) con los ítems ya resueltos por el
-  // usuario, ligada a la redistribución. La redistribución original de central queda intacta.
-  var confirmarOrdenConflictos = /*#__PURE__*/function () {
-    var _ref23 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(items) {
-      var prem, _prem$sucursal_destin5, _res$data8, res, _res$data9;
+  // Fusiona en central las redistribuciones seleccionadas (mismo destino) en una sola, sumando
+  // cantidades de productos duplicados. Deja auditoría en central. Recarga las premontas.
+  var fusionarSeleccionadas = /*#__PURE__*/function () {
+    var _ref23 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(ids) {
+      var _res$data8, res, _res$data9;
       return _regeneratorRuntime().wrap(function _callee11$(_context11) {
         while (1) switch (_context11.prev = _context11.next) {
           case 0:
-            prem = conflictosPremonta === null || conflictosPremonta === void 0 ? void 0 : conflictosPremonta.prem;
-            if (prem) {
+            if (!(!ids || ids.length < 2)) {
               _context11.next = 3;
               break;
             }
+            alert('Seleccioná al menos 2 redistribuciones del mismo destino.');
             return _context11.abrupt("return");
           case 3:
+            if (window.confirm("\xBFFusionar ".concat(ids.length, " redistribuciones en una sola? Se suman las cantidades de productos duplicados y las originales quedan canceladas. Esto se registra en central."))) {
+              _context11.next = 5;
+              break;
+            }
+            return _context11.abrupt("return");
+          case 5:
+            setProcesando('fusion');
+            _context11.prev = 6;
+            _context11.next = 9;
+            return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].fusionarPremontas({
+              ids_orden_distribucion: ids
+            });
+          case 9:
+            res = _context11.sent;
+            if ((_res$data8 = res.data) !== null && _res$data8 !== void 0 && _res$data8.estado) {
+              setSeleccionFusion(new Set());
+              setRefreshListKey(function (k) {
+                return k + 1;
+              }); // recarga premontas (la fusionada aparece, las originales ya no)
+              alert(res.data.msj || 'Redistribuciones fusionadas.');
+            } else {
+              alert(((_res$data9 = res.data) === null || _res$data9 === void 0 ? void 0 : _res$data9.msj) || 'No se pudieron fusionar.');
+            }
+            _context11.next = 16;
+            break;
+          case 13:
+            _context11.prev = 13;
+            _context11.t0 = _context11["catch"](6);
+            alert('Error al fusionar: ' + (_context11.t0.message || _context11.t0));
+          case 16:
+            _context11.prev = 16;
+            setProcesando(null);
+            return _context11.finish(16);
+          case 19:
+          case "end":
+            return _context11.stop();
+        }
+      }, _callee11, null, [[6, 13, 16, 19]]);
+    }));
+    return function fusionarSeleccionadas(_x9) {
+      return _ref23.apply(this, arguments);
+    };
+  }();
+
+  // Crea la orden en preparación (estado 0, SIN descontar) con los ítems ya resueltos por el
+  // usuario, ligada a la redistribución. La redistribución original de central queda intacta.
+  var confirmarOrdenConflictos = /*#__PURE__*/function () {
+    var _ref24 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee12(items) {
+      var prem, _prem$sucursal_destin5, _res$data0, res, _res$data1;
+      return _regeneratorRuntime().wrap(function _callee12$(_context12) {
+        while (1) switch (_context12.prev = _context12.next) {
+          case 0:
+            prem = conflictosPremonta === null || conflictosPremonta === void 0 ? void 0 : conflictosPremonta.prem;
+            if (prem) {
+              _context12.next = 3;
+              break;
+            }
+            return _context12.abrupt("return");
+          case 3:
             if (items.length) {
-              _context11.next = 6;
+              _context12.next = 6;
               break;
             }
             alert('No hay productos válidos para crear la orden.');
-            return _context11.abrupt("return");
+            return _context12.abrupt("return");
           case 6:
             setProcesando('crear-conflictos');
-            _context11.prev = 7;
-            _context11.next = 10;
+            _context12.prev = 7;
+            _context12.next = 10;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGuardarOrden({
               id_destino: ((_prem$sucursal_destin5 = prem.sucursal_destino) === null || _prem$sucursal_destin5 === void 0 ? void 0 : _prem$sucursal_destin5.id) || '',
               id_orden_distribucion: prem.id_orden_distribucion,
@@ -139650,12 +139723,12 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
               items: items
             });
           case 10:
-            res = _context11.sent;
-            if (!((_res$data8 = res.data) !== null && _res$data8 !== void 0 && _res$data8.estado)) {
-              _context11.next = 19;
+            res = _context12.sent;
+            if (!((_res$data0 = res.data) !== null && _res$data0 !== void 0 && _res$data0.estado)) {
+              _context12.next = 19;
               break;
             }
-            _context11.next = 14;
+            _context12.next = 14;
             return cargarBorradores();
           case 14:
             setPremontas(function (prev) {
@@ -139665,29 +139738,29 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
             });
             setConflictosPremonta(null);
             setVistaActual('list');
-            _context11.next = 20;
+            _context12.next = 20;
             break;
           case 19:
-            alert(((_res$data9 = res.data) === null || _res$data9 === void 0 ? void 0 : _res$data9.msj) || 'No se pudo crear la orden.');
+            alert(((_res$data1 = res.data) === null || _res$data1 === void 0 ? void 0 : _res$data1.msj) || 'No se pudo crear la orden.');
           case 20:
-            _context11.next = 25;
+            _context12.next = 25;
             break;
           case 22:
-            _context11.prev = 22;
-            _context11.t0 = _context11["catch"](7);
-            alert('Error al crear la orden: ' + (_context11.t0.message || _context11.t0));
+            _context12.prev = 22;
+            _context12.t0 = _context12["catch"](7);
+            alert('Error al crear la orden: ' + (_context12.t0.message || _context12.t0));
           case 25:
-            _context11.prev = 25;
+            _context12.prev = 25;
             setProcesando(null);
-            return _context11.finish(25);
+            return _context12.finish(25);
           case 28:
           case "end":
-            return _context11.stop();
+            return _context12.stop();
         }
-      }, _callee11, null, [[7, 22, 25, 28]]);
+      }, _callee12, null, [[7, 22, 25, 28]]);
     }));
-    return function confirmarOrdenConflictos(_x9) {
-      return _ref23.apply(this, arguments);
+    return function confirmarOrdenConflictos(_x0) {
+      return _ref24.apply(this, arguments);
     };
   }();
 
@@ -139706,257 +139779,257 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
 
   // Guarda el borrador (crear/actualizar) sin descontar. Devuelve {estado, msj, orden}.
   var guardarBorrador = /*#__PURE__*/function () {
-    var _ref24 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee12(datos) {
+    var _ref25 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee13(datos) {
       var res;
-      return _regeneratorRuntime().wrap(function _callee12$(_context12) {
-        while (1) switch (_context12.prev = _context12.next) {
+      return _regeneratorRuntime().wrap(function _callee13$(_context13) {
+        while (1) switch (_context13.prev = _context13.next) {
           case 0:
-            _context12.next = 2;
+            _context13.next = 2;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdGuardarOrden(datos);
           case 2:
-            res = _context12.sent;
-            _context12.next = 5;
+            res = _context13.sent;
+            _context13.next = 5;
             return cargarBorradores();
           case 5:
-            return _context12.abrupt("return", res.data);
+            return _context13.abrupt("return", res.data);
           case 6:
           case "end":
-            return _context12.stop();
+            return _context13.stop();
         }
-      }, _callee12);
+      }, _callee13);
     }));
-    return function guardarBorrador(_x0) {
-      return _ref24.apply(this, arguments);
+    return function guardarBorrador(_x1) {
+      return _ref25.apply(this, arguments);
     };
   }();
 
   // Dar salida a un borrador: descuenta inventario + crea el espejo en central.
   var darSalida = /*#__PURE__*/function () {
-    var _ref25 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee13(borrador) {
-      var nItems, _res$data0, res, _res$data1;
-      return _regeneratorRuntime().wrap(function _callee13$(_context13) {
-        while (1) switch (_context13.prev = _context13.next) {
+    var _ref26 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee14(borrador) {
+      var nItems, _res$data10, res, _res$data11;
+      return _regeneratorRuntime().wrap(function _callee14$(_context14) {
+        while (1) switch (_context14.prev = _context14.next) {
           case 0:
             nItems = (borrador.items || []).filter(function (i) {
               return parseFloat(i.cantidad) > 0;
             }).length;
             if (window.confirm("\xBFDar salida a la orden #".concat(borrador.id, "? Se descontar\xE1n ").concat(nItems, " producto(s) del inventario y se enviar\xE1 a central. Esta acci\xF3n s\xED mueve inventario."))) {
-              _context13.next = 3;
+              _context14.next = 3;
               break;
             }
-            return _context13.abrupt("return");
+            return _context14.abrupt("return");
           case 3:
             setProcesando('salida-' + borrador.id);
-            _context13.prev = 4;
-            _context13.next = 7;
+            _context14.prev = 4;
+            _context14.next = 7;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdDarSalidaSimple({
               id_transferencia: borrador.id
             });
           case 7:
-            res = _context13.sent;
-            if (!((_res$data0 = res.data) !== null && _res$data0 !== void 0 && _res$data0.estado)) {
-              _context13.next = 15;
+            res = _context14.sent;
+            if (!((_res$data10 = res.data) !== null && _res$data10 !== void 0 && _res$data10.estado)) {
+              _context14.next = 15;
               break;
             }
-            _context13.next = 11;
+            _context14.next = 11;
             return cargarBorradores();
           case 11:
             setRefreshListKey(function (k) {
               return k + 1;
             }); // refrescar histórico central
             alert(res.data.msj || 'Salida dada.');
-            _context13.next = 16;
+            _context14.next = 16;
             break;
           case 15:
-            alert(((_res$data1 = res.data) === null || _res$data1 === void 0 ? void 0 : _res$data1.msj) || 'No se pudo dar salida.');
+            alert(((_res$data11 = res.data) === null || _res$data11 === void 0 ? void 0 : _res$data11.msj) || 'No se pudo dar salida.');
           case 16:
-            _context13.next = 21;
+            _context14.next = 21;
             break;
           case 18:
-            _context13.prev = 18;
-            _context13.t0 = _context13["catch"](4);
-            alert('Error al dar salida: ' + (_context13.t0.message || _context13.t0));
+            _context14.prev = 18;
+            _context14.t0 = _context14["catch"](4);
+            alert('Error al dar salida: ' + (_context14.t0.message || _context14.t0));
           case 21:
-            _context13.prev = 21;
+            _context14.prev = 21;
             setProcesando(null);
-            return _context13.finish(21);
+            return _context14.finish(21);
           case 24:
           case "end":
-            return _context13.stop();
+            return _context14.stop();
         }
-      }, _callee13, null, [[4, 18, 21, 24]]);
+      }, _callee14, null, [[4, 18, 21, 24]]);
     }));
-    return function darSalida(_x1) {
-      return _ref25.apply(this, arguments);
+    return function darSalida(_x10) {
+      return _ref26.apply(this, arguments);
     };
   }();
 
   // Eliminar un borrador (no tocó inventario).
   var eliminarBorrador = /*#__PURE__*/function () {
-    var _ref26 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee14(borrador) {
-      var _res$data10, res, _res$data11;
-      return _regeneratorRuntime().wrap(function _callee14$(_context14) {
-        while (1) switch (_context14.prev = _context14.next) {
+    var _ref27 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee15(borrador) {
+      var _res$data12, res, _res$data13;
+      return _regeneratorRuntime().wrap(function _callee15$(_context15) {
+        while (1) switch (_context15.prev = _context15.next) {
           case 0:
             if (window.confirm("\xBFEliminar la orden en preparaci\xF3n #".concat(borrador.id, "? No descont\xF3 inventario, solo se borra el borrador."))) {
-              _context14.next = 2;
+              _context15.next = 2;
               break;
             }
-            return _context14.abrupt("return");
+            return _context15.abrupt("return");
           case 2:
             setProcesando('del-' + borrador.id);
-            _context14.prev = 3;
-            _context14.next = 6;
+            _context15.prev = 3;
+            _context15.next = 6;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdEliminarOrden({
               id: borrador.id
             });
           case 6:
-            res = _context14.sent;
-            if (!((_res$data10 = res.data) !== null && _res$data10 !== void 0 && _res$data10.estado)) {
-              _context14.next = 13;
+            res = _context15.sent;
+            if (!((_res$data12 = res.data) !== null && _res$data12 !== void 0 && _res$data12.estado)) {
+              _context15.next = 13;
               break;
             }
-            _context14.next = 10;
+            _context15.next = 10;
             return cargarBorradores();
           case 10:
             setRefreshListKey(function (k) {
               return k + 1;
             }); // por si vuelve a aparecer la premonta
-            _context14.next = 14;
+            _context15.next = 14;
             break;
           case 13:
-            alert(((_res$data11 = res.data) === null || _res$data11 === void 0 ? void 0 : _res$data11.msj) || 'No se pudo eliminar.');
+            alert(((_res$data13 = res.data) === null || _res$data13 === void 0 ? void 0 : _res$data13.msj) || 'No se pudo eliminar.');
           case 14:
-            _context14.next = 19;
+            _context15.next = 19;
             break;
           case 16:
-            _context14.prev = 16;
-            _context14.t0 = _context14["catch"](3);
-            alert('Error al eliminar: ' + (_context14.t0.message || _context14.t0));
+            _context15.prev = 16;
+            _context15.t0 = _context15["catch"](3);
+            alert('Error al eliminar: ' + (_context15.t0.message || _context15.t0));
           case 19:
-            _context14.prev = 19;
+            _context15.prev = 19;
             setProcesando(null);
-            return _context14.finish(19);
+            return _context15.finish(19);
           case 22:
           case "end":
-            return _context14.stop();
+            return _context15.stop();
         }
-      }, _callee14, null, [[3, 16, 19, 22]]);
+      }, _callee15, null, [[3, 16, 19, 22]]);
     }));
-    return function eliminarBorrador(_x10) {
-      return _ref26.apply(this, arguments);
+    return function eliminarBorrador(_x11) {
+      return _ref27.apply(this, arguments);
     };
   }();
 
   // Reenviar a central una despachada cuyo envío no se completó (sin Nº de Guía). Reusa
   // darSalidaSimple: para estado=1 sin central, solo reintenta el envío (NO re-descuenta).
   var reenviarACentral = /*#__PURE__*/function () {
-    var _ref27 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee15(d) {
-      var _res$data12, res, _res$data13;
-      return _regeneratorRuntime().wrap(function _callee15$(_context15) {
-        while (1) switch (_context15.prev = _context15.next) {
+    var _ref28 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee16(d) {
+      var _res$data14, res, _res$data15;
+      return _regeneratorRuntime().wrap(function _callee16$(_context16) {
+        while (1) switch (_context16.prev = _context16.next) {
           case 0:
             setProcesando('reenv-' + d.id);
-            _context15.prev = 1;
-            _context15.next = 4;
+            _context16.prev = 1;
+            _context16.next = 4;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdDarSalidaSimple({
               id_transferencia: d.id
             });
           case 4:
-            res = _context15.sent;
-            if (!((_res$data12 = res.data) !== null && _res$data12 !== void 0 && _res$data12.estado)) {
-              _context15.next = 12;
+            res = _context16.sent;
+            if (!((_res$data14 = res.data) !== null && _res$data14 !== void 0 && _res$data14.estado)) {
+              _context16.next = 12;
               break;
             }
-            _context15.next = 8;
+            _context16.next = 8;
             return cargarBorradores();
           case 8:
             setRefreshListKey(function (k) {
               return k + 1;
             });
             alert(res.data.msj || 'Enviada a central.');
-            _context15.next = 13;
+            _context16.next = 13;
             break;
           case 12:
-            alert(((_res$data13 = res.data) === null || _res$data13 === void 0 ? void 0 : _res$data13.msj) || 'No se pudo enviar a central.');
+            alert(((_res$data15 = res.data) === null || _res$data15 === void 0 ? void 0 : _res$data15.msj) || 'No se pudo enviar a central.');
           case 13:
-            _context15.next = 18;
+            _context16.next = 18;
             break;
           case 15:
-            _context15.prev = 15;
-            _context15.t0 = _context15["catch"](1);
-            alert('Error al enviar a central: ' + (_context15.t0.message || _context15.t0));
+            _context16.prev = 15;
+            _context16.t0 = _context16["catch"](1);
+            alert('Error al enviar a central: ' + (_context16.t0.message || _context16.t0));
           case 18:
-            _context15.prev = 18;
+            _context16.prev = 18;
             setProcesando(null);
-            return _context15.finish(18);
+            return _context16.finish(18);
           case 21:
           case "end":
-            return _context15.stop();
+            return _context16.stop();
         }
-      }, _callee15, null, [[1, 15, 18, 21]]);
+      }, _callee16, null, [[1, 15, 18, 21]]);
     }));
-    return function reenviarACentral(_x11) {
-      return _ref27.apply(this, arguments);
+    return function reenviarACentral(_x12) {
+      return _ref28.apply(this, arguments);
     };
   }();
 
   // Reversar una orden despachada: reintegra inventario, quita el espejo en central y la vuelve
   // a "en preparación" (estado 0) para corregir y volver a dar salida.
   var reversarSalida = /*#__PURE__*/function () {
-    var _ref28 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee16(d) {
-      var _res$data14, res, _res$data15;
-      return _regeneratorRuntime().wrap(function _callee16$(_context16) {
-        while (1) switch (_context16.prev = _context16.next) {
+    var _ref29 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee17(d) {
+      var _res$data16, res, _res$data17;
+      return _regeneratorRuntime().wrap(function _callee17$(_context17) {
+        while (1) switch (_context17.prev = _context17.next) {
           case 0:
             if (window.confirm("\xBFReversar la orden #".concat(d.id, "?\n\nSe REINTEGRA el inventario, se quita el env\xEDo de central y la orden vuelve a \"en preparaci\xF3n\" para corregir. No se puede si el destino ya la recibi\xF3."))) {
-              _context16.next = 2;
+              _context17.next = 2;
               break;
             }
-            return _context16.abrupt("return");
+            return _context17.abrupt("return");
           case 2:
             setProcesando('rev-' + d.id);
-            _context16.prev = 3;
-            _context16.next = 6;
+            _context17.prev = 3;
+            _context17.next = 6;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].tdReversarSalida({
               id_transferencia: d.id
             });
           case 6:
-            res = _context16.sent;
-            if (!((_res$data14 = res.data) !== null && _res$data14 !== void 0 && _res$data14.estado)) {
-              _context16.next = 14;
+            res = _context17.sent;
+            if (!((_res$data16 = res.data) !== null && _res$data16 !== void 0 && _res$data16.estado)) {
+              _context17.next = 14;
               break;
             }
-            _context16.next = 10;
+            _context17.next = 10;
             return cargarBorradores();
           case 10:
             setRefreshListKey(function (k) {
               return k + 1;
             }); // refresca despachadas + histórico
             alert(res.data.msj || 'Salida reversada.');
-            _context16.next = 15;
+            _context17.next = 15;
             break;
           case 14:
-            alert(((_res$data15 = res.data) === null || _res$data15 === void 0 ? void 0 : _res$data15.msj) || 'No se pudo reversar.');
+            alert(((_res$data17 = res.data) === null || _res$data17 === void 0 ? void 0 : _res$data17.msj) || 'No se pudo reversar.');
           case 15:
-            _context16.next = 20;
+            _context17.next = 20;
             break;
           case 17:
-            _context16.prev = 17;
-            _context16.t0 = _context16["catch"](3);
-            alert('Error al reversar: ' + (_context16.t0.message || _context16.t0));
+            _context17.prev = 17;
+            _context17.t0 = _context17["catch"](3);
+            alert('Error al reversar: ' + (_context17.t0.message || _context17.t0));
           case 20:
-            _context16.prev = 20;
+            _context17.prev = 20;
             setProcesando(null);
-            return _context16.finish(20);
+            return _context17.finish(20);
           case 23:
           case "end":
-            return _context16.stop();
+            return _context17.stop();
         }
-      }, _callee16, null, [[3, 17, 20, 23]]);
+      }, _callee17, null, [[3, 17, 20, 23]]);
     }));
-    return function reversarSalida(_x12) {
-      return _ref28.apply(this, arguments);
+    return function reversarSalida(_x13) {
+      return _ref29.apply(this, arguments);
     };
   }();
 
@@ -140153,6 +140226,17 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
     return matchDestino(destino.id) && enRangoFecha(p.fecha_emision || p.created_at) && matchTexto([p.id_orden_distribucion, destino.codigo, destino.nombre]);
   });
 
+  // Selección para FUSIONAR: solo cuentan las visibles. Se exige mismo destino.
+  var premontasSeleccionadas = premontasFiltradas.filter(function (p) {
+    return seleccionFusion.has(p.id_orden_distribucion);
+  });
+  var destinosSeleccion = new Set(premontasSeleccionadas.map(function (p) {
+    var _p$sucursal_destino;
+    return (_p$sucursal_destino = p.sucursal_destino) === null || _p$sucursal_destino === void 0 ? void 0 : _p$sucursal_destino.id;
+  }));
+  var seleccionMismoDestino = destinosSeleccion.size === 1;
+  var puedeFusionar = premontasSeleccionadas.length >= 2 && seleccionMismoDestino;
+
   // Borradores (en preparación): filtro por fecha de creación + destino + texto.
   var borradoresFiltrados = borradores.filter(function (b) {
     return matchDestino(b.id_destino) && enRangoFecha(b.created_at) && matchTexto([b.id, b.id_orden_distribucion].concat(_toConsumableArray(codDestino(b.id_destino))));
@@ -140332,14 +140416,47 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
           })]
         }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
           className: "mb-3 border border-amber-300 rounded-lg overflow-hidden",
-          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
             className: "flex items-center justify-between gap-2 bg-amber-50 px-3 py-2 flex-wrap",
-            children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h4", {
+            children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("h4", {
               className: "text-sm font-bold text-amber-800",
               children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
                 className: "fas fa-inbox mr-1"
               }), "Redistribuciones por despachar (", premontasFiltradas.length, ")"]
-            })
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("div", {
+              className: "flex items-center gap-2",
+              children: [seleccionFusion.size > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
+                className: "text-xs text-amber-700",
+                children: [premontasSeleccionadas.length, " seleccionada(s)", premontasSeleccionadas.length >= 2 && !seleccionMismoDestino && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("span", {
+                  className: "text-red-600 font-semibold ml-1",
+                  children: "\xB7 deben ser del mismo destino"
+                })]
+              }), seleccionFusion.size > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                onClick: function onClick() {
+                  return setSeleccionFusion(new Set());
+                },
+                className: "text-xs px-2 py-1 border border-gray-300 rounded text-gray-600 hover:bg-gray-50",
+                children: "Limpiar"
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("button", {
+                onClick: function onClick() {
+                  return fusionarSeleccionadas(premontasSeleccionadas.map(function (p) {
+                    return p.id_orden_distribucion;
+                  }));
+                },
+                disabled: !puedeFusionar || procesando === 'fusion',
+                className: "inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded disabled:opacity-40 disabled:cursor-not-allowed",
+                title: puedeFusionar ? 'Fusionar las redistribuciones seleccionadas en una sola' : 'Seleccioná 2+ redistribuciones del mismo destino',
+                children: procesando === 'fusion' ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
+                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                    className: "fas fa-spinner fa-spin"
+                  }), "Fusionando\u2026"]
+                }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.Fragment, {
+                  children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("i", {
+                    className: "fas fa-object-group"
+                  }), "Fusionar seleccionadas"]
+                })
+              })]
+            })]
           }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("div", {
             className: "overflow-x-auto",
             children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("table", {
@@ -140348,6 +140465,8 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
                 className: "bg-amber-50/60 text-xs uppercase tracking-wide text-amber-700",
                 children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
                   children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
+                    className: "px-3 py-2 text-center font-semibold w-8"
+                  }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
                     className: "px-3 py-2 text-left font-semibold",
                     children: "Origen"
                   }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("th", {
@@ -140371,15 +140490,26 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
                 className: "bg-white divide-y divide-gray-100",
                 children: premontasFiltradas.length === 0 ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("tr", {
                   children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
-                    colSpan: 6,
+                    colSpan: 7,
                     className: "px-3 py-4 text-center text-gray-400",
                     children: "Sin coincidencias"
                   })
                 }) : premontasFiltradas.map(function (prem) {
                   var _prem$sucursal_destin6;
                   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("tr", {
-                    className: "hover:bg-amber-50/40",
+                    className: "hover:bg-amber-50/40 ".concat(seleccionFusion.has(prem.id_orden_distribucion) ? 'bg-indigo-50' : ''),
                     children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
+                      className: "px-3 py-2 text-center",
+                      children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("input", {
+                        type: "checkbox",
+                        className: "w-4 h-4 accent-indigo-600 cursor-pointer",
+                        checked: seleccionFusion.has(prem.id_orden_distribucion),
+                        onChange: function onChange() {
+                          return toggleSeleccionFusion(prem.id_orden_distribucion);
+                        },
+                        title: "Seleccionar para fusionar (mismo destino)"
+                      })
+                    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsx)("td", {
                       className: "px-3 py-2",
                       children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_2__.jsxs)("span", {
                         className: "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800",
@@ -185050,6 +185180,9 @@ var db = {
   },
   getPremontadas: function getPremontadas(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "getPremontadas", data);
+  },
+  fusionarPremontas: function fusionarPremontas(data) {
+    return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "fusionarPremontas", data);
   },
   settransferenciaDici: function settransferenciaDici(data) {
     return axios__WEBPACK_IMPORTED_MODULE_1___default().post(host + "settransferenciaDici", data);
