@@ -102,12 +102,14 @@
                     </a>
 
                     <!-- PPR Reporte -->
-                    <a href="{{ route('ppr.reporte') }}" 
+                    <a href="{{ route('ppr.reporte') }}"
                        class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('ppr.reporte*') ? 'bg-white text-blue-700 shadow-md' : '' }}">
                         <i class="fas fa-clipboard-list mr-2"></i>
                         <span>PPR</span>
                     </a>
-                    
+
+                    @include('warehouse-inventory.partials.nav-wms')
+
                 @else
                     {{-- ADMIN (tipos 1, 6) u otros: Mostrar absolutamente todo --}}
                     
@@ -168,11 +170,13 @@
                     </a>
 
                     <!-- PPR Reporte -->
-                    <a href="{{ route('ppr.reporte') }}" 
+                    <a href="{{ route('ppr.reporte') }}"
                        class="flex items-center justify-center lg:justify-start px-4 py-2.5 rounded-lg text-sm font-medium transition {{ request()->routeIs('ppr.reporte*') ? 'bg-white text-blue-700 shadow-md' : '' }}">
                         <i class="fas fa-clipboard-list mr-2"></i>
                         <span>PPR</span>
                     </a>
+
+                    @include('warehouse-inventory.partials.nav-wms')
                 @endif
             </div>
         </div>

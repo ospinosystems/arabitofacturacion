@@ -341,10 +341,23 @@ class WarehouseInventoryController extends Controller
             $warehouse = Warehouse::findOrFail($request->warehouse_id);
             $producto = inventario::findOrFail($request->inventario_id);
             
-            // Verificar capacidad
-            if (!$warehouse->tieneCapacidad($request->cantidad)) {
+            // Compatibilidad producto-ubicación: refrigeración, mercancía peligrosa,
+            // mezcla de productos. Son condiciones de almacenamiento, no de espacio.
+            $compat = $warehouse->esCompatibleCon($producto);
+            if (!$compat['compatible']) {
                 return Response::json([
-                    'msj' => 'La ubicación no tiene capacidad suficiente',
+                    'msj' => 'Ubicación no compatible: ' . $compat['motivo'],
+                    'estado' => false
+                ]);
+            }
+
+            // Capacidad en unidades, peso y volumen. La comprobación anterior sólo
+            // miraba unidades, así que una ubicación podía aceptar media tonelada
+            // de más mientras no superara el conteo de piezas.
+            $capacidad = $warehouse->cabeProducto($producto, (float) $request->cantidad);
+            if (!$capacidad['cabe']) {
+                return Response::json([
+                    'msj' => 'La ubicación no tiene capacidad suficiente: ' . $capacidad['motivo'],
                     'estado' => false
                 ]);
             }
@@ -449,8 +462,25 @@ class WarehouseInventoryController extends Controller
                 ]);
             }
             
-            // Verificar capacidad en destino
-            if (!$warehouseDestino->tieneCapacidad($request->cantidad)) {
+            // Compatibilidad y capacidad en destino (unidades, peso y volumen).
+            $productoTransferido = inventario::find($request->inventario_id);
+            if ($productoTransferido) {
+                $compat = $warehouseDestino->esCompatibleCon($productoTransferido);
+                if (!$compat['compatible']) {
+                    return Response::json([
+                        'msj' => 'Destino no compatible: ' . $compat['motivo'],
+                        'estado' => false
+                    ]);
+                }
+
+                $capacidad = $warehouseDestino->cabeProducto($productoTransferido, (float) $request->cantidad);
+                if (!$capacidad['cabe']) {
+                    return Response::json([
+                        'msj' => 'La ubicación de destino no tiene capacidad suficiente: ' . $capacidad['motivo'],
+                        'estado' => false
+                    ]);
+                }
+            } elseif (!$warehouseDestino->tieneCapacidad($request->cantidad)) {
                 return Response::json([
                     'msj' => 'La ubicación de destino no tiene capacidad suficiente',
                     'estado' => false

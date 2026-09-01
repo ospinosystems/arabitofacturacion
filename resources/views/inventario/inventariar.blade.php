@@ -163,6 +163,25 @@
 
                 <!-- Paso 2: Escanear Ubicación -->
                 <div id="pasoUbicacion" class="space-y-2 mt-2" style="display: none;">
+
+                    <!-- Sugerencia del motor de slotting.
+                         Inventariar es un flujo producto -> ubicación -> cantidad, el
+                         mismo que el TCR pasillero, así que la sugerencia aplica igual.
+                         Es una recomendación: si el operario escanea otra ubicación,
+                         la corrección queda registrada para calibrar el motor. -->
+                    <div id="panelSugerenciaInv" class="hidden">
+                        <div class="bg-emerald-50 border-l-4 border-emerald-500 p-2 rounded">
+                            <div class="flex items-start justify-between gap-2">
+                                <h4 class="font-bold text-emerald-800 text-xs flex items-center">
+                                    <i class="fas fa-lightbulb mr-1"></i>Ubicación sugerida
+                                </h4>
+                                <span id="sugerenciaClaseInv" class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-200 text-emerald-800"></span>
+                            </div>
+                            <div id="sugerenciaContenidoInv" class="mt-1"></div>
+                            <div id="sugerenciaAvisoInv" class="mt-1 text-[10px] text-amber-700 hidden"></div>
+                        </div>
+                    </div>
+
                     <div class="bg-blue-50 border-l-4 border-blue-500 p-2 rounded">
                         <h3 class="font-bold text-blue-700 mb-1 text-sm">
                             <span class="bg-blue-500 text-white rounded-full w-6 h-6 inline-flex items-center justify-center mr-1 text-xs">2</span>
@@ -539,6 +558,7 @@ function buscarProducto() {
             document.getElementById('mensajeProducto').innerHTML = '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>Producto encontrado - Campo bloqueado</span>';
             document.getElementById('pasoUbicacion').style.display = 'block';
             document.getElementById('inputUbicacion').focus();
+            cargarSugerenciaInventariar();
             actualizarResumen();
         } else {
             mostrarNotificacion(data.msj || 'Producto no encontrado', 'error');
@@ -727,6 +747,121 @@ function resetearProducto() {
     document.getElementById('inputProducto').focus();
 }
 
+// --------------------------------------------------------------------------
+// Motor de slotting en el flujo de inventariar.
+//
+// El ABC no vive aquí: es una clasificación transversal que se recalcula desde
+// el historial de ventas y que también alimentan el conteo cíclico y la política
+// de stock. Lo que sí corresponde a esta pantalla es APLICARLO, mostrando dónde
+// debería ir el producto que se acaba de escanear.
+// --------------------------------------------------------------------------
+let sugerenciaIdInv = null;
+let sugerenciaTopInv = null;
+
+function cargarSugerenciaInventariar() {
+    sugerenciaIdInv = null;
+    sugerenciaTopInv = null;
+
+    const panel = document.getElementById('panelSugerenciaInv');
+    const contenido = document.getElementById('sugerenciaContenidoInv');
+    const aviso = document.getElementById('sugerenciaAvisoInv');
+
+    if (!productoSeleccionado || !productoSeleccionado.id) {
+        panel.classList.add('hidden');
+        return;
+    }
+
+    // Al inventariar aún no se conoce la cantidad; se pide con 1 para obtener la
+    // ubicación preferida, y el reparto por capacidad se resuelve al guardar.
+    panel.classList.remove('hidden');
+    contenido.innerHTML = '<span class="text-[11px] text-gray-600"><i class="fas fa-spinner fa-spin"></i> Calculando ubicación sugerida...</span>';
+    aviso.classList.add('hidden');
+
+    fetch('/wms/slotting/sugerir', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({
+            inventario_id: productoSeleccionado.id,
+            cantidad: 1,
+            contexto: 'manual',
+            referencia: 'inventariar',
+            top_n: 3
+        })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.estado || !d.candidatas || d.candidatas.length === 0) {
+            contenido.innerHTML = '<span class="text-[11px] text-gray-600">'
+                + (d.msj || 'Sin sugerencia') + '. Escanee la ubicación.</span>';
+            return;
+        }
+
+        sugerenciaIdInv = d.sugerencia_id || null;
+        sugerenciaTopInv = d.candidatas[0];
+
+        document.getElementById('sugerenciaClaseInv').textContent = d.clase_abc ? ('Clase ' + d.clase_abc) : 'Sin clasificar';
+
+        let html = '';
+        d.candidatas.forEach((c, i) => {
+            const principal = i === 0;
+            html += `
+                <div class="flex items-center justify-between gap-2 ${principal ? 'mb-1' : ''}">
+                    <div class="min-w-0">
+                        <span class="font-mono ${principal ? 'text-base font-bold text-emerald-900' : 'text-xs text-gray-600'}">${c.codigo}</span>
+                        ${principal && c.motivos.length
+                            ? '<div class="text-[10px] text-emerald-800">' + c.motivos.slice(0, 2).join(' · ') + '</div>'
+                            : ''}
+                    </div>
+                    <button type="button" onclick="usarSugerenciaInv('${c.codigo}')"
+                            class="shrink-0 px-2 ${principal ? 'py-1 bg-emerald-600 hover:bg-emerald-700' : 'py-0.5 bg-gray-400 hover:bg-gray-500'} text-white rounded text-[11px] font-semibold">
+                        Usar
+                    </button>
+                </div>`;
+        });
+        contenido.innerHTML = html;
+
+        if (d.advertencia) {
+            aviso.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i>' + d.advertencia;
+            aviso.classList.remove('hidden');
+        }
+    })
+    .catch(() => {
+        contenido.innerHTML = '<span class="text-[11px] text-gray-600">No se pudo calcular la sugerencia.</span>';
+    });
+}
+
+function usarSugerenciaInv(codigo) {
+    const input = document.getElementById('inputUbicacion');
+    if (input.disabled) { return; }
+    input.value = codigo;
+    buscarUbicacion();
+}
+
+// Cierra la sugerencia con la ubicación que realmente se usó.
+function registrarDecisionSlottingInv(codigoUbicacion) {
+    if (!sugerenciaIdInv) { return; }
+
+    const aceptada = sugerenciaTopInv && sugerenciaTopInv.codigo === codigoUbicacion;
+
+    fetch('/wms/slotting/decision', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({
+            sugerencia_id: sugerenciaIdInv,
+            codigo_ubicacion: codigoUbicacion,
+            motivo: aceptada ? null : 'Se inventarió en otra ubicación'
+        })
+    }).catch(() => { /* no debe interrumpir el flujo de inventariado */ });
+
+    sugerenciaIdInv = null;
+}
+
 function buscarUbicacion() {
     const inputUbicacion = document.getElementById('inputUbicacion');
     const codigo = inputUbicacion.value.trim();
@@ -755,6 +890,8 @@ function buscarUbicacion() {
         if (data.estado) {
             ubicacionSeleccionada = data.warehouse;
             mostrarInfoUbicacion(data.warehouse);
+            // Cerrar la sugerencia con la ubicación efectivamente elegida.
+            registrarDecisionSlottingInv(data.warehouse.codigo);
             // Bloquear el campo de ubicación después de encontrarlo
             bloquearInput('inputUbicacion');
             document.getElementById('mensajeUbicacion').innerHTML = '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>Ubicación encontrada - Campo bloqueado</span>';

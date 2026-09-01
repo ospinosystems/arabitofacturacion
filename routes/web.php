@@ -46,6 +46,10 @@ use App\Http\Controllers\WarehouseController;
 use App\Http\Controllers\WarehouseInventoryController;
 use App\Http\Controllers\TCRController;
 use App\Http\Controllers\TCDController;
+use App\Http\Controllers\SlottingController;
+use App\Http\Controllers\ConteoCiclicoController;
+use App\Http\Controllers\TmsController;
+use App\Http\Controllers\WmsPanelController;
 use App\Http\Controllers\PPRController;
 
 use App\Http\Controllers\CajasController;
@@ -432,7 +436,50 @@ Route::group(['middleware' => ['auth.user:login']], function () {
 		Route::get('warehouse-inventory/tcd/get-sucursales-disponibles', [TCDController::class, 'getSucursalesDisponibles'])->name('warehouse-inventory.tcd.get-sucursales-disponibles');
 		Route::post('warehouse-inventory/tcd/transferir-orden-sucursal', [TCDController::class, 'transferirOrdenASucursal'])->name('warehouse-inventory.tcd.transferir-orden-sucursal');
 		Route::get('warehouse-inventory/tcd/nota-entrega', [TCDController::class, 'notaEntrega'])->name('warehouse-inventory.tcd.nota-entrega');
-		
+
+		// ================ WMS: SLOTTING (sugerencia de ubicación) ================
+		Route::post('wms/slotting/sugerir', [SlottingController::class, 'sugerir'])->name('wms.slotting.sugerir');
+		Route::post('wms/slotting/decision', [SlottingController::class, 'registrarDecision'])->name('wms.slotting.decision');
+		Route::get('wms/slotting/metricas', [SlottingController::class, 'metricas'])->name('wms.slotting.metricas');
+		Route::get('wms/slotting/ocupacion', [SlottingController::class, 'ocupacion'])->name('wms.slotting.ocupacion');
+
+		// ================ WMS: CLASIFICACIÓN ABC ================
+		Route::get('wms/abc', [SlottingController::class, 'abc'])->name('wms.abc');
+		Route::get('wms/abc/panel', [WmsPanelController::class, 'abc'])->name('wms.abc.panel');
+
+		// ================ WMS: DATOS FÍSICOS DE PRODUCTOS ================
+		Route::get('wms/medidas/pendientes', [SlottingController::class, 'pendientesDeMedir'])->name('wms.medidas.pendientes');
+		Route::post('wms/medidas', [SlottingController::class, 'guardarMedidas'])->name('wms.medidas.guardar');
+
+		// ================ WMS: CONTEO CÍCLICO POR UBICACIÓN ================
+		Route::get('wms/conteos', [ConteoCiclicoController::class, 'index'])->name('wms.conteos.index');
+		Route::post('wms/conteos/generar', [ConteoCiclicoController::class, 'generar'])->name('wms.conteos.generar');
+		Route::get('wms/conteos/{id}/tareas', [ConteoCiclicoController::class, 'tareas'])->name('wms.conteos.tareas');
+		Route::post('wms/conteos/registrar', [ConteoCiclicoController::class, 'registrar'])->name('wms.conteos.registrar');
+		Route::post('wms/conteos/{id}/ajustar', [ConteoCiclicoController::class, 'ajustar'])->name('wms.conteos.ajustar');
+		Route::get('wms/conteos/{id}/reporte', [ConteoCiclicoController::class, 'reporte'])->name('wms.conteos.reporte');
+		Route::get('wms/conteo', [WmsPanelController::class, 'conteo'])->name('wms.conteo.panel');
+
+		// ================ TMS: FLOTA, RUTAS Y ENTREGAS ================
+		Route::get('tms/vehiculos', [TmsController::class, 'vehiculos'])->name('tms.vehiculos');
+		Route::post('tms/vehiculos', [TmsController::class, 'guardarVehiculo'])->name('tms.vehiculos.guardar');
+		Route::get('tms/conductores', [TmsController::class, 'conductores'])->name('tms.conductores');
+		Route::post('tms/conductores', [TmsController::class, 'guardarConductor'])->name('tms.conductores.guardar');
+		Route::post('tms/planificar', [TmsController::class, 'planificar'])->name('tms.planificar');
+		Route::post('tms/rutas/crear', [TmsController::class, 'crearRutas'])->name('tms.rutas.crear');
+		// Costura TCD -> TMS: una orden despachada se vuelve parada de ruta.
+		Route::get('tms/tcd-pendientes', [TmsController::class, 'tcdPendientesDeRuta'])->name('tms.tcd.pendientes');
+		Route::post('tms/rutas/desde-tcd', [TmsController::class, 'rutasDesdeTcd'])->name('tms.rutas.desde-tcd');
+		Route::get('tms/rutas', [TmsController::class, 'rutas'])->name('tms.rutas');
+		Route::get('tms/rutas/{id}', [TmsController::class, 'ruta'])->name('tms.ruta');
+		Route::post('tms/rutas/{id}/optimizar', [TmsController::class, 'optimizarRuta'])->name('tms.rutas.optimizar');
+		Route::post('tms/rutas/{id}/estado', [TmsController::class, 'cambiarEstadoRuta'])->name('tms.rutas.estado');
+		Route::get('tms/rutas/{id}/manifiesto', [TmsController::class, 'manifiesto'])->name('tms.rutas.manifiesto');
+		Route::post('tms/paradas/{id}/entrega', [TmsController::class, 'registrarEntrega'])->name('tms.paradas.entrega');
+		Route::post('tms/paradas/{id}/fallo', [TmsController::class, 'registrarFallo'])->name('tms.paradas.fallo');
+		Route::get('tms/indicadores', [TmsController::class, 'indicadores'])->name('tms.indicadores');
+		Route::get('tms/panel', [WmsPanelController::class, 'tms'])->name('tms.panel');
+
 		// Reporte PPR (DICI / admin): lista con filtros y reporte Blade
 		Route::get('ppr/reporte', [PPRController::class, 'reporteLista'])->name('ppr.reporte');
 		Route::get('ppr/reporte/ver', [PPRController::class, 'reporteVer'])->name('ppr.reporte.ver');

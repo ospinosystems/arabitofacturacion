@@ -11,6 +11,7 @@ use App\Models\WarehouseInventory;
 use App\Models\WarehouseMovement;
 use App\Models\inventario;
 use App\Models\SucursalCentralCache;
+use App\Services\Wms\PickingStrategyService;
 use App\Http\Controllers\InventarioController;
 use App\Http\Controllers\sendCentral;
 use Illuminate\Http\Request;
@@ -77,8 +78,13 @@ class TCDController extends Controller
                 })
                 ->limit(20)
                 ->get();
-            
-            $productosFormateados = $productos->map(function($producto) {
+
+            // Ubicaciones FEFO de todos los resultados en una sola consulta, para no
+            // repetirla dentro del map por cada producto.
+            $ubicacionesFefo = (new PickingStrategyService())
+                ->mapaUbicacionesSugeridas($productos->pluck('id')->all());
+
+            $productosFormateados = $productos->map(function($producto) use ($ubicacionesFefo) {
                 try {
                     // Obtener stock disponible desde WarehouseInventory (cantidad - cantidad_bloqueada)
                     $stockDisponibleWarehouse = WarehouseInventory::where('inventario_id', $producto->id)
@@ -101,18 +107,11 @@ class TCDController extends Controller
                         $stockTotal = (float)$stockTotalWarehouse;
                     }
                     
-                    // Obtener ubicación del producto (primera ubicación con stock disponible)
-                    $warehouseInventory = WarehouseInventory::where('inventario_id', $producto->id)
-                        ->whereRaw('(cantidad - COALESCE(cantidad_bloqueada, 0)) > 0')
-                        ->with('warehouse')
-                        ->orderBy('cantidad', 'desc')
-                        ->first();
-                    
-                    $ubicacion = 'N/A';
-                    if ($warehouseInventory && $warehouseInventory->warehouse) {
-                        $ubicacion = $warehouseInventory->warehouse->codigo ?? 'N/A';
-                    }
-                    
+                    // Ubicación sugerida según la estrategia configurada (FEFO por defecto).
+                    // Antes se tomaba la ubicación con más cantidad, lo que dejaba
+                    // envejecer los lotes próximos a vencer hasta que se perdían.
+                    $ubicacion = $ubicacionesFefo[$producto->id]['codigo'] ?? 'N/A';
+
                     return [
                         'id' => $producto->id,
                         'codigo_barras' => $producto->codigo_barras ?? '',
@@ -214,15 +213,9 @@ class TCDController extends Controller
                     throw new \Exception("Stock insuficiente para el producto '{$producto->descripcion}'. Disponible: {$stockDisponible}, Solicitado: {$item['cantidad']}");
                 }
                 
-                // Obtener ubicación del producto
-                $warehouseInventory = WarehouseInventory::where('inventario_id', $producto->id)
-                    ->whereRaw('(cantidad - COALESCE(cantidad_bloqueada, 0)) > 0')
-                    ->with('warehouse')
-                    ->orderBy('cantidad', 'desc')
-                    ->first();
-                
-                $ubicacion = $warehouseInventory ? $warehouseInventory->warehouse->codigo ?? null : null;
-                
+                // Ubicación de recolección según estrategia FEFO (ver PickingStrategyService).
+                $ubicacion = (new PickingStrategyService())->codigoUbicacionSugerida($producto->id);
+
                 TCDOrdenItem::create([
                     'tcd_orden_id' => $orden->id,
                     'inventario_id' => $producto->id,
@@ -336,10 +329,8 @@ class TCDController extends Controller
                     ->selectRaw('SUM(cantidad - COALESCE(cantidad_bloqueada, 0)) as disponible')->value('disponible') ?? 0;
                 $stockDisp = ($stockTotalWh == 0 && $producto->cantidad > 0) ? (float) $producto->cantidad : (float) $stockDispWh;
 
-                $wi = WarehouseInventory::where('inventario_id', $producto->id)
-                    ->whereRaw('(cantidad - COALESCE(cantidad_bloqueada, 0)) > 0')
-                    ->with('warehouse')->orderBy('cantidad', 'desc')->first();
-                $ubicacion = $wi ? ($wi->warehouse->codigo ?? null) : null;
+                // Ubicación de recolección según estrategia FEFO (ver PickingStrategyService).
+                $ubicacion = (new PickingStrategyService())->codigoUbicacionSugerida($producto->id);
 
                 if ($stockDisp < $cant) {
                     $sinStock[] = ($snap['descripcion'] ?? $producto->descripcion) . " (disp {$stockDisp}, pide {$cant})";

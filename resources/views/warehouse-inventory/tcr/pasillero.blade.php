@@ -157,6 +157,23 @@
 
                 <!-- Paso 3: Escanear Ubicación -->
                 <div id="pasoUbicacion" class="space-y-3 sm:space-y-4 mt-4 sm:mt-6" style="display: none;">
+
+                    <!-- Sugerencia del motor de slotting. Se llena al entrar al paso.
+                         Es una recomendación: el pasillero puede escanear otra y el
+                         sistema registra la corrección para aprender de ella. -->
+                    <div id="panelSugerencia" class="hidden">
+                        <div class="bg-emerald-50 border-l-4 border-emerald-500 p-3 sm:p-4 rounded">
+                            <div class="flex items-start justify-between gap-2">
+                                <h3 class="font-bold text-emerald-800 text-sm flex items-center">
+                                    <i class="fas fa-lightbulb mr-2"></i>Ubicación sugerida
+                                </h3>
+                                <span id="sugerenciaClase" class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-200 text-emerald-800"></span>
+                            </div>
+                            <div id="sugerenciaContenido" class="mt-2"></div>
+                            <div id="sugerenciaAviso" class="mt-2 text-[11px] text-amber-700 hidden"></div>
+                        </div>
+                    </div>
+
                     <div class="bg-blue-50 border-l-4 border-blue-500 p-3 sm:p-4 rounded">
                         <h3 class="font-bold text-blue-700 mb-2 text-sm sm:text-sm">Paso 2: Escanear Ubicación</h3>
                         <input type="text" 
@@ -661,6 +678,119 @@ function mostrarInfoAsignacion() {
 function mostrarPasoUbicacion() {
     document.getElementById('pasoUbicacion').style.display = 'block';
     document.getElementById('inputUbicacion').focus();
+    cargarSugerenciaUbicacion();
+}
+
+// --------------------------------------------------------------------------
+// Motor de slotting: sugerencia de ubicación
+//
+// Se pide al entrar al paso de ubicación. El pasillero puede aceptarla con un
+// toque o escanear otra; en ambos casos se registra la decisión, y esos datos
+// son los que después permiten reajustar el motor contra la realidad.
+// --------------------------------------------------------------------------
+let sugerenciaId = null;
+let sugerenciaTop = null;
+
+function cargarSugerenciaUbicacion() {
+    sugerenciaId = null;
+    sugerenciaTop = null;
+
+    const panel = document.getElementById('panelSugerencia');
+    const contenido = document.getElementById('sugerenciaContenido');
+    const aviso = document.getElementById('sugerenciaAviso');
+
+    if (!asignacionActual) { panel.classList.add('hidden'); return; }
+
+    const codigo = asignacionActual.codigo_barras || asignacionActual.codigo_proveedor;
+    if (!codigo) { panel.classList.add('hidden'); return; }
+
+    const pendiente = Math.max(0.0001, asignacionActual.cantidad - asignacionActual.cantidad_asignada);
+
+    panel.classList.remove('hidden');
+    contenido.innerHTML = '<span class="text-xs text-gray-600"><i class="fas fa-spinner fa-spin"></i> Calculando mejor ubicación...</span>';
+    aviso.classList.add('hidden');
+
+    fetch('/wms/slotting/sugerir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+        body: JSON.stringify({
+            codigo: codigo,
+            cantidad: pendiente,
+            contexto: 'tcr',
+            referencia: String(asignacionActual.id),
+            top_n: 3
+        })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.estado || !d.candidatas || d.candidatas.length === 0) {
+            contenido.innerHTML = '<span class="text-xs text-gray-600">'
+                + (d.msj || 'Sin sugerencia disponible') + '. Escanee la ubicación manualmente.</span>';
+            return;
+        }
+
+        sugerenciaId = d.sugerencia_id || null;
+        sugerenciaTop = d.candidatas[0];
+
+        document.getElementById('sugerenciaClase').textContent = d.clase_abc ? ('Clase ' + d.clase_abc) : '';
+
+        let html = '';
+        d.candidatas.forEach((c, i) => {
+            const principal = i === 0;
+            html += `
+                <div class="flex items-center justify-between gap-2 ${principal ? 'mb-2' : 'mb-1'}">
+                    <div class="min-w-0">
+                        <div class="font-mono ${principal ? 'text-xl font-bold text-emerald-900' : 'text-sm text-gray-700'}">
+                            ${c.codigo}
+                        </div>
+                        ${principal && c.motivos.length
+                            ? '<ul class="text-[11px] text-emerald-800 mt-1 list-disc list-inside">'
+                              + c.motivos.slice(0, 3).map(m => '<li>' + m + '</li>').join('')
+                              + '</ul>'
+                            : ''}
+                    </div>
+                    <button onclick="usarSugerencia('${c.codigo}')"
+                            class="shrink-0 px-3 ${principal ? 'py-2 bg-emerald-600 hover:bg-emerald-700' : 'py-1 bg-gray-400 hover:bg-gray-500'} text-white rounded-lg text-xs font-semibold">
+                        Usar
+                    </button>
+                </div>`;
+        });
+        contenido.innerHTML = html;
+
+        // Si el peso/volumen son estimados, hay que decirlo: la sugerencia puede
+        // cambiar cuando se carguen las medidas reales.
+        if (d.advertencia) {
+            aviso.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i>' + d.advertencia;
+            aviso.classList.remove('hidden');
+        }
+    })
+    .catch(() => {
+        contenido.innerHTML = '<span class="text-xs text-gray-600">No se pudo calcular la sugerencia. Escanee la ubicación manualmente.</span>';
+    });
+}
+
+function usarSugerencia(codigo) {
+    document.getElementById('inputUbicacion').value = codigo;
+    procesarUbicacion();
+}
+
+// Cierra la sugerencia con la ubicación que el operario realmente usó.
+function registrarDecisionSlotting(codigoUbicacion) {
+    if (!sugerenciaId) { return; }
+
+    const aceptada = sugerenciaTop && sugerenciaTop.codigo === codigoUbicacion;
+
+    fetch('/wms/slotting/decision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+        body: JSON.stringify({
+            sugerencia_id: sugerenciaId,
+            codigo_ubicacion: codigoUbicacion,
+            motivo: aceptada ? null : 'El pasillero eligió otra ubicación'
+        })
+    }).catch(() => { /* no debe interrumpir la operación del pasillero */ });
+
+    sugerenciaId = null;
 }
 
 function procesarUbicacion() {
@@ -684,6 +814,8 @@ function procesarUbicacion() {
         if (data.estado) {
             ubicacionActual = data.ubicacion;
             mensaje.innerHTML = `<span class="text-green-600"><i class="fas fa-check-circle"></i> Ubicación válida: ${data.ubicacion.codigo}</span>`;
+            // Se cierra la sugerencia con lo que el operario eligió de verdad.
+            registrarDecisionSlotting(data.ubicacion.codigo);
             mostrarPasoCantidad();
         } else {
             mensaje.innerHTML = `<span class="text-red-600"><i class="fas fa-times-circle"></i> ${data.msj}</span>`;

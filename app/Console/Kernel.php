@@ -45,6 +45,18 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(110)
             ->runInBackground();
 
+        // Reclasificación ABC semanal.
+        //
+        // Domingo de madrugada porque recorre toda la demanda del periodo y reescribe
+        // las cuatro clasificaciones; no conviene que compita con la operación.
+        // Semanal es la cadencia adecuada: la rotación de un producto no cambia de un
+        // día para otro, y recalcular a diario haría que las ubicaciones sugeridas
+        // bailaran sin motivo real.
+        $schedule->command('wms:abc-recalcular')
+            ->weeklyOn(0, '03:30')
+            ->withoutOverlapping(60)
+            ->runInBackground();
+
     }
 
     /**

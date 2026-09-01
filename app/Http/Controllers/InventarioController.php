@@ -2880,9 +2880,14 @@ class InventarioController extends Controller
                 }
             }
 
-            // Verificar capacidad de la ubicación solo si es entrada
-            if ($esEntrada && !$warehouse->tieneCapacidad($request->cantidad)) {
-                throw new \Exception('La ubicación no tiene capacidad suficiente');
+            // Verificar capacidad de la ubicación solo si es entrada.
+            // Se evalúan unidades, peso y volumen: mirar sólo el conteo de piezas
+            // deja pasar cargas que la estantería no aguanta.
+            if ($esEntrada) {
+                $capacidad = $warehouse->cabeProducto($producto, (float) $request->cantidad);
+                if (!$capacidad['cabe']) {
+                    throw new \Exception('La ubicación no tiene capacidad suficiente: ' . $capacidad['motivo']);
+                }
             }
 
             if ($warehouseInventory) {

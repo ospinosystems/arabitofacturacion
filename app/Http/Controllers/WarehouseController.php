@@ -418,26 +418,44 @@ class WarehouseController extends Controller
     }
 
     /**
-     * Sugerir ubicaciones óptimas para un producto
+     * Sugerir ubicaciones óptimas para un producto.
+     *
+     * Delega en el motor de slotting (SlottingService), que puntúa cada ubicación
+     * por rotación, consolidación, cercanía, ergonomía y cubicaje. Antes esto
+     * devolvía las primeras cinco ubicaciones con hueco, sin mirar el producto.
+     *
+     * Se conserva la clave `warehouses` para no romper a los consumidores
+     * existentes, y se añade `candidatas` con el score y su explicación.
      */
     public function sugerirUbicacion(Request $request)
     {
         $inventarioId = $request->inventario_id;
-        $cantidad = $request->cantidad ?? 1;
-        
-        // Buscar ubicaciones disponibles con capacidad
-        $warehouses = Warehouse::activas()
-            ->tipo('almacenamiento')
-            ->get()
-            ->filter(function($w) use ($cantidad) {
-                return $w->tieneCapacidad($cantidad);
-            })
-            ->take(5);
-        
-        return Response::json([
+        $cantidad = (float) ($request->cantidad ?? 1);
+
+        $producto = $inventarioId ? \App\Models\inventario::find($inventarioId) : null;
+
+        if (!$producto) {
+            return Response::json([
+                'estado'     => false,
+                'msj'        => 'Producto no encontrado',
+                'warehouses' => [],
+            ], 404);
+        }
+
+        $resultado = (new \App\Services\Wms\SlottingService())
+            ->sugerir($producto, $cantidad, ['top_n' => (int) ($request->top_n ?? 5)]);
+
+        // Compatibilidad: los consumidores viejos esperan modelos Warehouse.
+        $ids = collect($resultado['candidatas'])->pluck('warehouse_id')->all();
+        $warehouses = empty($ids)
+            ? collect()
+            : Warehouse::whereIn('id', $ids)->get()->sortBy(
+                fn ($w) => array_search($w->id, $ids)
+              )->values();
+
+        return Response::json(array_merge($resultado, [
             'warehouses' => $warehouses,
-            'estado' => true
-        ]);
+        ]));
     }
 
     /**
