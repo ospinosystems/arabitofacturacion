@@ -320,13 +320,18 @@ class MigrarPedidosCommand extends Command
             $cliente = $clientes->get($p->id_cliente);
 
             return [
+                // Todo campo no vital va con `?? null`: los esquemas de las
+                // sucursales tienen edades distintas (Altagracia no tiene
+                // `numero_factura`) y la mudanza no puede asumir el mas nuevo.
+                // Sin numero de factura, TitanioPOS usa el id del pedido como
+                // numero buscable, que es lo que imprime el ticket viejo.
                 'idinsucursal'           => $p->id,
                 'uuid'                   => $p->uuid,
-                'numero_factura'         => $p->numero_factura,
-                'estado'                 => $p->estado,
-                'isdevolucionOriginalid' => $p->isdevolucionOriginalid,
+                'numero_factura'         => $p->numero_factura ?? null,
+                'estado'                 => $p->estado ?? null,
+                'isdevolucionOriginalid' => $p->isdevolucionOriginalid ?? null,
                 // Sin esto la devolución no se puede enlazar a su venta.
-                'parent_uuid'            => $p->isdevolucionOriginalid
+                'parent_uuid'            => ($p->isdevolucionOriginalid ?? null)
                     ? ($padres[$p->isdevolucionOriginalid] ?? null)
                     : null,
                 'fecha_factura'          => $p->fecha_factura ?? null,
