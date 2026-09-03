@@ -132,6 +132,28 @@
                                     </div>
                                 </div>
 
+                                <!-- Ficha física (peso / dimensiones / volumen): alimenta el motor de slotting.
+                                     Sin ficha, la sugerencia de ubicación NO puede aplicar capacidad de peso/volumen. -->
+                                <div id="fichaFisicaInv" class="mt-1 p-2 rounded-lg border" style="display:none;">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <span class="text-xs font-semibold text-gray-700"><i class="fas fa-weight-hanging mr-0.5"></i> Ficha física (peso / volumen)</span>
+                                        <span id="fichaFuenteInv" class="text-[10px] font-bold px-2 py-0.5 rounded"></span>
+                                    </div>
+                                    <p id="fichaAvisoInv" class="text-[11px] text-amber-700 mb-1" style="display:none;"><i class="fas fa-exclamation-triangle mr-1"></i>Sin ficha física: la ubicación sugerida no puede considerar capacidad de peso/volumen. Cargala para una sugerencia precisa.</p>
+                                    <div class="grid grid-cols-2 md:grid-cols-5 gap-1 text-xs">
+                                        <label class="flex flex-col"><span class="text-gray-600">Peso (kg)</span><input type="number" step="0.0001" min="0" id="fichaPesoInv" class="px-2 py-1 border rounded text-gray-900" placeholder="0.000"></label>
+                                        <label class="flex flex-col"><span class="text-gray-600">Largo (cm)</span><input type="number" step="0.01" min="0" id="fichaLargoInv" class="px-2 py-1 border rounded text-gray-900" oninput="calcularVolumenInv()"></label>
+                                        <label class="flex flex-col"><span class="text-gray-600">Ancho (cm)</span><input type="number" step="0.01" min="0" id="fichaAnchoInv" class="px-2 py-1 border rounded text-gray-900" oninput="calcularVolumenInv()"></label>
+                                        <label class="flex flex-col"><span class="text-gray-600">Alto (cm)</span><input type="number" step="0.01" min="0" id="fichaAltoInv" class="px-2 py-1 border rounded text-gray-900" oninput="calcularVolumenInv()"></label>
+                                        <label class="flex flex-col"><span class="text-gray-600">Volumen (m³)</span><input type="text" id="fichaVolumenInv" class="px-2 py-1 border rounded bg-gray-100 text-gray-700" readonly placeholder="auto"></label>
+                                    </div>
+                                    <div class="flex flex-wrap items-center gap-2 mt-1">
+                                        <label class="flex items-center gap-1 text-xs text-gray-600">Uds/bulto <input type="number" min="1" id="fichaUpbInv" class="w-16 px-2 py-1 border rounded text-gray-900"></label>
+                                        <select id="fichaFuenteSelInv" class="px-2 py-1 border rounded text-xs text-gray-900"><option value="medido">Medido</option><option value="proveedor">Dato del proveedor</option></select>
+                                        <button type="button" onclick="guardarFichaFisicaInv()" id="btnGuardarFichaInv" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold"><i class="fas fa-save mr-1"></i>Guardar ficha</button>
+                                    </div>
+                                </div>
+
                                 <!-- Información de Ubicaciones -->
                                 <div id="infoUbicaciones" class="mt-1 p-1 bg-gray-50 border border-gray-200 rounded-lg" style="display: none;">
                                     <div class="flex items-center justify-between mb-1">
@@ -579,6 +601,7 @@ function mostrarInfoProducto(producto) {
     document.getElementById('productoCategoria').textContent = producto.categoria || 'N/A';
     document.getElementById('productoMarca').textContent = producto.marca || 'N/A';
     document.getElementById('productoUnidad').textContent = producto.unidad || 'N/A';
+    pintarFichaFisicaInv(producto);
     
     // Formatear precios
     const precio = parseFloat(producto.precio) || 0;
@@ -831,6 +854,85 @@ function cargarSugerenciaInventariar() {
     .catch(() => {
         contenido.innerHTML = '<span class="text-[11px] text-gray-600">No se pudo calcular la sugerencia.</span>';
     });
+}
+
+// ── Ficha física del producto (peso / dimensiones / volumen) ─────────────────
+// Sin ficha, SlottingService SALTA los filtros de capacidad de peso/volumen de la
+// ubicación (queda "estimado"). Se carga aquí, al inventariar, y se re-sugiere.
+function pintarFichaFisicaInv(p) {
+    const box = document.getElementById('fichaFisicaInv');
+    if (!box || !p) return;
+    box.style.display = 'block';
+    const val = (v) => (v === null || v === undefined || v === '') ? '' : v;
+    document.getElementById('fichaPesoInv').value  = val(p.peso_kg);
+    document.getElementById('fichaLargoInv').value = val(p.largo_cm);
+    document.getElementById('fichaAnchoInv').value = val(p.ancho_cm);
+    document.getElementById('fichaAltoInv').value  = val(p.alto_cm);
+    document.getElementById('fichaUpbInv').value   = val(p.unidades_por_bulto);
+    const tiene  = !!p.tiene_ficha;
+    const fuente = p.datos_fisicos_fuente || 'estimado';
+    const badge  = document.getElementById('fichaFuenteInv');
+    badge.textContent = tiene ? ('Ficha: ' + fuente) : 'Sin ficha (estimado)';
+    badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded ' + (tiene ? 'bg-emerald-200 text-emerald-800' : 'bg-amber-200 text-amber-800');
+    box.className = 'mt-1 p-2 rounded-lg border ' + (tiene ? 'border-emerald-200 bg-emerald-50' : 'border-amber-300 bg-amber-50');
+    document.getElementById('fichaAvisoInv').style.display = tiene ? 'none' : 'block';
+    if (fuente === 'medido' || fuente === 'proveedor') { document.getElementById('fichaFuenteSelInv').value = fuente; }
+    calcularVolumenInv(p.volumen_m3);
+}
+
+// Volumen = largo × ancho × alto (cm³ → m³). Solo informativo: el backend lo recalcula al guardar.
+function calcularVolumenInv(volumenGuardado) {
+    const l = parseFloat(document.getElementById('fichaLargoInv').value);
+    const a = parseFloat(document.getElementById('fichaAnchoInv').value);
+    const h = parseFloat(document.getElementById('fichaAltoInv').value);
+    const out = document.getElementById('fichaVolumenInv');
+    if (l > 0 && a > 0 && h > 0) { out.value = ((l * a * h) / 1000000).toFixed(6); }
+    else { out.value = (volumenGuardado !== undefined && volumenGuardado !== null) ? Number(volumenGuardado).toFixed(6) : ''; }
+}
+
+function guardarFichaFisicaInv() {
+    if (!productoSeleccionado || !productoSeleccionado.id) return;
+    const peso = parseFloat(document.getElementById('fichaPesoInv').value);
+    const l = parseFloat(document.getElementById('fichaLargoInv').value);
+    const a = parseFloat(document.getElementById('fichaAnchoInv').value);
+    const h = parseFloat(document.getElementById('fichaAltoInv').value);
+    if (!(peso >= 0) || !(l > 0) || !(a > 0) || !(h > 0)) {
+        mostrarNotificacion('Ingresá el peso y las 3 dimensiones (largo, ancho, alto) para calcular el volumen.', 'warning');
+        return;
+    }
+    const upb = parseInt(document.getElementById('fichaUpbInv').value, 10);
+    const btn = document.getElementById('btnGuardarFichaInv');
+    btn.disabled = true;
+    fetch('/wms/medidas', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({
+            inventario_id: productoSeleccionado.id,
+            peso_kg: peso, largo_cm: l, ancho_cm: a, alto_cm: h,
+            unidades_por_bulto: (upb > 0 ? upb : null),
+            fuente: document.getElementById('fichaFuenteSelInv').value
+        })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.estado) { mostrarNotificacion(d.msj || 'No se pudo guardar la ficha', 'error'); return; }
+        // Reflejar en memoria y RECALCULAR la sugerencia: ahora sí aplica capacidad de peso/volumen.
+        productoSeleccionado.peso_kg = d.producto.peso_kg;
+        productoSeleccionado.volumen_m3 = d.producto.volumen_m3;
+        productoSeleccionado.largo_cm = l; productoSeleccionado.ancho_cm = a; productoSeleccionado.alto_cm = h;
+        if (upb > 0) productoSeleccionado.unidades_por_bulto = upb;
+        productoSeleccionado.datos_fisicos_fuente = d.producto.fuente;
+        productoSeleccionado.tiene_ficha = true;
+        pintarFichaFisicaInv(productoSeleccionado);
+        mostrarNotificacion('Ficha guardada: ' + d.producto.peso_kg + ' kg · ' + Number(d.producto.volumen_m3).toFixed(6) + ' m³. Recalculando ubicación sugerida…', 'success');
+        cargarSugerenciaInventariar();
+    })
+    .catch(() => mostrarNotificacion('Error al guardar la ficha física', 'error'))
+    .finally(() => { btn.disabled = false; });
 }
 
 function usarSugerenciaInv(codigo) {

@@ -141,7 +141,7 @@
                                         <button type="button" class="btn btn-sm btn-success" onclick="asignarProductoAUbicacion({{ $warehouse->id }}, '{{ $warehouse->codigo }}')" title="Asignar producto">
                                             <i class="fas fa-plus"></i>
                                         </button>
-                                        <button type="button" class="btn btn-sm btn-primary" onclick="editWarehouse({{ $warehouse->id }})" title="Editar">
+                                        <button type="button" class="btn btn-sm btn-primary" onclick="editWarehouse(this)" title="Editar" data-warehouse="{{ json_encode($warehouse->only(['id','pasillo','cara','rack','nivel','nombre','tipo','estado','zona','capacidad_peso','capacidad_volumen','capacidad_unidades','descripcion'])) }}">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                         <button type="button" class="btn btn-sm btn-danger" onclick="deleteWarehouse({{ $warehouse->id }})" title="Eliminar">
@@ -271,6 +271,98 @@
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-save"></i> Crear Ubicación
                     </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para EDITAR ubicación (capacidad de peso/volumen/unidades soportada → alimenta el slotting) -->
+<!-- Trigger oculto: abre el modal de edición por data-API de Bootstrap (sin necesitar el global `bootstrap`) -->
+<button type="button" id="editWarehouseTrigger" class="d-none" data-bs-toggle="modal" data-bs-target="#editWarehouseModal" aria-hidden="true" tabindex="-1"></button>
+<div class="modal fade" id="editWarehouseModal" tabindex="-1" aria-labelledby="editWarehouseModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="editWarehouseModalLabel"><i class="fas fa-edit"></i> Editar Ubicación <span class="badge bg-light text-dark ms-2" id="edit_codigoActual"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form id="editWarehouseForm" onsubmit="updateWarehouse(event)">
+                <input type="hidden" id="edit_id">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label for="edit_pasillo" class="form-label">Pasillo *</label>
+                            <input type="text" class="form-control" id="edit_pasillo" required maxlength="10" placeholder="A, B, C">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="edit_cara" class="form-label">Cara *</label>
+                            <input type="number" class="form-control" id="edit_cara" required min="1" placeholder="1, 2">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="edit_rack" class="form-label">Rack *</label>
+                            <input type="number" class="form-control" id="edit_rack" required min="1" placeholder="1-100">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="edit_nivel" class="form-label">Nivel *</label>
+                            <input type="number" class="form-control" id="edit_nivel" required min="1" max="10" placeholder="1-4">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_nombre" class="form-label">Nombre</label>
+                            <input type="text" class="form-control" id="edit_nombre" placeholder="Nombre descriptivo (opcional)">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_tipo" class="form-label">Tipo *</label>
+                            <select class="form-select" id="edit_tipo" required>
+                                <option value="almacenamiento">Almacenamiento</option>
+                                <option value="picking">Picking</option>
+                                <option value="recepcion">Recepción</option>
+                                <option value="despacho">Despacho</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_estado" class="form-label">Estado *</label>
+                            <select class="form-select" id="edit_estado" required>
+                                <option value="activa">Activa</option>
+                                <option value="inactiva">Inactiva</option>
+                                <option value="mantenimiento">Mantenimiento</option>
+                                <option value="bloqueada">Bloqueada</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_zona" class="form-label">Zona</label>
+                            <input type="text" class="form-control" id="edit_zona" placeholder="Ej: Zona A, Almacén Principal">
+                        </div>
+                    </div>
+                    <div class="alert alert-info py-2">
+                        <i class="fas fa-lightbulb"></i> <strong>Capacidad soportada:</strong> el motor de sugerencia de ubicación (slotting ABC) usa estos límites para no proponer una ubicación que no aguante el peso o el volumen del producto.
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_capacidad_peso" class="form-label">Capacidad Peso (Kg)</label>
+                            <input type="number" step="0.01" min="0" class="form-control" id="edit_capacidad_peso" placeholder="Kg (vacío = sin límite)">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_capacidad_volumen" class="form-label">Capacidad Volumen (m³)</label>
+                            <input type="number" step="0.0001" min="0" class="form-control" id="edit_capacidad_volumen" placeholder="m³ (vacío = sin límite)">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="edit_capacidad_unidades" class="form-label">Capacidad Unidades</label>
+                            <input type="number" min="0" class="form-control" id="edit_capacidad_unidades" placeholder="Unidades (vacío = sin límite)">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_descripcion" class="form-label">Descripción</label>
+                        <textarea class="form-control" id="edit_descripcion" rows="2" placeholder="Descripción adicional (opcional)"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Guardar cambios</button>
                 </div>
             </form>
         </div>
@@ -889,9 +981,70 @@ document.addEventListener('DOMContentLoaded', function() {
     if (camposNivel) camposNivel.addEventListener('input', actualizarCodigoGenerado);
 });
 
-function editWarehouse(id) {
-    // Implementar la edición
-    window.location.href = `/warehouses/${id}/edit`;
+// EDITAR UBICACIÓN: antes redirigía a /warehouses/{id}/edit, ruta y vista que NO existen (quedaba
+// roto). Ahora abre un modal con los datos de la fila (data-warehouse) y guarda vía PUT
+// /warehouses/{id} (WarehouseController@update), que ya persiste capacidad_peso / capacidad_volumen /
+// capacidad_unidades — la capacidad soportada que usa el motor de slotting (sugerencia ABC).
+function editWarehouse(btn) {
+    let w = null;
+    try { w = JSON.parse(btn.dataset.warehouse || '{}'); } catch (e) { w = null; }
+    if (!w || !w.id) { alert('No se pudieron cargar los datos de la ubicación'); return; }
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = (v === null || v === undefined) ? '' : v; };
+    set('edit_id', w.id);
+    set('edit_pasillo', w.pasillo);
+    set('edit_cara', w.cara);
+    set('edit_rack', w.rack);
+    set('edit_nivel', w.nivel);
+    set('edit_nombre', w.nombre);
+    set('edit_tipo', w.tipo || 'almacenamiento');
+    set('edit_estado', w.estado || 'activa');
+    set('edit_zona', w.zona);
+    set('edit_capacidad_peso', w.capacidad_peso);
+    set('edit_capacidad_volumen', w.capacidad_volumen);
+    set('edit_capacidad_unidades', w.capacidad_unidades);
+    set('edit_descripcion', w.descripcion);
+    const cod = document.getElementById('edit_codigoActual');
+    if (cod) cod.textContent = (w.pasillo || '') + (w.cara || '') + '-' + (w.rack || '') + '-' + (w.nivel || '');
+    // Abrir el modal sin depender del global `bootstrap` (esta página no lo expone; el modal de
+    // crear abre por data-API). Orden: data-API (trigger oculto) → bootstrap.Modal → jQuery.
+    const trigger = document.getElementById('editWarehouseTrigger');
+    if (trigger) { trigger.click(); }
+    else if (window.bootstrap && window.bootstrap.Modal) { new window.bootstrap.Modal(document.getElementById('editWarehouseModal')).show(); }
+    else if (window.jQuery) { window.jQuery('#editWarehouseModal').modal('show'); }
+}
+
+function updateWarehouse(event) {
+    event.preventDefault();
+    const id = document.getElementById('edit_id').value;
+    const g = (i) => document.getElementById(i).value;
+    const num = (i) => { const v = g(i); return v === '' ? null : Number(v); };
+    const payload = {
+        pasillo: g('edit_pasillo'), cara: num('edit_cara'), rack: num('edit_rack'), nivel: num('edit_nivel'),
+        nombre: g('edit_nombre'), tipo: g('edit_tipo'), estado: g('edit_estado'), zona: g('edit_zona'),
+        capacidad_peso: num('edit_capacidad_peso'),
+        capacidad_volumen: num('edit_capacidad_volumen'),
+        capacidad_unidades: num('edit_capacidad_unidades'),
+        descripcion: g('edit_descripcion'),
+    };
+    fetch(`/warehouses/${id}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.estado) {
+            alert(data.msj || 'Ubicación actualizada');
+            window.location.reload();
+        } else {
+            alert(data.msj || 'Error al actualizar la ubicación');
+        }
+    })
+    .catch(error => { console.error('Error:', error); alert('Error al procesar la solicitud'); });
 }
 
 function deleteWarehouse(id) {

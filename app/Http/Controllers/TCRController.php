@@ -60,8 +60,11 @@ class TCRController extends Controller
         try {
             $sendCentral = new sendCentral();
             $codigo_origen = $sendCentral->getOrigen();
-            
-            $response = \Http::post($sendCentral->path() . '/respedidos', [
+
+            // BUG FIX: antes era un \Http::post crudo que NO enviaba la API key ni los headers de
+            // sucursal → central respondía {"success":false,"message":"Unauthorized"} y el TCR no
+            // listaba transferencias. requestToCentral() inyecta X-Sucursal-Api-Key + codigo_origen.
+            $response = $sendCentral->requestToCentral('post', '/respedidos', [
                 "codigo_origen" => $codigo_origen,
                 "qpedidoscentralq" => $request->qpedidoscentralq ?? '',
                 "qpedidocentrallimit" => $request->qpedidocentrallimit ?? '20',
@@ -649,8 +652,9 @@ class TCRController extends Controller
         try {
             $sendCentral = new sendCentral();
             $codigo_origen = $sendCentral->getOrigen();
-            
-            $response = \Http::post($sendCentral->path() . '/respedidos', [
+
+            // BUG FIX: mismo caso que getPedidosCentral — usar requestToCentral() para que viaje la API key.
+            $response = $sendCentral->requestToCentral('post', '/respedidos', [
                 "codigo_origen" => $codigo_origen,
                 "qpedidoscentralq" => $pedidoId,
                 "qpedidocentrallimit" => 1,

@@ -55,7 +55,7 @@
   color: #676767 !important;
 }
 .text-base{
-  color: #f9cb9c !important;
+  color: #9a3412; /* antes #f9cb9c !important: naranja claro sin contraste; colisiona con text-base (tamaño) de Tailwind. Sin !important, los text-* explícitos de Tailwind (posteriores) prevalecen. */
 }
 .text-venta{
   color: #b6d7a8 !important;

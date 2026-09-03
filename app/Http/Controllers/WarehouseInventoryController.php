@@ -659,6 +659,9 @@ class WarehouseInventoryController extends Controller
                     'cantidad' => $ubicacion->cantidad,
                     'fecha_entrada' => $ubicacion->fecha_entrada,
                     'lote' => $ubicacion->lote,
+                    // Los usa el modal "Ver detalles completos" (estado y vencimiento de cada ubicación).
+                    'estado' => $ubicacion->estado ?? 'disponible',
+                    'fecha_vencimiento' => $ubicacion->fecha_vencimiento,
                 ];
             });
             

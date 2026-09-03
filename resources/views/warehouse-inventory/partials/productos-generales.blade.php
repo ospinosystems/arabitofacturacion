@@ -201,19 +201,21 @@
 
 <script>
 function verUbicaciones(productoId) {
-    fetch(`/warehouse-inventory/producto/${productoId}`)
+    // BUG FIX: `/warehouse-inventory/producto/ID` devuelve la VISTA HTML; la ruta JSON es
+    // `.../producto/ID/ubicaciones` y entrega `ubicaciones` con campos planos (codigo/lote/cantidad).
+    fetch(`/warehouse-inventory/producto/${productoId}/ubicaciones`)
         .then(response => response.json())
         .then(data => {
             if (data.estado) {
-                const ubicaciones = data.data;
+                const ubicaciones = data.ubicaciones || [];
                 let html = '<div class="space-y-2">';
-                
+
                 if (ubicaciones.length > 0) {
                     ubicaciones.forEach(ubi => {
                         html += `
                             <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                                 <div>
-                                    <span class="font-semibold text-blue-600">${ubi.warehouse.codigo}</span>
+                                    <span class="font-semibold text-blue-600">${ubi.codigo || 'N/A'}</span>
                                     ${ubi.lote ? `<span class="text-sm text-gray-500 ml-2">Lote: ${ubi.lote}</span>` : ''}
                                 </div>
                                 <span class="font-medium">${parseFloat(ubi.cantidad).toFixed(2)} unidades</span>

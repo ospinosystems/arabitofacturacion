@@ -2704,6 +2704,16 @@ class InventarioController extends Controller
                     'marca' => null,
                     'unidad' => $producto->unidad ?? 'N/A',
                     'precio' => $producto->precio ?? 0,
+                    // Ficha física (peso / dimensiones / volumen) para el SLOTTING: sin ficha el motor
+                    // NO puede aplicar la capacidad de peso/volumen de la ubicación (queda "estimado").
+                    'peso_kg'              => $producto->peso_kg !== null ? (float) $producto->peso_kg : null,
+                    'largo_cm'             => $producto->largo_cm !== null ? (float) $producto->largo_cm : null,
+                    'ancho_cm'             => $producto->ancho_cm !== null ? (float) $producto->ancho_cm : null,
+                    'alto_cm'              => $producto->alto_cm !== null ? (float) $producto->alto_cm : null,
+                    'volumen_m3'           => $producto->volumen_m3 !== null ? (float) $producto->volumen_m3 : null,
+                    'unidades_por_bulto'   => $producto->unidades_por_bulto,
+                    'datos_fisicos_fuente' => $producto->datos_fisicos_fuente ?? 'estimado',
+                    'tiene_ficha'          => $producto->tieneDatosFisicos(),
                     'precio_base' => $producto->precio_base ?? 0,
                     'total_en_ubicaciones' => $totalEnUbicaciones,
                     'numero_ubicaciones' => $numeroUbicaciones,
@@ -2795,13 +2805,11 @@ class InventarioController extends Controller
      */
     public function guardarInventarioConUbicacion(Request $request)
     {
-        // Verificar si el inventario está habilitado
-        if (!$this->enInventario()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'El acceso al inventario está deshabilitado'
-            ], 403);
-        }
+        // DESBLOQUEADO: antes exigía enInventario() (switch global de "modo inventariado", hardcodeado
+        // en false) y devolvía 403 "El acceso al inventario está deshabilitado", dejando inutilizable
+        // la pantalla Inventariar. El guardado por ubicación tiene su propia validación y el acceso
+        // ya lo controla el middleware de la ruta; NO depende del modo global. Las demás protecciones
+        // de enInventario() (productos inventariados no modificables, borrado suave) quedan intactas.
 
         try {
             $request->validate([

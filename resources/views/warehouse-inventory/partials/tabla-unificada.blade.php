@@ -515,28 +515,33 @@ function mostrarNotificacion(mensaje, tipo = 'info') {
 }
 
 function verDetallesUbicaciones(productoId) {
-    fetch(`/warehouse-inventory/producto/${productoId}`)
+    // BUG FIX: antes pedía `/warehouse-inventory/producto/ID` (ruta que devuelve la VISTA HTML
+    // `consultarUbicaciones`) y fallaba al parsear JSON ("Unexpected token '<'"). La ruta JSON es
+    // `.../producto/ID/ubicaciones` (obtenerUbicacionesProducto), que devuelve `ubicaciones` con
+    // campos planos (codigo/nombre/estado/...), no `data` con `warehouse` anidado.
+    fetch(`/warehouse-inventory/producto/${productoId}/ubicaciones`)
         .then(response => response.json())
         .then(data => {
             if (data.estado) {
-                const ubicaciones = data.data;
+                const ubicaciones = data.ubicaciones || [];
                 let html = '<div class="space-y-3">';
-                
+
                 if (ubicaciones.length > 0) {
                     ubicaciones.forEach(ubi => {
+                        const estadoUbi = (ubi.estado || 'disponible').toString();
                         const vencimiento = ubi.fecha_vencimiento ? new Date(ubi.fecha_vencimiento).toLocaleDateString('es-ES') : '-';
                         const entrada = ubi.fecha_entrada ? new Date(ubi.fecha_entrada).toLocaleDateString('es-ES') : '-';
-                        const estadoClass = ubi.estado === 'disponible' ? 'bg-green-100 text-green-800' : (ubi.estado === 'reservado' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800');
-                        
+                        const estadoClass = estadoUbi === 'disponible' ? 'bg-green-100 text-green-800' : (estadoUbi === 'reservado' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800');
+
                         html += `
                             <div class="border border-gray-200 rounded-lg p-4">
                                 <div class="flex justify-between items-start mb-2">
                                     <div>
-                                        <span class="text-lg font-semibold text-blue-600">${ubi.warehouse.codigo}</span>
-                                        <span class="text-sm text-gray-500 ml-2">${ubi.warehouse.nombre || ''}</span>
+                                        <span class="text-lg font-semibold text-blue-600">${ubi.codigo || 'N/A'}</span>
+                                        <span class="text-sm text-gray-500 ml-2">${ubi.nombre || ''}</span>
                                     </div>
                                     <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${estadoClass}">
-                                        ${ubi.estado.charAt(0).toUpperCase() + ubi.estado.slice(1)}
+                                        ${estadoUbi.charAt(0).toUpperCase() + estadoUbi.slice(1)}
                                     </span>
                                 </div>
                                 <div class="grid grid-cols-2 gap-3 text-sm">
