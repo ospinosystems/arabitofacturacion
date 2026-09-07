@@ -2240,17 +2240,27 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
     }, [despPage, despPorPagina, filtroOrdenes]);
 
     // Cargar premontas (redistribuciones aprobadas para esta sucursal origen) + borradores.
-    // (Despachadas se carga aparte, paginado/filtrado en servidor.)
+    // Los filtros van AL SERVIDOR: antes central mandaba solo las 50 más recientes y acá se
+    // filtraba lo recibido, así que buscar una orden más vieja no devolvía nada (caso OD 1821).
+    // El texto se debouncea para no pegarle a central en cada tecla.
     useEffect(() => {
         let vivo = true;
         setCargandoOrdenes(true);
-        const cargarPremontas = db.getPremontadas({ limit: 50 })
-            .then(res => { if (vivo) setPremontas(res.data?.premontadas || []); })
-            .catch(() => { if (vivo) setPremontas([]); });
-        Promise.all([cargarPremontas, cargarBorradores()])
-            .finally(() => { if (vivo) setCargandoOrdenes(false); });
-        return () => { vivo = false; };
-    }, [refreshListKey, cargarBorradores]);
+        const t = setTimeout(() => {
+            const cargarPremontas = db.getPremontadas({
+                limit: 200,
+                q: filtroOrdenes.q || '',
+                id_destino: filtroOrdenes.destino || '',
+                desde: filtroOrdenes.desde || '',
+                hasta: filtroOrdenes.hasta || '',
+            })
+                .then(res => { if (vivo) setPremontas(res.data?.premontadas || []); })
+                .catch(() => { if (vivo) setPremontas([]); });
+            Promise.all([cargarPremontas, cargarBorradores()])
+                .finally(() => { if (vivo) setCargandoOrdenes(false); });
+        }, 300);
+        return () => { vivo = false; clearTimeout(t); };
+    }, [refreshListKey, cargarBorradores, filtroOrdenes.q, filtroOrdenes.destino, filtroOrdenes.desde, filtroOrdenes.hasta]);
 
     // Recarga de despachadas: al cambiar filtros (fecha/destino/texto), página o tamaño de página, o
     // al refrescar la lista. El texto (q) se debouncea para no pegarle al servidor en cada tecla.

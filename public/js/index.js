@@ -139452,25 +139452,34 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
   })), [despPage, despPorPagina, filtroOrdenes]);
 
   // Cargar premontas (redistribuciones aprobadas para esta sucursal origen) + borradores.
-  // (Despachadas se carga aparte, paginado/filtrado en servidor.)
+  // Los filtros van AL SERVIDOR: antes central mandaba solo las 50 más recientes y acá se
+  // filtraba lo recibido, así que buscar una orden más vieja no devolvía nada (caso OD 1821).
+  // El texto se debouncea para no pegarle a central en cada tecla.
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     var vivo = true;
     setCargandoOrdenes(true);
-    var cargarPremontas = _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].getPremontadas({
-      limit: 50
-    }).then(function (res) {
-      var _res$data7;
-      if (vivo) setPremontas(((_res$data7 = res.data) === null || _res$data7 === void 0 ? void 0 : _res$data7.premontadas) || []);
-    })["catch"](function () {
-      if (vivo) setPremontas([]);
-    });
-    Promise.all([cargarPremontas, cargarBorradores()])["finally"](function () {
-      if (vivo) setCargandoOrdenes(false);
-    });
+    var t = setTimeout(function () {
+      var cargarPremontas = _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].getPremontadas({
+        limit: 200,
+        q: filtroOrdenes.q || '',
+        id_destino: filtroOrdenes.destino || '',
+        desde: filtroOrdenes.desde || '',
+        hasta: filtroOrdenes.hasta || ''
+      }).then(function (res) {
+        var _res$data7;
+        if (vivo) setPremontas(((_res$data7 = res.data) === null || _res$data7 === void 0 ? void 0 : _res$data7.premontadas) || []);
+      })["catch"](function () {
+        if (vivo) setPremontas([]);
+      });
+      Promise.all([cargarPremontas, cargarBorradores()])["finally"](function () {
+        if (vivo) setCargandoOrdenes(false);
+      });
+    }, 300);
     return function () {
       vivo = false;
+      clearTimeout(t);
     };
-  }, [refreshListKey, cargarBorradores]);
+  }, [refreshListKey, cargarBorradores, filtroOrdenes.q, filtroOrdenes.destino, filtroOrdenes.desde, filtroOrdenes.hasta]);
 
   // Recarga de despachadas: al cambiar filtros (fecha/destino/texto), página o tamaño de página, o
   // al refrescar la lista. El texto (q) se debouncea para no pegarle al servidor en cada tecla.

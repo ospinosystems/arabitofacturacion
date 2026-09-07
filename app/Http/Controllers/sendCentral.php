@@ -2445,9 +2445,15 @@ class sendCentral extends Controller
     function getPremontadas(Request $req) {
         try {
             $codigo_origen = $this->getOrigen();
+            // Los filtros del buscador (texto, destino, rango de fechas) se resuelven EN CENTRAL:
+            // filtrar solo lo recibido escondía las órdenes que quedaban fuera del tope.
             $response = $this->requestToCentral('post', '/getPremontadasFromOrdenDistribucion', [
                 'codigo_origen' => $codigo_origen,
-                'limit' => $req->limit ?? 50,
+                'limit'      => $req->limit ?? 100,
+                'q'          => $req->q,
+                'id_destino' => $req->id_destino,
+                'desde'      => $req->desde,
+                'hasta'      => $req->hasta,
             ]);
             if ($response->ok()) {
                 $res = $response->json();

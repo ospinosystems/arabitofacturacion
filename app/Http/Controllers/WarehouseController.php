@@ -322,6 +322,10 @@ class WarehouseController extends Controller
                 'capacidad_peso' => $request->capacidad_peso,
                 'capacidad_volumen' => $request->capacidad_volumen,
                 'capacidad_unidades' => $request->capacidad_unidades,
+                // Flags de mezcla (los usa Warehouse::esCompatibleCon al asignar/trasladar). Si el
+                // cliente no los manda (formularios viejos), se conserva el valor actual.
+                'permite_mezcla_productos' => $request->has('permite_mezcla_productos') ? (bool) $request->permite_mezcla_productos : $warehouse->permite_mezcla_productos,
+                'permite_mezcla_lotes' => $request->has('permite_mezcla_lotes') ? (bool) $request->permite_mezcla_lotes : $warehouse->permite_mezcla_lotes,
             ]);
             
             return Response::json([

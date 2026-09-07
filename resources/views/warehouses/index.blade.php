@@ -141,7 +141,7 @@
                                         <button type="button" class="btn btn-sm btn-success" onclick="asignarProductoAUbicacion({{ $warehouse->id }}, '{{ $warehouse->codigo }}')" title="Asignar producto">
                                             <i class="fas fa-plus"></i>
                                         </button>
-                                        <button type="button" class="btn btn-sm btn-primary" onclick="editWarehouse(this)" title="Editar" data-warehouse="{{ json_encode($warehouse->only(['id','pasillo','cara','rack','nivel','nombre','tipo','estado','zona','capacidad_peso','capacidad_volumen','capacidad_unidades','descripcion'])) }}">
+                                        <button type="button" class="btn btn-sm btn-primary" onclick="editWarehouse(this)" title="Editar" data-warehouse="{{ json_encode($warehouse->only(['id','pasillo','cara','rack','nivel','nombre','tipo','estado','zona','capacidad_peso','capacidad_volumen','capacidad_unidades','permite_mezcla_productos','permite_mezcla_lotes','descripcion'])) }}">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                         <button type="button" class="btn btn-sm btn-danger" onclick="deleteWarehouse({{ $warehouse->id }})" title="Eliminar">
@@ -353,6 +353,22 @@
                         <div class="col-md-4 mb-3">
                             <label for="edit_capacidad_unidades" class="form-label">Capacidad Unidades</label>
                             <input type="number" min="0" class="form-control" id="edit_capacidad_unidades" placeholder="Unidades (vacío = sin límite)">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="edit_permite_mezcla_productos">
+                                <label class="form-check-label" for="edit_permite_mezcla_productos">Permite mezclar productos</label>
+                            </div>
+                            <div class="form-text">Apagado: la ubicación acepta un solo producto. Si ya hay otro adentro, los traslados y asignaciones hacia acá se rechazan con "no permite mezclar productos".</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="edit_permite_mezcla_lotes">
+                                <label class="form-check-label" for="edit_permite_mezcla_lotes">Permite mezclar lotes</label>
+                            </div>
+                            <div class="form-text">Apagado: un solo lote del mismo producto por ubicación.</div>
                         </div>
                     </div>
                     <div class="mb-3">
@@ -1003,6 +1019,10 @@ function editWarehouse(btn) {
     set('edit_capacidad_volumen', w.capacidad_volumen);
     set('edit_capacidad_unidades', w.capacidad_unidades);
     set('edit_descripcion', w.descripcion);
+    // Flags de mezcla: null/undefined (ubicaciones viejas) se muestran como permitido, igual que el default de la BD.
+    const chk = (i, v) => { const el = document.getElementById(i); if (el) el.checked = (v === null || v === undefined) ? true : !!Number(v); };
+    chk('edit_permite_mezcla_productos', w.permite_mezcla_productos);
+    chk('edit_permite_mezcla_lotes', w.permite_mezcla_lotes);
     const cod = document.getElementById('edit_codigoActual');
     if (cod) cod.textContent = (w.pasillo || '') + (w.cara || '') + '-' + (w.rack || '') + '-' + (w.nivel || '');
     // Abrir el modal sin depender del global `bootstrap` (esta página no lo expone; el modal de
@@ -1024,6 +1044,8 @@ function updateWarehouse(event) {
         capacidad_peso: num('edit_capacidad_peso'),
         capacidad_volumen: num('edit_capacidad_volumen'),
         capacidad_unidades: num('edit_capacidad_unidades'),
+        permite_mezcla_productos: document.getElementById('edit_permite_mezcla_productos').checked ? 1 : 0,
+        permite_mezcla_lotes: document.getElementById('edit_permite_mezcla_lotes').checked ? 1 : 0,
         descripcion: g('edit_descripcion'),
     };
     fetch(`/warehouses/${id}`, {
