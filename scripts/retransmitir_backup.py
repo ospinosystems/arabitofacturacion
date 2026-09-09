@@ -318,9 +318,12 @@ def rio_ventas(args, dump):
 def main():
     # La consola de Windows suele venir en cp1252 y revienta con → o «»:
     # forzamos utf-8 (y si ni así puede, se degrada sin tumbar el proceso).
+    # utf-8 (la consola de Windows viene en cp1252) y SIN buffer: cuando la
+    # salida va a un archivo, Python la retiene hasta el final y el avance no
+    # se ve; con line_buffering cada lote aparece al instante.
     for flujo in (sys.stdout, sys.stderr):
         try:
-            flujo.reconfigure(encoding='utf-8', errors='replace')
+            flujo.reconfigure(encoding='utf-8', errors='replace', line_buffering=True)
         except Exception:  # noqa: BLE001
             pass
 

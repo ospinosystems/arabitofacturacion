@@ -346,7 +346,7 @@ class WarehouseInventoryController extends Controller
             $compat = $warehouse->esCompatibleCon($producto);
             if (!$compat['compatible']) {
                 return Response::json([
-                    'msj' => 'Ubicación no compatible: ' . $compat['motivo'],
+                    'msj' => 'No se puede asignar: ' . $compat['motivo'],
                     'estado' => false
                 ]);
             }
@@ -468,7 +468,7 @@ class WarehouseInventoryController extends Controller
                 $compat = $warehouseDestino->esCompatibleCon($productoTransferido);
                 if (!$compat['compatible']) {
                     return Response::json([
-                        'msj' => 'Destino no compatible: ' . $compat['motivo'],
+                        'msj' => 'No se puede trasladar: ' . $compat['motivo'],
                         'estado' => false
                     ]);
                 }

@@ -297,7 +297,10 @@ class SlottingService
             return 'Producto no apilable en ubicación de altura';
         }
 
-        if (!$u->permite_mezcla_productos
+        // Igual que Warehouse::esCompatibleCon: solo descarta si la ubicación PROHÍBE
+        // explícitamente mezclar (flag = 0). Nulo = permitido (default de la migración).
+        if ($u->permite_mezcla_productos !== null
+            && ! $u->permite_mezcla_productos
             && $ocup['productos_distintos'] > 0
             && $ocup['filas_producto'] === 0) {
             return 'No permite mezclar productos y ya está ocupada';
@@ -749,7 +752,8 @@ class SlottingService
         if (!$producto->apilable && $u->accesibilidad === 'altura') {
             return 0.0;
         }
-        if (!$u->permite_mezcla_productos && $ocup['productos_distintos'] > 0 && $ocup['filas_producto'] === 0) {
+        if ($u->permite_mezcla_productos !== null && ! $u->permite_mezcla_productos
+            && $ocup['productos_distintos'] > 0 && $ocup['filas_producto'] === 0) {
             return 0.0;
         }
         if ($u->alto_util_cm !== null && $producto->alto_cm !== null

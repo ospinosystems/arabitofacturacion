@@ -304,13 +304,39 @@ class Warehouse extends Model
             return ['compatible' => false, 'motivo' => 'La ubicación no admite mercancía peligrosa'];
         }
 
-        if (!$this->permite_mezcla_productos) {
+        // Mezcla de productos. Se bloquea SOLO si la ubicación lo prohíbe explícitamente
+        // (flag = 0). Un valor nulo — fila anterior a la migración de slotting, o instalación
+        // donde esa columna aún no existe — se trata como PERMITIDO: el default de la migración
+        // es `true` y prohibir por omisión frenaba traslados legítimos con un mensaje que no
+        // explicaba nada. Ver `permite_mezcla_productos` en la migración add_slotting_to_warehouses.
+        $prohibeMezcla = array_key_exists('permite_mezcla_productos', $this->getAttributes())
+            && $this->permite_mezcla_productos !== null
+            && ! $this->permite_mezcla_productos;
+
+        if ($prohibeMezcla) {
             $otro = $this->inventarios()
+                ->with('inventario:id,descripcion,codigo_barras')
                 ->where('inventario_id', '!=', $producto->id)
                 ->where('cantidad', '>', 0)
-                ->exists();
+                ->first();
             if ($otro) {
-                return ['compatible' => false, 'motivo' => 'La ubicación no permite mezclar productos'];
+                // El motivo nombra al ocupante y dice cómo destrabarlo: "no permite mezclar"
+                // a secas obligaba a mirar la base de datos para entender qué pasaba.
+                $ocupante = $otro->inventario;
+                $quien = $ocupante && trim((string) $ocupante->descripcion) !== ''
+                    ? '"' . trim($ocupante->descripcion) . '"'
+                    : 'otro producto (id ' . $otro->inventario_id . ')';
+
+                return [
+                    'compatible' => false,
+                    'motivo' => sprintf(
+                        'la ubicación %s está configurada para UN SOLO producto y ya contiene %s con %s unidades. '
+                        . 'Para poder mezclar, editá la ubicación y activá "Permite mezclar productos"; si no, mové ese producto a otra ubicación.',
+                        $this->codigo ?: ('#' . $this->id),
+                        $quien,
+                        rtrim(rtrim(number_format((float) $otro->cantidad, 2, ',', '.'), '0'), ',')
+                    ),
+                ];
             }
         }
 
