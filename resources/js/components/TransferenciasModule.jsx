@@ -2537,32 +2537,37 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
         const sub = items.reduce((a, it) => a + (parseFloat(it.cantidad) || 0) * (parseFloat(it.precio) || 0), 0);
         const exento = 0, gravable = sub, iva = 0;
         const fmtP = (n) => Number(n).toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        // Fecha de emisión (dd/mm/aaaa): la del pedido en central si vino, si no la de la orden.
+        const fechaEmision = fmtFecha(orden.fecha_emision || orden.created_at);
         const ventana = window.open('', '_blank');
         if (!ventana) { alert('Habilitá las ventanas emergentes para poder imprimir la guía.'); return; }
         ventana.document.write(`
             <!DOCTYPE html><html><head><title>Guía de Despacho N° ${id}</title>
-            <style>@page{size:letter portrait;margin:${MARGENES_IMPRESION.guiaDespacho};} html,body{margin:0;padding:0;} body{font-family:sans-serif;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;} .titulo-guia{text-align:left;font-weight:bold;margin-bottom:1rem;}</style>
+            <style>@page{size:letter portrait;margin:${MARGENES_IMPRESION.guiaDespacho};} html,body{margin:0;padding:0;} body{font-family:sans-serif;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;} .titulo-guia{text-align:left;font-weight:bold;margin-bottom:1rem;} thead{display:table-header-group;} .guia>thead>tr>th,.guia>tbody>tr>td{border:none;background:none;padding:0;text-align:left;font-weight:normal;}</style>
             </head><body>
-            <div class="titulo-guia">Guía de Despacho N°: ${id}</div>
+            <table class="guia" style="width:100%;"><thead>
+            <tr><th>
+                <div class="titulo-guia" style="margin-bottom:0;">Guía de Despacho N°: ${id}</div>
+                <div class="titulo-guia">Emisión-${fechaEmision}</div>
+            </th></tr></thead><tbody><tr><td>
             <div class="header">
                 <div><strong>Cliente</strong></div>
                 <div>Razón Social: ${clienteRazon}</div>
                 <div>RIF: ${clienteRif}</div>
                 <div>Dirección: ${clienteDir}</div>
                 <div style="margin-top:0.5rem;"><strong>Origen:</strong> ${origenNombre}</div>
-
+            
             </div>
-            <table style="width:100%;"><thead><tr><th>#</th><th>Código</th><th>Cód. proveedor</th><th>Descripción</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Precio</th></tr></thead><tbody>
+            <table style="width:100%;"><thead><tr><th>#</th><th>Código</th><th>Cód. proveedor</th><th>Descripción</th><th style="text-align:right">Cantidad</th></tr></thead><tbody>
             ${items.map((e, i) => {
                 const cod = (e.codigo_barras ?? '—').toString().trim() || '—';
                 const codProv = (e.codigo_proveedor ?? '—').toString().trim() || '—';
                 const desc = (e.descripcion ?? '—').toString();
                 const cant = Number(e.cantidad);
-                const prec = e.precio ?? 0;
-                const precStr = Number(prec).toLocaleString('es', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-                return `<tr><td>${i + 1}</td><td>${cod}</td><td>${codProv}</td><td>${desc}</td><td style="text-align:right">${cant % 1 === 0 ? cant : cant.toFixed(2)}</td><td style="text-align:right">${precStr}</td></tr>`;
+                return `<tr><td>${i + 1}</td><td>${cod}</td><td>${codProv}</td><td>${desc}</td><td style="text-align:right">${cant % 1 === 0 ? cant : cant.toFixed(2)}</td></tr>`;
             }).join('')}
             </tbody></table>
+            </td></tr></tbody></table>
             <div class="totales">
                 <table>
                 <tr><td style="padding-right:1rem;">Subtotal</td><td style="text-align:right;">${fmtP(sub)}</td></tr>
