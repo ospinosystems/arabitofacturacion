@@ -2540,23 +2540,21 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
         if (!ventana) { alert('Habilitá las ventanas emergentes para poder imprimir la guía.'); return; }
         ventana.document.write(`
             <!DOCTYPE html><html><head><title>Guía de Despacho N° ${id}</title>
-            <style>@page{size:letter portrait;margin:${MARGENES_IMPRESION.guiaDespacho};} html,body{margin:0;padding:0;} body{font-family:sans-serif;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;} .titulo-guia{text-align:left;font-weight:bold;margin-bottom:1rem;} thead{display:table-header-group;} .guia>thead>tr>th,.guia>tbody>tr>td{border:none;background:none;padding:0;text-align:left;font-weight:normal;} .enc{position:relative;height:180px;line-height:1.25;} .enc .titulo-guia{position:absolute;right:0;bottom:1rem;margin:0;text-align:right;} .cab{position:relative;height:0;} .cab .header{position:absolute;left:0;bottom:1rem;margin:0;line-height:1.25;}</style>
+            <style>@page{size:letter portrait;margin:${MARGENES_IMPRESION.guiaDespacho};} html,body{margin:0;padding:0;} body{font-family:sans-serif;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;} .titulo-guia{text-align:left;font-weight:bold;margin-bottom:1rem;} thead{display:table-header-group;} .guia>thead>tr>th,.guia>tbody>tr>td{border:none;background:none;padding:0;text-align:left;font-weight:normal;} .enc{position:relative;height:180px;line-height:1.25;} .enc .titulo-guia{position:absolute;right:0;bottom:1rem;margin:0;text-align:right;} .enc .header{position:absolute;left:0;bottom:1rem;margin:0;line-height:1.25;}</style>
             </head><body>
             <table class="guia" style="width:100%;"><thead>
             <tr><th>
                 <div class="enc">
+                    <div class="header">
+                        <div><strong>Cliente</strong></div>
+                        <div>Razón Social: ${clienteRazon}</div>
+                        <div>RIF: ${clienteRif}</div>
+                        <div>Dirección: ${clienteDir}</div>
+                        <div style="margin-top:0.5rem;"><strong>Origen:</strong> ${origenNombre}</div>
+                    </div>
                     <div class="titulo-guia">Guía de Despacho N°: ${id}<br>Emisión-${fechaEmision}</div>
                 </div>
-            </th></tr></thead><tbody><tr><td class="cab">
-            <div class="header">
-                <div><strong>Cliente</strong></div>
-                <div>Razón Social: ${clienteRazon}</div>
-                <div>RIF: ${clienteRif}</div>
-                <div>Dirección: ${clienteDir}</div>
-                <div style="margin-top:0.5rem;"><strong>Origen:</strong> ${origenNombre}</div>
-            
-            </div>
-            </td></tr><tr><td>
+            </th></tr></thead><tbody><tr><td>
             <table style="width:100%;"><thead><tr><th>#</th><th>Código</th><th>Cód. proveedor</th><th>Descripción</th><th style="text-align:right">Cantidad</th></tr></thead><tbody>
             ${items.map((e, i) => {
                 const cod = (e.codigo_barras ?? '—').toString().trim() || '—';
