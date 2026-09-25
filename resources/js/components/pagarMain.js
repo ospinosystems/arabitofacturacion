@@ -5,9 +5,6 @@ import ListProductosInterno from "./listProductosInterno";
 import db from "../database/database";
 import { descripcionBanco } from "./bancoCentralUtils";
 
-import { imprimirGuiaDespachoPaginada, formatearCantidadGuia } from "./guiaDespachoPrint";
-// Márgenes de hoja (carta) de la guía que se imprime desde F4. Formato CSS: "TOP RIGHT BOTTOM LEFT".
-const MARGENES_GUIA_F4 = "10mm 10mm 10mm 10mm";
 export default function PagarMain({
     bancosCentral,
     qProductosMain,
@@ -5426,30 +5423,59 @@ export default function PagarMain({
                             type="button"
                             onClick={() => {
                                 if (refContenidoImpresionExportar.current) {
-                                    const clienteRazon = (cliente?.razon_social ?? cliente?.nombre) ? (cliente?.nombre === "CF" ? "Sin cliente" : (cliente?.razon_social || cliente?.nombre)) : "—";
-                                    const clienteRif = cliente?.identificacion && cliente.identificacion !== "CF" ? cliente.identificacion : "—";
-                                    const clienteDir = cliente?.direccion && String(cliente.direccion || "").trim() ? cliente.direccion : "—";
-                                    const origenNombre = sucursaldata?.sucursal || sucursaldata?.codigo || "—";
-                                    // Fecha de emisión (dd/mm/aaaa) del pedido; si no viene, hoy.
-                                    const fechaEmision = (() => {
-                                        const raw = String(pedidoData.fecha_emision || pedidoData.created_at || "").slice(0, 10);
-                                        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
-                                        if (m) return `${m[3]}/${m[2]}/${m[1]}`;
-                                        const h = new Date();
-                                        return `${String(h.getDate()).padStart(2, "0")}/${String(h.getMonth() + 1).padStart(2, "0")}/${h.getFullYear()}`;
-                                    })();
-                                    const filas = (items || []).map((e) => ({
-                                        cod: (e.producto?.codigo_barras ?? e.codigo_barras ?? "—").toString().trim() || "—",
-                                        codProv: (e.producto?.codigo_proveedor ?? e.codigo_proveedor ?? "—").toString().trim() || "—",
-                                        desc: (e.producto?.descripcion ?? e.descripcion ?? "—").toString(),
-                                        cant: formatearCantidadGuia(e.cantidad),
-                                    }));
-                                    imprimirGuiaDespachoPaginada({
-                                        numeroBase: String(id).padStart(8, '0'),
-                                        tituloVentana: `Lista de productos - Pedido ${id}`,
-                                        fechaEmision, clienteRazon, clienteRif, clienteDir, origenNombre, filas,
-                                        margenesMm: MARGENES_GUIA_F4,
-                                    });
+                                    const ventana = window.open("", "_blank");
+                                    if (ventana) {
+                                        const clienteRazon = (cliente?.razon_social ?? cliente?.nombre) ? (cliente?.nombre === "CF" ? "Sin cliente" : (cliente?.razon_social || cliente?.nombre)) : "—";
+                                        const clienteRif = cliente?.identificacion && cliente.identificacion !== "CF" ? cliente.identificacion : "—";
+                                        const clienteDir = cliente?.direccion && String(cliente.direccion || "").trim() ? cliente.direccion : "—";
+                                        const origenNombre = sucursaldata?.sucursal || sucursaldata?.codigo || "—";
+                                        const sub = parseFloat(pedidoData.subtotal ?? pedidoData.clean_total ?? total) || 0;
+                                        const exento = parseFloat(pedidoData.exento) || 0;
+                                        const gravable = parseFloat(pedidoData.gravable) || 0;
+                                        const iva = parseFloat(pedidoData.monto_iva ?? pedidoData.ivas) || 0;
+                                        const fmtP = (n) => Number(n).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                        ventana.document.write(`
+                                            <!DOCTYPE html><html><head><title>Lista de productos - Pedido ${id}</title>
+                                            <style>body{font-family:sans-serif;padding:1rem;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;} .titulo-guia{text-align:left;font-weight:bold;margin-bottom:1rem;}</style>
+                                            </head><body>
+                                            <div class="titulo-guia">Guía de Despacho N°: ${String(id).padStart(8, '0')}</div>
+                                            <div class="header">
+                                                <div><strong>Cliente</strong></div>
+                                                <div>Razón Social: ${clienteRazon}</div>
+                                                <div>RIF: ${clienteRif}</div>
+                                                <div>Dirección: ${clienteDir}</div>
+                                                <div style="margin-top:0.5rem;"><strong>Origen:</strong> ${origenNombre}</div>
+
+                                            </div>
+                                            <table style="width:100%;"><thead><tr><th>#</th><th>Código</th><th>Cód. proveedor</th><th>Descripción</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Precio</th></tr></thead><tbody>
+                                            ${(items || []).map((e, i) => {
+                                                const cod = (e.producto?.codigo_barras ?? e.codigo_barras ?? "—").toString().trim() || "—";
+                                                const codProv = (e.producto?.codigo_proveedor ?? e.codigo_proveedor ?? "—").toString().trim() || "—";
+                                                const desc = (e.producto?.descripcion ?? e.descripcion ?? "—").toString();
+                                                const cant = Number(e.cantidad);
+                                                const prec = e.producto?.precio ?? e.precio_unitario ?? e.precio ?? 0;
+                                                const precStr = Number(prec).toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+                                                return `<tr><td>${i + 1}</td><td>${cod}</td><td>${codProv}</td><td>${desc}</td><td style="text-align:right">${cant % 1 === 0 ? cant : cant.toFixed(2)}</td><td style="text-align:right">${precStr}</td></tr>`;
+                                            }).join("")}
+                                            </tbody></table>
+                                            <div class="totales">
+                                                <table>
+                                                <tr><td style="padding-right:1rem;">Subtotal</td><td style="text-align:right;">${fmtP(sub)}</td></tr>
+                                                <tr><td style="padding-right:1rem;">Monto Exento</td><td style="text-align:right;">${fmtP(exento)}</td></tr>
+                                                <tr><td style="padding-right:1rem;">Monto Gravable</td><td style="text-align:right;">${fmtP(gravable)}</td></tr>
+                                                <tr><td style="padding-right:1rem;">IVA</td><td style="text-align:right;">${fmtP(iva)}</td></tr>
+                                                <tr><td style="padding-right:1rem;font-weight:bold;">Monto Total</td><td style="text-align:right;font-weight:bold;">${fmtP(sub)}</td></tr>
+                                                </table>
+                                            </div>
+                                            <div class="firmas">
+                                                <div><div style="border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;">Firma del Despachador</div></div>
+                                                <div><div style="border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;">Firma del Receptor</div></div>
+                                            </div>
+                                            </body></html>`);
+                                        ventana.document.close();
+                                        ventana.focus();
+                                        setTimeout(() => { ventana.print(); ventana.close(); }, 300);
+                                    }
                                 }
                             }}
                             className="px-4 py-2 text-white bg-indigo-600 border border-indigo-700 rounded-lg hover:bg-indigo-700"
