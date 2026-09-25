@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import es from 'date-fns/locale/es';
 import db from '../database/database';
 
+import { imprimirGuiaDespachoPaginada, formatearCantidadGuia } from './guiaDespachoPrint';
 // ── Márgenes de impresión (FIJOS en la hoja vía @page; NO dependen de lo que
 //    tenga configurado la impresora ni de que el usuario los ajuste). Para
 //    cambiarlos a futuro, editar acá. Formato CSS shorthand: "TOP RIGHT BOTTOM LEFT".
@@ -2503,8 +2504,8 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
         }
     };
 
-    // Imprime la GUÍA DE DESPACHO de una orden despachada, con el MISMO formato/letras que la F4
-    // de pagarMain.js (mismo HTML, estilos y textos). Destino = sucursal receptora; Origen = esta.
+    // Imprime la GUÍA DE DESPACHO de una orden despachada (formato compartido con la F4 de
+    // pagarMain.js vía guiaDespachoPrint.js). Destino = sucursal receptora; Origen = esta.
     const imprimirGuiaDespacho = (orden) => {
         const sucByIdLocal = {};
         (sucursales || []).forEach(s => { sucByIdLocal[s.id] = s; });
@@ -2536,43 +2537,18 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
         const items = orden.items || [];
         // Fecha de emisión (dd/mm/aaaa): la del pedido en central si vino, si no la de la orden.
         const fechaEmision = fmtFecha(orden.fecha_emision || orden.created_at);
-        const ventana = window.open('', '_blank');
-        if (!ventana) { alert('Habilitá las ventanas emergentes para poder imprimir la guía.'); return; }
-        ventana.document.write(`
-            <!DOCTYPE html><html><head><title>Guía de Despacho N° ${id}</title>
-            <style>@page{size:letter portrait;margin:${MARGENES_IMPRESION.guiaDespacho};} html,body{margin:0;padding:0;} body{font-family:sans-serif;} table{border-collapse:collapse;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;} .header{margin-bottom:1rem;} .totales{margin-left:auto;margin-top:1rem;} .totales table{margin-left:auto;} .totales td:last-child{text-align:right;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;} .titulo-guia{text-align:left;font-weight:bold;margin-bottom:1rem;} thead{display:table-header-group;} .guia>thead>tr>th,.guia>tbody>tr>td{border:none;background:none;padding:0;text-align:left;font-weight:normal;} .enc{position:relative;height:180px;line-height:1.25;} .enc .titulo-guia{position:absolute;right:0;bottom:1rem;margin:0;text-align:right;} .enc .header{position:absolute;left:0;bottom:1rem;margin:0;line-height:1.25;}</style>
-            </head><body>
-            <table class="guia" style="width:100%;"><thead>
-            <tr><th>
-                <div class="enc">
-                    <div class="header">
-                        <div><strong>Cliente</strong></div>
-                        <div>Razón Social: ${clienteRazon}</div>
-                        <div>RIF: ${clienteRif}</div>
-                        <div>Dirección: ${clienteDir}</div>
-                        <div style="margin-top:0.5rem;"><strong>Origen:</strong> ${origenNombre}</div>
-                    </div>
-                    <div class="titulo-guia">Guía de Despacho N°: ${id}<br>Emisión-${fechaEmision}</div>
-                </div>
-            </th></tr></thead><tbody><tr><td>
-            <table style="width:100%;"><thead><tr><th>#</th><th>Código</th><th>Cód. proveedor</th><th>Descripción</th><th style="text-align:right">Cantidad</th></tr></thead><tbody>
-            ${items.map((e, i) => {
-                const cod = (e.codigo_barras ?? '—').toString().trim() || '—';
-                const codProv = (e.codigo_proveedor ?? '—').toString().trim() || '—';
-                const desc = (e.descripcion ?? '—').toString();
-                const cant = Number(e.cantidad);
-                return `<tr><td>${i + 1}</td><td>${cod}</td><td>${codProv}</td><td>${desc}</td><td style="text-align:right">${cant % 1 === 0 ? cant : cant.toFixed(2)}</td></tr>`;
-            }).join('')}
-            </tbody></table>
-            </td></tr></tbody></table>
-            <div class="firmas">
-                <div><div style="border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;">Firma del Despachador</div></div>
-                <div><div style="border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;">Firma del Receptor</div></div>
-            </div>
-            </body></html>`);
-        ventana.document.close();
-        ventana.focus();
-        setTimeout(() => { ventana.print(); ventana.close(); }, 300);
+        const filas = items.map((e) => ({
+            cod: (e.codigo_barras ?? '—').toString().trim() || '—',
+            codProv: (e.codigo_proveedor ?? '—').toString().trim() || '—',
+            desc: (e.descripcion ?? '—').toString(),
+            cant: formatearCantidadGuia(e.cantidad),
+        }));
+        imprimirGuiaDespachoPaginada({
+            numeroBase: id,
+            tituloVentana: `Guía de Despacho N° ${id}`,
+            fechaEmision, clienteRazon, clienteRif, clienteDir, origenNombre, filas,
+            margenesMm: MARGENES_IMPRESION.guiaDespacho,
+        });
     };
 
     // Abre el modal de impresión de bultos para una orden despachada.
