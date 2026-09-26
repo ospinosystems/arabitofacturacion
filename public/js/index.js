@@ -159694,11 +159694,46 @@ function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
 // bloque Cliente/Origen a la izquierda, número y emisión a la derecha) y la fila de columnas.
 // Las firmas van solo en la última hoja.
 //
-// Se usa desde la Torre de transferencias (TransferenciasModule.jsx) y desde F4 (pagarMain.js).
+// Tamaños: la tabla de productos puede imprimirse en varios tamaños de letra (el encabezado de la
+// hoja no cambia). En modo "automatico" se elige la letra más grande con la que TODA la orden entra
+// en una sola hoja; si no entra en ninguna, se usa el tamaño mínimo en varias hojas.
+//
+// Se usa desde la Torre de transferencias (TransferenciasModule.jsx).
 
 var MM_A_PX = 96 / 25.4;
 var CARTA_ANCHO_MM = 215.9;
 var CARTA_ALTO_MM = 279.4;
+
+// Opciones del selector "Tamaño guía". El orden de las claves es el orden del selector y, para el
+// modo automático, el orden de prueba (de mayor a menor letra) es el de `ORDEN_AUTO`.
+var TAMANOS_GUIA = {
+  automatico: {
+    etiqueta: 'Automático',
+    auto: true
+  },
+  normal: {
+    etiqueta: 'Normal',
+    fontSize: '16px',
+    padding: '6px 10px'
+  },
+  mediano: {
+    etiqueta: 'Mediano',
+    fontSize: '14px',
+    padding: '4px 8px'
+  },
+  compacto: {
+    etiqueta: 'Compacto',
+    fontSize: '12px',
+    padding: '2px 6px'
+  },
+  minimo: {
+    etiqueta: 'Mínimo',
+    fontSize: '11px',
+    padding: '1px 5px'
+  }
+};
+var TAMANO_GUIA_DEFAULT = 'normal';
+var ORDEN_AUTO = ['normal', 'mediano', 'compacto', 'minimo'];
 
 /** "40mm 5mm 35mm 5mm" → { top, right, bottom, left } en mm. */
 var parseMargenesMm = function parseMargenesMm(s) {
@@ -159731,27 +159766,6 @@ var escHtml = function escHtml(s) {
   });
 };
 
-// Tamaños de la tabla de productos (el encabezado de la hoja no cambia: está alineado a la forma
-// libre preimpresa). A menor letra y relleno, más filas por hoja.
-var TAMANOS_GUIA = {
-  normal: {
-    etiqueta: 'Normal',
-    fontSize: '16px',
-    padding: '6px 10px'
-  },
-  mediano: {
-    etiqueta: 'Mediano',
-    fontSize: '14px',
-    padding: '4px 8px'
-  },
-  compacto: {
-    etiqueta: 'Compacto',
-    fontSize: '12px',
-    padding: '2px 6px'
-  }
-};
-var TAMANO_GUIA_DEFAULT = 'normal';
-
 /** Cantidad para la tabla: entera sin decimales, si no con 2. */
 var formatearCantidadGuia = function formatearCantidadGuia(cantidad) {
   var cant = Number(cantidad);
@@ -159771,16 +159785,24 @@ var formatearCantidadGuia = function formatearCantidadGuia(cantidad) {
  * @param {string} o.origenNombre
  * @param {Array<{cod:string, codProv:string, desc:string, cant:string}>} o.filas
  * @param {string} o.margenesMm   Shorthand CSS en mm: "TOP RIGHT BOTTOM LEFT".
- * @param {string} [o.tamano]     'normal' | 'mediano' | 'compacto' (ver TAMANOS_GUIA).
+ * @param {string} [o.tamano]     Clave de TAMANOS_GUIA ('automatico' | 'normal' | 'mediano' | 'compacto' | 'minimo').
  */
 var construirHtmlGuiaDespacho = function construirHtmlGuiaDespacho(o) {
   var m = parseMargenesMm(o.margenesMm);
   var anchoPx = Math.floor((CARTA_ANCHO_MM - m.left - m.right) * MM_A_PX);
   var altoPx = Math.floor((CARTA_ALTO_MM - m.top - m.bottom) * MM_A_PX);
-  var tam = TAMANOS_GUIA[o.tamano] || TAMANOS_GUIA[TAMANO_GUIA_DEFAULT];
+  var tamano = TAMANOS_GUIA[o.tamano] ? o.tamano : TAMANO_GUIA_DEFAULT;
+  // Tamaños a probar, en orden: en automático todos (de mayor a menor); si no, solo el elegido.
+  var candidatos = TAMANOS_GUIA[tamano].auto ? ORDEN_AUTO : [tamano];
+  // Una clase CSS por tamaño (.t-normal, .t-mediano, ...) para que el script pueda cambiar de
+  // tamaño y volver a medir sin regenerar el documento.
+  var cssTamanos = ORDEN_AUTO.map(function (k) {
+    var t = TAMANOS_GUIA[k];
+    return ".t-".concat(k, " table{font-size:").concat(t.fontSize, ";} .t-").concat(k, " th,.t-").concat(k, " td{padding:").concat(t.padding, ";}");
+  }).join(' ');
   // Datos de filas embebidos como JSON; se escapa "<" para que nunca cierre el <script>.
   var filasJson = JSON.stringify(o.filas || []).replace(/</g, "\\u003c");
-  return "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>".concat(escHtml(o.tituloVentana), "</title>\n<style>\n@page{size:letter portrait;margin:").concat(escHtml(o.margenesMm), ";}\nhtml,body{margin:0;padding:0;} body{font-family:sans-serif;}\ntable{border-collapse:collapse;width:100%;font-size:").concat(tam.fontSize, ";} th,td{border:1px solid #ccc;padding:").concat(tam.padding, ";text-align:left;} th{background:#f3f4f6;}\n.pagina{width:").concat(anchoPx, "px;page-break-after:always;} .pagina:last-child{page-break-after:auto;}\n.enc{position:relative;height:180px;line-height:1.25;}\n.enc .header{position:absolute;left:0;bottom:1rem;margin:0;}\n.enc .titulo-guia{position:absolute;right:0;bottom:1rem;margin:0;text-align:right;font-weight:bold;}\n.firmas-wrap{overflow:hidden;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;}\n.medir{position:absolute;left:-10000px;top:0;visibility:hidden;}\n</style></head><body>\n<template id=\"tpl-enc\">\n<div class=\"enc\">\n    <div class=\"header\">\n        <div><strong>Cliente</strong></div>\n        <div>Raz\xF3n Social: ").concat(escHtml(o.clienteRazon), "</div>\n        <div>RIF: ").concat(escHtml(o.clienteRif), "</div>\n        <div>Direcci\xF3n: ").concat(escHtml(o.clienteDir), "</div>\n        <div style=\"margin-top:0.5rem;\"><strong>Origen:</strong> ").concat(escHtml(o.origenNombre), "</div>\n    </div>\n    <div class=\"titulo-guia\">Gu\xEDa de Despacho N\xB0: ").concat(escHtml(o.numeroBase), "__PAG__<br>Emisi\xF3n-").concat(escHtml(o.fechaEmision), "</div>\n</div>\n</template>\n<template id=\"tpl-cols\"><tr><th>#</th><th>C\xF3digo</th><th>C\xF3d. proveedor</th><th>Descripci\xF3n</th><th style=\"text-align:right\">Cantidad</th></tr></template>\n<template id=\"tpl-firmas\">\n<div class=\"firmas-wrap\"><div class=\"firmas\">\n    <div><div style=\"border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;\">Firma del Despachador</div></div>\n    <div><div style=\"border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;\">Firma del Receptor</div></div>\n</div></div>\n</template>\n<div id=\"hojas\"></div>\n<script>\n(function () {\n    var FILAS = ").concat(filasJson, ";\n    var ALTO_UTIL = ").concat(altoPx, ";\n    var SEGURIDAD = 30; // px de holgura para que ninguna hoja se pase por redondeos.\n    function esc(s) { return String(s == null ? '' : s).replace(/[&<>\"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]; }); }\n    function fila(f, i) {\n        return '<tr><td>' + (i + 1) + '</td><td>' + esc(f.cod) + '</td><td>' + esc(f.codProv) + '</td><td>' + esc(f.desc) + '</td><td style=\"text-align:right\">' + esc(f.cant) + '</td></tr>';\n    }\n    var tplEnc = document.getElementById('tpl-enc').innerHTML;\n    var cols = document.getElementById('tpl-cols').innerHTML;\n    var firmas = document.getElementById('tpl-firmas').innerHTML;\n    function enc(nroHoja) { return tplEnc.replace('__PAG__', String(nroHoja)); }\n    // Anchos de columna fijos (px). Sin esto cada hoja repartir\xEDa las columnas seg\xFAn sus propias\n    // filas (p. ej. \"#\" de 1 o 2 d\xEDgitos) y las alturas medidas no coincidir\xEDan con las impresas.\n    var anchosCol = null;\n    function tabla(filasHtml) {\n        var colgroup = anchosCol ? '<colgroup>' + anchosCol.map(function (w) { return '<col style=\"width:' + w + 'px\">'; }).join('') + '</colgroup>' : '';\n        var estilo = anchosCol ? ' style=\"table-layout:fixed\"' : '';\n        return '<table' + estilo + '>' + colgroup + '<thead>' + cols + '</thead><tbody>' + filasHtml + '</tbody></table>';\n    }\n\n    // 1) Medir. Primero se renderiza la tabla completa con layout autom\xE1tico para obtener los\n    //    anchos de columna que acomodan TODO el contenido; luego se vuelve a renderizar con esos\n    //    anchos fijos (igual que saldr\xE1 cada hoja) y se toman las alturas de cada fila.\n    var medidor = document.createElement('div');\n    medidor.className = 'pagina medir';\n    medidor.innerHTML = enc(1) + tabla(FILAS.map(fila).join('')) + firmas;\n    document.body.appendChild(medidor);\n    var filaRef = medidor.querySelector('tbody tr') || medidor.querySelector('thead tr');\n    anchosCol = Array.prototype.map.call(filaRef.children, function (c) { return c.offsetWidth; });\n    // Reparto igual al de la impresi\xF3n original: #, C\xF3digo, C\xF3d. proveedor y Cantidad al ancho de su\n    // contenido (los t\xEDtulos de columna se parten si hace falta) y TODO el resto para Descripci\xF3n.\n    if (FILAS.length) {\n        medidor.innerHTML = '<table style=\"width:auto;table-layout:auto\"><tbody>' + FILAS.map(fila).join('') + '</tbody></table>';\n        var mc = Array.prototype.map.call(medidor.querySelector('tbody tr').children, function (c) { return c.offsetWidth; });\n        // Ancho m\xEDnimo de cada t\xEDtulo de columna (su palabra m\xE1s larga), para que no se desborde.\n        medidor.innerHTML = '<table style=\"width:1px;table-layout:auto\"><thead>' + cols + '</thead></table>';\n        var mh = Array.prototype.map.call(medidor.querySelector('thead tr').children, function (c) { return c.offsetWidth; });\n        for (var k = 0; k < mc.length; k++) { if (mh[k] > mc[k]) { mc[k] = mh[k]; } }\n        var resto = ").concat(anchoPx, " - (mc[0] + mc[1] + mc[2] + mc[4]);\n        if (resto >= 200) { anchosCol = [mc[0], mc[1], mc[2], resto, mc[4]]; }\n    }\n    medidor.innerHTML = enc(1) + tabla(FILAS.map(fila).join('')) + firmas;\n    var hEnc = medidor.querySelector('.enc').offsetHeight;\n    var hCols = medidor.querySelector('thead').offsetHeight;\n    var hFirmas = medidor.querySelector('.firmas-wrap').offsetHeight;\n    var alturas = Array.prototype.map.call(medidor.querySelectorAll('tbody tr'), function (tr) { return tr.offsetHeight; });\n    document.body.removeChild(medidor);\n\n    // 2) Repartir filas en p\xE1ginas. La \xFAltima p\xE1gina debe dejar lugar para las firmas.\n    var presupuesto = ALTO_UTIL - hEnc - hCols - SEGURIDAD;\n    var paginas = [];\n    var actual = [];\n    var usado = 0;\n    for (var i = 0; i < FILAS.length; i++) {\n        var extra = (i === FILAS.length - 1) ? hFirmas : 0;\n        if (actual.length && usado + alturas[i] + extra > presupuesto) {\n            paginas.push(actual);\n            actual = [];\n            usado = 0;\n        }\n        actual.push(i);\n        usado += alturas[i];\n    }\n    paginas.push(actual);\n\n    // 3) Armar cada hoja con su n\xFAmero propio (base + n\xB0 de hoja).\n    var html = '';\n    for (var p = 0; p < paginas.length; p++) {\n        var filasHtml = paginas[p].map(function (idx) { return fila(FILAS[idx], idx); }).join('');\n        var esUltima = (p === paginas.length - 1);\n        html += '<div class=\"pagina\">' + enc(p + 1) + tabla(filasHtml) + (esUltima ? firmas : '') + '</div>';\n    }\n    document.getElementById('hojas').innerHTML = html;\n    window.__guiaPaginada = { hojas: paginas.length };\n})();\n</script>\n</body></html>");
+  return "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>".concat(escHtml(o.tituloVentana), "</title>\n<style>\n@page{size:letter portrait;margin:").concat(escHtml(o.margenesMm), ";}\nhtml,body{margin:0;padding:0;} body{font-family:sans-serif;}\ntable{border-collapse:collapse;width:100%;} th,td{border:1px solid #ccc;text-align:left;} th{background:#f3f4f6;}\n").concat(cssTamanos, "\n.pagina{width:").concat(anchoPx, "px;page-break-after:always;} .pagina:last-child{page-break-after:auto;}\n.enc{position:relative;height:180px;line-height:1.25;}\n.enc .header{position:absolute;left:0;bottom:1rem;margin:0;}\n.enc .titulo-guia{position:absolute;right:0;bottom:1rem;margin:0;text-align:right;font-weight:bold;}\n.firmas-wrap{overflow:hidden;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;}\n.medir{position:absolute;left:-10000px;top:0;visibility:hidden;}\n</style></head><body>\n<template id=\"tpl-enc\">\n<div class=\"enc\">\n    <div class=\"header\">\n        <div><strong>Cliente</strong></div>\n        <div>Raz\xF3n Social: ").concat(escHtml(o.clienteRazon), "</div>\n        <div>RIF: ").concat(escHtml(o.clienteRif), "</div>\n        <div>Direcci\xF3n: ").concat(escHtml(o.clienteDir), "</div>\n        <div style=\"margin-top:0.5rem;\"><strong>Origen:</strong> ").concat(escHtml(o.origenNombre), "</div>\n    </div>\n    <div class=\"titulo-guia\">Gu\xEDa de Despacho N\xB0: ").concat(escHtml(o.numeroBase), "__PAG__<br>Emisi\xF3n-").concat(escHtml(o.fechaEmision), "</div>\n</div>\n</template>\n<template id=\"tpl-cols\"><tr><th>#</th><th>C\xF3digo</th><th>C\xF3d. proveedor</th><th>Descripci\xF3n</th><th style=\"text-align:right\">Cantidad</th></tr></template>\n<template id=\"tpl-firmas\">\n<div class=\"firmas-wrap\"><div class=\"firmas\">\n    <div><div style=\"border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;\">Firma del Despachador</div></div>\n    <div><div style=\"border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;\">Firma del Receptor</div></div>\n</div></div>\n</template>\n<div id=\"hojas\"></div>\n<script>\n(function () {\n    var FILAS = ").concat(filasJson, ";\n    var ALTO_UTIL = ").concat(altoPx, ";\n    var ANCHO_UTIL = ").concat(anchoPx, ";\n    var CANDIDATOS = ").concat(JSON.stringify(candidatos), ";\n    var SEGURIDAD = 30; // px de holgura para que ninguna hoja se pase por redondeos.\n    function esc(s) { return String(s == null ? '' : s).replace(/[&<>\"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]; }); }\n    function fila(f, i) {\n        return '<tr><td>' + (i + 1) + '</td><td>' + esc(f.cod) + '</td><td>' + esc(f.codProv) + '</td><td>' + esc(f.desc) + '</td><td style=\"text-align:right\">' + esc(f.cant) + '</td></tr>';\n    }\n    var tplEnc = document.getElementById('tpl-enc').innerHTML;\n    var cols = document.getElementById('tpl-cols').innerHTML;\n    var firmas = document.getElementById('tpl-firmas').innerHTML;\n    function enc(nroHoja) { return tplEnc.replace('__PAG__', String(nroHoja)); }\n    // Anchos de columna fijos (px). Sin esto cada hoja repartir\xEDa las columnas seg\xFAn sus propias\n    // filas (p. ej. \"#\" de 1 o 2 d\xEDgitos) y las alturas medidas no coincidir\xEDan con las impresas.\n    function tabla(filasHtml, anchosCol) {\n        var colgroup = anchosCol ? '<colgroup>' + anchosCol.map(function (w) { return '<col style=\"width:' + w + 'px\">'; }).join('') + '</colgroup>' : '';\n        var estilo = anchosCol ? ' style=\"table-layout:fixed\"' : '';\n        return '<table' + estilo + '>' + colgroup + '<thead>' + cols + '</thead><tbody>' + filasHtml + '</tbody></table>';\n    }\n    var todasHtml = FILAS.map(fila).join('');\n\n    // Mide y pagina con un tama\xF1o dado. Devuelve { tam, anchosCol, paginas } (paginas = \xEDndices de filas).\n    function paginar(tam) {\n        var medidor = document.createElement('div');\n        medidor.className = 'pagina medir t-' + tam;\n        document.body.appendChild(medidor);\n\n        // 1) Anchos de columna: primero la tabla completa con layout autom\xE1tico, para obtener anchos\n        //    que acomodan todo el contenido.\n        medidor.innerHTML = enc(1) + tabla(todasHtml, null) + firmas;\n        var filaRef = medidor.querySelector('tbody tr') || medidor.querySelector('thead tr');\n        var anchosCol = Array.prototype.map.call(filaRef.children, function (c) { return c.offsetWidth; });\n        // Reparto igual al de la impresi\xF3n original: #, C\xF3digo, C\xF3d. proveedor y Cantidad al ancho de\n        // su contenido (los t\xEDtulos de columna se parten si hace falta) y TODO el resto para Descripci\xF3n.\n        if (FILAS.length) {\n            medidor.innerHTML = '<table style=\"width:auto;table-layout:auto\"><tbody>' + todasHtml + '</tbody></table>';\n            var mc = Array.prototype.map.call(medidor.querySelector('tbody tr').children, function (c) { return c.offsetWidth; });\n            // Ancho m\xEDnimo de cada t\xEDtulo de columna (su palabra m\xE1s larga), para que no se desborde.\n            medidor.innerHTML = '<table style=\"width:1px;table-layout:auto\"><thead>' + cols + '</thead></table>';\n            var mh = Array.prototype.map.call(medidor.querySelector('thead tr').children, function (c) { return c.offsetWidth; });\n            for (var k = 0; k < mc.length; k++) { if (mh[k] > mc[k]) { mc[k] = mh[k]; } }\n            var resto = ANCHO_UTIL - (mc[0] + mc[1] + mc[2] + mc[4]);\n            if (resto >= 200) { anchosCol = [mc[0], mc[1], mc[2], resto, mc[4]]; }\n        }\n\n        // 2) Alturas reales con esos anchos fijos (igual que saldr\xE1 cada hoja).\n        medidor.innerHTML = enc(1) + tabla(todasHtml, anchosCol) + firmas;\n        var hEnc = medidor.querySelector('.enc').offsetHeight;\n        var hCols = medidor.querySelector('thead').offsetHeight;\n        var hFirmas = medidor.querySelector('.firmas-wrap').offsetHeight;\n        var alturas = Array.prototype.map.call(medidor.querySelectorAll('tbody tr'), function (tr) { return tr.offsetHeight; });\n        document.body.removeChild(medidor);\n\n        // 3) Repartir filas en p\xE1ginas. La \xFAltima p\xE1gina debe dejar lugar para las firmas.\n        var presupuesto = ALTO_UTIL - hEnc - hCols - SEGURIDAD;\n        var paginas = [];\n        var actual = [];\n        var usado = 0;\n        for (var i = 0; i < FILAS.length; i++) {\n            var extra = (i === FILAS.length - 1) ? hFirmas : 0;\n            if (actual.length && usado + alturas[i] + extra > presupuesto) {\n                paginas.push(actual);\n                actual = [];\n                usado = 0;\n            }\n            actual.push(i);\n            usado += alturas[i];\n        }\n        paginas.push(actual);\n        return { tam: tam, anchosCol: anchosCol, paginas: paginas };\n    }\n\n    // Autom\xE1tico: el primer tama\xF1o (de mayor a menor) con el que todo entra en UNA hoja; si ninguno,\n    // el \xFAltimo (el m\xE1s chico) en varias hojas. Con tama\xF1o fijo hay un solo candidato.\n    var elegido = null;\n    for (var c = 0; c < CANDIDATOS.length; c++) {\n        elegido = paginar(CANDIDATOS[c]);\n        if (elegido.paginas.length === 1) { break; }\n    }\n\n    // 4) Armar cada hoja con su n\xFAmero propio (base + n\xB0 de hoja).\n    var html = '';\n    for (var p = 0; p < elegido.paginas.length; p++) {\n        var filasHtml = elegido.paginas[p].map(function (idx) { return fila(FILAS[idx], idx); }).join('');\n        var esUltima = (p === elegido.paginas.length - 1);\n        html += '<div class=\"pagina t-' + elegido.tam + '\">' + enc(p + 1) + tabla(filasHtml, elegido.anchosCol) + (esUltima ? firmas : '') + '</div>';\n    }\n    document.getElementById('hojas').innerHTML = html;\n    window.__guiaPaginada = { hojas: elegido.paginas.length, tamano: elegido.tam };\n})();\n</script>\n</body></html>");
 };
 
 /** Abre la ventana, escribe la guía paginada e imprime. */
