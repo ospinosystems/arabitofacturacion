@@ -139181,7 +139181,27 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
     _useState102 = _slicedToArray(_useState101, 2),
     despPorPagina = _useState102[0],
     setDespPorPagina = _useState102[1];
-  var _useState103 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
+  // Tamaño de la tabla al imprimir la Guía de Despacho (normal / mediano / compacto). Se recuerda por equipo.
+  var LS_TAMANO_GUIA = 'guiaDespacho.tamano';
+  var _useState103 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(function () {
+      try {
+        var v = localStorage.getItem(LS_TAMANO_GUIA);
+        return _guiaDespachoPrint__WEBPACK_IMPORTED_MODULE_2__.TAMANOS_GUIA[v] ? v : _guiaDespachoPrint__WEBPACK_IMPORTED_MODULE_2__.TAMANO_GUIA_DEFAULT;
+      } catch (e) {
+        return _guiaDespachoPrint__WEBPACK_IMPORTED_MODULE_2__.TAMANO_GUIA_DEFAULT;
+      }
+    }),
+    _useState104 = _slicedToArray(_useState103, 2),
+    tamanoGuia = _useState104[0],
+    setTamanoGuiaState = _useState104[1];
+  var setTamanoGuia = function setTamanoGuia(v) {
+    var val = _guiaDespachoPrint__WEBPACK_IMPORTED_MODULE_2__.TAMANOS_GUIA[v] ? v : _guiaDespachoPrint__WEBPACK_IMPORTED_MODULE_2__.TAMANO_GUIA_DEFAULT;
+    setTamanoGuiaState(val);
+    try {
+      localStorage.setItem(LS_TAMANO_GUIA, val);
+    } catch (e) {/* sin almacenamiento: solo esta sesión */}
+  };
+  var _useState105 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({
       current_page: 1,
       last_page: 1,
       per_page: 20,
@@ -139189,41 +139209,41 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       from: 0,
       to: 0
     }),
-    _useState104 = _slicedToArray(_useState103, 2),
-    despPag = _useState104[0],
-    setDespPag = _useState104[1];
-  var _useState105 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState106 = _slicedToArray(_useState105, 2),
-    cargandoDespachadas = _useState106[0],
-    setCargandoDespachadas = _useState106[1];
-  // Código de la sucursal ORIGEN (este galpón), para resolver sus datos fiscales en la guía.
-  var _useState107 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    despPag = _useState106[0],
+    setDespPag = _useState106[1];
+  var _useState107 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState108 = _slicedToArray(_useState107, 2),
-    origenCodigo = _useState108[0],
-    setOrigenCodigo = _useState108[1];
-  // Loading al cargar las órdenes (premontas + borradores).
-  var _useState109 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
+    cargandoDespachadas = _useState108[0],
+    setCargandoDespachadas = _useState108[1];
+  // Código de la sucursal ORIGEN (este galpón), para resolver sus datos fiscales en la guía.
+  var _useState109 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState110 = _slicedToArray(_useState109, 2),
-    cargandoOrdenes = _useState110[0],
-    setCargandoOrdenes = _useState110[1];
-  // Modal de previsualización de ítems de una orden (despachadas): la orden a mostrar.
-  var _useState111 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    origenCodigo = _useState110[0],
+    setOrigenCodigo = _useState110[1];
+  // Loading al cargar las órdenes (premontas + borradores).
+  var _useState111 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(true),
     _useState112 = _slicedToArray(_useState111, 2),
-    itemsOrden = _useState112[0],
-    setItemsOrden = _useState112[1];
-  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
+    cargandoOrdenes = _useState112[0],
+    setCargandoOrdenes = _useState112[1];
+  // Modal de previsualización de ítems de una orden (despachadas): la orden a mostrar.
   var _useState113 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState114 = _slicedToArray(_useState113, 2),
-    bultosOrden = _useState114[0],
-    setBultosOrden = _useState114[1];
-  var _useState115 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
+    itemsOrden = _useState114[0],
+    setItemsOrden = _useState114[1];
+  // Modal de impresión de bultos (transferencia): la orden + nº + url del iframe.
+  var _useState115 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
     _useState116 = _slicedToArray(_useState115, 2),
-    numBultosInput = _useState116[0],
-    setNumBultosInput = _useState116[1];
-  var _useState117 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    bultosOrden = _useState116[0],
+    setBultosOrden = _useState116[1];
+  var _useState117 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(''),
     _useState118 = _slicedToArray(_useState117, 2),
-    bultosIframeUrl = _useState118[0],
-    setBultosIframeUrl = _useState118[1];
+    numBultosInput = _useState118[0],
+    setNumBultosInput = _useState118[1];
+  var _useState119 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null),
+    _useState120 = _slicedToArray(_useState119, 2),
+    bultosIframeUrl = _useState120[0],
+    setBultosIframeUrl = _useState120[1];
   var refIframeBultos = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var cargarTransferencias = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
     var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5(filtros) {
@@ -140102,7 +140122,8 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       clienteDir: clienteDir,
       origenNombre: origenNombre,
       filas: filas,
-      margenesMm: MARGENES_IMPRESION.guiaDespacho
+      margenesMm: MARGENES_IMPRESION.guiaDespacho,
+      tamano: tamanoGuia
     });
   };
 
@@ -140766,20 +140787,42 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
                 className: "text-xs text-emerald-600",
                 children: "Inventario ya descontado. Imprim\xED la Gu\xEDa de Despacho y las etiquetas de bultos."
               })]
-            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsxs)("label", {
-              className: "text-xs text-emerald-700 flex items-center gap-1 whitespace-nowrap",
-              children: ["Por p\xE1gina:", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("select", {
-                value: despPorPagina,
-                onChange: function onChange(e) {
-                  return setDespPorPagina(Number(e.target.value));
-                },
-                className: "px-1.5 py-1 text-xs border border-emerald-300 rounded bg-white",
-                children: [10, 20, 50, 100].map(function (n) {
-                  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("option", {
-                    value: n,
-                    children: n
-                  }, n);
-                })
+            }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsxs)("div", {
+              className: "flex flex-wrap items-center gap-3",
+              children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsxs)("label", {
+                className: "text-xs text-emerald-700 flex items-center gap-1 whitespace-nowrap",
+                title: "Tama\xF1o de letra de la tabla al imprimir la Gu\xEDa de Despacho. M\xE1s chico = m\xE1s productos por hoja.",
+                children: ["Tama\xF1o gu\xEDa:", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("select", {
+                  value: tamanoGuia,
+                  onChange: function onChange(e) {
+                    return setTamanoGuia(e.target.value);
+                  },
+                  className: "px-1.5 py-1 text-xs border border-emerald-300 rounded bg-white",
+                  children: Object.entries(_guiaDespachoPrint__WEBPACK_IMPORTED_MODULE_2__.TAMANOS_GUIA).map(function (_ref30) {
+                    var _ref31 = _slicedToArray(_ref30, 2),
+                      k = _ref31[0],
+                      t = _ref31[1];
+                    return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("option", {
+                      value: k,
+                      children: t.etiqueta
+                    }, k);
+                  })
+                })]
+              }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsxs)("label", {
+                className: "text-xs text-emerald-700 flex items-center gap-1 whitespace-nowrap",
+                children: ["Por p\xE1gina:", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("select", {
+                  value: despPorPagina,
+                  onChange: function onChange(e) {
+                    return setDespPorPagina(Number(e.target.value));
+                  },
+                  className: "px-1.5 py-1 text-xs border border-emerald-300 rounded bg-white",
+                  children: [10, 20, 50, 100].map(function (n) {
+                    return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("option", {
+                      value: n,
+                      children: n
+                    }, n);
+                  })
+                })]
               })]
             })]
           }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("div", {
@@ -159629,6 +159672,8 @@ var RevisionStep = function RevisionStep(_ref) {
 "use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   TAMANOS_GUIA: () => (/* binding */ TAMANOS_GUIA),
+/* harmony export */   TAMANO_GUIA_DEFAULT: () => (/* binding */ TAMANO_GUIA_DEFAULT),
 /* harmony export */   construirHtmlGuiaDespacho: () => (/* binding */ construirHtmlGuiaDespacho),
 /* harmony export */   formatearCantidadGuia: () => (/* binding */ formatearCantidadGuia),
 /* harmony export */   imprimirGuiaDespachoPaginada: () => (/* binding */ imprimirGuiaDespachoPaginada)
@@ -159686,6 +159731,27 @@ var escHtml = function escHtml(s) {
   });
 };
 
+// Tamaños de la tabla de productos (el encabezado de la hoja no cambia: está alineado a la forma
+// libre preimpresa). A menor letra y relleno, más filas por hoja.
+var TAMANOS_GUIA = {
+  normal: {
+    etiqueta: 'Normal',
+    fontSize: '16px',
+    padding: '6px 10px'
+  },
+  mediano: {
+    etiqueta: 'Mediano',
+    fontSize: '14px',
+    padding: '4px 8px'
+  },
+  compacto: {
+    etiqueta: 'Compacto',
+    fontSize: '12px',
+    padding: '2px 6px'
+  }
+};
+var TAMANO_GUIA_DEFAULT = 'normal';
+
 /** Cantidad para la tabla: entera sin decimales, si no con 2. */
 var formatearCantidadGuia = function formatearCantidadGuia(cantidad) {
   var cant = Number(cantidad);
@@ -159705,14 +159771,16 @@ var formatearCantidadGuia = function formatearCantidadGuia(cantidad) {
  * @param {string} o.origenNombre
  * @param {Array<{cod:string, codProv:string, desc:string, cant:string}>} o.filas
  * @param {string} o.margenesMm   Shorthand CSS en mm: "TOP RIGHT BOTTOM LEFT".
+ * @param {string} [o.tamano]     'normal' | 'mediano' | 'compacto' (ver TAMANOS_GUIA).
  */
 var construirHtmlGuiaDespacho = function construirHtmlGuiaDespacho(o) {
   var m = parseMargenesMm(o.margenesMm);
   var anchoPx = Math.floor((CARTA_ANCHO_MM - m.left - m.right) * MM_A_PX);
   var altoPx = Math.floor((CARTA_ALTO_MM - m.top - m.bottom) * MM_A_PX);
+  var tam = TAMANOS_GUIA[o.tamano] || TAMANOS_GUIA[TAMANO_GUIA_DEFAULT];
   // Datos de filas embebidos como JSON; se escapa "<" para que nunca cierre el <script>.
   var filasJson = JSON.stringify(o.filas || []).replace(/</g, "\\u003c");
-  return "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>".concat(escHtml(o.tituloVentana), "</title>\n<style>\n@page{size:letter portrait;margin:").concat(escHtml(o.margenesMm), ";}\nhtml,body{margin:0;padding:0;} body{font-family:sans-serif;}\ntable{border-collapse:collapse;width:100%;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;}\n.pagina{width:").concat(anchoPx, "px;page-break-after:always;} .pagina:last-child{page-break-after:auto;}\n.enc{position:relative;height:180px;line-height:1.25;}\n.enc .header{position:absolute;left:0;bottom:1rem;margin:0;}\n.enc .titulo-guia{position:absolute;right:0;bottom:1rem;margin:0;text-align:right;font-weight:bold;}\n.firmas-wrap{overflow:hidden;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;}\n.medir{position:absolute;left:-10000px;top:0;visibility:hidden;}\n</style></head><body>\n<template id=\"tpl-enc\">\n<div class=\"enc\">\n    <div class=\"header\">\n        <div><strong>Cliente</strong></div>\n        <div>Raz\xF3n Social: ").concat(escHtml(o.clienteRazon), "</div>\n        <div>RIF: ").concat(escHtml(o.clienteRif), "</div>\n        <div>Direcci\xF3n: ").concat(escHtml(o.clienteDir), "</div>\n        <div style=\"margin-top:0.5rem;\"><strong>Origen:</strong> ").concat(escHtml(o.origenNombre), "</div>\n    </div>\n    <div class=\"titulo-guia\">Gu\xEDa de Despacho N\xB0: ").concat(escHtml(o.numeroBase), "__PAG__<br>Emisi\xF3n-").concat(escHtml(o.fechaEmision), "</div>\n</div>\n</template>\n<template id=\"tpl-cols\"><tr><th>#</th><th>C\xF3digo</th><th>C\xF3d. proveedor</th><th>Descripci\xF3n</th><th style=\"text-align:right\">Cantidad</th></tr></template>\n<template id=\"tpl-firmas\">\n<div class=\"firmas-wrap\"><div class=\"firmas\">\n    <div><div style=\"border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;\">Firma del Despachador</div></div>\n    <div><div style=\"border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;\">Firma del Receptor</div></div>\n</div></div>\n</template>\n<div id=\"hojas\"></div>\n<script>\n(function () {\n    var FILAS = ").concat(filasJson, ";\n    var ALTO_UTIL = ").concat(altoPx, ";\n    var SEGURIDAD = 30; // px de holgura para que ninguna hoja se pase por redondeos.\n    function esc(s) { return String(s == null ? '' : s).replace(/[&<>\"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]; }); }\n    function fila(f, i) {\n        return '<tr><td>' + (i + 1) + '</td><td>' + esc(f.cod) + '</td><td>' + esc(f.codProv) + '</td><td>' + esc(f.desc) + '</td><td style=\"text-align:right\">' + esc(f.cant) + '</td></tr>';\n    }\n    var tplEnc = document.getElementById('tpl-enc').innerHTML;\n    var cols = document.getElementById('tpl-cols').innerHTML;\n    var firmas = document.getElementById('tpl-firmas').innerHTML;\n    function enc(nroHoja) { return tplEnc.replace('__PAG__', String(nroHoja)); }\n    // Anchos de columna fijos (px). Sin esto cada hoja repartir\xEDa las columnas seg\xFAn sus propias\n    // filas (p. ej. \"#\" de 1 o 2 d\xEDgitos) y las alturas medidas no coincidir\xEDan con las impresas.\n    var anchosCol = null;\n    function tabla(filasHtml) {\n        var colgroup = anchosCol ? '<colgroup>' + anchosCol.map(function (w) { return '<col style=\"width:' + w + 'px\">'; }).join('') + '</colgroup>' : '';\n        var estilo = anchosCol ? ' style=\"table-layout:fixed\"' : '';\n        return '<table' + estilo + '>' + colgroup + '<thead>' + cols + '</thead><tbody>' + filasHtml + '</tbody></table>';\n    }\n\n    // 1) Medir. Primero se renderiza la tabla completa con layout autom\xE1tico para obtener los\n    //    anchos de columna que acomodan TODO el contenido; luego se vuelve a renderizar con esos\n    //    anchos fijos (igual que saldr\xE1 cada hoja) y se toman las alturas de cada fila.\n    var medidor = document.createElement('div');\n    medidor.className = 'pagina medir';\n    medidor.innerHTML = enc(1) + tabla(FILAS.map(fila).join('')) + firmas;\n    document.body.appendChild(medidor);\n    var filaRef = medidor.querySelector('tbody tr') || medidor.querySelector('thead tr');\n    anchosCol = Array.prototype.map.call(filaRef.children, function (c) { return c.offsetWidth; });\n    // Reparto igual al de la impresi\xF3n original: #, C\xF3digo, C\xF3d. proveedor y Cantidad al ancho de su\n    // contenido (los t\xEDtulos de columna se parten si hace falta) y TODO el resto para Descripci\xF3n.\n    if (FILAS.length) {\n        medidor.innerHTML = '<table style=\"width:auto;table-layout:auto\"><tbody>' + FILAS.map(fila).join('') + '</tbody></table>';\n        var mc = Array.prototype.map.call(medidor.querySelector('tbody tr').children, function (c) { return c.offsetWidth; });\n        // Ancho m\xEDnimo de cada t\xEDtulo de columna (su palabra m\xE1s larga), para que no se desborde.\n        medidor.innerHTML = '<table style=\"width:1px;table-layout:auto\"><thead>' + cols + '</thead></table>';\n        var mh = Array.prototype.map.call(medidor.querySelector('thead tr').children, function (c) { return c.offsetWidth; });\n        for (var k = 0; k < mc.length; k++) { if (mh[k] > mc[k]) { mc[k] = mh[k]; } }\n        var resto = ").concat(anchoPx, " - (mc[0] + mc[1] + mc[2] + mc[4]);\n        if (resto >= 200) { anchosCol = [mc[0], mc[1], mc[2], resto, mc[4]]; }\n    }\n    medidor.innerHTML = enc(1) + tabla(FILAS.map(fila).join('')) + firmas;\n    var hEnc = medidor.querySelector('.enc').offsetHeight;\n    var hCols = medidor.querySelector('thead').offsetHeight;\n    var hFirmas = medidor.querySelector('.firmas-wrap').offsetHeight;\n    var alturas = Array.prototype.map.call(medidor.querySelectorAll('tbody tr'), function (tr) { return tr.offsetHeight; });\n    document.body.removeChild(medidor);\n\n    // 2) Repartir filas en p\xE1ginas. La \xFAltima p\xE1gina debe dejar lugar para las firmas.\n    var presupuesto = ALTO_UTIL - hEnc - hCols - SEGURIDAD;\n    var paginas = [];\n    var actual = [];\n    var usado = 0;\n    for (var i = 0; i < FILAS.length; i++) {\n        var extra = (i === FILAS.length - 1) ? hFirmas : 0;\n        if (actual.length && usado + alturas[i] + extra > presupuesto) {\n            paginas.push(actual);\n            actual = [];\n            usado = 0;\n        }\n        actual.push(i);\n        usado += alturas[i];\n    }\n    paginas.push(actual);\n\n    // 3) Armar cada hoja con su n\xFAmero propio (base + n\xB0 de hoja).\n    var html = '';\n    for (var p = 0; p < paginas.length; p++) {\n        var filasHtml = paginas[p].map(function (idx) { return fila(FILAS[idx], idx); }).join('');\n        var esUltima = (p === paginas.length - 1);\n        html += '<div class=\"pagina\">' + enc(p + 1) + tabla(filasHtml) + (esUltima ? firmas : '') + '</div>';\n    }\n    document.getElementById('hojas').innerHTML = html;\n    window.__guiaPaginada = { hojas: paginas.length };\n})();\n</script>\n</body></html>");
+  return "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>".concat(escHtml(o.tituloVentana), "</title>\n<style>\n@page{size:letter portrait;margin:").concat(escHtml(o.margenesMm), ";}\nhtml,body{margin:0;padding:0;} body{font-family:sans-serif;}\ntable{border-collapse:collapse;width:100%;font-size:").concat(tam.fontSize, ";} th,td{border:1px solid #ccc;padding:").concat(tam.padding, ";text-align:left;} th{background:#f3f4f6;}\n.pagina{width:").concat(anchoPx, "px;page-break-after:always;} .pagina:last-child{page-break-after:auto;}\n.enc{position:relative;height:180px;line-height:1.25;}\n.enc .header{position:absolute;left:0;bottom:1rem;margin:0;}\n.enc .titulo-guia{position:absolute;right:0;bottom:1rem;margin:0;text-align:right;font-weight:bold;}\n.firmas-wrap{overflow:hidden;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;}\n.medir{position:absolute;left:-10000px;top:0;visibility:hidden;}\n</style></head><body>\n<template id=\"tpl-enc\">\n<div class=\"enc\">\n    <div class=\"header\">\n        <div><strong>Cliente</strong></div>\n        <div>Raz\xF3n Social: ").concat(escHtml(o.clienteRazon), "</div>\n        <div>RIF: ").concat(escHtml(o.clienteRif), "</div>\n        <div>Direcci\xF3n: ").concat(escHtml(o.clienteDir), "</div>\n        <div style=\"margin-top:0.5rem;\"><strong>Origen:</strong> ").concat(escHtml(o.origenNombre), "</div>\n    </div>\n    <div class=\"titulo-guia\">Gu\xEDa de Despacho N\xB0: ").concat(escHtml(o.numeroBase), "__PAG__<br>Emisi\xF3n-").concat(escHtml(o.fechaEmision), "</div>\n</div>\n</template>\n<template id=\"tpl-cols\"><tr><th>#</th><th>C\xF3digo</th><th>C\xF3d. proveedor</th><th>Descripci\xF3n</th><th style=\"text-align:right\">Cantidad</th></tr></template>\n<template id=\"tpl-firmas\">\n<div class=\"firmas-wrap\"><div class=\"firmas\">\n    <div><div style=\"border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;\">Firma del Despachador</div></div>\n    <div><div style=\"border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;\">Firma del Receptor</div></div>\n</div></div>\n</template>\n<div id=\"hojas\"></div>\n<script>\n(function () {\n    var FILAS = ").concat(filasJson, ";\n    var ALTO_UTIL = ").concat(altoPx, ";\n    var SEGURIDAD = 30; // px de holgura para que ninguna hoja se pase por redondeos.\n    function esc(s) { return String(s == null ? '' : s).replace(/[&<>\"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]; }); }\n    function fila(f, i) {\n        return '<tr><td>' + (i + 1) + '</td><td>' + esc(f.cod) + '</td><td>' + esc(f.codProv) + '</td><td>' + esc(f.desc) + '</td><td style=\"text-align:right\">' + esc(f.cant) + '</td></tr>';\n    }\n    var tplEnc = document.getElementById('tpl-enc').innerHTML;\n    var cols = document.getElementById('tpl-cols').innerHTML;\n    var firmas = document.getElementById('tpl-firmas').innerHTML;\n    function enc(nroHoja) { return tplEnc.replace('__PAG__', String(nroHoja)); }\n    // Anchos de columna fijos (px). Sin esto cada hoja repartir\xEDa las columnas seg\xFAn sus propias\n    // filas (p. ej. \"#\" de 1 o 2 d\xEDgitos) y las alturas medidas no coincidir\xEDan con las impresas.\n    var anchosCol = null;\n    function tabla(filasHtml) {\n        var colgroup = anchosCol ? '<colgroup>' + anchosCol.map(function (w) { return '<col style=\"width:' + w + 'px\">'; }).join('') + '</colgroup>' : '';\n        var estilo = anchosCol ? ' style=\"table-layout:fixed\"' : '';\n        return '<table' + estilo + '>' + colgroup + '<thead>' + cols + '</thead><tbody>' + filasHtml + '</tbody></table>';\n    }\n\n    // 1) Medir. Primero se renderiza la tabla completa con layout autom\xE1tico para obtener los\n    //    anchos de columna que acomodan TODO el contenido; luego se vuelve a renderizar con esos\n    //    anchos fijos (igual que saldr\xE1 cada hoja) y se toman las alturas de cada fila.\n    var medidor = document.createElement('div');\n    medidor.className = 'pagina medir';\n    medidor.innerHTML = enc(1) + tabla(FILAS.map(fila).join('')) + firmas;\n    document.body.appendChild(medidor);\n    var filaRef = medidor.querySelector('tbody tr') || medidor.querySelector('thead tr');\n    anchosCol = Array.prototype.map.call(filaRef.children, function (c) { return c.offsetWidth; });\n    // Reparto igual al de la impresi\xF3n original: #, C\xF3digo, C\xF3d. proveedor y Cantidad al ancho de su\n    // contenido (los t\xEDtulos de columna se parten si hace falta) y TODO el resto para Descripci\xF3n.\n    if (FILAS.length) {\n        medidor.innerHTML = '<table style=\"width:auto;table-layout:auto\"><tbody>' + FILAS.map(fila).join('') + '</tbody></table>';\n        var mc = Array.prototype.map.call(medidor.querySelector('tbody tr').children, function (c) { return c.offsetWidth; });\n        // Ancho m\xEDnimo de cada t\xEDtulo de columna (su palabra m\xE1s larga), para que no se desborde.\n        medidor.innerHTML = '<table style=\"width:1px;table-layout:auto\"><thead>' + cols + '</thead></table>';\n        var mh = Array.prototype.map.call(medidor.querySelector('thead tr').children, function (c) { return c.offsetWidth; });\n        for (var k = 0; k < mc.length; k++) { if (mh[k] > mc[k]) { mc[k] = mh[k]; } }\n        var resto = ").concat(anchoPx, " - (mc[0] + mc[1] + mc[2] + mc[4]);\n        if (resto >= 200) { anchosCol = [mc[0], mc[1], mc[2], resto, mc[4]]; }\n    }\n    medidor.innerHTML = enc(1) + tabla(FILAS.map(fila).join('')) + firmas;\n    var hEnc = medidor.querySelector('.enc').offsetHeight;\n    var hCols = medidor.querySelector('thead').offsetHeight;\n    var hFirmas = medidor.querySelector('.firmas-wrap').offsetHeight;\n    var alturas = Array.prototype.map.call(medidor.querySelectorAll('tbody tr'), function (tr) { return tr.offsetHeight; });\n    document.body.removeChild(medidor);\n\n    // 2) Repartir filas en p\xE1ginas. La \xFAltima p\xE1gina debe dejar lugar para las firmas.\n    var presupuesto = ALTO_UTIL - hEnc - hCols - SEGURIDAD;\n    var paginas = [];\n    var actual = [];\n    var usado = 0;\n    for (var i = 0; i < FILAS.length; i++) {\n        var extra = (i === FILAS.length - 1) ? hFirmas : 0;\n        if (actual.length && usado + alturas[i] + extra > presupuesto) {\n            paginas.push(actual);\n            actual = [];\n            usado = 0;\n        }\n        actual.push(i);\n        usado += alturas[i];\n    }\n    paginas.push(actual);\n\n    // 3) Armar cada hoja con su n\xFAmero propio (base + n\xB0 de hoja).\n    var html = '';\n    for (var p = 0; p < paginas.length; p++) {\n        var filasHtml = paginas[p].map(function (idx) { return fila(FILAS[idx], idx); }).join('');\n        var esUltima = (p === paginas.length - 1);\n        html += '<div class=\"pagina\">' + enc(p + 1) + tabla(filasHtml) + (esUltima ? firmas : '') + '</div>';\n    }\n    document.getElementById('hojas').innerHTML = html;\n    window.__guiaPaginada = { hojas: paginas.length };\n})();\n</script>\n</body></html>");
 };
 
 /** Abre la ventana, escribe la guía paginada e imprime. */

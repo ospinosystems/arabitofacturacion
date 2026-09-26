@@ -23,6 +23,15 @@ const parseMargenesMm = (s) => {
 
 const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// Tamaños de la tabla de productos (el encabezado de la hoja no cambia: está alineado a la forma
+// libre preimpresa). A menor letra y relleno, más filas por hoja.
+export const TAMANOS_GUIA = {
+    normal:   { etiqueta: 'Normal',   fontSize: '16px', padding: '6px 10px' },
+    mediano:  { etiqueta: 'Mediano',  fontSize: '14px', padding: '4px 8px' },
+    compacto: { etiqueta: 'Compacto', fontSize: '12px', padding: '2px 6px' },
+};
+export const TAMANO_GUIA_DEFAULT = 'normal';
+
 /** Cantidad para la tabla: entera sin decimales, si no con 2. */
 export const formatearCantidadGuia = (cantidad) => {
     const cant = Number(cantidad);
@@ -42,11 +51,13 @@ export const formatearCantidadGuia = (cantidad) => {
  * @param {string} o.origenNombre
  * @param {Array<{cod:string, codProv:string, desc:string, cant:string}>} o.filas
  * @param {string} o.margenesMm   Shorthand CSS en mm: "TOP RIGHT BOTTOM LEFT".
+ * @param {string} [o.tamano]     'normal' | 'mediano' | 'compacto' (ver TAMANOS_GUIA).
  */
 export const construirHtmlGuiaDespacho = (o) => {
     const m = parseMargenesMm(o.margenesMm);
     const anchoPx = Math.floor((CARTA_ANCHO_MM - m.left - m.right) * MM_A_PX);
     const altoPx = Math.floor((CARTA_ALTO_MM - m.top - m.bottom) * MM_A_PX);
+    const tam = TAMANOS_GUIA[o.tamano] || TAMANOS_GUIA[TAMANO_GUIA_DEFAULT];
     // Datos de filas embebidos como JSON; se escapa "<" para que nunca cierre el <script>.
     const filasJson = JSON.stringify(o.filas || []).replace(/</g, '\\u003c');
 
@@ -54,7 +65,7 @@ export const construirHtmlGuiaDespacho = (o) => {
 <style>
 @page{size:letter portrait;margin:${escHtml(o.margenesMm)};}
 html,body{margin:0;padding:0;} body{font-family:sans-serif;}
-table{border-collapse:collapse;width:100%;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#f3f4f6;}
+table{border-collapse:collapse;width:100%;font-size:${tam.fontSize};} th,td{border:1px solid #ccc;padding:${tam.padding};text-align:left;} th{background:#f3f4f6;}
 .pagina{width:${anchoPx}px;page-break-after:always;} .pagina:last-child{page-break-after:auto;}
 .enc{position:relative;height:180px;line-height:1.25;}
 .enc .header{position:absolute;left:0;bottom:1rem;margin:0;}
