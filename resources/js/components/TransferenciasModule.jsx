@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import es from 'date-fns/locale/es';
 import db from '../database/database';
 
-import { imprimirGuiaDespachoPaginada, formatearCantidadGuia } from './guiaDespachoPrint';
+import { imprimirGuiaDespachoPaginada, formatearCantidadGuia, TAMANOS_GUIA, TAMANO_GUIA_DEFAULT } from './guiaDespachoPrint';
 // ── Márgenes de impresión (FIJOS en la hoja vía @page; NO dependen de lo que
 //    tenga configurado la impresora ni de que el usuario los ajuste). Para
 //    cambiarlos a futuro, editar acá. Formato CSS shorthand: "TOP RIGHT BOTTOM LEFT".
@@ -2127,6 +2127,16 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
     const [despachadas, setDespachadas] = useState([]);
     const [despPage, setDespPage] = useState(1);
     const [despPorPagina, setDespPorPagina] = useState(20);
+    // Tamaño de la tabla al imprimir la Guía de Despacho (normal / mediano / compacto). Se recuerda por equipo.
+    const LS_TAMANO_GUIA = 'guiaDespacho.tamano';
+    const [tamanoGuia, setTamanoGuiaState] = useState(() => {
+        try { const v = localStorage.getItem(LS_TAMANO_GUIA); return TAMANOS_GUIA[v] ? v : TAMANO_GUIA_DEFAULT; } catch (e) { return TAMANO_GUIA_DEFAULT; }
+    });
+    const setTamanoGuia = (v) => {
+        const val = TAMANOS_GUIA[v] ? v : TAMANO_GUIA_DEFAULT;
+        setTamanoGuiaState(val);
+        try { localStorage.setItem(LS_TAMANO_GUIA, val); } catch (e) { /* sin almacenamiento: solo esta sesión */ }
+    };
     const [despPag, setDespPag] = useState({ current_page: 1, last_page: 1, per_page: 20, total: 0, from: 0, to: 0 });
     const [cargandoDespachadas, setCargandoDespachadas] = useState(false);
     // Código de la sucursal ORIGEN (este galpón), para resolver sus datos fiscales en la guía.
@@ -2548,6 +2558,7 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
             tituloVentana: `Guía de Despacho N° ${id}`,
             fechaEmision, clienteRazon, clienteRif, clienteDir, origenNombre, filas,
             margenesMm: MARGENES_IMPRESION.guiaDespacho,
+            tamano: tamanoGuia,
         });
     };
 
@@ -2954,12 +2965,20 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
                                     <h4 className="text-sm font-bold text-emerald-800"><i className="fas fa-truck-fast mr-1"></i>Despachadas — listas para imprimir ({despPag.total})</h4>
                                     <p className="text-xs text-emerald-600">Inventario ya descontado. Imprimí la Guía de Despacho y las etiquetas de bultos.</p>
                                 </div>
+                                <div className="flex flex-wrap items-center gap-3">
+                                <label className="text-xs text-emerald-700 flex items-center gap-1 whitespace-nowrap" title="Tamaño de letra de la tabla al imprimir la Guía de Despacho. Más chico = más productos por hoja.">
+                                    Tamaño guía:
+                                    <select value={tamanoGuia} onChange={e => setTamanoGuia(e.target.value)} className="px-1.5 py-1 text-xs border border-emerald-300 rounded bg-white">
+                                        {Object.entries(TAMANOS_GUIA).map(([k, t]) => <option key={k} value={k}>{t.etiqueta}</option>)}
+                                    </select>
+                                </label>
                                 <label className="text-xs text-emerald-700 flex items-center gap-1 whitespace-nowrap">
                                     Por página:
                                     <select value={despPorPagina} onChange={e => setDespPorPagina(Number(e.target.value))} className="px-1.5 py-1 text-xs border border-emerald-300 rounded bg-white">
                                         {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
                                     </select>
                                 </label>
+                                </div>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="min-w-full text-sm divide-y divide-emerald-100">
