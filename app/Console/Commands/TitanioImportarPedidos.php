@@ -348,9 +348,9 @@ class TitanioImportarPedidos extends Command
         $pagosRows = [];
         $referenciasRows = [];
         foreach ($pagos as $p) {
-            $payType = $p['payment_type_name'] ?? null;
+            $payType = $this->normalizarTipoPago($p);
             $amount = (float) ($p['amount'] ?? 0);
-            $amountBs = (float) ($p['reference']['amount_in_ves'] ?? 0);
+            $amountBs = (float) ($p['reference']['amount_in_ves'] ?? $p['amount_in_ves'] ?? 0);
             $ref = $p['reference']['reference'] ?? null;
             $payDate = $p['reference']['pay_date'] ?? null;
             $pinpad = is_array($p['pinpad_response'] ?? null) ? $p['pinpad_response'] : null;
@@ -417,7 +417,7 @@ class TitanioImportarPedidos extends Command
                     break;
 
                 default:
-                    throw new \RuntimeException("tipo de pago desconocido: ".($payType ?? 'null'));
+                    throw new \RuntimeException('tipo de pago desconocido: '.($payType ?? 'null').' (name='.json_encode($p['name'] ?? $p['payment_type_name'] ?? null).', currency='.json_encode($p['currency'] ?? null).')');
             }
         }
 
@@ -630,15 +630,41 @@ class TitanioImportarPedidos extends Command
         }
     }
 
+    /**
+     * Clasifica un pago de la API en: debito | efectivo_usd | efectivo_ves | transferencia (o null si no se puede).
+     * La API antigua traía "payment_type_name" (pinpad, debito, efectivo_usd, efectivo_ves, transferencia); la actual trae
+     * "name" con esos mismos valores o con el nombre de la cuenta bancaria receptora (p. ej. "0134_banesco_omar_personal_0823",
+     * "zelle", "pago_movil"), que se tratan como transferencia.
+     */
+    private function normalizarTipoPago(array $p): ?string
+    {
+        $name = strtolower(trim((string) ($p['payment_type_name'] ?? $p['name'] ?? '')));
+        $currency = strtolower((string) ($p['currency'] ?? ''));
+        if ($name === '') {
+            return null;
+        }
+        if (in_array($name, ['pinpad', 'debito', 'debit', 'punto', 'punto_de_venta', 'tarjeta'], true)) {
+            return 'debito';
+        }
+        if ($name === 'efectivo_usd' || $name === 'efectivo_ves') {
+            return $name;
+        }
+        if (str_starts_with($name, 'efectivo') || $name === 'cash') {
+            return $currency === 'usd' ? 'efectivo_usd' : 'efectivo_ves';
+        }
+        // transferencia, pago_movil, zelle, binance, cuentas bancarias ("0134_banesco_…", "0102_bdv_…"), etc.
+        return 'transferencia';
+    }
+
     private function inferirTasa(array $pagos): float
     {
         foreach ($pagos as $p) {
             $usd = (float) ($p['amount'] ?? 0);
-            $bs = (float) ($p['reference']['amount_in_ves'] ?? 0);
+            $bs = (float) ($p['reference']['amount_in_ves'] ?? $p['amount_in_ves'] ?? 0);
             if ($usd > 0 && $bs > 0) {
                 return round($bs / $usd, 4);
             }
-            if (($p['payment_type_name'] ?? '') === 'pinpad' && isset($p['pinpad_response']['amount'])) {
+            if ($this->normalizarTipoPago($p) === 'debito' && isset($p['pinpad_response']['amount'])) {
                 $posBs = ((float) $p['pinpad_response']['amount']) / 100.0;
                 if ($usd > 0 && $posBs > 0) {
                     return round($posBs / $usd, 4);
