@@ -46,6 +46,9 @@ class TitanioImportarPedidos extends Command
     /** @var array<int,int> numero_caja → usuarios.id */
     private array $cajaUserIdCache = [];
 
+    /** Ítems importados sin descontar inventario por falta de existencia (se conservan pedido e ítems). */
+    private int $itemsSinStock = 0;
+
     /** @var array<int,bool> inventarios.id → existe */
     private array $productoExisteCache = [];
 
@@ -175,6 +178,9 @@ class TitanioImportarPedidos extends Command
 
         $this->newLine();
         $this->info('==== Resumen '.($dryRun ? '(DRY-RUN) ' : '').'storeId='.$this->storeId.' | '.count($fechas).' día(s) | '.round(microtime(true) - $inicio).' s ====');
+        if ($this->itemsSinStock > 0) {
+            $this->warn("ítems sin stock : {$this->itemsSinStock} (importados sin movimiento de inventario)");
+        }
         foreach ($totales as $k => $v) {
             $this->line(str_pad($k, 16).': '.($k === 'total_usd' ? number_format($v, 2) : $v));
         }
@@ -488,7 +494,16 @@ class TitanioImportarPedidos extends Command
                 $inv = inventario::find($idProd);
                 $ct1 = (float) $inv->cantidad;
                 $ctFinal = round($ct1 - $cantidad, 4);
-                $invCtrl->descontarInventario($idProd, $ctFinal, $ct1, $idPedido, 'IMPORT.TITANIO');
+                try {
+                    $invCtrl->descontarInventario($idProd, $ctFinal, $ct1, $idPedido, 'IMPORT.TITANIO');
+                } catch (\Throwable $e) {
+                    // Sin existencia suficiente (típico al importar sobre un respaldo anterior a las ventas): el pedido y
+                    // sus ítems se conservan igual; solo se omite el movimiento de inventario y se cuenta.
+                    if (stripos($e->getMessage(), 'No hay disponible') === false) {
+                        throw $e;
+                    }
+                    $this->itemsSinStock++;
+                }
             }
 
             $hasPagosMontoBs = Schema::hasColumn('pago_pedidos', 'monto_bs');

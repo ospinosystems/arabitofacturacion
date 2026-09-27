@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Schema;
  *   1. preparar   Descomprime, clasifica archivos y fusiona los objetivos en un CSV canónico. Estima tiempos.
  *   2. restaurar  BORRA todas las tablas de la BD local (.env) e importa el respaldo (mysql CLI o PHP).
  *   3. migrar     php artisan migrate --force (columnas del cuadre, tabla cuadre_ajustes, uuid, etc.).
+ *   3b. tasas    Recalcula tasa y monto_bs de items_pedidos con la tasa BCV del día (CSV) — los respaldos traen una tasa fija falsa.
  *   4. titanio    Importa desde Titanio POS los pedidos entre --titanio-desde y --titanio-hasta.
  *   5. respaldo   mysqldump de la BD ya completa (punto de retorno antes de cuadrar).
  *   6. simular    (opcional) corre la selección sin escribir y reporta ajustes por grupo.
@@ -35,6 +36,8 @@ class CuadreCompletoCommand extends Command
                             {--titanio-desde=2026-08-30 : Primer día a importar desde Titanio POS}
                             {--titanio-hasta= : Último día a importar desde Titanio POS (default hoy)}
                             {--sin-titanio : Omitir la importación desde Titanio POS}
+                            {--sin-tasas : No recalcular tasa/monto_bs de items_pedidos con la tasa BCV del día (paso tasas)}
+                            {--tasas-csv= : CSV de tasas BCV por día (default database/data/Tasas_BCV_2023_2024_2025.csv)}
                             {--sin-respaldo : No hacer mysqldump antes del cuadre}
                             {--simular-antes : Correr una simulación (sin escribir) antes del cuadre real}
                             {--solo-simular : Correr solo la simulación del cuadre y detenerse}
@@ -44,7 +47,7 @@ class CuadreCompletoCommand extends Command
                             {--umbral-ajuste=5 : % de ajuste a partir del cual se avisa}
                             {--trabajo= : Carpeta de trabajo (default storage/app/cuadre-completo/<sucursal>)}
                             {--mysql-bin= : Carpeta con mysql/mysqldump (default: detectar; en Windows C:\\xampp\\mysql\\bin)}
-                            {--paso= : Ejecutar solo este paso (preparar|restaurar|migrar|titanio|respaldo|simular|cuadre|medir)}
+                            {--paso= : Ejecutar solo este paso (preparar|restaurar|migrar|tasas|titanio|respaldo|simular|cuadre|medir)}
                             {--desde-paso= : Reanudar desde este paso aunque el estado lo marque como hecho}
                             {--reiniciar : Ignorar el estado guardado y empezar desde el primer paso}
                             {--permitir-remoto : Permitir restaurar sobre una BD cuyo host no es local}
@@ -53,7 +56,7 @@ class CuadreCompletoCommand extends Command
 
     protected $description = 'Proceso completo: restaurar respaldo de la sucursal, importar Titanio POS, cuadrar contra montos objetivo y medir.';
 
-    protected const PASOS = ['preparar', 'restaurar', 'migrar', 'titanio', 'respaldo', 'simular', 'cuadre', 'medir'];
+    protected const PASOS = ['preparar', 'restaurar', 'migrar', 'tasas', 'titanio', 'respaldo', 'simular', 'cuadre', 'medir'];
 
     protected string $carpeta = '';
     protected string $trabajo = '';
@@ -417,6 +420,39 @@ class CuadreCompletoCommand extends Command
             return false;
         }
         $this->log('Esquema listo (numero_factura, maquina_fiscal, valido, uuid, monto_bs, cuadre_ajustes).');
+        return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    //  Paso 3b: tasas — tasa BCV real por día en items_pedidos (los respaldos antiguos traen una tasa fija falsa)
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
+    protected function pasoTasas(CuadreCsvReader $reader): bool
+    {
+        if ($this->option('sin-tasas')) {
+            $this->log('Paso tasas omitido (--sin-tasas).');
+            return true;
+        }
+        DB::reconnect();
+        $csv = (string) ($this->option('tasas-csv') ?: base_path('database/data/Tasas_BCV_2023_2024_2025.csv'));
+        if (!is_file($csv)) {
+            $this->log("No existe el CSV de tasas BCV: {$csv}", 'error');
+            return false;
+        }
+        $antes = DB::table('items_pedidos')
+            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as mes, ROUND(AVG(tasa), 2) as tasa_prom, COUNT(*) as n")
+            ->groupBy('mes')->orderBy('mes')->get();
+        $this->log('Tasa promedio por mes en items_pedidos ANTES: ' . $antes->map(fn ($r) => "{$r->mes}={$r->tasa_prom}")->implode(' '));
+        $rc = $this->call('tasas-bcv:seed', ['path' => $csv]);
+        if ($rc !== 0) {
+            $this->log('tasas-bcv:seed no terminó limpio.', 'error');
+            return false;
+        }
+        $despues = DB::table('items_pedidos')
+            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as mes, ROUND(AVG(tasa), 2) as tasa_prom, SUM(monto_bs IS NULL) as sin_bs")
+            ->groupBy('mes')->orderBy('mes')->get();
+        $this->log('Tasa promedio por mes DESPUÉS: ' . $despues->map(fn ($r) => "{$r->mes}={$r->tasa_prom}" . ($r->sin_bs > 0 ? "(sin monto_bs: {$r->sin_bs})" : ''))->implode(' '));
+        $this->log('Los meses sin tasa en el CSV (p. ej. 2026) conservan la tasa que trae cada ítem.');
         return true;
     }
 
