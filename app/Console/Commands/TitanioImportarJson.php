@@ -20,9 +20,10 @@ class TitanioImportarJson extends Command
                             {--uuid= : Importar solo el pedido con este UUID (id)}
                             {--caja= : Forzar numero de caja (default: daily_cash_count_id)}
                             {--sobrescribir : Si el pedido ya existe lo reimporta (por defecto se salta)}
+                            {--sucursal= : Código esperado de la sucursal en la BD local (default env TITANIO_SUCURSAL; vacío = no verificar)}
                             {--reversar : Revertir lo importado (todos los uuids del JSON: repone inventario y borra pedido+items+pagos+refs)}';
 
-    protected $description = 'Importa pedidos desde un backup JSON local de Titanio POS (Guacara) cuando la API no está disponible';
+    protected $description = 'Importa pedidos desde un backup JSON local de Titanio POS cuando la API no está disponible';
 
     private const ID_CLIENTE = 1;
     private const BANCO_DEFECTO = '0102'; // Banco de Venezuela
@@ -43,10 +44,13 @@ class TitanioImportarJson extends Command
         $sobrescribir = (bool) $this->option('sobrescribir');
 
         $sucursal = DB::table('sucursals')->first();
-        if (! $sucursal || strtolower($sucursal->codigo) !== 'guacara') {
-            $this->error('Esta instancia no es Guacara (codigo='.($sucursal->codigo ?? '?').'). Aborto.');
+        $codigoBd = strtolower((string) ($sucursal->codigo ?? ''));
+        $sucursalEsperada = strtolower(trim((string) ($this->option('sucursal') ?: env('TITANIO_SUCURSAL', ''))));
+        if ($sucursalEsperada !== '' && $codigoBd !== $sucursalEsperada) {
+            $this->error("Esta BD es de la sucursal '{$codigoBd}', se esperaba '{$sucursalEsperada}'. Aborto.");
             return self::FAILURE;
         }
+        $this->info("Sucursal BD: {$codigoBd}");
 
         if (! is_file($archivo)) {
             $this->error("No existe el archivo: $archivo");

@@ -2,79 +2,58 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Cuadre\CuadreResetService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
-use App\Models\pedidos;
-use App\Models\items_pedidos;
-use App\Models\pago_pedidos;
 
+/**
+ * Resetea el cuadre diario (numero_factura, maquina_fiscal, valido) en un rango de fechas y
+ * RESTAURA los ítems/pagos ajustados a partir de la auditoría `cuadre_ajustes`.
+ */
 class CuadrePedidosReset extends Command
 {
-    protected $signature = 'cuadre:pedidos-reset {--fecha_desde=} {--fecha_hasta=} {--dry-run}';
-    protected $description = 'Resetea cuadre diario para re-ejecutar cuadre:pedidos-diario.';
+    protected $signature = 'cuadre:pedidos-reset
+                            {--fecha_desde= : Desde esta fecha (YYYY-MM-DD, inclusive)}
+                            {--fecha_hasta= : Hasta esta fecha (YYYY-MM-DD, inclusive)}
+                            {--si : No pedir confirmación}
+                            {--dry-run : Solo contar, sin modificar}';
 
-    public function handle(): int
+    protected $description = 'Resetea cuadre diario (restaurando ajustes auditados) para re-ejecutar cuadre:pedidos-diario.';
+
+    public function handle(CuadreResetService $reset): int
     {
-        $fechaDesde = $this->option('fecha_desde') ? trim($this->option('fecha_desde')) : null;
-        $fechaHasta = $this->option('fecha_hasta') ? trim($this->option('fecha_hasta')) : null;
-        $dryRun = $this->option('dry-run');
+        $fechaDesde = $this->option('fecha_desde') ? trim((string) $this->option('fecha_desde')) : null;
+        $fechaHasta = $this->option('fecha_hasta') ? trim((string) $this->option('fecha_hasta')) : null;
+        $dryRun = (bool) $this->option('dry-run');
 
-        $query = pedidos::where('valido', true);
-        if ($fechaDesde !== null && $fechaDesde !== '') {
-            $query->whereRaw('DATE(COALESCE(fecha_factura, created_at)) >= ?', [$fechaDesde]);
-        }
-        if ($fechaHasta !== null && $fechaHasta !== '') {
-            $query->whereRaw('DATE(COALESCE(fecha_factura, created_at)) <= ?', [$fechaHasta]);
-        }
-        $pedidosReset = $query->get();
-        $total = $pedidosReset->count();
+        $ids = $reset->idsEnRango($fechaDesde, $fechaHasta);
+        $total = count($ids);
 
         if ($total === 0) {
-            $this->info('No hay pedidos validos que resetear.');
+            $this->info('No hay pedidos válidos que resetear.');
             return Command::SUCCESS;
         }
 
-        $this->info('Se resetearan ' . $total . ' pedidos.');
+        $this->info('Se resetearán ' . $total . ' pedidos' . ($fechaDesde || $fechaHasta ? " (rango {$fechaDesde} → {$fechaHasta})" : ' (TODOS)') . '.');
         if ($dryRun) {
-            $this->warn('Dry-run: no se modificara la BD.');
+            $this->warn('Dry-run: no se modificará la BD.');
             return Command::SUCCESS;
         }
 
-        if (!$this->confirm('Continuar?', true)) {
+        if (!$this->option('si') && !$this->confirm('¿Continuar?', true)) {
             return Command::SUCCESS;
         }
 
-        $ids = $pedidosReset->pluck('id')->all();
-
-        DB::transaction(function () use ($ids) {
-            $itemsAjuste = items_pedidos::whereIn('id_pedido', $ids)
-                ->whereNull('id_producto')->where('cantidad', 1)->where('monto', 0)->get();
-
-            foreach ($itemsAjuste as $item) {
-                $item->delete();
-            }
-
-            foreach ($itemsAjuste->pluck('id_pedido')->unique() as $idPedido) {
-                $suma = (string) items_pedidos::where('id_pedido', $idPedido)->sum(DB::raw('COALESCE(monto_bs, 0)'));
-                $pago = pago_pedidos::where('id_pedido', $idPedido)->first();
-                if ($pago) {
-                    $pago->monto = (float) $suma;
-                    if (Schema::hasColumn('pago_pedidos', 'monto_bs')) {
-                        $pago->monto_bs = (float) $suma;
-                    }
-                    $pago->save();
-                }
-            }
-
-            $data = ['numero_factura' => null, 'valido' => false];
-            if (Schema::hasColumn('pedidos', 'maquina_fiscal')) {
-                $data['maquina_fiscal'] = null;
-            }
-            pedidos::whereIn('id', $ids)->update($data);
+        $bar = $this->output->createProgressBar($total);
+        $stats = $reset->resetear($ids, function ($hechos) use ($bar) {
+            $bar->setProgress($hechos);
         });
+        $bar->finish();
+        $this->newLine();
 
-        $this->info('Listo. ' . $total . ' pedidos reseteados.');
+        $this->info(sprintf(
+            'Listo. Pedidos reseteados: %d | ajustes restaurados: %d | pagos creados por el cuadre eliminados: %d | ítems de ajuste antiguos borrados: %d',
+            $stats['pedidos'], $stats['ajustes_revertidos'], $stats['pagos_eliminados'], $stats['items_legacy_borrados']
+        ));
         return Command::SUCCESS;
     }
 }
