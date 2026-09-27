@@ -2,6 +2,12 @@
 
 Fecha del análisis: 2026-09-27. Rama: `claude/anaco-order-transformation-command-6v5vg2`.
 
+> **Actualización (misma fecha):** los hallazgos de la sección 2.4 y el plan de la sección 6 ya están
+> implementados en esta rama: auditoría `cuadre_ajustes` + reset que restaura, `--simular`, filtro `estado=1`
+> y monto > 0, `--si`, `--tolerancia-bs`, importador Titanio parametrizable (`--store-id`, `--sucursal`,
+> `--desde/--hasta`) y el orquestador reanudable `cuadre:completo`. Instrucciones de uso, tiempos y servidor
+> en `RUNBOOK_CUADRE_ANACO.md`. El texto siguiente se conserva como registro del estado previo.
+
 Objetivo del trabajo: llevar la facturación de Anaco a un monto objetivo por día y máquina fiscal,
 sobre una BD que cubre hasta el 30/08/2026 con el sistema viejo, y completarla con los pedidos
 facturados en Titanio POS desde el 30/08/2026 hasta hoy.

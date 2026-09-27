@@ -1,0 +1,58 @@
+# Entorno para correr `php artisan cuadre:completo` en un servidor aparte (VPS Linux con Docker).
+#
+#   cd scripts/cuadre-servidor
+#   cp .env.servidor.example .env.servidor   # y completar TITANIO_STORE_ID
+#   mkdir -p datos && copiar ahí los ZIP (respaldo de BD + montos objetivo)
+#   bash run.sh                                # corre en segundo plano y es reanudable
+#
+# Volúmenes:
+#   ./datos    → /datos     ZIP de entrada (respaldo .sql y objetivos CSV/XLSX)
+#   ./trabajo  → /trabajo   estado.json, CSV fusionado, respaldo pre-cuadre, reportes
+#   ./mysql    → datos de MariaDB (persisten entre reinicios)
+services:
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-cuadre}
+      MARIADB_DATABASE: ${DB_DATABASE:-arabito}
+    command: >
+      --max_allowed_packet=256M
+      --innodb_buffer_pool_size=${DB_BUFFER_POOL:-1G}
+      --innodb_flush_log_at_trx_commit=2
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - ./mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    working_dir: /app
+    env_file:
+      - .env.servidor
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-arabito}
+      DB_USERNAME: root
+      DB_PASSWORD: ${DB_ROOT_PASSWORD:-cuadre}
+      APP_ENV: production
+      APP_DEBUG: "false"
+      LOG_CHANNEL: single
+      CACHE_DRIVER: file
+      SESSION_DRIVER: file
+      QUEUE_CONNECTION: sync
+      BROADCAST_DRIVER: log
+    volumes:
+      - ../..:/app
+      - ./datos:/datos
+      - ./trabajo:/trabajo

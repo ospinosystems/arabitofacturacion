@@ -101,7 +101,7 @@ class CuadreCsvReader
             throw new \RuntimeException('PhpSpreadsheet no está instalado; no se puede leer ' . basename($path));
         }
         $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($path);
-        $reader->setReadDataOnly(true);
+        // No usar setReadDataOnly(true): se perderían los formatos y no se podría detectar qué celdas son fechas.
         $spreadsheet = $reader->load($path);
 
         $out = [];
@@ -113,7 +113,7 @@ class CuadreCsvReader
                 $fila = [];
                 $vacia = true;
                 for ($c = 1; $c <= $highestCol; $c++) {
-                    $cell = $sheet->getCellByColumnAndRow($c, $r);
+                    $cell = $sheet->getCell(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c) . $r);
                     $val = $cell->getValue();
                     if ($val instanceof \PhpOffice\PhpSpreadsheet\RichText\RichText) {
                         $val = $val->getPlainText();
@@ -260,6 +260,13 @@ class CuadreCsvReader
         }
         if (preg_match('/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/', $f, $m)) {
             return $m[1] . '-' . str_pad((string) (int) $m[2], 2, '0', STR_PAD_LEFT) . '-' . str_pad((string) (int) $m[3], 2, '0', STR_PAD_LEFT);
+        }
+        // Serial de fecha de Excel (días desde 1899-12-30): 36526 = 2000-01-01, 54789 = 2050-01-01.
+        if (preg_match('/^\d{5}(\.0+)?$/', $f)) {
+            $serial = (int) $f;
+            if ($serial >= 36526 && $serial <= 54789) {
+                return date('Y-m-d', (int) (($serial - 25569) * 86400));
+            }
         }
         return '';
     }

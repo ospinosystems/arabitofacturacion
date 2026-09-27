@@ -1,90 +1,68 @@
-# Cómo funciona el algoritmo de cuadre diario (explicación)
+# Cómo funciona el algoritmo de cuadre diario (versión actual)
 
-El objetivo es que **día a día** quede un resultado **lo más real posible**: N pedidos con números de factura consecutivos y un total en Bs muy cercano al objetivo, con un **único ajuste pequeño** cuando haga falta (no un “último pedido” con monto irreal).
+Objetivo: que **cada día y cada máquina fiscal** quede con exactamente N facturas consecutivas cuya suma en Bs
+coincida con el monto objetivo del CSV, con un **único ajuste pequeño** y reversible.
 
----
+## 1. Qué entra por grupo (fecha + máquina)
 
-## 1. Qué entra por día
+Del CSV (`database/data/FORMATO_CUADRE_DIARIO.md`) se obtiene por (FECHA, CONCEPTO):
 
-Para cada **fecha** del CSV:
+- **N** = cantidad de facturas del rango (`inicio-fin`, más las FISCAL UNITARIA).
+- **Objetivo** = suma de VENTA (Bs) menos las filas `REDUCE EL TOTAL DE ESE DIA` del día (aplicadas a la
+  primera máquina del día).
 
-- Se buscan todos los pedidos **de ese día** usando la fecha/hora de factura (o de creación si no hay fecha factura):  
-  `DATE(COALESCE(fecha_factura, created_at)) = fecha`.
-- Esos pedidos se ordenan en **orden natural**: primero por `fecha_factura` (o `created_at`), luego por `id`.  
-  Es decir, en el orden en que “pasaron” en el tiempo ese día.
+Si ya existen pedidos `valido=1` con esa fecha y esa máquina, el grupo se **omite** (así el comando es reanudable).
 
-Así trabajamos siempre con el **flujo real** del día, en orden cronológico.
+## 2. Candidatos
 
----
+Pedidos del día (`DATE(COALESCE(fecha_factura, created_at)) = fecha`) que:
 
-## 2. Cuánto “pesa” cada pedido (monto Bs)
+- no estén ya marcados (`valido` nulo o 0),
+- tengan `estado = 1` (facturados; se desactiva con `--sin-filtro-estado`),
+- y cuyo monto en Bs sea > 0 (`SUM(COALESCE(monto_bs, monto × tasa))` de sus ítems). Devoluciones y pedidos
+  sin ítems quedan fuera.
 
-Para cada pedido del día se calcula su **monto en Bs**: suma de `monto_bs` de todos sus ítems en `items_pedidos`.
+## 3. Selección de los N pedidos
 
-Eso da una lista:  
-pedido 1 → X₁ Bs, pedido 2 → X₂ Bs, … (en el mismo orden natural de antes).
+- Si hay ≤ N candidatos, se toman todos (el comando avisa que el rango queda corto).
+- Si hay más, se busca un **subconjunto de exactamente N** pedidos cuya suma se acerque al objetivo:
+  1. 20 corridas *greedy* con orden aleatorio (cada paso agrega el pedido que deja la suma más cerca).
+  2. *Simulated annealing* (intercambios aleatorios entre seleccionados y no seleccionados) partiendo de la
+     mejor solución, hasta agotar `--max-segundos` (15 s por defecto).
+  3. La búsqueda se detiene antes al llegar a `|suma − objetivo| ≤ --tolerancia-bs` (1 Bs por defecto): más
+     precisión no aporta porque el ajuste final cubre la diferencia.
 
----
+Los pedidos **no elegidos** siguen en la BD sin número de factura y con `valido` nulo. Así es como un mes con
+ventas por 1.000.000 Bs se lleva a un objetivo de 500.000 Bs: se eligen los pedidos que suman el objetivo.
 
-## 3. Elegir los N pedidos que más se acerquen al objetivo
+## 4. Numeración
 
-El CSV dice para ese día:
+Los N elegidos se ordenan cronológicamente y reciben `numero_factura` consecutivo desde `inicio`,
+`maquina_fiscal` = CONCEPTO y `valido = 1`. Todo el grupo se escribe en **una transacción**: si el proceso muere,
+el grupo queda completo o no queda.
 
-- **N** = cantidad de pedidos que deben contar (ej. 5).
-- **Objetivo** = monto total en Bs que debería sumar ese día.
+## 5. Ajuste
 
-Si ese día hay **menos o igual** que N pedidos:
+Diferencia = objetivo − suma de los N elegidos (normalmente ≤ 1 Bs por la tolerancia; puede ser mayor si el
+día tiene pocos pedidos o se agotó el tiempo). Se aplica sobre el **ítem de mayor monto del último pedido** del
+grupo:
 
-- Se usan **todos**. No se inventan pedidos.
-- La “suma del grupo” es la suma de todos sus montos.
+- nuevo precio unitario (USD) = (monto_bs actual + diferencia) / tasa / cantidad, **redondeado a 1 decimal**
+  (precio "creíble"); se recalculan `monto` y `monto_bs`,
+- se recalcula el primer `pago_pedidos` del pedido con la suma real de ítems (o se crea uno si no existe),
+- se guarda en **`cuadre_ajustes`** el valor original del ítem y del pago, el ajuste pedido y el aplicado.
 
-Si ese día hay **más** de N pedidos:
+Por el redondeo a 1 decimal, la suma real puede diferir del objetivo en unos Bs por grupo (≤ 0,05 USD ×
+cantidad × tasa). El comando reporta la suma **real**; la validación web tolera 2 Bs o 0,05 % del objetivo.
 
-- Se piensa el día como una **tira de pedidos en orden de tiempo**: 1º, 2º, 3º, …
-- Se prueban **todas las ventanas de N pedidos seguidos** en esa tira:
-  - Ventana 1: pedidos 1 a N → suma S₁  
-  - Ventana 2: pedidos 2 a N+1 → suma S₂  
-  - Ventana 3: pedidos 3 a N+2 → suma S₃  
-  - … hasta la última ventana posible (por ejemplo, si hay 20 pedidos y N=5, las ventanas son 16).
-- Para cada ventana se mira: **¿cuánto se desvía su suma del objetivo?**  
-  Diferencia = |objetivo − suma de esa ventana|.
-- Se elige la ventana cuya suma **más se acerca al objetivo** (diferencia mínima).
+## 6. Reverso
 
-Esa ventana son los **N pedidos “ganadores”** del día: los que, siendo **consecutivos en el tiempo**, dan un total **lo más cercano posible** al objetivo. Con eso el resultado día a día es más real: no se fuerza un monto raro en un pedido cualquiera, sino que se elige el bloque de N que ya casi cuadra.
+`cuadre:pedidos-reset` (o `cuadre:pedidos-diario --desde-cero`) usa `CuadreResetService`: restaura los ítems y
+pagos desde `cuadre_ajustes` (del ajuste más reciente al más antiguo), borra pagos creados por el cuadre, elimina
+los "ítems de ajuste" del mecanismo antiguo y limpia `numero_factura`, `maquina_fiscal` y `valido`. Verificado con
+huella MD5 de ítems y pagos: tras el reset quedan idénticos al respaldo previo.
 
----
+## 7. Costo
 
-## 4. Asignar números de factura y marcar como válidos
-
-A los N pedidos de la ventana elegida (en su orden natural, es decir, en orden de hora):
-
-- Se les asigna **numero_factura** consecutivo empezando por `rango_factura_inicio` (ej. 1001, 1002, …, 1005).
-- Se les pone **valido = true**.
-
-No se borra ni se modifica ningún ítem en este paso; solo se actualizan esos dos campos del pedido.
-
----
-
-## 5. El ajuste (solo la diferencia mínima)
-
-- Se calcula: **Ajuste = objetivo − suma de los N pedidos elegidos**.
-- Esa cantidad es la **única** que “falta” o “sobra” para que el total del día coincida exactamente con el objetivo. Como elegimos la ventana que más se acercaba, esta diferencia es **la mínima posible** con N pedidos consecutivos.
-- Si **ajuste = 0**: no se hace nada más.
-- Si **ajuste ≠ 0**:
-  - Se **añade un solo ítem** al **último** pedido del grupo (el que cierra la ventana en el tiempo) con `monto_bs = ajuste`.
-  - Se actualiza el pago de ese pedido para que el total del pedido (ítems + ese ítem) coincida con el nuevo total.
-
-Así, el “último” del grupo no se convierte en un pedido con un monto irreal: solo lleva un **ítem de ajuste** por la diferencia pequeña que faltaba (o sobraba) para cuadrar el día.
-
----
-
-## 6. Resumen en una frase
-
-Por cada día, el algoritmo **recorre todas las ventanas de N pedidos consecutivos en el tiempo**, elige la cuya suma **más se acerca al objetivo**, les asigna números de factura consecutivos y **solo esa diferencia mínima** la aplica como un único ítem de ajuste en el último pedido del grupo; el resto de pedidos y ítems no se tocan, para que el resultado sea lo más real posible día a día.
-
----
-
-## Consumo de recursos
-
-- Por día se hace: una consulta de pedidos, una suma de ítems por pedido y un bucle de ventanas (si hay más de N pedidos). No se crean pedidos fantasma ni se borran ítems.
-- El coste crece con el número de pedidos del día y con el tamaño de N, pero el diseño prioriza **resultado real** día a día sobre ahorro de recursos.
+Por grupo: 2 consultas (pedidos y suma de ítems) y la búsqueda acotada en tiempo. Medido: ~0,35 s por grupo con
+tolerancia 1 Bs; peor caso `--max-segundos` por grupo. Ver `RUNBOOK_CUADRE_ANACO.md` para la estimación completa.

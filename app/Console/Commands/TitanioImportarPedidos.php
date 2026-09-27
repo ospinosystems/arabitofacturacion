@@ -38,7 +38,7 @@ class TitanioImportarPedidos extends Command
 
     protected $description = 'Importa pedidos desde Titanio POS (API) a la BD local de la sucursal';
 
-    private const TITANIO_URL = 'https://www.titanio-pos.com/api/orders/raw';
+    private const TITANIO_URL_DEFAULT = 'https://www.titanio-pos.com/api/orders/raw';
     private const TITANIO_SECRET_DEFAULT = 'qwerty20-26$$';
     private const STORE_ID_GUACARA = 14;
     private const ID_CLIENTE = 1;
@@ -246,13 +246,14 @@ class TitanioImportarPedidos extends Command
     {
         $error = null;
         $secret = (string) env('TITANIO_SECRET', self::TITANIO_SECRET_DEFAULT);
+        $url = (string) env('TITANIO_URL', self::TITANIO_URL_DEFAULT);
         $intentos = 3;
         for ($intento = 1; $intento <= $intentos; $intento++) {
             try {
                 $resp = Http::withHeaders([
                     'x-secret' => $secret,
                     'Accept' => 'application/json',
-                ])->timeout(180)->post(self::TITANIO_URL, [
+                ])->timeout(180)->post($url, [
                     'fecha' => $fecha,
                     'storeId' => $this->storeId,
                 ]);

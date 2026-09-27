@@ -36,6 +36,7 @@ class CuadrePedidosDiario extends Command
                             {--desde= : Procesar solo grupos con fecha >= YYYY-MM-DD}
                             {--hasta= : Procesar solo grupos con fecha <= YYYY-MM-DD}
                             {--max-segundos=15 : Tiempo máximo de búsqueda (greedy + annealing) por grupo día+máquina}
+                            {--tolerancia-bs=1 : La búsqueda se detiene cuando |suma - objetivo| <= este monto en Bs (el resto lo cubre el ajuste)}
                             {--umbral-ajuste=5 : Porcentaje de ajuste sobre el objetivo a partir del cual se avisa}
                             {--sin-filtro-estado : Incluir también pedidos con estado distinto de 1 (por defecto solo facturados)}
                             {--reporte= : Ruta de un CSV donde escribir el detalle por grupo (objetivo, seleccionados, suma, ajuste, real)}';
@@ -54,7 +55,10 @@ class CuadrePedidosDiario extends Command
     protected int $pedidosExcluidosMontoCero = 0;
 
     protected float $maxSegundos = 15.0;
+    protected float $toleranciaBs = 1.0;
     protected float $umbralAjuste = 0.05;
+    /** @var array<int,bool> ids de pedidos excluidos por monto <= 0 (para contarlos una sola vez) */
+    protected array $excluidosMontoCero = [];
     protected bool $filtrarEstado = true;
     protected bool $simular = false;
 
@@ -77,6 +81,7 @@ class CuadrePedidosDiario extends Command
         $desde = $this->option('desde') ? trim((string) $this->option('desde')) : null;
         $hasta = $this->option('hasta') ? trim((string) $this->option('hasta')) : null;
         $this->maxSegundos = max(1.0, (float) $this->option('max-segundos'));
+        $this->toleranciaBs = max(0.005, (float) $this->option('tolerancia-bs'));
         $this->umbralAjuste = max(0.0, (float) $this->option('umbral-ajuste')) / 100.0;
         $this->filtrarEstado = !$this->option('sin-filtro-estado');
 
@@ -135,8 +140,8 @@ class CuadrePedidosDiario extends Command
             $fechas = array_column($agregadas, 'fecha');
             $this->info('Rango de fechas: ' . min($fechas) . ' → ' . max($fechas));
             $this->info(sprintf(
-                'Tiempo máximo estimado de búsqueda: %d grupos × %.0f s = %s (cota superior; los días con pocos pedidos terminan al instante)',
-                $totalGrupos, $this->maxSegundos, $this->formatearDuracion($totalGrupos * $this->maxSegundos)
+                'Tiempo máximo estimado de búsqueda: %d grupos × %.0f s = %s (cota superior; la búsqueda se corta al llegar a ±%.2f Bs del objetivo)',
+                $totalGrupos, $this->maxSegundos, $this->formatearDuracion($totalGrupos * $this->maxSegundos), $this->toleranciaBs
             ));
         }
 
@@ -335,7 +340,10 @@ class CuadrePedidosDiario extends Command
         foreach ($pedidos as $ped) {
             $monto = $montosPorPedido[$ped->id] ?? '0';
             if (bccomp($monto, '0', $this->scale) <= 0) {
-                $this->pedidosExcluidosMontoCero++;
+                if (!isset($this->excluidosMontoCero[$ped->id])) {
+                    $this->excluidosMontoCero[$ped->id] = true;
+                    $this->pedidosExcluidosMontoCero++;
+                }
                 continue; // sin ítems, devolución o monto cero: no puede ser factura fiscal
             }
             $pairs[] = ['pedido' => $ped, 'monto' => $monto];
@@ -419,16 +427,17 @@ class CuadrePedidosDiario extends Command
         $inicio = microtime(true);
         $deadline = $inicio + $this->maxSegundos;
 
+        $tol = $this->toleranciaBs;
         for ($run = 0; $run < 20; $run++) {
             $result = $this->greedySeleccionRapida($montosFloat, $total, $cantidadObjetivo, $montoObjFloat);
             if ($result !== null && $result['abs_diff'] < $globalBestDiff) {
                 $globalBestDiff = $result['abs_diff'];
                 $globalBestIndices = $result['indices'];
             }
-            if ($globalBestDiff < 0.005 || microtime(true) >= $deadline) break;
+            if ($globalBestDiff <= $tol || microtime(true) >= $deadline) break;
         }
 
-        if ($globalBestIndices !== null && $globalBestDiff >= 0.005) {
+        if ($globalBestIndices !== null && $globalBestDiff > $tol) {
             $saRun = 0;
             while (microtime(true) < $deadline) {
                 $semilla = $saRun === 0
@@ -437,12 +446,12 @@ class CuadrePedidosDiario extends Command
                 $semillaSuma = 0.0;
                 foreach ($semilla as $idx) $semillaSuma += $montosFloat[$idx];
 
-                $saResult = $this->simulatedAnnealingRapido($montosFloat, $total, $semilla, $semillaSuma, $cantidadObjetivo, $montoObjFloat, $deadline);
+                $saResult = $this->simulatedAnnealingRapido($montosFloat, $total, $semilla, $semillaSuma, $cantidadObjetivo, $montoObjFloat, $deadline, $tol);
                 if ($saResult['abs_diff'] < $globalBestDiff) {
                     $globalBestDiff = $saResult['abs_diff'];
                     $globalBestIndices = $saResult['indices'];
                 }
-                if ($globalBestDiff < 0.005) break;
+                if ($globalBestDiff <= $tol) break;
                 $saRun++;
             }
         }
@@ -607,7 +616,7 @@ class CuadrePedidosDiario extends Command
     /**
      * Simulated annealing con floats y límite de tiempo (deadline absoluto).
      */
-    protected function simulatedAnnealingRapido(array $montosFloat, int $total, array $selectedIndices, float $currentSuma, int $cantidadObjetivo, float $montoObjetivo, float $deadline): array
+    protected function simulatedAnnealingRapido(array $montosFloat, int $total, array $selectedIndices, float $currentSuma, int $cantidadObjetivo, float $montoObjetivo, float $deadline, float $tolerancia = 0.005): array
     {
         $currentAbs = abs($montoObjetivo - $currentSuma);
         $bestIndices = $selectedIndices;
@@ -630,7 +639,7 @@ class CuadrePedidosDiario extends Command
 
         for ($it = 0; $it < $maxIter; $it++) {
             if (($it & 8191) === 0 && microtime(true) >= $deadline) break;
-            if ($bestAbs < 0.005) break;
+            if ($bestAbs <= $tolerancia) break;
             $i = mt_rand(0, $cantidadObjetivo - 1);
             $idxOut = $selectedIndices[$i];
             $j = mt_rand(0, $totalNoSel - 1);

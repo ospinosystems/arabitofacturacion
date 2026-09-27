@@ -1,6 +1,10 @@
 # Cuadre diario por máquina fiscal
 
-El comando `php artisan cuadre:pedidos-diario {archivo}` procesa un CSV con filas por día, máquina fiscal y tipo de movimiento. El valor **CONCEPTO** (o MAQUINA_FISCAL en formato antiguo) del CSV se guarda en **pedidos.maquina_fiscal**.
+El comando `php artisan cuadre:pedidos-diario {archivo}` procesa un CSV **o XLSX** con filas por día, máquina fiscal y tipo de movimiento. El valor **CONCEPTO** (o MAQUINA_FISCAL en formato antiguo) del CSV se guarda en **pedidos.maquina_fiscal**.
+
+Para el proceso completo de una sucursal (restaurar respaldo, importar Titanio POS, cuadrar y medir) ver `RUNBOOK_CUADRE_ANACO.md` (`php artisan cuadre:completo <carpeta>`), que acepta varios archivos mensuales y los fusiona.
+
+Fechas aceptadas: `YYYY-MM-DD`, `DD/MM/YYYY`, `DD-MM-YYYY`, `YYYY/MM/DD`, fechas reales de Excel. Montos: `12345.67`, `12.345,67`, `12,345.67`.
 
 ## Campo en pedidos
 
@@ -77,14 +81,25 @@ php artisan cuadre:pedidos-reset --fecha_desde=2024-01-01 --fecha_hasta=2024-06-
 php artisan cuadre:pedidos-reset --dry-run
 ```
 
-El comando pide confirmacion (salvo en --dry-run), borra los ítems de ajuste creados por el cuadre, recalcula el pago de esos pedidos y limpia numero_factura, maquina_fiscal y valido. Despues puede volver a ejecutar `cuadre:pedidos-diario` con el CSV.
+El comando pide confirmación (salvo con `--si` o `--dry-run`), **restaura los ítems y pagos ajustados** usando la auditoría `cuadre_ajustes` (valores originales de precio_unitario, monto, monto_bs y del pago), borra los ítems de ajuste del mecanismo antiguo y limpia numero_factura, maquina_fiscal y valido. Después puede volver a ejecutar `cuadre:pedidos-diario` con el CSV.
 
 ## Uso
 
 ```bash
 php artisan cuadre:pedidos-diario "c:\Users\alvar\Downloads\maracay2023-2024-2025-2026\resumen_ventas_maracay_ordenado.csv"
-php artisan cuadre:pedidos-diario database/data/resumen.csv --dry-run
+php artisan cuadre:pedidos-diario database/data/resumen.csv --dry-run      # solo valida y agrupa el archivo
+php artisan cuadre:pedidos-diario database/data/resumen.csv --simular      # selección real sin escribir
+php artisan cuadre:pedidos-diario resumen.csv --si --max-segundos=15 --tolerancia-bs=1 --reporte=storage/app/cuadre.csv
 ```
+
+Opciones: `--desde-cero` (resetea el rango del archivo antes, restaurando ajustes), `--si` (sin confirmación),
+`--solo-fecha=`, `--anio=`, `--desde=`, `--hasta=` (filtros de grupos), `--max-segundos=15` (búsqueda por grupo),
+`--tolerancia-bs=1` (corte de la búsqueda), `--umbral-ajuste=5` (% para avisar), `--sin-filtro-estado` (incluir
+pedidos con estado ≠ 1), `--reporte=` (CSV por grupo: objetivo, candidatos, seleccionados, suma, ajuste, %, real).
+
+Por defecto solo son candidatos los pedidos con `estado = 1` y monto en Bs > 0. Cada ajuste queda registrado en la
+tabla `cuadre_ajustes`. Los grupos (fecha + máquina) ya cuadrados se omiten, por lo que el comando puede
+interrumpirse y volver a ejecutarse.
 
 ## Reporte
 

@@ -326,7 +326,10 @@ class CuadreReportController extends Controller
                     $f->check_csv = false;
                     continue;
                 }
-                $montoCoincide = abs((float) $f->monto_bs - (float) $esp['total_venta']) < 0.01;
+                // El ajuste redondea el precio unitario a 1 decimal en USD, así que el total real puede
+                // diferir del objetivo en unos pocos Bs: tolerancia de 2 Bs o 0,05 % del objetivo.
+                $tolerancia = max(2.0, 0.0005 * abs((float) $esp['total_venta']));
+                $montoCoincide = abs((float) $f->monto_bs - (float) $esp['total_venta']) <= $tolerancia;
                 $rangoCoincide = (string) $f->factura_inicio === (string) $esp['factura_inicio'] && (string) $f->factura_fin === (string) $esp['factura_fin'];
                 $cantCoincide = (int) $f->cantidad === (int) $esp['cantidad'];
                 $f->check_csv = $montoCoincide && $rangoCoincide && $cantCoincide;
