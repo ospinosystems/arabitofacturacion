@@ -72,6 +72,25 @@ Si el servidor se reinicia: `bash run.sh` otra vez. Al terminar, copiar `trabajo
 Notas: en Docker la BD está en el host `db`, por eso `run.sh` pasa `--permitir-remoto`. El repo queda montado en
 `/app` y `composer install` corre la primera vez.
 
+### 4.b Servidor Cloudways (PHP + MySQL ya instalados, sin Docker)
+
+Desde el terminal SSH de la aplicación (Cloudways → Application → Application Credentials → SSH, o cualquier
+app SSH con esas credenciales). El repositorio es público, no hace falta token:
+
+```bash
+cd ~/public_html                      # carpeta de la aplicación (si ya hay archivos, use otra: mkdir ~/cuadre && cd ~/cuadre)
+git clone https://github.com/ospinosystems/arabitofacturacion.git .
+bash scripts/cuadre-servidor/cloudways.sh instalar   # composer install + .env (pide DB name/user/pass de "MySQL Access" y el storeId)
+# subir por SFTP los ZIP a ~/public_html/datos  (WinSCP / FileZilla con las mismas credenciales)
+bash scripts/cuadre-servidor/cloudways.sh correr     # arranca en segundo plano (setsid + nohup)
+bash scripts/cuadre-servidor/cloudways.sh estado     # o: log
+```
+
+La BD de la aplicación (Access Details → MySQL Access) es la que se borra y restaura. Si el servidor se reinicia
+o se corta la sesión: `bash scripts/cuadre-servidor/cloudways.sh correr` de nuevo y continúa. Para actualizar el
+código: `git pull` y repetir `correr`. Si el PHP del servidor no tiene `bcmath` o `zip`, activarlos en
+Cloudways → Server → Settings & Packages → PHP.
+
 ## 5. Tiempo estimado
 
 Medido en la prueba sintética (3 meses, 2 máquinas, 182 grupos, 3.600 pedidos): **0,35 s por grupo** con
