@@ -280,7 +280,15 @@ class TitanioImportarPedidos extends Command
                 $error = 'Respuesta inválida: '.substr($resp->body(), 0, 300);
                 return null;
             }
-            return $json['data'];
+            // La API devolvía la lista en "data"; ahora la envuelve en "data.orders" (junto con cierre_administrativo e inventario).
+            if (isset($json['data']['orders']) && is_array($json['data']['orders'])) {
+                return array_values($json['data']['orders']);
+            }
+            if (array_is_list($json['data'])) {
+                return $json['data'];
+            }
+            $error = 'Respuesta sin lista de pedidos (claves data: '.implode(',', array_keys($json['data'])).')';
+            return null;
         }
         return null;
     }
