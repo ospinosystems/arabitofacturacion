@@ -53,10 +53,12 @@ instalar() {
 
   if [[ ! -f .env ]]; then
     echo "── Creando .env (credenciales MySQL de la aplicación en Cloudways: Access Details → MySQL Access)"
-    read -r -p "  DB name: " DBN
-    read -r -p "  DB user: " DBU
-    read -r -s -p "  DB password: " DBP; echo
-    read -r -p "  storeId de la sucursal en Titanio POS (vacío = omitir Titanio): " STORE
+    # No interactivo si vienen por variables de entorno (CW_DB_NAME, CW_DB_USER, CW_DB_PASS, CW_STORE_ID).
+    DBN=${CW_DB_NAME:-}; DBU=${CW_DB_USER:-}; DBP=${CW_DB_PASS:-}; STORE=${CW_STORE_ID:-}
+    [[ -n "$DBN" ]] || read -r -p "  DB name: " DBN
+    [[ -n "$DBU" ]] || read -r -p "  DB user: " DBU
+    [[ -n "$DBP" ]] || { read -r -s -p "  DB password: " DBP; echo; }
+    [[ -n "${CW_STORE_ID+x}" ]] || read -r -p "  storeId de la sucursal en Titanio POS (vacío = omitir Titanio): " STORE
     cat > .env <<EOF
 APP_NAME="Arabito Cuadre"
 APP_ENV=production
@@ -84,7 +86,12 @@ EOF
   fi
 
   echo "── Probando conexión a la BD"
-  php artisan tinker --execute='echo "OK: ".DB::connection()->getDatabaseName()." (tablas: ".count(DB::select("SHOW TABLES")).")\n";' 2>/dev/null || {
+  php -r '
+    require "vendor/autoload.php"; $app = require "bootstrap/app.php";
+    $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+    $t = count(Illuminate\Support\Facades\DB::select("SHOW TABLES"));
+    echo "  OK: BD ".Illuminate\Support\Facades\DB::connection()->getDatabaseName()." (tablas actuales: $t)\n";
+  ' 2>/dev/null || {
     echo "No se pudo conectar a la BD con el .env actual. Revise DB_DATABASE/DB_USERNAME/DB_PASSWORD." >&2; exit 1; }
 
   echo

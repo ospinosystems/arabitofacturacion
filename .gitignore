@@ -20,3 +20,6 @@ yarn-error.log
 /test-results
 /tests/e2e/.auth
 /tests/e2e/.report
+
+# ZIP de entrada del cuadre completo (scripts/cuadre-servidor)
+/datos

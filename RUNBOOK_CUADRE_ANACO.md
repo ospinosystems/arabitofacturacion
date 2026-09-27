@@ -74,8 +74,20 @@ Notas: en Docker la BD está en el host `db`, por eso `run.sh` pasa `--permitir-
 
 ### 4.b Servidor Cloudways (PHP + MySQL ya instalados, sin Docker)
 
-Desde el terminal SSH de la aplicación (Cloudways → Application → Application Credentials → SSH, o cualquier
-app SSH con esas credenciales). El repositorio es público, no hace falta token:
+**Camino corto, desde la PC (Windows 10/11, PowerShell):** un solo comando sube los ZIP por SFTP, clona el
+repositorio en el servidor, crea el `.env` y lanza el proceso en segundo plano. Pide la IP, el usuario SFTP, la
+carpeta local de los ZIP, los datos MySQL de la app (Access Details → MySQL Access) y el storeId; la contraseña
+SFTP la pide el propio ssh/scp tres veces.
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/ospinosystems/arabitofacturacion/master/scripts/cuadre-servidor/desplegar-desde-pc.ps1 -OutFile $env:TEMP\desplegar.ps1; & $env:TEMP\desplegar.ps1"
+```
+
+Después, para ver el avance: `ssh usuario@IP "bash ~/private_html/cuadre/scripts/cuadre-servidor/cloudways.sh estado"`
+(o `log`).
+
+**Camino manual**, desde el terminal SSH de la aplicación (Cloudways → Application → Application Credentials →
+SSH, o cualquier app SSH con esas credenciales). El repositorio es público, no hace falta token:
 
 ```bash
 cd ~/public_html                      # carpeta de la aplicación (si ya hay archivos, use otra: mkdir ~/cuadre && cd ~/cuadre)
