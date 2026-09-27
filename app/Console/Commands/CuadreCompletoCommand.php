@@ -270,6 +270,12 @@ class CuadreCompletoCommand extends Command
                 $this->log('    - ' . $r, 'warn');
             }
         }
+        if (!empty($stats['avisos'])) {
+            $this->log('Avisos del lector (correcciones automáticas / secciones omitidas): ' . count($stats['avisos']), 'warn');
+            foreach ($stats['avisos'] as $a) {
+                $this->log('    - ' . $a, 'warn');
+            }
+        }
         if (($stats['duplicadas_omitidas'] ?? 0) > 0) {
             $this->log('Filas duplicadas entre archivos omitidas: ' . $stats['duplicadas_omitidas'], 'warn');
         }
@@ -278,6 +284,9 @@ class CuadreCompletoCommand extends Command
             return false;
         }
         $this->log("CSV fusionado: {$csvObjetivo} ({$stats['filas']} filas, {$stats['grupos']} grupos día+máquina, {$stats['fecha_min']} → {$stats['fecha_max']})");
+        foreach ($stats['por_tipo'] ?? [] as $tipo => $d) {
+            $this->log(sprintf('  %-28s filas: %5d  monto: %18s Bs  conceptos: %s', $tipo, $d['filas'], number_format((float) $d['venta'], 2, ',', '.'), implode(' ', $d['conceptos'])));
+        }
         $filas = [];
         foreach ($stats['por_mes'] as $mes => $d) {
             $filas[] = [$mes, $d['dias'], $d['facturas'], number_format((float) $d['venta'], 2, ',', '.'), implode(' ', $d['maquinas'])];

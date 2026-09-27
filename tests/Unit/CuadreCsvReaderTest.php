@@ -121,4 +121,196 @@ class CuadreCsvReaderTest extends TestCase
         $this->assertCount(2, $grupos);
         $this->assertEquals(1990.5, (float) $grupos[1]['total_venta'], '', 0.0001);
     }
+
+    /**
+     * Libro de ventas mensual (formato SENIAT de la contadora): título en las primeras filas, cabecera de dos
+     * filas, "RESUMEN DE VENTAS <máquina>" por día, TOTAL VENTA como fórmula, notas de crédito, facturas
+     * manuales SERIE R, filas ANULADA/solo retención, Z sin ventas, y salto de página (VAN…/…VIENEN).
+     */
+    public function test_lee_libro_de_ventas_xlsx_y_lo_convierte_al_formato_canonico(): void
+    {
+        if (!class_exists(\PhpOffice\PhpSpreadsheet\Spreadsheet::class)) {
+            $this->markTestSkipped('PhpSpreadsheet no instalado');
+        }
+        $xlsx = $this->tmp . '/LIBRO DE VENTAS MES DE ABRIL 26 SUC ANACO.xlsx';
+        $this->crearLibroVentas($xlsx);
+
+        $normalizadas = $this->reader->leerNormalizado($xlsx);
+        $this->assertSame([], $this->reader->razonesRechazo());
+
+        $resumen = array_map(fn ($n) => implode('|', [$n['fecha'], $n['maquina_fiscal'], $n['tipo'], $n['factura_inicio'] ?? '', $n['factura_fin'] ?? '', $n['cantidad'], round((float) $n['total_venta'], 2)]), $normalizadas);
+        $this->assertSame([
+            '2026-04-01|Z7C7037700|FISCAL RANGO|50259|50470|212|1260',
+            '2026-04-01|Z7C7038463|FISCAL RANGO|55006|55010|5|580',
+            '2026-04-01|SERIE R|FISCAL UNITARIA|131|131|1|1132.1',
+            '2026-04-02|Z7C7037700|REDUCE EL TOTAL DE ESE DIA|||0|-232',
+            '2026-04-02|Z7C7037700|FISCAL RANGO|50471|50480|10|2320',
+            '2026-04-02|Z7C7037700|REDUCE EL TOTAL DE ESE DIA|||0|-116', // NC de cliente: máquina inferida por la factura afectada
+            '2026-04-03|Z7C7037700|FISCAL RANGO|50481|50490|10|3480',   // tras el salto de página
+        ], $resumen);
+
+        $grupos = $this->reader->agregarPorDiaMaquina($normalizadas);
+        $this->assertCount(5, $grupos);
+        $g0402 = array_values(array_filter($grupos, fn ($g) => $g['fecha'] === '2026-04-02'))[0];
+        $this->assertSame('Z7C7037700', $g0402['maquina_fiscal']);
+        $this->assertSame(10, $g0402['cantidad']);
+        $this->assertEqualsWithDelta(2320 - 232 - 116, (float) $g0402['total_venta'], 0.0001);
+
+        // Fusionado: el CSV canónico se vuelve a leer igual y las estadísticas por tipo cuentan las SERIE R.
+        $destino = $this->tmp . '/fusion_libro.csv';
+        $stats = $this->reader->fusionarEnCsv([$xlsx], $destino);
+        $this->assertSame(7, $stats['filas']);
+        $this->assertSame(5, $stats['grupos']);
+        $this->assertSame(1, $stats['por_tipo'][CuadreCsvReader::TIPO_FISCAL_UNITARIA]['filas']);
+        $this->assertSame(['SERIE R'], $stats['por_tipo'][CuadreCsvReader::TIPO_FISCAL_UNITARIA]['conceptos']);
+        $this->assertSame(238, $stats['por_mes']['2026-04']['facturas']);
+        $this->assertEqualsWithDelta(1260 + 580 + 1132.102 - 232 + 2320 - 116 + 3480, (float) $stats['por_mes']['2026-04']['venta'], 0.001);
+        $this->assertCount(5, $this->reader->agregarPorDiaMaquina($this->reader->leerNormalizado($destino)));
+    }
+
+    public function test_xlsx_plano_con_cabecera_que_no_esta_en_la_fila_1(): void
+    {
+        if (!class_exists(\PhpOffice\PhpSpreadsheet\Spreadsheet::class)) {
+            $this->markTestSkipped('PhpSpreadsheet no instalado');
+        }
+        $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $s = $ss->getActiveSheet();
+        $s->setCellValue('A1', 'Objetivos de junio');
+        $s->fromArray(['FECHA', 'CONCEPTO', 'FACTURA', 'VENTA', 'TIPO'], null, 'A3');
+        $s->fromArray(['2026-06-01', 'ZZN1', '1-10', 1000, 'FISCAL RANGO'], null, 'A4');
+        $s->fromArray(['2026-06-01', '', '', -10, 'REDUCE EL TOTAL DE ESE DIA'], null, 'A5');
+        $xlsx = $this->tmp . '/plano.xlsx';
+        (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($ss))->save($xlsx);
+
+        $grupos = $this->reader->agregarPorDiaMaquina($this->reader->leerNormalizado($xlsx));
+        $this->assertCount(1, $grupos);
+        $this->assertSame(10, $grupos[0]['cantidad']);
+        $this->assertEqualsWithDelta(990.0, (float) $grupos[0]['total_venta'], 0.0001);
+    }
+
+    /**
+     * Errores de digitación reales de los libros: año equivocado en unas filas, extremos de rango mal escritos
+     * (un dígito cambiado, extremos intercambiados entre las dos máquinas del mismo día) y una segunda sección
+     * con el libro de otra sucursal pegado al final. Todo se corrige/omite con aviso, sin rechazar filas.
+     */
+    public function test_libro_corrige_anio_y_rangos_por_continuidad_y_omite_otra_sucursal(): void
+    {
+        if (!class_exists(\PhpOffice\PhpSpreadsheet\Spreadsheet::class)) {
+            $this->markTestSkipped('PhpSpreadsheet no instalado');
+        }
+        $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $s = $ss->getActiveSheet();
+        $s->setCellValue('B5', 'CORRESPONDIENTE AL MES DE ENERO DE 2026');
+        $s->setCellValue('B6', 'SUCURSAL ANACO, AV. FRANCISCO MIRANDA ESTADO ANZOATEGUI');
+        $s->fromArray(['FECHA', 'CLIENTE', 'C.I./RIF.', 'N° DE FACTURA', 'Nº NOTA', 'Nº FC.', '', '', 'TOTAL'], null, 'B8');
+        $s->fromArray(['', '', '', 'SERIE ', 'DE CREDITO', 'AFECTADA', 'Nº. Z', 'Nº. FACTURA', 'VENTA'], null, 'B9');
+        $filas = [
+            // fecha, máquina, Z, rango, total
+            ['08/01/2025', 'Z7C7038463', '0235', '00038247-00038455', 1000], // año mal digitado (el libro es de enero 2026)
+            ['08/01/2026', 'Z7C7037700', '0237', '00036501-00036717', 1000],
+            ['09/01/2026', 'Z7C7038463', '0236', '00038456-00038643', 1000],
+            ['09/01/2026', 'Z7C7037700', '0238', '00036718-00036913', 1000],
+            ['10/01/2026', 'Z7C7038463', '0237', '00038644-00036828', 1000], // fin con un dígito cambiado (real 38828)
+            ['10/01/2026', 'Z7C7037700', '0239', '00036914-00037082', 1000],
+            ['11/01/2026', 'Z7C7038463', '0238', '00036829-00038888', 1000], // inicio copiado del error anterior
+            ['11/01/2026', 'Z7C7037700', '0240', '00037083-00037158', 1000],
+            ['12/01/2026', 'Z7C7038463', '0239', '00038889-00037337', 1000], // fines intercambiados entre las dos máquinas
+            ['12/01/2026', 'Z7C7037700', '0241', '00037159-00039071', 1000], // (real: 39071 y 37337)
+            ['13/01/2026', 'Z7C7038463', '0240', '00037338-00039220', 1000], // inicios copiados del error anterior
+            ['13/01/2026', 'Z7C7037700', '0242', '00039072-00037492', 1000],
+            ['14/01/2026', 'Z7C7038463', '0241', '00039221-00039369', 1000],
+            ['14/01/2026', 'Z7C7037700', '0243', '00037493-00037636', 1000],
+        ];
+        $r = 10;
+        foreach ($filas as [$fecha, $maq, $z, $rango, $total]) {
+            $s->fromArray([$fecha, 'RESUMEN DE VENTAS ' . $maq, '', '', '', '', $z, $rango, $total], null, 'B' . $r);
+            $r++;
+        }
+        // Segunda sección: otra sucursal pegada en el mismo libro.
+        $r += 2;
+        $s->setCellValue('B' . $r, 'SUCURSAL TUREN, ESTADO PORTUGUESA');
+        $r += 2;
+        $s->fromArray(['FECHA', 'CLIENTE', 'C.I./RIF.', 'N° DE FACTURA', 'Nº NOTA', 'Nº FC.', '', '', 'TOTAL'], null, 'B' . $r);
+        $s->fromArray(['', '', '', 'SERIE ', 'DE CREDITO', 'AFECTADA', 'Nº. Z', 'Nº. FACTURA', 'VENTA'], null, 'B' . ($r + 1));
+        $s->fromArray(['08/01/2026', 'RESUMEN DE VENTAS Z7C7037730', '', '', '', '', '0253', '00017570-00017590', 500], null, 'B' . ($r + 2));
+        $s->fromArray(['09/01/2026', 'RESUMEN DE VENTAS Z7C7037730', '', '', '', '', '0254', '00017591-00017657', 500], null, 'B' . ($r + 3));
+        $xlsx = $this->tmp . '/enero26.xlsx';
+        (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($ss))->save($xlsx);
+
+        $n = $this->reader->leerNormalizado($xlsx);
+        $this->assertSame([], $this->reader->razonesRechazo());
+        $this->assertCount(14, $n);
+
+        $porClave = [];
+        foreach ($n as $x) {
+            $porClave[$x['fecha'] . '|' . $x['maquina_fiscal']] = $x['factura_inicio'] . '-' . $x['factura_fin'];
+        }
+        $this->assertSame('38247-38455', $porClave['2026-01-08|Z7C7038463']); // año corregido
+        $this->assertArrayNotHasKey('2025-01-08|Z7C7038463', $porClave);
+        $this->assertSame('38644-38828', $porClave['2026-01-10|Z7C7038463']); // dígito corregido (única edición de un dígito que encaja)
+        $this->assertSame('38829-38888', $porClave['2026-01-11|Z7C7038463']); // inicio reencadenado
+        $this->assertSame('38889-39071', $porClave['2026-01-12|Z7C7038463']); // fin tomado del extremo que la otra máquina tenía ese día
+        $this->assertSame('39072-39220', $porClave['2026-01-13|Z7C7038463']); // inicio reencadenado
+        $this->assertSame('37159-37337', $porClave['2026-01-12|Z7C7037700']);
+        $this->assertSame('37338-37492', $porClave['2026-01-13|Z7C7037700']);
+        $this->assertSame('37083-37158', $porClave['2026-01-11|Z7C7037700']); // fila correcta intacta
+        $this->assertArrayNotHasKey('2026-01-08|Z7C7037730', $porClave);       // otra sucursal omitida
+
+        $avisos = implode("\n", $this->reader->avisos());
+        $this->assertStringContainsString('fecha 2025-01-08 corregida a 2026-01-08', $avisos);
+        $this->assertStringContainsString('rango 38644-36828 corregido a 38644-38828', $avisos);
+        $this->assertStringContainsString('rango 37159-39071 corregido a 37159-37337', $avisos);
+        $this->assertStringContainsString('SUCURSAL TUREN, ESTADO PORTUGUESA" omitida (2 filas)', $avisos);
+        $this->assertSame(1000.0 * 14, array_sum(array_map(fn ($x) => (float) $x['total_venta'], $n)));
+    }
+
+    private function crearLibroVentas(string $path): void
+    {
+        $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $s = $ss->getActiveSheet();
+        $s->setTitle('ABRIL 2026');
+        $s->setCellValue('B2', 'OMAR EL HENAOUI SALAH (COMERCIALIZADORA "EL ARABITO 222" F.P)');
+        $s->setCellValue('B4', 'LIBRO DE VENTAS');
+        $s->setCellValue('B5', 'CORRESPONDIENTE AL MES DE ABRIL DE 2026');
+
+        $cabecera = function (int $r) use ($s): void {
+            $s->fromArray(['FECHA', 'CLIENTE', 'C.I./RIF.', 'N° DE FACTURA', 'Nº NOTA', 'Nº FC.', '', '', 'TOTAL', 'VENTAS A NO CONTRIBUYENTES', '', '', '', 'VENTAS A CONTRIBUYENTES', '', '', '', 'AGENTE', 'MONTO DE', '% DE ', 'Nº', 'FECHA DE'], null, 'B' . $r);
+            $s->fromArray(['', '', '', 'SERIE ', 'DE CREDITO', 'AFECTADA', 'Nº. Z', 'Nº. FACTURA', 'VENTA', 'EXENTAS', 'BASE', '%', 'I.V.A.', 'EXENTAS', 'BASE', '%', 'I.V.A.', 'RETENCION', 'IVA RET', 'IVA RET', 'COMPROBANTE', 'COMPROBANTE'], null, 'B' . ($r + 1));
+        };
+        $fila = function (int $r, string $fecha, string $cliente, array $celdas) use ($s): void {
+            $s->setCellValue('B' . $r, \PhpOffice\PhpSpreadsheet\Shared\Date::PHPToExcel(new \DateTime($fecha)));
+            $s->getStyle('B' . $r)->getNumberFormat()->setFormatCode('dd/mm/yyyy');
+            $s->setCellValue('C' . $r, $cliente);
+            $s->setCellValue('J' . $r, "=K{$r}+L{$r}+N{$r}+O{$r}+P{$r}+R{$r}");
+            $s->setCellValue('M' . $r, 16);
+            $s->setCellValue('N' . $r, "=L{$r}*16%");
+            $s->setCellValue('Q' . $r, 16);
+            $s->setCellValue('R' . $r, "=P{$r}*16%");
+            foreach ($celdas as $col => $v) {
+                $s->setCellValue($col . $r, $v);
+            }
+        };
+
+        $cabecera(8);
+        $fila(10, '2026-04-01', 'RESUMEN DE VENTAS Z7C7037700', ['H' => '0323', 'I' => '00050259-00050470', 'K' => 100, 'L' => 1000]);
+        $fila(11, '2026-04-01', 'RESUMEN DE VENTAS Z7C7038463', ['H' => '0318', 'I' => '00055006-00055010', 'L' => 500]);
+        $fila(12, '2026-04-01', 'SERVICIOS Y TRANSPORTE DEL ESTE, C.A.', ['D' => 'J-29878584-5', 'E' => 'SERIE R 00000131', 'P' => 975.95, 'S' => 'X']);
+        $fila(13, '2026-04-01', 'ANULADA', ['E' => 'SERIE R 00000132']);
+        $fila(14, '2026-04-02', 'RESUMEN DE VENTAS Z7C7037700', ['F' => '00000003', 'G' => '50300', 'L' => -200]);
+        $fila(15, '2026-04-02', 'RESUMEN DE VENTAS Z7C7037700', ['H' => '0324', 'I' => '00050471-00050480', 'L' => 2000]);
+        $fila(16, '2026-04-02', 'RESUMEN DE VENTAS Z7C7038463', ['H' => '0319', 'I' => '0', 'K' => 0, 'L' => 0]);
+        $fila(17, '2026-04-02', 'DISTRIBUIDORA PANDOR, C.A.', ['D' => 'J-30998694-5', 'F' => 'SERIE R 00000001', 'G' => '00050260', 'P' => -100, 'S' => 'X']);
+        $fila(18, '2026-04-03', 'MULTI-TIENDA LOS 7 HERMANOS, C.A.', ['D' => 'J-29744071-2', 'S' => 'X', 'T' => 693.33, 'U' => 0.75, 'V' => '20260400001476']);
+        $s->setCellValue('C19', 'VAN…');
+        $s->setCellValue('J19', '=SUM(J10:J18)');
+        $cabecera(21);
+        $s->setCellValue('C23', '…VIENEN');
+        $s->setCellValue('J23', '=J19');
+        $fila(24, '2026-04-03', 'RESUMEN DE VENTAS Z7C7037700', ['H' => '0325', 'I' => '00050481-00050490', 'L' => 3000]);
+        $s->setCellValue('C25', 'TOTALES');
+        $s->setCellValue('J25', '=J23+J24');
+
+        (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($ss))->save($path);
+        $ss->disconnectWorksheets();
+    }
 }

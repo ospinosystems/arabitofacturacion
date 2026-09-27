@@ -46,6 +46,25 @@ FECHA,CONCEPTO,CEDULA,SERIE,NOTA DE CREDITO,AFECTADA,NUMERO DE Z,FACTURA,VENTA,T
 2024-01-15,,,,,,,,,-95.00,REDUCE EL TOTAL DE ESE DIA
 ```
 
+## Libro de ventas mensual (XLSX de la contadora)
+
+`CuadreCsvReader` reconoce directamente los libros de ventas mensuales (formato SENIAT: título, cabecera de dos filas
+`FECHA / CLIENTE / C.I./RIF. / N° DE FACTURA SERIE / Nº NOTA DE CREDITO / Nº FC. AFECTADA / Nº. Z / Nº. FACTURA / TOTAL VENTA / …`,
+saltos de página con VAN…/…VIENEN) y los convierte al formato canónico:
+
+| Fila del libro | Resultado |
+|---|---|
+| `RESUMEN DE VENTAS <máquina>` con Nº FACTURA `inicio-fin` | FISCAL RANGO, CONCEPTO = máquina, VENTA = TOTAL VENTA (fórmula evaluada) |
+| `RESUMEN DE VENTAS <máquina>` con Nº NOTA DE CREDITO | REDUCE EL TOTAL DE ESE DIA (monto negativo) para esa máquina |
+| Cliente con `SERIE R 000123` (factura manual) | FISCAL UNITARIA, CONCEPTO = `SERIE R`, FACTURA = 123 |
+| Cliente con nota de crédito | REDUCE; la máquina se infiere del número de factura afectada |
+| `ANULADA`, Z sin ventas (factura `0`), filas solo de retención, totales | Se omiten |
+| Sección con otra `SUCURSAL …` pegada en el mismo libro | Se omite (aviso) |
+
+Correcciones automáticas, siempre con aviso en el log del paso `preparar` (`avisos()` del lector): año mal digitado
+cuando el mes coincide con el del libro, y rangos `inicio-fin` mal digitados reconstruidos por continuidad de la
+numeración de cada máquina (la primera factura de un día sigue a la última del anterior).
+
 ## Formato antiguo (compatible)
 
 Se sigue aceptando el formato anterior:
