@@ -45,18 +45,26 @@ if (-not $Sucursal) { $Sucursal = "anaco" }
 
 $destino = "$Usuario@$Servidor"
 $sshOpts = @("-o", "StrictHostKeyChecking=accept-new", "-o", "ServerAliveInterval=30")
-$remoto = 'D=$HOME/private_html/cuadre; [ -d $HOME/private_html ] || D=$HOME/cuadre; mkdir -p $D/datos; echo $D'
+# El paso 1 devuelve dos líneas: la ruta absoluta (para ssh) y la relativa al home (para scp/SFTP, que en
+# Cloudways está enjaulado en la carpeta de la aplicación y no ve las rutas absolutas).
+$remoto = 'D=$HOME/private_html/cuadre; [ -d $HOME/private_html ] || D=$HOME/cuadre; mkdir -p $D/datos; echo $D; echo ${D#$HOME/}'
 
 Write-Host ""
 Write-Host "1/3 Preparando carpeta en el servidor (se pedirá la contraseña SFTP)..." -ForegroundColor Cyan
-$dirRemoto = (& ssh @sshOpts $destino $remoto | Select-Object -Last 1).Trim()
-if (-not $dirRemoto) { Write-Host "No se pudo crear la carpeta remota." -ForegroundColor Red; exit 1 }
-Write-Host "    Carpeta remota: $dirRemoto"
+$salida = @(& ssh @sshOpts $destino $remoto | Where-Object { $_ -and $_.Trim() } | ForEach-Object { $_.Trim() })
+if ($salida.Count -lt 2) { Write-Host "No se pudo crear la carpeta remota." -ForegroundColor Red; exit 1 }
+$dirRemoto = $salida[-2]
+$dirRel = $salida[-1]
+Write-Host "    Carpeta remota: $dirRemoto  (SFTP: $dirRel)"
 
-Write-Host "2/3 Subiendo $($zips.Count) ZIP a $dirRemoto/datos (se pedirá la contraseña)..." -ForegroundColor Cyan
+Write-Host "2/3 Subiendo $($zips.Count) ZIP a $dirRel/datos (se pedirá la contraseña)..." -ForegroundColor Cyan
 $archivos = $zips | ForEach-Object { $_.FullName }
-& scp @sshOpts $archivos "${destino}:$dirRemoto/datos/"
-if ($LASTEXITCODE -ne 0) { Write-Host "Falló la subida por SFTP." -ForegroundColor Red; exit 1 }
+& scp @sshOpts $archivos "${destino}:$dirRel/datos/"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "    Reintentando con el protocolo scp clásico (-O)..." -ForegroundColor Yellow
+    & scp -O @sshOpts $archivos "${destino}:$dirRemoto/datos/"
+    if ($LASTEXITCODE -ne 0) { Write-Host "Falló la subida por SFTP." -ForegroundColor Red; exit 1 }
+}
 
 Write-Host "3/3 Instalando y lanzando el proceso en el servidor (se pedirá la contraseña)..." -ForegroundColor Cyan
 $escDbPass = $DbPass -replace "'", "'\''"
