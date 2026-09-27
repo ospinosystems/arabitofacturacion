@@ -118,6 +118,11 @@ class CuadreCompletoCommand extends Command
             if ($forzarDesde && $paso === $desdePaso) {
                 $forzando = true;
             }
+            if ($forzando && !$this->dryRun && isset($this->estado['pasos'][$paso])) {
+                // Al repetir un paso, los posteriores dejan de valer (p. ej. repetir tasas obliga a rehacer respaldo y cuadre).
+                unset($this->estado['pasos'][$paso]);
+                $this->guardarEstado();
+            }
 
             $omitir = $this->motivoOmision($paso);
             if ($omitir !== null) {
@@ -141,6 +146,10 @@ class CuadreCompletoCommand extends Command
             }
             $dur = microtime(true) - $inicio;
             if (!$ok) {
+                if (!$this->dryRun && isset($this->estado['pasos'][$paso])) {
+                    unset($this->estado['pasos'][$paso]); // un paso fallido no puede quedar marcado como hecho por una corrida anterior
+                    $this->guardarEstado();
+                }
                 $this->log("Paso {$paso} FALLÓ tras " . $this->formatearDuracion($dur) . '. Corrija y vuelva a ejecutar el mismo comando: continuará desde este paso.', 'error');
                 $this->cerrar();
                 return Command::FAILURE;
