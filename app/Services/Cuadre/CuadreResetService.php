@@ -102,16 +102,19 @@ class CuadreResetService
                 if ($itemsAjuste->isNotEmpty()) {
                     $stats['items_legacy_borrados'] += DB::table('items_pedidos')->whereIn('id', $itemsAjuste->pluck('id')->all())->delete();
                     foreach ($itemsAjuste->pluck('id_pedido')->unique() as $idPedido) {
-                        $suma = (float) DB::table('items_pedidos')->where('id_pedido', $idPedido)->sum(DB::raw('COALESCE(monto_bs, 0)'));
-                        $upd = ['monto' => $suma];
+                        // Convención: pago.monto = USD, monto_bs = Bs.
+                        $sumaUsd = (float) DB::table('items_pedidos')->where('id_pedido', $idPedido)->sum(DB::raw('COALESCE(monto, 0)'));
+                        $sumaBs = (float) DB::table('items_pedidos')->where('id_pedido', $idPedido)->sum(DB::raw('COALESCE(monto_bs, 0)'));
+                        $upd = ['monto' => round($sumaUsd, 4)];
                         if ($pagoTieneMontoBs) {
-                            $upd['monto_bs'] = $suma;
+                            $upd['monto_bs'] = round($sumaBs, 4);
                         }
                         DB::table('pago_pedidos')->where('id_pedido', $idPedido)->orderBy('id')->limit(1)->update($upd);
                     }
                 }
 
-                $data = ['numero_factura' => null, 'valido' => false];
+                // valido vuelve a NULL (estado original de un pedido nunca cuadrado).
+                $data = ['numero_factura' => null, 'valido' => null];
                 if ($tieneMaquina) {
                     $data['maquina_fiscal'] = null;
                 }

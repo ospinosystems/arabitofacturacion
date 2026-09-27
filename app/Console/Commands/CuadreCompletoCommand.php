@@ -559,9 +559,13 @@ class CuadreCompletoCommand extends Command
         } elseif ($this->option('desde-cero')) {
             $args['--desde-cero'] = true;
         }
-        $rc = $this->call('cuadre:pedidos-diario', $args);
+        // Registrar el reporte ANTES de correr: si el proceso muere a mitad, medir igual lo encuentra.
         $this->estado['datos'][$simular ? 'reporte_simulacion' : 'reporte_cuadre'] = $reporte;
+        if (!$simular) {
+            $this->estado['datos']['reportes_cuadre'] = array_values(array_unique(array_merge($this->estado['datos']['reportes_cuadre'] ?? [], [$reporte])));
+        }
         $this->guardarEstado();
+        $rc = $this->call('cuadre:pedidos-diario', $args);
         if ($rc !== 0) {
             $this->log(($simular ? 'La simulación' : 'El cuadre') . ' terminó con error. Al volver a ejecutar continúa por los grupos pendientes (los ya cuadrados se omiten).', 'error');
             return false;
@@ -678,26 +682,42 @@ class CuadreCompletoCommand extends Command
             $this->log('Numeración: sin números de factura repetidos por máquina.');
         }
 
-        // Grupos sin pedidos / ajuste alto según el último reporte del cuadre.
-        $rep = $this->estado['datos']['reporte_cuadre'] ?? null;
-        if ($rep && is_file($rep)) {
-            $sinPedidos = 0; $altos = 0; $omitidos = 0; $procesados = 0;
+        // Grupos sin pedidos / ajuste alto según TODOS los reportes de cuadre de esta carpeta de trabajo
+        // (una corrida interrumpida y su reanudación se combinan: por grupo vale la última fila no omitida).
+        $reportes = $this->estado['datos']['reportes_cuadre'] ?? array_filter([$this->estado['datos']['reporte_cuadre'] ?? null]);
+        $porGrupo = [];
+        $archivosLeidos = 0;
+        foreach ($reportes as $rep) {
+            if (!$rep || !is_file($rep) || ($fh = fopen($rep, 'r')) === false) {
+                continue;
+            }
+            $archivosLeidos++;
+            $head = fgetcsv($fh);
+            while (($r = fgetcsv($fh)) !== false) {
+                $row = $head ? @array_combine($head, $r) : false;
+                if (!$row || ($row['estado'] ?? '') === 'omitido') continue;
+                $porGrupo[($row['fecha'] ?? '') . '|' . ($row['maquina_fiscal'] ?? '')] = $row;
+            }
+            fclose($fh);
+        }
+        if ($archivosLeidos > 0) {
             $umbral = (float) $this->option('umbral-ajuste');
-            if (($fh = fopen($rep, 'r')) !== false) {
-                $head = fgetcsv($fh);
-                while (($r = fgetcsv($fh)) !== false) {
-                    $row = @array_combine($head, $r);
-                    if (!$row) continue;
-                    if (($row['estado'] ?? '') === 'sin_pedidos') $sinPedidos++;
-                    if (($row['estado'] ?? '') === 'omitido') $omitidos++;
-                    if (($row['estado'] ?? '') === 'procesado') {
-                        $procesados++;
-                        if ((float) ($row['pct_ajuste'] ?? 0) > $umbral) $altos++;
+            $sinPedidos = 0; $altos = 0; $procesados = 0;
+            $gruposAltos = [];
+            foreach ($porGrupo as $k => $row) {
+                if (($row['estado'] ?? '') === 'sin_pedidos') $sinPedidos++;
+                if (($row['estado'] ?? '') === 'procesado') {
+                    $procesados++;
+                    if ((float) ($row['pct_ajuste'] ?? 0) > $umbral) {
+                        $altos++;
+                        if (count($gruposAltos) < 15) $gruposAltos[] = $k . ' (' . round((float) $row['pct_ajuste'], 2) . '%)';
                     }
                 }
-                fclose($fh);
             }
-            $this->log(sprintf('Último cuadre (%s): grupos procesados %d | omitidos (ya hechos) %d | sin pedidos %d | con ajuste > %s%%: %d', basename($rep), $procesados, $omitidos, $sinPedidos, $umbral, $altos), $sinPedidos + $altos > 0 ? 'warn' : 'info');
+            $this->log(sprintf('Reportes de cuadre (%d archivo(s)): grupos procesados %d | sin pedidos %d | con ajuste > %s%%: %d', $archivosLeidos, $procesados, $sinPedidos, $umbral, $altos), $sinPedidos + $altos > 0 ? 'warn' : 'info');
+            if (!empty($gruposAltos)) {
+                $this->log('  Grupos con ajuste alto: ' . implode(', ', $gruposAltos), 'warn');
+            }
         }
 
         $destino = $this->trabajo . DIRECTORY_SEPARATOR . 'resultado_' . ($this->sucursal ?: 'sucursal') . '.csv';

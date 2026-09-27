@@ -371,6 +371,7 @@ class TitanioImportarPedidos extends Command
                         'moneda' => 'dolar',
                         'monto' => $amount,
                         'monto_original' => $amount,
+                        'monto_bs' => round($amount * $tasa, 4),
                     ];
                     break;
 
@@ -389,6 +390,7 @@ class TitanioImportarPedidos extends Command
                         'moneda' => null,
                         'monto' => $amount,
                         'monto_original' => null,
+                        'monto_bs' => $amountBs ?: round($amount * $tasa, 4),
                     ];
                     $refData = is_array($p['reference'] ?? null) ? $p['reference'] : [];
                     $cliRef = is_array($refData['client'] ?? null) ? $refData['client'] : [];
@@ -426,6 +428,14 @@ class TitanioImportarPedidos extends Command
         $resultado = DB::transaction(function () use ($uuid, $itemsRows, $pagosRows, $referenciasRows, $createdAt, $idVendedor) {
             $existed = DB::table('pedidos')->where('uuid', $uuid)->first();
             if ($existed) {
+                // Un pedido ya cuadrado (numero_factura/valido asignados por cuadre:pedidos-diario) no se
+                // reemplaza: se perderían la factura y la auditoría de ajustes. Primero cuadre:pedidos-reset.
+                if (!empty($existed->valido)) {
+                    throw new \RuntimeException(sprintf(
+                        'pedido ya cuadrado (factura %s, máquina %s); ejecute cuadre:pedidos-reset para ese día antes de reimportar',
+                        $existed->numero_factura ?? '?', $existed->maquina_fiscal ?? '?'
+                    ));
+                }
                 $this->reponerInventarioPedido($existed->id, $idVendedor);
                 DB::table('pedidos')->where('id', $existed->id)->delete();
             }
@@ -482,7 +492,9 @@ class TitanioImportarPedidos extends Command
                 $row['created_at'] = $fechaPedido;
                 $row['updated_at'] = $now;
                 if ($hasPagosMontoBs) {
-                    $row['monto_bs'] = $row['monto_original'] ?? null;
+                    $row['monto_bs'] = $row['monto_bs'] ?? $row['monto_original'] ?? null;
+                } else {
+                    unset($row['monto_bs']);
                 }
                 DB::table('pago_pedidos')->insert($row);
             }

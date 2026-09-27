@@ -140,7 +140,7 @@ class CuadrePedidosDiario extends Command
             $fechas = array_column($agregadas, 'fecha');
             $this->info('Rango de fechas: ' . min($fechas) . ' → ' . max($fechas));
             $this->info(sprintf(
-                'Tiempo máximo estimado de búsqueda: %d grupos × %.0f s = %s (cota superior; la búsqueda se corta al llegar a ±%.2f Bs del objetivo)',
+                'Tiempo máximo estimado de búsqueda: %d grupos × %.0f s = %s (cota superior; la búsqueda se corta al llegar a ±%.3f Bs del objetivo)',
                 $totalGrupos, $this->maxSegundos, $this->formatearDuracion($totalGrupos * $this->maxSegundos), $this->toleranciaBs
             ));
         }
@@ -509,30 +509,41 @@ class CuadrePedidosDiario extends Command
 
         $aplicado = bcsub(number_format($nuevoMontoBs, 4, '.', ''), number_format($montoActualBs, 4, '.', ''), $this->scale);
 
-        // Pago: recalcular con la suma real de ítems (o crear uno si no existe).
-        $pago = pago_pedidos::where('id_pedido', $pedido->id)->orderBy('id')->first();
+        // Pago. Convención de la app: pago_pedidos.monto = USD, monto_original y monto_bs = Bs.
+        // Se mueve la DIFERENCIA al primer pago de la venta (cuenta=1) para respetar pedidos con varios pagos;
+        // si el pedido no tiene pagos se crea uno con la suma de ítems.
+        $deltaUsd = round($nuevoMontoUsd - (float) ($orig['monto'] ?? 0), 4);
+        $deltaBs = (float) $aplicado;
+        $pago = pago_pedidos::where('id_pedido', $pedido->id)->where('cuenta', 1)->orderBy('id')->first()
+            ?: pago_pedidos::where('id_pedido', $pedido->id)->orderBy('id')->first();
         $pagoOrig = null;
         $pagoCreado = false;
-        $sumaBsItems = (float) DB::table('items_pedidos')
-            ->where('id_pedido', $pedido->id)
-            ->sum(DB::raw('COALESCE(monto_bs, monto * COALESCE(NULLIF(tasa, 0), 1), 0)'));
         if ($pago) {
             $pagoOrig = ['monto' => $pago->monto, 'monto_bs' => $pago->monto_bs ?? null, 'monto_original' => $pago->monto_original ?? null];
-            $pago->monto = $sumaBsItems;
-            if ($this->pagoTieneMontoBs) {
-                $pago->monto_bs = $sumaBsItems;
+            $pago->monto = round((float) $pago->monto + $deltaUsd, 4);
+            if ($pago->monto_original !== null) {
+                $enDolar = strtolower((string) ($pago->moneda ?? '')) === 'dolar';
+                $pago->monto_original = round((float) $pago->monto_original + ($enDolar ? $deltaUsd : $deltaBs), 4);
+            }
+            if ($this->pagoTieneMontoBs && $pago->monto_bs !== null) {
+                $pago->monto_bs = round((float) $pago->monto_bs + $deltaBs, 4);
             }
             $pago->save();
         } else {
+            $sumaUsdItems = (float) DB::table('items_pedidos')->where('id_pedido', $pedido->id)->sum(DB::raw('COALESCE(monto, 0)'));
+            $sumaBsItems = (float) DB::table('items_pedidos')
+                ->where('id_pedido', $pedido->id)
+                ->sum(DB::raw('COALESCE(monto_bs, monto * COALESCE(NULLIF(tasa, 0), 1), 0)'));
             $datosPago = [
                 'id_pedido'      => $pedido->id,
                 'tipo'           => '5',
                 'cuenta'         => 1,
-                'monto'          => $sumaBsItems,
-                'monto_original' => $sumaBsItems,
+                'moneda'         => 'bs',
+                'monto'          => round($sumaUsdItems, 4),
+                'monto_original' => round($sumaBsItems, 4),
             ];
             if ($this->pagoTieneMontoBs) {
-                $datosPago['monto_bs'] = $sumaBsItems;
+                $datosPago['monto_bs'] = round($sumaBsItems, 4);
             }
             $pago = pago_pedidos::create($datosPago);
             $pagoCreado = true;
