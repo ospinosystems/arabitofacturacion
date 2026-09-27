@@ -1,7 +1,7 @@
 @echo off
 REM ============================================================================
 REM  Cuadre completo de ANACO en esta PC (XAMPP). Reanudable: si se apaga la PC,
-REM  vuelva a ejecutar este .bat y continúa donde quedó.
+REM  vuelva a ejecutar este .bat y continua donde quedo.
 REM
 REM  Uso:  cuadre-completo-anaco.bat "C:\Users\alvar\Downloads\ANACO FACTURAS" <storeId Titanio>
 REM        cuadre-completo-anaco.bat "C:\Users\alvar\Downloads\ANACO FACTURAS" --sin-titanio
