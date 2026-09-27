@@ -37,7 +37,8 @@ class CuadreCompletoCommand extends Command
                             {--titanio-hasta= : Último día a importar desde Titanio POS (default hoy)}
                             {--sin-titanio : Omitir la importación desde Titanio POS}
                             {--sin-tasas : No recalcular tasa/monto_bs de items_pedidos con la tasa BCV del día (paso tasas)}
-                            {--tasas-csv= : CSV de tasas BCV por día (default database/data/Tasas_BCV_2023_2024_2025.csv)}
+                            {--tasas-csv= : CSV de tasas BCV por día (default database/data/tasas_bcv_diarias.csv, fecha,tasa_bcv)}
+                            {--tasas-forzar : Aplicar la tasa del CSV a todos los meses, no solo a los que traen una tasa fija (placeholder)}
                             {--sin-respaldo : No hacer mysqldump antes del cuadre}
                             {--simular-antes : Correr una simulación (sin escribir) antes del cuadre real}
                             {--solo-simular : Correr solo la simulación del cuadre y detenerse}
@@ -434,16 +435,29 @@ class CuadreCompletoCommand extends Command
             return true;
         }
         DB::reconnect();
-        $csv = (string) ($this->option('tasas-csv') ?: base_path('database/data/Tasas_BCV_2023_2024_2025.csv'));
+        $csv = (string) ($this->option('tasas-csv') ?: base_path(\Database\Seeders\TasasBcvItemsPedidosSeeder::CSV_DEFAULT));
         if (!is_file($csv)) {
             $this->log("No existe el CSV de tasas BCV: {$csv}", 'error');
             return false;
         }
-        $antes = DB::table('items_pedidos')
-            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as mes, ROUND(AVG(tasa), 2) as tasa_prom, COUNT(*) as n")
+        // Meses "con tasa fija": más de la mitad de los ítems del mes comparten exactamente la misma tasa. Es la huella de
+        // un respaldo que no guardaba la tasa real por venta (Anaco: 267,7499 en todo dic 2024 → dic 2025). En los meses
+        // donde el POS ya grababa la tasa de cada venta (valores distintos cada día) se conserva la del ítem.
+        $porMes = DB::table(DB::raw("(SELECT DATE_FORMAT(created_at, '%Y-%m') AS mes, ROUND(tasa, 4) AS t, COUNT(*) AS c FROM items_pedidos GROUP BY 1, 2) x"))
+            ->selectRaw('mes, SUM(c) AS n, MAX(c) AS max_c, ROUND(SUM(t * c) / SUM(c), 2) AS tasa_prom')
             ->groupBy('mes')->orderBy('mes')->get();
-        $this->log('Tasa promedio por mes en items_pedidos ANTES: ' . $antes->map(fn ($r) => "{$r->mes}={$r->tasa_prom}")->implode(' '));
-        $rc = $this->call('tasas-bcv:seed', ['path' => $csv]);
+        $this->log('Tasa promedio por mes en items_pedidos ANTES: ' . $porMes->map(fn ($r) => "{$r->mes}={$r->tasa_prom}" . ($r->max_c / max(1, $r->n) >= 0.5 ? '(fija)' : ''))->implode(' '));
+        $meses = $porMes->filter(fn ($r) => $r->max_c / max(1, $r->n) >= 0.5)->pluck('mes')->values()->all();
+        if ($this->option('tasas-forzar')) {
+            $meses = $porMes->pluck('mes')->values()->all();
+            $this->log('--tasas-forzar: se aplica la tasa del CSV a todos los meses (' . count($meses) . ').');
+        } elseif (empty($meses)) {
+            $this->log('Ningún mes trae tasa fija: se conservan las tasas de los ítems (use --tasas-forzar para sobreescribirlas).');
+            return true;
+        } else {
+            $this->log('Meses con tasa fija que se recalculan con la tasa BCV del día: ' . implode(' ', $meses));
+        }
+        $rc = $this->call('tasas-bcv:seed', ['path' => $csv, '--meses' => implode(',', $meses)]);
         if ($rc !== 0) {
             $this->log('tasas-bcv:seed no terminó limpio.', 'error');
             return false;

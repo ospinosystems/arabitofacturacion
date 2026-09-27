@@ -15,11 +15,17 @@ use Illuminate\Support\Facades\DB;
  */
 class TasasBcvItemsPedidosSeeder extends Seeder
 {
+    /** CSV por defecto: tasas diarias BCV extraídas de Wikipedia (fecha,tasa_bcv; ver database/data/README de tasas). */
+    public const CSV_DEFAULT = 'database/data/tasas_bcv_diarias.csv';
+
     protected string $csvPath;
+
+    /** @var string[]|null Solo actualizar ítems de estos meses (YYYY-MM). null = todos los que tengan tasa en el CSV. */
+    public ?array $meses = null;
 
     public function __construct(?string $csvPath = null)
     {
-        $this->csvPath = $csvPath ?? base_path('database/data/Tasas_BCV_2023_2024_2025.csv');
+        $this->csvPath = $csvPath ?? base_path(self::CSV_DEFAULT);
     }
 
     public function run($stepBar = null): void
@@ -57,6 +63,19 @@ class TasasBcvItemsPedidosSeeder extends Seeder
         }
 
         $tasasPorFecha = [];
+
+        // Formato simple: cabecera "fecha,tasa_bcv" y una fila por día hábil (YYYY-MM-DD,valor).
+        if (preg_match('/^(\xEF\xBB\xBF)?fecha\s*[,;]/i', $lines[0])) {
+            foreach (array_slice($lines, 1) as $line) {
+                $c = str_getcsv($line, strpos($line, ';') !== false ? ';' : ',');
+                $fecha = trim((string) ($c[0] ?? ''));
+                $tasa = $this->extraerTasaBcv((string) ($c[1] ?? ''));
+                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha) && $tasa !== null && $tasa > 0) {
+                    $tasasPorFecha[$fecha] = $tasa;
+                }
+            }
+            return $this->rellenarDiasSinTasa($tasasPorFecha);
+        }
         $year = null;
         $months = []; // [1,2,3,4] o [5,6,7,8] o [9,10,11,12]
         $dataStartIndex = -1;
@@ -133,9 +152,17 @@ class TasasBcvItemsPedidosSeeder extends Seeder
             }
         }
 
+        return $this->rellenarDiasSinTasa($tasasPorFecha);
+    }
+
+    /** Sábados, domingos y feriados: usar la última tasa válida (forward-fill + backward-fill). */
+    protected function rellenarDiasSinTasa(array $tasasPorFecha): array
+    {
+        if (empty($tasasPorFecha)) {
+            return [];
+        }
         ksort($tasasPorFecha);
 
-        // Sábados, domingos y feriados: usar la última tasa válida (forward-fill + backward-fill)
         $rangoMin = min(array_keys($tasasPorFecha));
         $rangoMax = max(array_keys($tasasPorFecha));
         $filled = [];
@@ -232,9 +259,19 @@ class TasasBcvItemsPedidosSeeder extends Seeder
     protected function actualizarTasaEnItemsPedidos(array $tasasPorFecha): void
     {
         $tabla = 'items_pedidos';
-        $total = DB::table($tabla)->count();
+        $consulta = function () use ($tabla) {
+            $q = DB::table($tabla);
+            if ($this->meses !== null) {
+                $q->whereIn(DB::raw("DATE_FORMAT(created_at, '%Y-%m')"), $this->meses);
+            }
+            return $q;
+        };
+        $total = $consulta()->count();
         $actualizados = 0;
         $sinTasa = 0;
+        if ($this->command && $this->meses !== null) {
+            $this->command->info('Meses a actualizar: ' . implode(', ', $this->meses) . " ({$total} ítems)");
+        }
 
         $bar = null;
         if ($this->command && $total > 0) {
@@ -243,7 +280,7 @@ class TasasBcvItemsPedidosSeeder extends Seeder
             $bar->start();
         }
 
-        DB::table($tabla)->orderBy('id')->chunk(500, function ($items) use ($tasasPorFecha, &$actualizados, &$sinTasa, $bar) {
+        $consulta()->orderBy('id')->chunk(500, function ($items) use ($tasasPorFecha, &$actualizados, &$sinTasa, $bar) {
             foreach ($items as $item) {
                 if ($bar) {
                     $bar->advance();
