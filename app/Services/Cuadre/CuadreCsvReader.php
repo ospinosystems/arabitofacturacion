@@ -506,9 +506,8 @@ class CuadreCsvReader
             for ($cur = $mejor; $cur !== null; $cur = $prev[$cur[0]][$cur[1]]) {
                 $fijos[$cur[0]] = $cands[$cur[0]][$cur[1]];
             }
-            if (count($fijos) === $n + 1) {
-                continue; // todo coherente
-            }
+            // Aunque la cadena cubra todas las fronteras, puede haber elegido "inicio − 1" donde el "fin" de la fila anterior
+            // discrepaba (solape de un día con el siguiente): la reescritura final corrige esa fila.
 
             $valores = $fijos;
             for ($i = 0; $i <= $n; $i++) {

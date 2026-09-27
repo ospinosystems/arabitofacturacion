@@ -39,6 +39,8 @@ class CuadrePedidosDiario extends Command
                             {--tolerancia-bs=1 : La búsqueda se detiene cuando |suma - objetivo| <= este monto en Bs (el resto lo cubre el ajuste)}
                             {--umbral-ajuste=5 : Porcentaje de ajuste sobre el objetivo a partir del cual se avisa}
                             {--sin-filtro-estado : Incluir también pedidos con estado distinto de 1 (por defecto solo facturados)}
+                            {--sin-absorber : No incluir como candidatos los pedidos de días que el libro salta (ver --max-dias-absorber)}
+                            {--max-dias-absorber=3 : Máximo de días seguidos sin objetivo que se absorben en el grupo siguiente de la misma máquina}
                             {--reporte= : Ruta de un CSV donde escribir el detalle por grupo (objetivo, seleccionados, suma, ajuste, real)}';
 
     protected $description = 'Cuadre por día y máquina fiscal contra monto objetivo (CSV/XLSX con FECHA, CONCEPTO, FACTURA, VENTA, TIPO).';
@@ -60,6 +62,9 @@ class CuadrePedidosDiario extends Command
     /** @var array<int,bool> ids de pedidos excluidos por monto <= 0 (para contarlos una sola vez) */
     protected array $excluidosMontoCero = [];
     protected bool $filtrarEstado = true;
+
+    /** @var array<string, string[]> "fecha|maquina" => días anteriores sin objetivo cuyos pedidos entran en ese grupo */
+    protected array $diasAbsorbidos = [];
     protected bool $simular = false;
 
     protected bool $tieneMaquinaFiscal = false;
@@ -124,6 +129,8 @@ class CuadrePedidosDiario extends Command
         if ($desde || $hasta) {
             $this->info("Filtro --desde/--hasta ({$desde} → {$hasta}): " . count($agregadas) . ' grupo(s).');
         }
+
+        $this->calcularDiasAbsorbidos($agregadas);
 
         $totalGrupos = count($agregadas);
         $objetivoTotal = '0';
@@ -293,6 +300,56 @@ class CuadrePedidosDiario extends Command
      * Procesa un grupo fecha + máquina. Devuelve null si no hay candidatos, ['skipped'=>true] si ya estaba
      * procesado, o el resultado con cantidades y montos.
      */
+    /**
+     * Días que el libro de ventas "salta" (ningún concepto fiscal tiene filas ese día) y cuyas ventas quedaron en el
+     * cierre Z del día siguiente (típico: el Z se cerró a la mañana siguiente y el libro trae dos Z ese día).
+     * Para cada grupo (fecha, máquina) se anotan los días sin objetivo entre la fecha anterior de esa máquina y la
+     * fecha del grupo; sus pedidos entran como candidatos del grupo. Solo aplica a máquinas fiscales (serial), no a
+     * conceptos como "SERIE R" (facturas manuales), y hasta --max-dias-absorber días hacia atrás.
+     */
+    protected function calcularDiasAbsorbidos(array $agregadas): void
+    {
+        $this->diasAbsorbidos = [];
+        if ($this->option('sin-absorber')) {
+            return;
+        }
+        $maxDias = max(0, (int) $this->option('max-dias-absorber'));
+        $esFiscal = fn (string $m) => (bool) preg_match('/^[A-Z]{1,4}[A-Z0-9]{5,}$/', $m);
+        $fechasConObjetivo = [];
+        $fechasPorMaquina = [];
+        foreach ($agregadas as $g) {
+            if ($esFiscal($g['maquina_fiscal'])) {
+                $fechasConObjetivo[$g['fecha']] = true;
+                $fechasPorMaquina[$g['maquina_fiscal']][$g['fecha']] = true;
+            }
+        }
+        foreach ($fechasPorMaquina as $maquina => $fechas) {
+            $lista = array_keys($fechas);
+            sort($lista);
+            for ($i = 1; $i < count($lista); $i++) {
+                $prev = $lista[$i - 1];
+                $actual = $lista[$i];
+                $absorbidos = [];
+                $d = date('Y-m-d', strtotime($prev . ' +1 day'));
+                while ($d < $actual && count($absorbidos) < $maxDias) {
+                    if (!isset($fechasConObjetivo[$d])) {
+                        $absorbidos[] = $d;
+                    }
+                    $d = date('Y-m-d', strtotime($d . ' +1 day'));
+                }
+                if ($d < $actual) {
+                    $absorbidos = []; // hueco más largo que el máximo: no se absorbe nada (mejor reportarlo como sin pedidos)
+                }
+                if (!empty($absorbidos)) {
+                    $this->diasAbsorbidos[$actual . '|' . $maquina] = $absorbidos;
+                }
+            }
+        }
+        if (!empty($this->diasAbsorbidos)) {
+            $this->info('Días sin objetivo en el libro que se absorben en el grupo siguiente de su máquina: ' . count($this->diasAbsorbidos) . ' grupo(s).');
+        }
+    }
+
     protected function procesarDiaMaquina(string $fechaStr, string $maquinaFiscal, string $montoObjetivo, string $facturaInicio, string $facturaFin, int $cantidadObjetivo): ?array
     {
         $dateExpr = 'DATE(COALESCE(fecha_factura, created_at))';
@@ -308,7 +365,11 @@ class CuadrePedidosDiario extends Command
 
         // Lectura y cómputo pesado FUERA de la transacción (la conexión se cierra si una transacción
         // queda abierta mucho tiempo sin consultas en algunos hostings).
-        $query = pedidos::whereRaw($dateExpr . ' = ?', [$fechaStr])
+        $fechasCandidatas = array_merge($this->diasAbsorbidos[$fechaStr . '|' . $maquinaFiscal] ?? [], [$fechaStr]);
+        if (count($fechasCandidatas) > 1) {
+            $this->line('  → absorbe también los días sin objetivo: ' . implode(', ', array_slice($fechasCandidatas, 0, -1)));
+        }
+        $query = pedidos::whereIn(DB::raw($dateExpr), $fechasCandidatas)
             ->where(function ($q) {
                 $q->whereNull('valido')->orWhere('valido', false);
             });
