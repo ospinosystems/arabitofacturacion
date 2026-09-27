@@ -34,7 +34,8 @@ class TitanioImportarPedidos extends Command
                             {--limit= : Limitar a N pedidos por día para pruebas}
                             {--uuid= : Importar solo el pedido con este UUID}
                             {--detener-si-falla : Abortar el rango al primer día con error HTTP (default: seguir y reportar)}
-                            {--reversar : Revertir lo importado en la(s) fecha(s) (repone inventario + borra pedidos)}';
+                            {--reversar : Revertir lo importado en la(s) fecha(s) (repone inventario + borra pedidos)}
+                            {--tolerar-errores=0 : Terminar con éxito si los pedidos con error no superan este porcentaje del total (0 = cualquier error es fallo)}';
 
     protected $description = 'Importa pedidos desde Titanio POS (API) a la BD local de la sucursal';
 
@@ -204,7 +205,17 @@ class TitanioImportarPedidos extends Command
             return self::FAILURE;
         }
 
-        return $totales['errores'] > 0 ? self::FAILURE : self::SUCCESS;
+        if ($totales['errores'] > 0) {
+            $procesados = $totales['importados'] + $totales['sobreescritos'] + $totales['saltados'] + $totales['errores'];
+            $pct = $procesados > 0 ? $totales['errores'] * 100 / $procesados : 100.0;
+            $tolerar = (float) $this->option('tolerar-errores');
+            if ($tolerar > 0 && $pct <= $tolerar) {
+                $this->warn(sprintf('Errores: %d de %d pedidos (%.1f%%), dentro de la tolerancia --tolerar-errores=%s: se da por completado. Los pedidos con error NO están en la BD (productos inexistentes en el respaldo, tipos no soportados).', $totales['errores'], $procesados, $pct, $this->option('tolerar-errores')));
+                return self::SUCCESS;
+            }
+            return self::FAILURE;
+        }
+        return self::SUCCESS;
     }
 
     /**
@@ -604,7 +615,15 @@ class TitanioImportarPedidos extends Command
             }
             $ct1 = (float) $inv->cantidad;
             $ctFinal = round($ct1 + (float) $it->cantidad, 4);
-            $invCtrl->descontarInventario((int) $it->id_producto, $ctFinal, $ct1, $idPedido, 'IMPORT.TITANIO.REPONER');
+            try {
+                $invCtrl->descontarInventario((int) $it->id_producto, $ctFinal, $ct1, $idPedido, 'IMPORT.TITANIO.REPONER');
+            } catch (\Throwable $e) {
+                // Ítems con cantidad negativa (cambios/devoluciones) sobre stock 0: no impedir el reverso/reimportación.
+                if (stripos($e->getMessage(), 'No hay disponible') === false) {
+                    throw $e;
+                }
+                $this->itemsSinStock++;
+            }
         }
     }
 

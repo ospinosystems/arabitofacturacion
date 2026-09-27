@@ -36,6 +36,7 @@ class CuadreCompletoCommand extends Command
                             {--titanio-desde=2026-08-30 : Primer día a importar desde Titanio POS}
                             {--titanio-hasta= : Último día a importar desde Titanio POS (default hoy)}
                             {--sin-titanio : Omitir la importación desde Titanio POS}
+                            {--titanio-tolerar-errores=25 : % de pedidos de Titanio con error (productos inexistentes, tipos no soportados) que no detiene el proceso}
                             {--sin-tasas : No recalcular tasa/monto_bs de items_pedidos con la tasa BCV del día (paso tasas)}
                             {--tasas-csv= : CSV de tasas BCV por día (default database/data/tasas_bcv_diarias.csv, fecha,tasa_bcv)}
                             {--tasas-forzar : Aplicar la tasa del CSV a todos los meses, no solo a los que traen una tasa fija (placeholder)}
@@ -500,6 +501,7 @@ class CuadreCompletoCommand extends Command
             '--hasta'    => $hasta,
             '--store-id' => (string) $storeId,
             '--sucursal' => $this->sucursal !== '' ? $this->sucursal : null,
+            '--tolerar-errores' => (string) $this->option('titanio-tolerar-errores'),
             '--dry-run'  => $this->dryRun ? true : null,
         ], fn ($v) => $v !== null));
 
