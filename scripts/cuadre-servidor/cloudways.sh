@@ -12,8 +12,10 @@
 # (Access Details → MySQL Access): esa BD se BORRA y se restaura con el respaldo de la sucursal.
 set -euo pipefail
 
+# Se ubica solo en la raíz del repositorio (este script vive en scripts/cuadre-servidor/).
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 if [[ ! -f artisan ]]; then
-  echo "Ejecute este script desde la raíz del repositorio (donde está artisan)." >&2
+  echo "No se encontró artisan en $(pwd); el script debe estar en <repo>/scripts/cuadre-servidor/." >&2
   exit 1
 fi
 RAIZ=$(pwd)
