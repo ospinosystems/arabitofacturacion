@@ -356,12 +356,18 @@ class CuadrePedidosDiario extends Command
 
     protected function procesarDiaMaquina(string $fechaStr, string $maquinaFiscal, string $montoObjetivo, string $facturaInicio, string $facturaFin, int $cantidadObjetivo, array $numeros = []): ?array
     {
-        $dateExpr = 'DATE(COALESCE(fecha_factura, created_at))';
-
+        // Ya procesado = alguna de sus facturas ya está asignada. Se busca por número y no por fecha: con relleno o días
+        // absorbidos el grupo puede no tener ningún pedido de su propia fecha.
         $yaProcesado = $this->tieneMaquinaFiscal
-            && pedidos::whereRaw($dateExpr . ' = ?', [$fechaStr])
-                ->where('maquina_fiscal', $maquinaFiscal)
+            && pedidos::where('maquina_fiscal', $maquinaFiscal)
                 ->where('valido', true)
+                ->where(function ($q) use ($numeros, $cantidadObjetivo, $facturaInicio, $facturaFin) {
+                    if (count($numeros) === $cantidadObjetivo) {
+                        $q->whereIn('numero_factura', array_map('strval', $numeros));
+                    } else {
+                        $q->whereRaw('CAST(numero_factura AS UNSIGNED) BETWEEN ? AND ?', [(int) $facturaInicio, (int) $facturaFin]);
+                    }
+                })
                 ->exists();
         if ($yaProcesado) {
             return ['skipped' => true];
