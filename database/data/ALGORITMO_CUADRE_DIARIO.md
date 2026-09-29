@@ -22,11 +22,17 @@ Pedidos del día (`DATE(COALESCE(fecha_factura, created_at)) = fecha`) que:
 - y cuyo monto en Bs sea > 0 (`SUM(COALESCE(monto_bs, monto × tasa))` de sus ítems). Devoluciones y pedidos
   sin ítems quedan fuera.
 
+**Relleno** (`--dias-relleno=3`): si con esos candidatos no se puede llegar (hay menos de N, o ni los N más baratos
+bajan al objetivo, o ni los N más caros llegan), se suman los pedidos que sobraron (sin factura) de hasta 3 días
+antes. `cuadre:verificar` acepta pedidos de hasta 3 días antes de la fecha del grupo.
+
 ## 3. Selección de los N pedidos
 
 - Si hay ≤ N candidatos, se toman todos (el comando avisa que el rango queda corto).
 - Si hay más, se busca un **subconjunto de exactamente N** pedidos cuya suma se acerque al objetivo:
-  1. 20 corridas *greedy* con orden aleatorio (cada paso agrega el pedido que deja la suma más cerca).
+  1. 20 corridas *greedy* con orden aleatorio que alternan dos criterios: el pedido que deja la suma más cerca del
+     objetivo, y el pedido más cercano a (objetivo − suma) / cupos restantes. El segundo evita la trampa de un pedido
+     enorme parecido al objetivo, que el primero toma de entrada y el annealing ya no puede sacar.
   2. *Simulated annealing* (intercambios aleatorios entre seleccionados y no seleccionados) partiendo de la
      mejor solución, hasta agotar `--max-segundos` (15 s por defecto).
   3. La búsqueda se detiene antes al llegar a `|suma − objetivo| ≤ --tolerancia-bs` (1 Bs por defecto): más
@@ -37,23 +43,28 @@ ventas por 1.000.000 Bs se lleva a un objetivo de 500.000 Bs: se eligen los pedi
 
 ## 4. Numeración
 
-Los N elegidos se ordenan cronológicamente y reciben `numero_factura` consecutivo desde `inicio`,
-`maquina_fiscal` = CONCEPTO y `valido = 1`. Todo el grupo se escribe en **una transacción**: si el proceso muere,
+Los N elegidos se ordenan cronológicamente y reciben los números de factura del libro (`maquina_fiscal` =
+CONCEPTO y `valido = 1`). Normalmente es el rango consecutivo desde `inicio`; si el libro trae FISCAL UNITARIA no
+consecutivas (SERIE R 2, 7 y 8) se asignan exactamente esos números. Todo el grupo se escribe en **una transacción**: si el proceso muere,
 el grupo queda completo o no queda.
 
 ## 5. Ajuste
 
 Diferencia = objetivo − suma de los N elegidos (normalmente ≤ 1 Bs por la tolerancia; puede ser mayor si el
-día tiene pocos pedidos o se agotó el tiempo). Se aplica sobre el **ítem de mayor monto del último pedido** del
-grupo:
+día tiene pocos pedidos o se agotó el tiempo). Si ya está dentro de la tolerancia (1 Bs o 0,02 % del objetivo) no
+se toca ningún precio. Si no:
 
-- nuevo precio unitario (USD) = (monto_bs actual + diferencia) / tasa / cantidad, **redondeado a 1 decimal**
-  (precio "creíble"); se recalculan `monto` y `monto_bs`,
-- se recalcula el primer `pago_pedidos` del pedido con la suma real de ítems (o se crea uno si no existe),
-- se guarda en **`cuadre_ajustes`** el valor original del ítem y del pago, el ajuste pedido y el aplicado.
+- se evalúan **todos los ítems** de los pedidos elegidos: nuevo precio unitario (USD) = (monto_bs actual +
+  diferencia) / tasa / cantidad, **redondeado a 1 decimal** (precio "creíble"); si así ningún ítem deja la suma
+  dentro de la tolerancia, se prueba con 2 y luego con 4 decimales;
+- entre los que quedan dentro se prefiere menos decimales, sin descuento, del último pedido y de mayor monto;
+- si un solo ítem no alcanza (p. ej. un ajuste negativo mayor que el ítem), se toma el que más acerca y se repite
+  con el resto sobre otro ítem (hasta 20); nunca se aplica un cambio que aleje la suma del objetivo;
+- en cada pedido tocado se mueve la diferencia al primer `pago_pedidos` (o se crea uno si no existe);
+- cada ítem ajustado deja una fila en **`cuadre_ajustes`** con el valor original del ítem y del pago, el ajuste
+  pedido y el aplicado.
 
-Por el redondeo a 1 decimal, la suma real puede diferir del objetivo en unos Bs por grupo (≤ 0,05 USD ×
-cantidad × tasa). El comando reporta la suma **real**; la validación web tolera 2 Bs o 0,05 % del objetivo.
+El comando reporta la suma **real**; la validación web y `cuadre:verificar` toleran 2 Bs o 0,05 % del objetivo.
 
 ## 6. Reverso
 

@@ -83,6 +83,28 @@ class CuadreCsvReaderTest extends TestCase
         $this->assertEquals(28970.22 + 10.00, (float) $grupos[1]['total_venta'], '', 0.0001);
     }
 
+    public function test_guarda_los_numeros_reales_de_facturas_no_consecutivas(): void
+    {
+        $csv = $this->tmp . '/serie_r.csv';
+        file_put_contents($csv, implode("\n", [
+            'FECHA,CONCEPTO,CEDULA,SERIE,NOTA DE CREDITO,AFECTADA,NUMERO DE Z,FACTURA,VENTA,TIPO',
+            '2025-03-08,SERIE R,,,,,,2,537818.55,FISCAL UNITARIA',
+            '2025-03-08,SERIE R,,,,,,8,456733.55,FISCAL UNITARIA',
+            '2025-03-08,SERIE R,,,,,,7,92105.99,FISCAL UNITARIA',
+            '2025-03-08,ZZN0029416,,,,,,10-12,300.00,FISCAL RANGO',
+        ]));
+        $grupos = $this->reader->agregarPorDiaMaquina($this->reader->leerNormalizado($csv));
+        $this->assertCount(2, $grupos);
+
+        $this->assertSame('SERIE R', $grupos[0]['maquina_fiscal']);
+        $this->assertSame(3, $grupos[0]['cantidad']);
+        $this->assertSame([2, 7, 8], $grupos[0]['numeros']);
+        $this->assertSame('2', $grupos[0]['factura_inicio']);
+        $this->assertSame('8', $grupos[0]['factura_fin']);
+
+        $this->assertSame([10, 11, 12], $grupos[1]['numeros']);
+    }
+
     public function test_acepta_formato_antiguo_y_punto_y_coma(): void
     {
         $csv = $this->tmp . '/antiguo.csv';

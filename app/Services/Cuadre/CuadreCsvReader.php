@@ -1055,6 +1055,11 @@ class CuadreCsvReader
                 $reduccionPorDia[$row['fecha']] = bcadd($reduccionPorDia[$row['fecha']] ?? '0', $row['total_venta'], $this->scale + 2);
                 continue;
             }
+            // Números de factura reales de la fila: las FISCAL UNITARIA de un día pueden no ser consecutivas
+            // (SERIE R 2, 7 y 8): el cuadre debe asignar esos números, no 2, 3 y 4.
+            $numerosFila = ($row['factura_inicio'] !== null && $row['factura_inicio'] !== '')
+                ? range((int) $row['factura_inicio'], (int) ($row['factura_fin'] ?? $row['factura_inicio']))
+                : [];
             if (!isset($grupos[$key])) {
                 $grupos[$key] = [
                     'fecha'           => $row['fecha'],
@@ -1063,8 +1068,10 @@ class CuadreCsvReader
                     'factura_inicio'  => $row['factura_inicio'],
                     'factura_fin'     => $row['factura_fin'],
                     'cantidad'        => (int) $row['cantidad'],
+                    'numeros'         => $numerosFila,
                 ];
             } else {
+                $grupos[$key]['numeros'] = array_merge($grupos[$key]['numeros'], $numerosFila);
                 $grupos[$key]['total_venta'] = bcadd($grupos[$key]['total_venta'], $row['total_venta'], $this->scale + 2);
                 if ($row['factura_inicio'] !== null && $row['factura_inicio'] !== '') {
                     $inicio = (int) $row['factura_inicio'];
@@ -1091,6 +1098,11 @@ class CuadreCsvReader
         $ordenados = array_values(array_filter($grupos, function ($g) {
             return $g['factura_inicio'] !== null && $g['factura_inicio'] !== '' && $g['cantidad'] >= 1;
         }));
+        foreach ($ordenados as $i => $g) {
+            $numeros = array_values(array_unique($g['numeros']));
+            sort($numeros);
+            $ordenados[$i]['numeros'] = $numeros;
+        }
 
         usort($ordenados, function ($a, $b) {
             $c = strcmp($a['fecha'], $b['fecha']);

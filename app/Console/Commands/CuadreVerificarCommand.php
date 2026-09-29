@@ -89,7 +89,10 @@ class CuadreVerificarCommand extends Command
             $fechas = [];
             $fechaDistinta = 0;
             $limiteAtras = date('Y-m-d', strtotime($g['fecha'] . " -{$maxDiasAtras} days"));
-            for ($n = $ini; $n <= $fin; $n++) {
+            // Números que trae el libro (las FISCAL UNITARIA pueden no ser consecutivas); si no cuadran con la cantidad
+            // (rangos solapados), se usa el rango completo.
+            $numeros = (!empty($g['numeros']) && count($g['numeros']) === (int) $g['cantidad']) ? $g['numeros'] : range($ini, $fin);
+            foreach ($numeros as $n) {
                 $p = $porMaquina[$m][$n] ?? null;
                 if ($p === null) {
                     $faltantes[] = $n;
@@ -124,7 +127,7 @@ class CuadreVerificarCommand extends Command
             }
             ksort($fechas);
             fputcsv($fh, [
-                $g['fecha'], $m, $ini, $fin, $fin - $ini + 1, $enBd,
+                $g['fecha'], $m, $ini, $fin, count($numeros), $enBd,
                 count($faltantes) > 20 ? count($faltantes) . ' (' . implode(' ', array_slice($faltantes, 0, 20)) . '…)' : implode(' ', $faltantes),
                 round($objetivo, 2), round($real, 2), round($diff, 2), round($pct, 4),
                 implode(' ', array_map(fn ($f, $c) => "$f:$c", array_keys($fechas), $fechas)), $fechaDistinta, $estado,
@@ -135,7 +138,7 @@ class CuadreVerificarCommand extends Command
             $porMes[$mes]['ok'] += $estado === 'ok' ? 1 : 0;
             $porMes[$mes]['obj'] += $objetivo;
             $porMes[$mes]['real'] += $real;
-            $porMes[$mes]['fact_obj'] += $fin - $ini + 1;
+            $porMes[$mes]['fact_obj'] += count($numeros);
             $porMes[$mes]['fact_bd'] += $enBd;
         }
 

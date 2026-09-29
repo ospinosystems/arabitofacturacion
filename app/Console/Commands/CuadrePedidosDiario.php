@@ -41,6 +41,7 @@ class CuadrePedidosDiario extends Command
                             {--sin-filtro-estado : Incluir también pedidos con estado distinto de 1 (por defecto solo facturados)}
                             {--sin-absorber : No incluir como candidatos los pedidos de días que el libro salta (ver --max-dias-absorber)}
                             {--max-dias-absorber=3 : Máximo de días seguidos sin objetivo que se absorben en el grupo siguiente de la misma máquina}
+                            {--dias-relleno=3 : Si con los pedidos del día no se puede llegar al objetivo, usar también los que sobraron de hasta N días anteriores (0 = no)}
                             {--reporte= : Ruta de un CSV donde escribir el detalle por grupo (objetivo, seleccionados, suma, ajuste, real)}';
 
     protected $description = 'Cuadre por día y máquina fiscal contra monto objetivo (CSV/XLSX con FECHA, CONCEPTO, FACTURA, VENTA, TIPO).';
@@ -62,6 +63,8 @@ class CuadrePedidosDiario extends Command
     /** @var array<int,bool> ids de pedidos excluidos por monto <= 0 (para contarlos una sola vez) */
     protected array $excluidosMontoCero = [];
     protected bool $filtrarEstado = true;
+    protected int $diasRelleno = 3;
+    protected ?float $tasaGlobal = null;
 
     /** @var array<string, string[]> "fecha|maquina" => días anteriores sin objetivo cuyos pedidos entran en ese grupo */
     protected array $diasAbsorbidos = [];
@@ -89,6 +92,7 @@ class CuadrePedidosDiario extends Command
         $this->toleranciaBs = max(0.005, (float) $this->option('tolerancia-bs'));
         $this->umbralAjuste = max(0.0, (float) $this->option('umbral-ajuste')) / 100.0;
         $this->filtrarEstado = !$this->option('sin-filtro-estado');
+        $this->diasRelleno = max(0, (int) $this->option('dias-relleno'));
 
         if (!is_file($path)) {
             $this->error("Archivo no encontrado: {$path}");
@@ -222,7 +226,7 @@ class CuadrePedidosDiario extends Command
             $procesado = false;
             while (!$procesado) {
                 try {
-                    $resultado = $this->procesarDiaMaquina($fecha, $maquina, $montoObjetivo, $facturaInicio, $facturaFin, $cantidad);
+                    $resultado = $this->procesarDiaMaquina($fecha, $maquina, $montoObjetivo, $facturaInicio, $facturaFin, $cantidad, $normalized['numeros'] ?? []);
                     $this->registrarResultado($fecha, $maquina, $montoObjetivo, $facturaInicio, $facturaFin, $cantidad, $resultado);
                     $procesado = true;
                 } catch (\Throwable $e) {
@@ -350,7 +354,7 @@ class CuadrePedidosDiario extends Command
         }
     }
 
-    protected function procesarDiaMaquina(string $fechaStr, string $maquinaFiscal, string $montoObjetivo, string $facturaInicio, string $facturaFin, int $cantidadObjetivo): ?array
+    protected function procesarDiaMaquina(string $fechaStr, string $maquinaFiscal, string $montoObjetivo, string $facturaInicio, string $facturaFin, int $cantidadObjetivo, array $numeros = []): ?array
     {
         $dateExpr = 'DATE(COALESCE(fecha_factura, created_at))';
 
@@ -369,45 +373,23 @@ class CuadrePedidosDiario extends Command
         if (count($fechasCandidatas) > 1) {
             $this->line('  → absorbe también los días sin objetivo: ' . implode(', ', array_slice($fechasCandidatas, 0, -1)));
         }
-        $query = pedidos::whereIn(DB::raw($dateExpr), $fechasCandidatas)
-            ->where(function ($q) {
-                $q->whereNull('valido')->orWhere('valido', false);
-            });
-        if ($this->filtrarEstado && $this->tieneEstado) {
-            $query->where('estado', 1);
-        }
-        $pedidos = $query->orderByRaw('COALESCE(fecha_factura, created_at) ASC')->orderBy('id')->get();
+        $pairs = $this->cargarCandidatos($fechasCandidatas);
 
-        if ($pedidos->isEmpty()) {
-            return null;
-        }
-
-        // Una sola consulta para todos los montos por pedido.
-        $ids = $pedidos->pluck('id')->all();
-        $montosPorPedido = [];
-        foreach (array_chunk($ids, 1000) as $chunk) {
-            $parcial = DB::table('items_pedidos')
-                ->whereIn('id_pedido', $chunk)
-                ->selectRaw('id_pedido, SUM(COALESCE(monto_bs, monto * COALESCE(NULLIF(tasa, 0), 1), 0)) as total')
-                ->groupBy('id_pedido')
-                ->pluck('total', 'id_pedido')
-                ->all();
-            foreach ($parcial as $k => $v) {
-                $montosPorPedido[$k] = (string) $v;
-            }
-        }
-
-        $pairs = [];
-        foreach ($pedidos as $ped) {
-            $monto = $montosPorPedido[$ped->id] ?? '0';
-            if (bccomp($monto, '0', $this->scale) <= 0) {
-                if (!isset($this->excluidosMontoCero[$ped->id])) {
-                    $this->excluidosMontoCero[$ped->id] = true;
-                    $this->pedidosExcluidosMontoCero++;
+        // Relleno: si con los pedidos del día no se puede llegar (faltan pedidos, o ni los N más baratos bajan al
+        // objetivo, o ni los N más caros llegan), se suman los pedidos que sobraron de los días anteriores.
+        if ($this->diasRelleno > 0 && $this->requiereRelleno($pairs, $cantidadObjetivo, (float) $montoObjetivo)) {
+            $fechasRelleno = [];
+            for ($d = 1; $d <= $this->diasRelleno; $d++) {
+                $f = date('Y-m-d', strtotime($fechaStr . " -{$d} days"));
+                if (!in_array($f, $fechasCandidatas, true)) {
+                    $fechasRelleno[] = $f;
                 }
-                continue; // sin ítems, devolución o monto cero: no puede ser factura fiscal
             }
-            $pairs[] = ['pedido' => $ped, 'monto' => $monto];
+            $extra = empty($fechasRelleno) ? [] : $this->cargarCandidatos($fechasRelleno);
+            if (!empty($extra)) {
+                $this->line(sprintf('  → relleno con %d pedido(s) sobrantes de %s', count($extra), implode(', ', $fechasRelleno)));
+                $pairs = array_merge($extra, $pairs);
+            }
         }
         if (empty($pairs)) {
             return null;
@@ -454,11 +436,12 @@ class CuadrePedidosDiario extends Command
         }
 
         $inicioNum = (int) $facturaInicio;
-        $ultimo = $selected->last();
+        // Si el libro trae los números exactos del grupo (p. ej. FISCAL UNITARIA no consecutivas), se usan esos.
+        $numerosLibro = count($numeros) === $cantidadObjetivo ? array_values($numeros) : null;
 
-        return DB::transaction(function () use ($selected, $fechaStr, $maquinaFiscal, $sumaSelected, $ajuste, $inicioNum, $ultimo, $base) {
+        return DB::transaction(function () use ($selected, $fechaStr, $maquinaFiscal, $sumaSelected, $ajuste, $inicioNum, $numerosLibro, $montoObjetivo, $base) {
             foreach ($selected as $i => $ped) {
-                $ped->numero_factura = (string) ($inicioNum + $i);
+                $ped->numero_factura = (string) ($numerosLibro[$i] ?? ($inicioNum + $i));
                 if ($this->tieneMaquinaFiscal) {
                     $ped->maquina_fiscal = $maquinaFiscal;
                 }
@@ -469,7 +452,7 @@ class CuadrePedidosDiario extends Command
 
             $aplicado = '0';
             if (bccomp($ajuste, '0', $this->scale) !== 0) {
-                $aplicado = $this->aplicarAjuste($ultimo, $ajuste, $fechaStr, $maquinaFiscal);
+                $aplicado = $this->aplicarAjuste($selected, $ajuste, $montoObjetivo, $fechaStr, $maquinaFiscal);
             }
             $base['monto_real_dia'] = bcadd($sumaSelected, $aplicado, $this->scale);
             return $base;
@@ -477,7 +460,76 @@ class CuadrePedidosDiario extends Command
     }
 
     /**
+     * Pedidos candidatos (no válidos, facturados y con monto > 0) de las fechas dadas, en orden cronológico.
+     * @param string[] $fechas
+     * @return array<int, array{pedido: pedidos, monto: string}>
+     */
+    protected function cargarCandidatos(array $fechas): array
+    {
+        $query = pedidos::whereIn(DB::raw('DATE(COALESCE(fecha_factura, created_at))'), $fechas)
+            ->where(function ($q) {
+                $q->whereNull('valido')->orWhere('valido', false);
+            });
+        if ($this->filtrarEstado && $this->tieneEstado) {
+            $query->where('estado', 1);
+        }
+        $pedidos = $query->orderByRaw('COALESCE(fecha_factura, created_at) ASC')->orderBy('id')->get();
+        if ($pedidos->isEmpty()) {
+            return [];
+        }
+
+        // Una sola consulta para todos los montos por pedido.
+        $montosPorPedido = [];
+        foreach (array_chunk($pedidos->pluck('id')->all(), 1000) as $chunk) {
+            $parcial = DB::table('items_pedidos')
+                ->whereIn('id_pedido', $chunk)
+                ->selectRaw('id_pedido, SUM(COALESCE(monto_bs, monto * COALESCE(NULLIF(tasa, 0), 1), 0)) as total')
+                ->groupBy('id_pedido')
+                ->pluck('total', 'id_pedido')
+                ->all();
+            foreach ($parcial as $k => $v) {
+                $montosPorPedido[$k] = (string) $v;
+            }
+        }
+
+        $pairs = [];
+        foreach ($pedidos as $ped) {
+            $monto = $montosPorPedido[$ped->id] ?? '0';
+            if (bccomp($monto, '0', $this->scale) <= 0) {
+                if (!isset($this->excluidosMontoCero[$ped->id])) {
+                    $this->excluidosMontoCero[$ped->id] = true;
+                    $this->pedidosExcluidosMontoCero++;
+                }
+                continue; // sin ítems, devolución o monto cero: no puede ser factura fiscal
+            }
+            $pairs[] = ['pedido' => $ped, 'monto' => $monto];
+        }
+        return $pairs;
+    }
+
+    /**
+     * ¿Hace falta relleno? Sí cuando no hay N candidatos, o cuando ni los N más baratos bajan al objetivo, o ni los
+     * N más caros llegan (con la tolerancia de búsqueda).
+     */
+    protected function requiereRelleno(array $pairs, int $cantidadObjetivo, float $montoObjetivo): bool
+    {
+        if (count($pairs) < $cantidadObjetivo) {
+            return true;
+        }
+        $montos = array_map(fn ($p) => (float) $p['monto'], $pairs);
+        sort($montos);
+        $minimo = array_sum(array_slice($montos, 0, $cantidadObjetivo));
+        $maximo = array_sum(array_slice($montos, -$cantidadObjetivo));
+        return $minimo > $montoObjetivo + $this->toleranciaBs || $maximo < $montoObjetivo - $this->toleranciaBs;
+    }
+
+    /**
      * Greedy (20 semillas) + simulated annealing con límite de tiempo. Devuelve índices seleccionados.
+     *
+     * Las semillas alternan dos criterios: el greedy clásico (cada paso toma el pedido que deja la suma más cerca del
+     * objetivo) y el greedy por promedio (cada paso toma el pedido más cercano a lo que falta / cupos restantes).
+     * El clásico cae en una trampa cuando hay un pedido enorme parecido al objetivo: lo toma primero y el annealing
+     * no puede sacarlo; el de promedio reparte el objetivo entre los N cupos y no lo elige.
      * @param float[] $montosFloat
      * @return int[]
      */
@@ -490,7 +542,9 @@ class CuadrePedidosDiario extends Command
 
         $tol = $this->toleranciaBs;
         for ($run = 0; $run < 20; $run++) {
-            $result = $this->greedySeleccionRapida($montosFloat, $total, $cantidadObjetivo, $montoObjFloat);
+            $result = $run % 2 === 0
+                ? $this->greedyPorPromedio($montosFloat, $total, $cantidadObjetivo, $montoObjFloat, $run > 0)
+                : $this->greedySeleccionRapida($montosFloat, $total, $cantidadObjetivo, $montoObjFloat);
             if ($result !== null && $result['abs_diff'] < $globalBestDiff) {
                 $globalBestDiff = $result['abs_diff'];
                 $globalBestIndices = $result['indices'];
@@ -501,9 +555,14 @@ class CuadrePedidosDiario extends Command
         if ($globalBestIndices !== null && $globalBestDiff > $tol) {
             $saRun = 0;
             while (microtime(true) < $deadline) {
-                $semilla = $saRun === 0
-                    ? $globalBestIndices
-                    : ($this->greedySeleccionRapida($montosFloat, $total, $cantidadObjetivo, $montoObjFloat)['indices'] ?? $globalBestIndices);
+                if ($saRun === 0) {
+                    $semilla = $globalBestIndices;
+                } else {
+                    $reinicio = $saRun % 2 === 0
+                        ? $this->greedyPorPromedio($montosFloat, $total, $cantidadObjetivo, $montoObjFloat, true)
+                        : $this->greedySeleccionRapida($montosFloat, $total, $cantidadObjetivo, $montoObjFloat);
+                    $semilla = $reinicio['indices'] ?? $globalBestIndices;
+                }
                 $semillaSuma = 0.0;
                 foreach ($semilla as $idx) $semillaSuma += $montosFloat[$idx];
 
@@ -521,47 +580,126 @@ class CuadrePedidosDiario extends Command
     }
 
     /**
-     * Aplica el ajuste en Bs modificando el precio unitario del ítem de mayor monto del pedido,
-     * recalcula el pago y deja auditoría en cuadre_ajustes. Devuelve el ajuste realmente aplicado (Bs).
+     * Aplica el ajuste en Bs cambiando el precio unitario de ítems de los pedidos elegidos, recalcula el pago de cada
+     * pedido tocado y deja auditoría en cuadre_ajustes (una fila por ítem). Devuelve el ajuste realmente aplicado (Bs).
+     *
+     * - Si la diferencia ya está dentro de la tolerancia (1 Bs o 0,02 % del objetivo) no se toca nada.
+     * - Cada ítem se prueba con el precio a 1 decimal en USD (precio "creíble"); si así no queda dentro de la
+     *   tolerancia, con 2 y luego con 4 decimales. Entre los que quedan dentro se prefiere menos decimales, sin
+     *   descuento, del último pedido y de mayor monto.
+     * - Si un solo ítem no alcanza (p. ej. un ajuste negativo mayor que el ítem), se toma el que más acerca y se repite
+     *   con el resto sobre otro ítem, hasta 20 ítems.
+     * - Nunca se aplica un cambio que no acerque la suma al objetivo.
      */
-    protected function aplicarAjuste(pedidos $pedido, string $ajusteBs, string $fecha, string $maquinaFiscal): string
+    protected function aplicarAjuste($seleccionados, string $ajusteBs, string $montoObjetivo, string $fecha, string $maquinaFiscal): string
     {
-        $item = items_pedidos::where('id_pedido', $pedido->id)
-            ->whereNotNull('id_producto')
-            ->where('cantidad', '>', 0)
-            ->orderByRaw('COALESCE(monto_bs, monto * COALESCE(NULLIF(tasa, 0), 1), 0) DESC')
-            ->first();
-
-        if (!$item) {
-            \Log::warning('CuadrePedidosDiario: sin ítems para ajustar en pedido', ['id_pedido' => $pedido->id]);
+        $tolerancia = max(1.0, abs((float) $montoObjetivo) * 0.0002);
+        $restante = (float) $ajusteBs;
+        if (abs($restante) <= $tolerancia) {
             return '0';
         }
 
-        $tasa = (float) ($item->tasa ?? 0);
-        if ($tasa <= 0) {
-            $tasa = $this->obtenerTasaGlobal();
+        $ultimoId = (int) $seleccionados->last()->id;
+        $pedidosPorId = $seleccionados->keyBy('id');
+        $items = collect();
+        foreach (array_chunk($pedidosPorId->keys()->all(), 1000) as $chunk) {
+            $items = $items->merge(items_pedidos::whereIn('id_pedido', $chunk)->whereNotNull('id_producto')->where('cantidad', '>', 0)->get());
+        }
+        if ($items->isEmpty()) {
+            \Log::warning('CuadrePedidosDiario: sin ítems para ajustar en el grupo', ['fecha' => $fecha, 'maquina' => $maquinaFiscal]);
+            return '0';
         }
 
+        $aplicadoTotal = '0';
+        $usados = [];
+        for ($paso = 0; $paso < 20 && abs($restante) > $tolerancia; $paso++) {
+            $mejor = null;
+            $mejorClave = null;
+            foreach ($items as $item) {
+                if (isset($usados[$item->id])) {
+                    continue;
+                }
+                $tasa = (float) ($item->tasa ?? 0);
+                if ($tasa <= 0) {
+                    $tasa = $this->obtenerTasaGlobal();
+                }
+                $opcion = null;
+                foreach ([1, 2, 4] as $decimales) {
+                    $opcion = $this->calcularAjusteItem($item, $tasa, $restante, $decimales);
+                    if ($opcion['error'] <= $tolerancia) {
+                        break;
+                    }
+                }
+                if ($opcion['error'] >= abs($restante) - 0.0001) {
+                    continue; // no acerca la suma al objetivo
+                }
+                $dentro = $opcion['error'] <= $tolerancia;
+                $clave = [
+                    $dentro ? 0 : 1,
+                    $dentro ? $opcion['decimales'] : 0,
+                    $dentro ? 0 : $opcion['error'],
+                    (float) ($item->descuento ?? 0) > 0 ? 1 : 0,
+                    (int) $item->id_pedido === $ultimoId ? 0 : 1,
+                    -$opcion['monto_actual_bs'],
+                ];
+                if ($mejorClave === null || $clave < $mejorClave) {
+                    $mejorClave = $clave;
+                    $mejor = [$item, $opcion];
+                }
+            }
+            if ($mejor === null) {
+                break;
+            }
+            [$item, $opcion] = $mejor;
+            $aplicado = $this->guardarAjusteItem($item, $pedidosPorId[$item->id_pedido], $opcion, $restante, $fecha, $maquinaFiscal);
+            $usados[$item->id] = true;
+            $aplicadoTotal = bcadd($aplicadoTotal, $aplicado, $this->scale);
+            $restante -= (float) $aplicado;
+        }
+
+        return $aplicadoTotal;
+    }
+
+    /**
+     * Precio nuevo de un ítem para absorber $ajusteBs con el precio redondeado a $decimales en USD.
+     * @return array{decimales: int, precio_unitario: float, monto_usd: float, monto_bs: float, monto_actual_bs: float, aplicado: float, error: float}
+     */
+    protected function calcularAjusteItem(items_pedidos $item, float $tasa, float $ajusteBs, int $decimales): array
+    {
+        $cantidad = (float) $item->cantidad;
+        $montoActualBs = (float) ($item->monto_bs ?? ((float) $item->monto * $tasa));
+        $nuevoMontoUsd = ($montoActualBs + $ajusteBs) / $tasa;
+        $precio = $cantidad > 0 ? $nuevoMontoUsd / $cantidad : $nuevoMontoUsd;
+        $precio = max(10 ** -$decimales, round($precio, $decimales));
+        $montoUsd = round($cantidad * $precio, 4);
+        $montoBs = round($montoUsd * $tasa, 4);
+        $aplicado = $montoBs - $montoActualBs;
+        return [
+            'decimales'       => $decimales,
+            'precio_unitario' => $precio,
+            'monto_usd'       => $montoUsd,
+            'monto_bs'        => $montoBs,
+            'monto_actual_bs' => $montoActualBs,
+            'aplicado'        => $aplicado,
+            'error'           => abs($ajusteBs - $aplicado),
+        ];
+    }
+
+    /**
+     * Guarda el precio nuevo del ítem, mueve la diferencia al pago del pedido y deja la auditoría. Devuelve lo aplicado (Bs).
+     */
+    protected function guardarAjusteItem(items_pedidos $item, pedidos $pedido, array $opcion, float $ajusteBs, string $fecha, string $maquinaFiscal): string
+    {
         $orig = [
             'precio_unitario' => $item->precio_unitario,
             'monto'           => $item->monto,
             'monto_bs'        => $item->monto_bs,
         ];
-
-        $cantidad = (float) $item->cantidad;
-        $montoActualBs = (float) ($item->monto_bs ?? ((float) $item->monto * $tasa));
-        $nuevoMontoBs = $montoActualBs + (float) $ajusteBs;
-        $nuevoMontoUsd = $tasa > 0 ? $nuevoMontoBs / $tasa : $nuevoMontoBs;
-        $nuevoPrecioUnitario = $cantidad > 0 ? $nuevoMontoUsd / $cantidad : $nuevoMontoUsd;
-
-        // Redondear a máximo 1 decimal en USD (precio "creíble"); si es entero exacto queda entero.
-        $nuevoPrecioUnitario = round($nuevoPrecioUnitario, 1);
-        if ($nuevoPrecioUnitario <= 0) {
-            $nuevoPrecioUnitario = 0.1;
-        }
-
-        $nuevoMontoUsd = round($cantidad * $nuevoPrecioUnitario, 4);
-        $nuevoMontoBs = round($nuevoMontoUsd * $tasa, 4);
+        $montoActualBs = $opcion['monto_actual_bs'];
+        $nuevoPrecioUnitario = $opcion['precio_unitario'];
+        $nuevoMontoUsd = $opcion['monto_usd'];
+        $nuevoMontoBs = $opcion['monto_bs'];
+        $ajusteBs = number_format($ajusteBs, 4, '.', '');
 
         $item->precio_unitario = $nuevoPrecioUnitario;
         $item->monto = $nuevoMontoUsd;
@@ -639,8 +777,11 @@ class CuadrePedidosDiario extends Command
 
     protected function obtenerTasaGlobal(): float
     {
-        $tasaMoneda = DB::table('monedas')->where('tipo', 1)->orderBy('id', 'desc')->value('valor');
-        return $tasaMoneda !== null && (float) $tasaMoneda > 0 ? (float) $tasaMoneda : 1.0;
+        if ($this->tasaGlobal === null) {
+            $tasaMoneda = DB::table('monedas')->where('tipo', 1)->orderBy('id', 'desc')->value('valor');
+            $this->tasaGlobal = $tasaMoneda !== null && (float) $tasaMoneda > 0 ? (float) $tasaMoneda : 1.0;
+        }
+        return $this->tasaGlobal;
     }
 
     protected function esErrorMysqlGoneAway(\Throwable $e): bool
@@ -652,6 +793,43 @@ class CuadrePedidosDiario extends Command
             }
         }
         return false;
+    }
+
+    /**
+     * Greedy por promedio: en cada paso toma el pedido más cercano a (objetivo - suma) / cupos restantes, de modo que el
+     * objetivo se reparte entre los N cupos. Con $ruido se desplaza ese ideal al azar (±30 %, salvo en el último cupo)
+     * para que cada semilla sea distinta.
+     */
+    protected function greedyPorPromedio(array $montosFloat, int $total, int $cantidadObjetivo, float $montoObjetivo, bool $ruido): ?array
+    {
+        if ($total < $cantidadObjetivo || $cantidadObjetivo < 1) return null;
+        $indices = range(0, $total - 1);
+        shuffle($indices);
+        $selectedSet = [];
+        $selectedIndices = [];
+        $suma = 0.0;
+        for ($k = 0; $k < $cantidadObjetivo; $k++) {
+            $restantes = $cantidadObjetivo - $k;
+            $ideal = ($montoObjetivo - $suma) / $restantes;
+            if ($ruido && $restantes > 1) {
+                $ideal *= 0.7 + (mt_rand() / mt_getrandmax()) * 0.6;
+            }
+            $bestIdx = null;
+            $bestDiff = PHP_FLOAT_MAX;
+            foreach ($indices as $idx) {
+                if (isset($selectedSet[$idx])) continue;
+                $diff = abs($montosFloat[$idx] - $ideal);
+                if ($diff < $bestDiff) {
+                    $bestDiff = $diff;
+                    $bestIdx = $idx;
+                }
+            }
+            if ($bestIdx === null) return null;
+            $selectedIndices[] = $bestIdx;
+            $selectedSet[$bestIdx] = true;
+            $suma += $montosFloat[$bestIdx];
+        }
+        return ['indices' => $selectedIndices, 'suma' => $suma, 'abs_diff' => abs($montoObjetivo - $suma)];
     }
 
     /**
