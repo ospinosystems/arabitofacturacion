@@ -51,8 +51,8 @@ el grupo queda completo o no queda.
 ## 5. Ajuste
 
 Diferencia = objetivo − suma de los N elegidos (normalmente ≤ 1 Bs por la tolerancia; puede ser mayor si el
-día tiene pocos pedidos o se agotó el tiempo). Si ya está dentro de la tolerancia (1 Bs o 0,02 % del objetivo) no
-se toca ningún precio. Si no:
+día tiene pocos pedidos o se agotó el tiempo). Si ya está dentro de la tolerancia (1 Bs o 0,02 % del objetivo, con
+tope del 10 % del objetivo para facturas muy pequeñas) no se toca ningún precio. Si no:
 
 - se evalúan **todos los ítems** de los pedidos elegidos: nuevo precio unitario (USD) = (monto_bs actual +
   diferencia) / tasa / cantidad, **redondeado a 1 decimal** (precio "creíble"); si así ningún ítem deja la suma

@@ -593,7 +593,8 @@ class CuadrePedidosDiario extends Command
      */
     protected function aplicarAjuste($seleccionados, string $ajusteBs, string $montoObjetivo, string $fecha, string $maquinaFiscal): string
     {
-        $tolerancia = max(1.0, abs((float) $montoObjetivo) * 0.0002);
+        // 1 Bs o 0,02 % del objetivo, pero nunca más del 10 % (una factura de 1 Bs no puede quedar en 0).
+        $tolerancia = min(max(1.0, abs((float) $montoObjetivo) * 0.0002), abs((float) $montoObjetivo) * 0.1);
         $restante = (float) $ajusteBs;
         if (abs($restante) <= $tolerancia) {
             return '0';
