@@ -122,8 +122,15 @@
     </table>
     @if(count($resultados ?? []) > 0)
         <div style="margin-top: 12px;">
+            <label style="font-size: 13px; margin-right: 8px;">Facturas por ZIP:
+                <select name="lote">
+                    <option value="1000">1.000</option>
+                    <option value="2000" selected>2.000</option>
+                    <option value="5000">5.000</option>
+                </select>
+            </label>
             <button type="submit" class="btn-export">Descargar ZIP (pedidos en Mes/Día)</button>
-            <span style="margin-left: 12px; color: #666; font-size: 13px;">Si selecciona más de 30 días, la descarga se preparará en segundo plano y podrá descargarla cuando esté lista.</span>
+            <span style="margin-left: 12px; color: #666; font-size: 13px;">Marque los días. Los PDFs se generan en lotes y cada ZIP se puede bajar en cuanto está listo.</span>
         </div>
     </form>
     <script>

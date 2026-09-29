@@ -11,8 +11,8 @@ use App\Models\pedidos;
 use App\Models\items_pedidos;
 use App\Models\pago_pedidos;
 use App\Services\CuadrePdfService;
-use App\Jobs\CuadreDiarioDescargaMasivaJob;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Str;
 use ZipArchive;
 
 /**
@@ -613,13 +613,18 @@ class CuadreReportController extends Controller
         return $pdf->download($nombre . '.pdf');
     }
 
-    /** Umbral: por encima de este número de días se usa cola en segundo plano. */
-    protected const DESCARGAR_MASIVO_INLINE_MAX_DIAS = 30;
+    /** PDFs por archivo ZIP (lote) si no se indica otro tamaño. */
+    protected const LOTE_DEFECTO = 2000;
+
+    /** Segundos de trabajo por llamada a procesarDescargaMasiva (cada llamada es una petición web corta). */
+    protected const SEGUNDOS_POR_TANDA = 20;
 
     /**
-     * Descarga masiva: ZIP con todos los pedidos de los días seleccionados.
-     * Si hay más de DESCARGAR_MASIVO_INLINE_MAX_DIAS días, se encola un job y se redirige a la página de estado.
-     * Estructura del ZIP: Mes/Dia/factura-XXX.pdf (ej. 2025-03/2025-03-15/factura-123.pdf).
+     * Descarga masiva de los pedidos de los días seleccionados, en lotes ZIP de N PDFs (carpetas Mes/Día).
+     *
+     * Solo prepara la lista de pedidos y redirige a la página de la descarga; esa página llama a procesarDescargaMasiva
+     * en tandas cortas hasta terminar y va mostrando cada lote listo para bajar. Así funciona con miles de pedidos sin
+     * cola ni proceso aparte, y si la página se cierra, al volver continúa donde quedó (el estado vive en disco).
      */
     public function descargarMasivo(Request $request)
     {
@@ -633,110 +638,188 @@ class CuadreReportController extends Controller
         sort($fechas);
 
         if (empty($fechas)) {
-            if ($request->expectsJson()) {
-                return response()->json(['error' => 'Seleccione al menos un día.'], 422);
-            }
             return redirect()->route('reportes.cuadre-diario', array_filter($request->only(['fecha_desde', 'fecha_hasta'])))
                 ->with('error', 'Seleccione al menos un día para descargar.');
         }
 
-        // Muchos días: cola en segundo plano
-        if (count($fechas) > static::DESCARGAR_MASIVO_INLINE_MAX_DIAS) {
-            $token = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode(random_bytes(32)));
-            $id = DB::table('cuadre_descargas')->insertGetId([
-                'token'  => $token,
-                'fechas' => json_encode($fechas),
-                'status' => 'pending',
-            ]);
-            CuadreDiarioDescargaMasivaJob::dispatch($id);
-
-            return redirect()->route('reportes.cuadre-diario.descarga-masiva.estado', ['token' => $token])
-                ->with('info', 'Se está preparando la descarga en segundo plano. Esta página se actualizará cuando esté lista (puede tardar varios minutos).');
-        }
-
-        // Pocos días: descarga inmediata
-        set_time_limit(600);
         $dateExpr = $this->dateExpr();
-        $pedidosPorFecha = [];
-        foreach ($fechas as $fecha) {
-            $list = pedidos::whereRaw($dateExpr . ' = ?', [$fecha])
-                ->where('pedidos.valido', true)
-                ->whereNotNull('pedidos.numero_factura')
-                ->orderBy('pedidos.numero_factura')
-                ->orderBy('pedidos.id')
-                ->get();
-            $pedidosPorFecha[$fecha] = $list;
+        $ids = pedidos::whereIn(DB::raw($dateExpr), $fechas)
+            ->where('pedidos.valido', true)
+            ->whereNotNull('pedidos.numero_factura')
+            ->orderByRaw($dateExpr)
+            ->orderBy('pedidos.maquina_fiscal')
+            ->orderByRaw('CAST(pedidos.numero_factura AS UNSIGNED)')
+            ->orderBy('pedidos.id')
+            ->pluck('pedidos.id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        if (empty($ids)) {
+            return redirect()->route('reportes.cuadre-diario', array_filter($request->only(['fecha_desde', 'fecha_hasta'])))
+                ->with('error', 'Los días seleccionados no tienen pedidos con número de factura.');
         }
 
-        $tempZip = tempnam(sys_get_temp_dir(), 'cuadre_');
-        $zip = new ZipArchive();
-        if ($zip->open($tempZip, ZipArchive::OVERWRITE | ZipArchive::CREATE) !== true) {
-            if ($request->expectsJson()) {
-                return response()->json(['error' => 'No se pudo crear el ZIP.'], 500);
-            }
-            return redirect()->route('reportes.cuadre-diario')->with('error', 'No se pudo crear el archivo ZIP.');
-        }
+        $this->limpiarDescargasViejas();
+        $token = Str::random(40);
+        @mkdir($this->dirDescarga($token), 0775, true);
+        $this->guardarEstado($token, [
+            'fechas'    => $fechas,
+            'ids'       => $ids,
+            'total'     => count($ids),
+            'cursor'    => 0,
+            'tamano'    => max(100, min(10000, (int) $request->input('lote', static::LOTE_DEFECTO))),
+            'lotes'     => [],
+            'errores'   => [],
+            'creado'    => now()->toDateTimeString(),
+            'terminado' => false,
+        ]);
 
-        foreach ($pedidosPorFecha as $fecha => $pedidosList) {
-            $carpetaMes = date('Y-m', strtotime($fecha));
-            $prefijo = $carpetaMes . '/' . $fecha . '/';
-            foreach ($pedidosList as $pedido) {
-                $pdfContent = CuadrePdfService::generarPdfPedido($pedido->id);
-                if ($pdfContent === null) {
-                    continue;
-                }
-                $nombre = $pedido->numero_factura ? 'factura-' . $pedido->numero_factura : 'pedido-' . $pedido->id;
-                $zip->addFromString($prefijo . $nombre . '.pdf', $pdfContent);
-            }
-        }
-
-        $zip->close();
-        $nombreZip = 'cuadre-diario-pedidos-' . ($fechas[0] ?? '') . '-' . (end($fechas) ?: '') . '.zip';
-        return response()->download($tempZip, $nombreZip, [
-            'Content-Type' => 'application/zip',
-        ])->deleteFileAfterSend(true);
+        return redirect()->route('reportes.cuadre-diario.descarga-masiva.estado', ['token' => $token]);
     }
 
     /**
-     * Página de estado de una descarga masiva (por token). Si está lista, muestra enlace de descarga.
+     * Página de una descarga masiva: progreso y lotes listos. Mientras está abierta va pidiendo las tandas.
      */
     public function descargaMasivaEstado(string $token)
     {
-        $row = DB::table('cuadre_descargas')->where('token', $token)->first();
-        if (!$row) {
+        $estado = $this->leerEstado($token);
+        if ($estado === null) {
             return redirect()->route('reportes.cuadre-diario')->with('error', 'Enlace no válido o expirado.');
         }
-        return view('reportes.cuadre-diario-descarga-estado', [
-            'token'             => $token,
-            'status'            => $row->status,
-            'path'              => $row->path,
-            'error'             => $row->error_message,
-            'ready_at'          => $row->ready_at,
-            'total_fechas'      => $row->total_fechas ?? 0,
-            'fechas_procesadas' => $row->fechas_procesadas ?? 0,
-            'total_pedidos'     => $row->total_pedidos ?? 0,
-            'fecha_actual'      => $row->fecha_actual ?? null,
-            'started_at'        => $row->started_at ?? null,
-        ]);
+        return view('reportes.cuadre-diario-descarga-estado', ['resumen' => $this->resumenDescarga($token, $estado)]);
     }
 
     /**
-     * Descarga el ZIP generado por el job (cuando status = ready).
+     * Procesa la siguiente tanda de PDFs (hasta SEGUNDOS_POR_TANDA) y devuelve el progreso en JSON.
+     * Un candado por descarga evita que dos pestañas procesen a la vez.
      */
-    public function descargarMasivoPorToken(string $token): Response
+    public function procesarDescargaMasiva(string $token)
     {
-        $row = DB::table('cuadre_descargas')->where('token', $token)->first();
-        if (!$row || $row->status !== 'ready' || empty($row->path)) {
-            return redirect()->route('reportes.cuadre-diario')->with('error', 'La descarga no está disponible.');
+        $estado = $this->leerEstado($token);
+        if ($estado === null) {
+            return response()->json(['error' => 'Descarga no encontrada.'], 404);
         }
-        $fullPath = storage_path('app/' . $row->path);
-        if (!is_file($fullPath)) {
-            return redirect()->route('reportes.cuadre-diario')->with('error', 'El archivo ya no está disponible.');
+        $candado = fopen($this->dirDescarga($token) . '/.lock', 'c');
+        if (!$candado || !flock($candado, LOCK_EX | LOCK_NB)) {
+            return response()->json($this->resumenDescarga($token, $estado) + ['ocupado' => true]);
         }
-        $nombreZip = 'cuadre-diario-pedidos-' . $token . '.zip';
-        return response()->download($fullPath, $nombreZip, [
-            'Content-Type' => 'application/zip',
-        ]);
+
+        try {
+            set_time_limit(static::SEGUNDOS_POR_TANDA * 3);
+            $estado = $this->leerEstado($token);
+            $inicio = microtime(true);
+            while ($estado['cursor'] < $estado['total'] && microtime(true) - $inicio < static::SEGUNDOS_POR_TANDA) {
+                $n = intdiv($estado['cursor'], $estado['tamano']) + 1;
+                $finLote = min($estado['total'], $n * $estado['tamano']);
+                $bloque = array_slice($estado['ids'], $estado['cursor'], min(200, $finLote - $estado['cursor']));
+
+                $pedidos = pedidos::whereIn('id', $bloque)
+                    ->get(['id', 'numero_factura', 'maquina_fiscal', 'fecha_factura', 'created_at'])
+                    ->keyBy('id');
+                $zip = new ZipArchive();
+                if ($zip->open($this->dirDescarga($token) . "/lote-{$n}.zip", ZipArchive::CREATE) !== true) {
+                    throw new \RuntimeException("No se pudo abrir el lote {$n}.");
+                }
+                $lote = $estado['lotes'][$n] ?? ['n' => $n, 'pedidos' => 0, 'desde' => null, 'hasta' => null];
+                foreach ($bloque as $id) {
+                    $estado['cursor']++;
+                    $pedido = $pedidos[$id] ?? null;
+                    $pdf = $pedido ? CuadrePdfService::generarPdfPedido($id) : null;
+                    if ($pdf === null) {
+                        $estado['errores'][] = $id;
+                        continue;
+                    }
+                    $fecha = substr((string) ($pedido->fecha_factura ?? $pedido->created_at), 0, 10);
+                    $maquina = preg_replace('/[^A-Za-z0-9]+/', '_', trim((string) $pedido->maquina_fiscal)) ?: 'SIN_MAQUINA';
+                    $zip->addFromString(substr($fecha, 0, 7) . "/{$fecha}/factura-{$maquina}-{$pedido->numero_factura}.pdf", $pdf);
+                    $lote['pedidos']++;
+                    $lote['desde'] = $lote['desde'] ?? $fecha;
+                    $lote['hasta'] = $fecha;
+                }
+                $zip->close();
+                $lote['listo'] = $estado['cursor'] >= $finLote;
+                $estado['lotes'][$n] = $lote;
+                $estado['terminado'] = $estado['cursor'] >= $estado['total'];
+                $this->guardarEstado($token, $estado);
+            }
+        } catch (\Throwable $e) {
+            \Log::error('Descarga masiva del cuadre: ' . $e->getMessage(), ['token' => $token]);
+            return response()->json($this->resumenDescarga($token, $estado) + ['error' => $e->getMessage()], 500);
+        } finally {
+            flock($candado, LOCK_UN);
+            fclose($candado);
+        }
+
+        return response()->json($this->resumenDescarga($token, $estado));
+    }
+
+    /**
+     * Descarga un lote ZIP ya terminado.
+     */
+    public function descargarLote(string $token, int $n)
+    {
+        $estado = $this->leerEstado($token);
+        $archivo = $this->dirDescarga($token) . "/lote-{$n}.zip";
+        if ($estado === null || empty($estado['lotes'][$n]['listo']) || !is_file($archivo)) {
+            return redirect()->route('reportes.cuadre-diario')->with('error', 'El lote no está disponible.');
+        }
+        $lote = $estado['lotes'][$n];
+        $nombre = sprintf('facturas-lote-%03d-de-%03d_%s_a_%s.zip', $n, (int) ceil($estado['total'] / $estado['tamano']), $lote['desde'], $lote['hasta']);
+        return response()->download($archivo, $nombre, ['Content-Type' => 'application/zip']);
+    }
+
+    protected function dirDescarga(string $token): string
+    {
+        return storage_path('app/descargas_cuadre/' . preg_replace('/[^A-Za-z0-9]/', '', $token));
+    }
+
+    protected function leerEstado(string $token): ?array
+    {
+        $archivo = $this->dirDescarga($token) . '/estado.json';
+        return is_file($archivo) ? json_decode(file_get_contents($archivo), true) : null;
+    }
+
+    protected function guardarEstado(string $token, array $estado): void
+    {
+        $archivo = $this->dirDescarga($token) . '/estado.json';
+        file_put_contents($archivo . '.tmp', json_encode($estado));
+        rename($archivo . '.tmp', $archivo);
+    }
+
+    /** Progreso y lotes para la página y el JSON (sin la lista de ids). */
+    protected function resumenDescarga(string $token, array $estado): array
+    {
+        $lotes = [];
+        foreach ($estado['lotes'] as $l) {
+            $lotes[] = $l + ['url' => !empty($l['listo']) ? route('reportes.cuadre-diario.descarga-masiva.lote', ['token' => $token, 'n' => $l['n']]) : null];
+        }
+        return [
+            'token'       => $token,
+            'total'       => $estado['total'],
+            'procesados'  => $estado['cursor'],
+            'total_lotes' => (int) ceil($estado['total'] / $estado['tamano']),
+            'tamano'      => $estado['tamano'],
+            'dias'        => count($estado['fechas']),
+            'desde'       => $estado['fechas'][0] ?? null,
+            'hasta'       => end($estado['fechas']) ?: null,
+            'lotes'       => $lotes,
+            'errores'     => count($estado['errores']),
+            'terminado'   => (bool) $estado['terminado'],
+            'procesar'    => route('reportes.cuadre-diario.descarga-masiva.procesar', ['token' => $token]),
+        ];
+    }
+
+    /** Borra las descargas de hace más de 3 días. */
+    protected function limpiarDescargasViejas(): void
+    {
+        foreach (glob(storage_path('app/descargas_cuadre/*'), GLOB_ONLYDIR) ?: [] as $dir) {
+            $estado = $dir . '/estado.json';
+            if (is_file($estado) && filemtime($estado) < time() - 3 * 86400) {
+                foreach (array_merge(glob($dir . '/*') ?: [], [$dir . '/.lock']) as $f) {
+                    @unlink($f);
+                }
+                @rmdir($dir);
+            }
+        }
     }
 
     /**
