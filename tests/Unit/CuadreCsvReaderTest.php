@@ -105,6 +105,33 @@ class CuadreCsvReaderTest extends TestCase
         $this->assertSame([10, 11, 12], $grupos[1]['numeros']);
     }
 
+    public function test_agrupa_por_fila_del_libro_con_notas_de_credito_en_su_maquina(): void
+    {
+        $csv = $this->tmp . '/por_fila.csv';
+        file_put_contents($csv, implode("\n", [
+            'FECHA,CONCEPTO,CEDULA,SERIE,NOTA DE CREDITO,AFECTADA,NUMERO DE Z,FACTURA,VENTA,TIPO',
+            '2026-03-30,Z7C7037700,,,,,,49946-50019,1585088.41,FISCAL RANGO',
+            '2026-03-30,Z7C7037700,,,,,,49802-49945,2324391.58,FISCAL RANGO',
+            '2026-03-30,SERIE R,,,,,,129,93019.31,FISCAL UNITARIA',
+            '2026-03-30,SERIE R,,,,,,128,103160.85,FISCAL UNITARIA',
+            '2026-03-30,Z7C7037700,,,,,,,-1000.00,REDUCE EL TOTAL DE ESE DIA',
+            '2026-03-30,,,,,,,,-50.00,REDUCE EL TOTAL DE ESE DIA',
+        ]));
+        $grupos = $this->reader->agregarPorFila($this->reader->leerNormalizado($csv));
+        $this->assertCount(4, $grupos);
+
+        // Ordenados por máquina y primera factura; la reducción sin máquina va al primer grupo del día.
+        $this->assertSame(['SERIE R', '128', 1, [128]], [$grupos[0]['maquina_fiscal'], $grupos[0]['factura_inicio'], $grupos[0]['cantidad'], $grupos[0]['numeros']]);
+        $this->assertEquals(103160.85 - 50.00, (float) $grupos[0]['total_venta'], '', 0.0001);
+        $this->assertSame('129', $grupos[1]['factura_inicio']);
+
+        // Cada Z es su propio grupo; la nota de crédito de la máquina se resta a su primer Z.
+        $this->assertSame(['Z7C7037700', '49802', '49945', 144], [$grupos[2]['maquina_fiscal'], $grupos[2]['factura_inicio'], $grupos[2]['factura_fin'], $grupos[2]['cantidad']]);
+        $this->assertEquals(2324391.58 - 1000.00, (float) $grupos[2]['total_venta'], '', 0.0001);
+        $this->assertSame(['49946', 74], [$grupos[3]['factura_inicio'], $grupos[3]['cantidad']]);
+        $this->assertEquals(1585088.41, (float) $grupos[3]['total_venta'], '', 0.0001);
+    }
+
     public function test_acepta_formato_antiguo_y_punto_y_coma(): void
     {
         $csv = $this->tmp . '/antiguo.csv';

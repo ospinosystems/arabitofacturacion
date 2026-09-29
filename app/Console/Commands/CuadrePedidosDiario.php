@@ -42,7 +42,8 @@ class CuadrePedidosDiario extends Command
                             {--sin-absorber : No incluir como candidatos los pedidos de días que el libro salta (ver --max-dias-absorber)}
                             {--max-dias-absorber=3 : Máximo de días seguidos sin objetivo que se absorben en el grupo siguiente de la misma máquina}
                             {--dias-relleno=3 : Si con los pedidos del día no se puede llegar al objetivo, usar también los que sobraron de hasta N días anteriores (0 = no)}
-                            {--reporte= : Ruta de un CSV donde escribir el detalle por grupo (objetivo, seleccionados, suma, ajuste, real)}';
+                            {--reporte= : Ruta de un CSV donde escribir el detalle por grupo (objetivo, seleccionados, suma, ajuste, real)}
+                            {--por-dia-maquina : Agrupar por día + máquina (antes) en vez de un grupo por fila del libro (cada Z y cada factura unitaria)}';
 
     protected $description = 'Cuadre por día y máquina fiscal contra monto objetivo (CSV/XLSX con FECHA, CONCEPTO, FACTURA, VENTA, TIPO).';
 
@@ -114,7 +115,7 @@ class CuadrePedidosDiario extends Command
             return Command::FAILURE;
         }
 
-        $agregadas = $reader->agregarPorDiaMaquina($normalizadas);
+        $agregadas = $this->option('por-dia-maquina') ? $reader->agregarPorDiaMaquina($normalizadas) : $reader->agregarPorFila($normalizadas);
 
         if ($soloFecha) {
             $agregadas = array_values(array_filter($agregadas, fn ($a) => $a['fecha'] === $soloFecha));

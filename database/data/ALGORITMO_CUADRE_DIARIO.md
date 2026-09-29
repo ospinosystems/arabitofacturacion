@@ -3,7 +3,14 @@
 Objetivo: que **cada día y cada máquina fiscal** quede con exactamente N facturas consecutivas cuya suma en Bs
 coincida con el monto objetivo del CSV, con un **único ajuste pequeño** y reversible.
 
-## 1. Qué entra por grupo (fecha + máquina)
+## 1. Qué entra por grupo (una fila del libro)
+
+Cada fila del libro es un grupo: cada Z (FISCAL RANGO) y cada factura FISCAL UNITARIA (p. ej. SERIE R) con su propio
+monto, para que coincidan fila por fila y no solo en la suma del día y la máquina. Las notas de crédito (REDUCE con
+máquina) se restan al primer grupo de esa máquina ese día; las REDUCE sin máquina, al primer grupo del día.
+`--por-dia-maquina` (en `cuadre:pedidos-diario` y `cuadre:verificar`) vuelve al agrupamiento anterior por día + máquina.
+
+### Antes: por fecha + máquina
 
 Del CSV (`database/data/FORMATO_CUADRE_DIARIO.md`) se obtiene por (FECHA, CONCEPTO):
 

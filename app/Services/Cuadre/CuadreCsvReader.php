@@ -1040,6 +1040,62 @@ class CuadreCsvReader
     }
 
     /**
+     * Un grupo por fila del libro: cada Z (FISCAL RANGO) y cada factura FISCAL UNITARIA con su propio monto, para que el
+     * cuadre coincida fila por fila y no solo en la suma del día y la máquina. Las REDUCE con máquina (notas de crédito)
+     * se restan al primer grupo de esa máquina ese día; las REDUCE sin máquina, al primer grupo del día.
+     * Mismo formato de salida que agregarPorDiaMaquina, ordenado por fecha, máquina y primera factura.
+     */
+    public function agregarPorFila(array $normalizadas): array
+    {
+        $grupos = [];
+        $reducciones = [];
+        foreach ($normalizadas as $row) {
+            if ($row['factura_inicio'] === null || $row['factura_inicio'] === '' || (int) $row['cantidad'] < 1) {
+                $reducciones[] = $row;
+                continue;
+            }
+            $grupos[] = [
+                'fecha'           => $row['fecha'],
+                'maquina_fiscal'  => $row['maquina_fiscal'],
+                'total_venta'     => $row['total_venta'],
+                'factura_inicio'  => (string) $row['factura_inicio'],
+                'factura_fin'     => (string) ($row['factura_fin'] ?? $row['factura_inicio']),
+                'cantidad'        => (int) $row['cantidad'],
+                'numeros'         => range((int) $row['factura_inicio'], (int) ($row['factura_fin'] ?? $row['factura_inicio'])),
+            ];
+        }
+        usort($grupos, function ($a, $b) {
+            return [$a['fecha'], $a['maquina_fiscal'], (int) $a['factura_inicio']] <=> [$b['fecha'], $b['maquina_fiscal'], (int) $b['factura_inicio']];
+        });
+
+        foreach ($reducciones as $r) {
+            if (bccomp((string) $r['total_venta'], '0', $this->scale + 2) === 0) {
+                continue;
+            }
+            $destino = null;
+            foreach ($grupos as $i => $g) {
+                if ($g['fecha'] === $r['fecha'] && ($r['maquina_fiscal'] === '' || $g['maquina_fiscal'] === $r['maquina_fiscal'])) {
+                    $destino = $i;
+                    break;
+                }
+            }
+            if ($destino === null && $r['maquina_fiscal'] !== '') {
+                foreach ($grupos as $i => $g) {
+                    if ($g['fecha'] === $r['fecha']) {
+                        $destino = $i;
+                        break;
+                    }
+                }
+            }
+            if ($destino !== null) {
+                $grupos[$destino]['total_venta'] = bcadd($grupos[$destino]['total_venta'], $r['total_venta'], $this->scale + 2);
+            }
+        }
+
+        return $grupos;
+    }
+
+    /**
      * Agrupa filas por (fecha, maquina_fiscal). Suma total_venta (positivos FISCAL RANGO/UNITARIA y negativos REDUCE).
      * Combina rangos/unitarias: factura_inicio = min, factura_fin = max, cantidad = suma.
      * Si hay REDUCE con máquina vacía (reducción del día), se resta del primer grupo de esa fecha.

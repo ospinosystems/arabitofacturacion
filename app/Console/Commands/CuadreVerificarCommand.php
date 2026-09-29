@@ -19,7 +19,8 @@ class CuadreVerificarCommand extends Command
                             {--salida= : CSV con el detalle por grupo (default: storage/app/cuadre-completo/verificacion_<fecha>.csv)}
                             {--tolerancia-bs=2 : Diferencia absoluta aceptada por grupo}
                             {--tolerancia-pct=0.05 : Diferencia relativa aceptada por grupo (%)}
-                            {--max-dias-atras=3 : Días de antigüedad tolerados en pedidos absorbidos de días sin objetivo}';
+                            {--max-dias-atras=3 : Días de antigüedad tolerados en pedidos absorbidos de días sin objetivo}
+                            {--por-dia-maquina : Comparar por día + máquina en vez de por fila del libro (cada Z y cada factura unitaria)}';
 
     protected $description = 'Verifica día por día y monto por monto el cuadre aplicado en la BD contra el archivo objetivo.';
 
@@ -34,7 +35,8 @@ class CuadreVerificarCommand extends Command
         $tolPct = (float) $this->option('tolerancia-pct');
         $maxDiasAtras = (int) $this->option('max-dias-atras');
 
-        $grupos = $reader->agregarPorDiaMaquina($reader->leerNormalizado($path));
+        $normalizadas = $reader->leerNormalizado($path);
+        $grupos = $this->option('por-dia-maquina') ? $reader->agregarPorDiaMaquina($normalizadas) : $reader->agregarPorFila($normalizadas);
         if (empty($grupos)) {
             $this->error('El archivo objetivo no produjo grupos.');
             return Command::FAILURE;
