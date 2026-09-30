@@ -112,7 +112,7 @@
                                     <td class="mono">{{ $codigo }}</td>
                                     <td class="mono">{{ $codigoProv }}</td>
                                     <td>{{ $desc }}</td>
-                                    <td class="num">{{ $cant == (int)$cant ? (int)$cant : number_format($cant, 2, ',', '.') }}</td>
+                                    <td class="num">{{ $cant == (int)$cant ? (int)$cant : number_format($cant, abs(round($cant, 2) - $cant) < 0.00005 ? 2 : 4, ',', '.') }}</td>
                                     <td class="num">{{ $fmtPrecioLinea($precio) }}</td>
                                     <td class="num">{{ $fmt($importe) }}</td>
                                 </tr>
