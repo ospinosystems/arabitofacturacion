@@ -43,6 +43,7 @@
         @endif
         @if(count($resultados ?? []) > 0)
             <a href="{{ route('reportes.cuadre-diario.export', request()->only(['fecha_desde', 'fecha_hasta'])) }}" style="margin-left: 15px;" class="btn-export">Exportar CSV (resumen)</a>
+        <a href="{{ route('reportes.cuadre-diario.descargas-completas') }}" style="margin-left: 15px;" class="btn-export">Descargas completas (ZIP por mes)</a>
         @endif
     </form>
 

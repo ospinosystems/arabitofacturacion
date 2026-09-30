@@ -767,6 +767,31 @@ class CuadreReportController extends Controller
         return response()->download($archivo, $nombre, ['Content-Type' => 'application/zip']);
     }
 
+    /**
+     * Descargas completas ya preparadas en el servidor: un ZIP por mes (carpetas Año-Mes/Día) y uno con todo.
+     * Se generan con un proceso aparte en storage/app/descargas_cuadre/zips (miles de PDFs en paralelo).
+     */
+    public function descargasCompletas()
+    {
+        $dir = storage_path('app/descargas_cuadre/zips');
+        $archivos = [];
+        foreach (glob($dir . '/*.zip') ?: [] as $f) {
+            $archivos[] = ['nombre' => basename($f), 'mb' => round(filesize($f) / 1048576, 1), 'fecha' => date('Y-m-d H:i', filemtime($f))];
+        }
+        usort($archivos, fn ($a, $b) => strcmp($a['nombre'], $b['nombre']));
+        return view('reportes.cuadre-diario-descargas-completas', ['archivos' => $archivos]);
+    }
+
+    public function descargarCompleta(string $archivo)
+    {
+        $ruta = storage_path('app/descargas_cuadre/zips/' . basename($archivo));
+        if (!preg_match('/^[A-Za-z0-9_\-]+\.zip$/', $archivo) || !is_file($ruta)) {
+            return redirect()->route('reportes.cuadre-diario.descargas-completas')->with('error', 'Archivo no disponible.');
+        }
+        set_time_limit(0);
+        return response()->download($ruta, $archivo, ['Content-Type' => 'application/zip', 'Cache-Control' => 'no-store']);
+    }
+
     protected function dirDescarga(string $token): string
     {
         return storage_path('app/descargas_cuadre/' . preg_replace('/[^A-Za-z0-9]/', '', $token));

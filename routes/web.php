@@ -783,6 +783,8 @@ Route::post('/reportes/cuadre-diario/descargar-masivo', [App\Http\Controllers\Cu
 Route::get('/reportes/cuadre-diario/descarga-masiva/{token}', [App\Http\Controllers\CuadreReportController::class, 'descargaMasivaEstado'])->name('reportes.cuadre-diario.descarga-masiva.estado');
 Route::post('/reportes/cuadre-diario/descarga-masiva/{token}/procesar', [App\Http\Controllers\CuadreReportController::class, 'procesarDescargaMasiva'])->name('reportes.cuadre-diario.descarga-masiva.procesar');
 Route::get('/reportes/cuadre-diario/descarga-masiva/{token}/lote/{n}', [App\Http\Controllers\CuadreReportController::class, 'descargarLote'])->where('n', '[0-9]+')->name('reportes.cuadre-diario.descarga-masiva.lote');
+Route::get('/reportes/cuadre-diario/descargas-completas', [App\Http\Controllers\CuadreReportController::class, 'descargasCompletas'])->name('reportes.cuadre-diario.descargas-completas');
+Route::get('/reportes/cuadre-diario/descargas-completas/{archivo}', [App\Http\Controllers\CuadreReportController::class, 'descargarCompleta'])->name('reportes.cuadre-diario.descargas-completas.archivo');
 Route::get('/reportes/cuadre-diario/validacion', [App\Http\Controllers\CuadreReportController::class, 'validacion'])->name('reportes.cuadre-diario.validacion');
 
 // NOTA: Las rutas API de garantías se movieron a routes/api.php para mejor organización
