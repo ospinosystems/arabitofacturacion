@@ -29,7 +29,7 @@ class CuadrePdfService
             ->get();
 
         $subtotalUsd = $items->sum(function ($i) { return (float) ($i->monto ?? 0); });
-        $subtotalBs = $items->sum(function ($i) { return (float) ($i->monto_bs ?? 0); });
+        $subtotalBs = $items->sum(function ($i) { return (float) ($i->monto_bs ?? ((float) $i->monto * ((float) $i->tasa ?: 1))); });
         $tasaPedido = null;
         $itemConTasa = $items->first(function ($i) { return isset($i->tasa) && (float) $i->tasa > 0; });
         if ($itemConTasa !== null) {

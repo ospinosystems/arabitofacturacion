@@ -43,7 +43,7 @@ class CuadreReportController extends Controller
             ->where('pedidos.valido', true)
             ->whereNotNull('pedidos.numero_factura')
             ->selectRaw($dateExpr . ' as fecha, ' . $maquinaExpr . ' as maquina_fiscal,
-                SUM(COALESCE(items_pedidos.monto_bs, 0)) as monto_bs,
+                SUM(COALESCE(items_pedidos.monto_bs, items_pedidos.monto * COALESCE(NULLIF(items_pedidos.tasa, 0), 1), 0)) as monto_bs,
                 SUM(COALESCE(items_pedidos.monto, 0)) as monto_usd,
                 SUM(CASE WHEN items_pedidos.tasa IS NOT NULL AND items_pedidos.tasa > 0 AND COALESCE(items_pedidos.monto, 0) > 0 THEN items_pedidos.tasa * COALESCE(items_pedidos.monto, 0) ELSE 0 END) / NULLIF(SUM(CASE WHEN items_pedidos.tasa IS NOT NULL AND items_pedidos.tasa > 0 AND COALESCE(items_pedidos.monto, 0) > 0 THEN COALESCE(items_pedidos.monto, 0) ELSE 0 END), 0) as tasa_ponderada,
                 MIN(CAST(pedidos.numero_factura AS UNSIGNED)) as factura_inicio,
@@ -165,7 +165,7 @@ class CuadreReportController extends Controller
         $pedidosList = $query->get();
         $pedidosConTotales = [];
         foreach ($pedidosList as $p) {
-            $totalBs = (float) items_pedidos::where('id_pedido', $p->id)->sum(DB::raw('COALESCE(monto_bs, 0)'));
+            $totalBs = (float) items_pedidos::where('id_pedido', $p->id)->sum(DB::raw('COALESCE(monto_bs, monto * COALESCE(NULLIF(tasa, 0), 1), 0)'));
             $totalUsd = (float) items_pedidos::where('id_pedido', $p->id)->sum(DB::raw('COALESCE(monto, 0)'));
             $cantItems = items_pedidos::where('id_pedido', $p->id)->count();
             $tasaBs = items_pedidos::where('id_pedido', $p->id)->whereNotNull('tasa')->value('tasa');
@@ -207,7 +207,7 @@ class CuadreReportController extends Controller
             fputcsv($out, ['NUMERO_FACTURA', 'MAQUINA_FISCAL', 'MONTO_USD', 'MONTO_BS', 'CANT_ITEMS', 'FECHA_FACTURA']);
             foreach ($pedidosList as $p) {
                 $montoUsd = (float) items_pedidos::where('id_pedido', $p->id)->sum(DB::raw('COALESCE(monto, 0)'));
-                $montoBs = (float) items_pedidos::where('id_pedido', $p->id)->sum(DB::raw('COALESCE(monto_bs, 0)'));
+                $montoBs = (float) items_pedidos::where('id_pedido', $p->id)->sum(DB::raw('COALESCE(monto_bs, monto * COALESCE(NULLIF(tasa, 0), 1), 0)'));
                 $cantItems = items_pedidos::where('id_pedido', $p->id)->count();
                 fputcsv($out, [$p->numero_factura ?? '', $p->maquina_fiscal ?? '', number_format($montoUsd, 2, '.', ''), number_format($montoBs, 2, '.', ''), $cantItems, $p->fecha_factura ?? $p->created_at]);
             }
@@ -233,7 +233,7 @@ class CuadreReportController extends Controller
             ->get();
 
         $subtotalUsd = $items->sum(function ($i) { return (float) ($i->monto ?? 0); });
-        $subtotalBs = $items->sum(function ($i) { return (float) ($i->monto_bs ?? 0); });
+        $subtotalBs = $items->sum(function ($i) { return (float) ($i->monto_bs ?? ((float) $i->monto * ((float) $i->tasa ?: 1))); });
         $tasaPedido = null;
         $itemConTasa = $items->first(function ($i) { return isset($i->tasa) && (float) $i->tasa > 0; });
         if ($itemConTasa !== null) {
@@ -282,7 +282,7 @@ class CuadreReportController extends Controller
             COUNT(pedidos.id) as cantidad,
             MAX(COALESCE(ip.total, 0)) as max_single
             FROM pedidos
-            LEFT JOIN (SELECT id_pedido, SUM(COALESCE(monto_bs, 0)) as total FROM items_pedidos GROUP BY id_pedido) ip ON ip.id_pedido = pedidos.id
+            LEFT JOIN (SELECT id_pedido, SUM(COALESCE(monto_bs, monto * COALESCE(NULLIF(tasa, 0), 1), 0)) as total FROM items_pedidos GROUP BY id_pedido) ip ON ip.id_pedido = pedidos.id
             WHERE pedidos.valido = 1 AND pedidos.numero_factura IS NOT NULL";
         $bindings = [];
         if ($fechaDesde) {
@@ -578,7 +578,7 @@ class CuadreReportController extends Controller
             ->get();
 
         $subtotalUsd = $items->sum(function ($i) { return (float) ($i->monto ?? 0); });
-        $subtotalBs = $items->sum(function ($i) { return (float) ($i->monto_bs ?? 0); });
+        $subtotalBs = $items->sum(function ($i) { return (float) ($i->monto_bs ?? ((float) $i->monto * ((float) $i->tasa ?: 1))); });
         $tasaPedido = null;
         $itemConTasa = $items->first(function ($i) { return isset($i->tasa) && (float) $i->tasa > 0; });
         if ($itemConTasa !== null) {
