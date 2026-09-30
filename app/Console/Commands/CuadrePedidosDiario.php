@@ -502,7 +502,7 @@ class CuadrePedidosDiario extends Command
         $pairs = [];
         foreach ($pedidos as $ped) {
             $monto = $montosPorPedido[$ped->id] ?? '0';
-            if (bccomp($monto, '0', $this->scale) <= 0) {
+            if (bccomp($monto, '0.01', $this->scale) <= 0) { // incluye cambios que se compensan a 0 (quedan en ~0,01 Bs por redondeo)
                 if (!isset($this->excluidosMontoCero[$ped->id])) {
                     $this->excluidosMontoCero[$ped->id] = true;
                     $this->pedidosExcluidosMontoCero++;
