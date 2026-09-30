@@ -54,6 +54,8 @@
         $fechaPedido = $pedido->fecha_factura ? date('Y-m-d', strtotime($pedido->fecha_factura)) : ($pedido->created_at ? date('Y-m-d', strtotime($pedido->created_at)) : '');
         $fmt = function($n) { return number_format((float)$n, 2, ',', '.'); };
         $fmtPrecio = function($n) { return number_format((float)$n, 4, ',', '.'); };
+        // Precio de la línea: 2 decimales, o hasta 4 si el precio cobrado los tiene (p. ej. 6,8967).
+        $fmtPrecioLinea = function($n) { $n = (float) $n; return number_format($n, abs(round($n, 2) - $n) < 0.00005 ? 2 : 4, ',', '.'); };
         $tasaPedido = $tasaPedido ?? null;
     @endphp
 
@@ -90,6 +92,7 @@
                                 <th>Descripción</th>
                                 <th class="num" style="width: 96px;">Cantidad</th>
                                 <th class="num" style="width: 112px;">Precio</th>
+                                <th class="num" style="width: 112px;">Importe</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -99,7 +102,10 @@
                                     $codigoProv = trim($item->codigo_proveedor ?? '') ?: '—';
                                     $desc = $item->producto_descripcion ?? '—';
                                     $cant = (float)($item->cantidad ?? 0);
-                                    $precio = $item->precio_unitario !== null ? (float)$item->precio_unitario : 0;
+                                    // Precio cobrado = importe / cantidad: precio_unitario guarda el precio de lista y en
+                                    // muchas ventas se cobró otro (precio en divisas, descuento), así cantidad × precio = importe.
+                                    $importe = (float)($item->monto ?? 0);
+                                    $precio = $cant != 0 ? $importe / $cant : (float)($item->precio_unitario ?? 0);
                                 @endphp
                                 <tr>
                                     <td class="num mono" style="color:#4b5563;">{{ $index + 1 }}</td>
@@ -107,11 +113,12 @@
                                     <td class="mono">{{ $codigoProv }}</td>
                                     <td>{{ $desc }}</td>
                                     <td class="num">{{ $cant == (int)$cant ? (int)$cant : number_format($cant, 2, ',', '.') }}</td>
-                                    <td class="num">{{ $fmtPrecio($precio) }}</td>
+                                    <td class="num">{{ $fmtPrecioLinea($precio) }}</td>
+                                    <td class="num">{{ $fmt($importe) }}</td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6">No hay ítems en este pedido.</td>
+                                    <td colspan="7">No hay ítems en este pedido.</td>
                                 </tr>
                             @endforelse
                         </tbody>

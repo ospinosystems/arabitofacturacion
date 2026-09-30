@@ -859,7 +859,7 @@ class CuadreReportController extends Controller
                     $item->codigo_proveedor ?? '',
                     $item->producto_descripcion ?? '',
                     $item->cantidad,
-                    $item->precio_unitario ?? '',
+                    (float) $item->cantidad != 0 ? round((float) $item->monto / (float) $item->cantidad, 4) : ($item->precio_unitario ?? ''),
                     $item->monto ?? '',
                     $item->monto_bs ?? '',
                 ]);
