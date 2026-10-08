@@ -65,10 +65,13 @@ class LibroInventarioController extends Controller
 
     public function entradas(Request $r)
     {
+        // Agregado por documento en una subconsulta (ONLY_FULL_GROUP_BY no permite e.* con GROUP BY e.id).
+        $agg = DB::table('inventario_entrada_items')
+            ->selectRaw('entrada_id, COUNT(*) items, COALESCE(SUM(cantidad),0) unidades, COALESCE(SUM(cantidad*costo_unitario_usd),0) costo_usd, SUM(id_producto IS NULL) sin_mapear')
+            ->groupBy('entrada_id');
         $q = DB::table('inventario_entradas as e')
-            ->leftJoin('inventario_entrada_items as ei', 'ei.entrada_id', '=', 'e.id')
-            ->groupBy('e.id')
-            ->selectRaw('e.*, COUNT(ei.id) items, COALESCE(SUM(ei.cantidad),0) unidades, COALESCE(SUM(ei.cantidad*ei.costo_unitario_usd),0) costo_usd, SUM(ei.id_producto IS NULL) sin_mapear')
+            ->leftJoinSub($agg, 'a', 'a.entrada_id', '=', 'e.id')
+            ->select('e.*', DB::raw('COALESCE(a.items,0) as items'), DB::raw('COALESCE(a.unidades,0) as unidades'), DB::raw('COALESCE(a.costo_usd,0) as costo_usd'), DB::raw('COALESCE(a.sin_mapear,0) as sin_mapear'))
             ->orderByDesc('e.fecha_recepcion')->orderByDesc('e.id');
         if ($r->input('tipo')) $q->where('e.tipo', strtoupper($r->input('tipo')));
         if ($r->input('desde')) $q->where('e.fecha_recepcion', '>=', $r->input('desde'));
