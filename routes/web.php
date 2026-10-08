@@ -785,6 +785,13 @@ Route::post('/reportes/cuadre-diario/descarga-masiva/{token}/procesar', [App\Htt
 Route::get('/reportes/cuadre-diario/descarga-masiva/{token}/lote/{n}', [App\Http\Controllers\CuadreReportController::class, 'descargarLote'])->where('n', '[0-9]+')->name('reportes.cuadre-diario.descarga-masiva.lote');
 Route::get('/reportes/cuadre-diario/descargas-completas', [App\Http\Controllers\CuadreReportController::class, 'descargasCompletas'])->name('reportes.cuadre-diario.descargas-completas');
 Route::get('/reportes/cuadre-diario/descargas-completas/{archivo}', [App\Http\Controllers\CuadreReportController::class, 'descargarCompleta'])->name('reportes.cuadre-diario.descargas-completas.archivo');
+Route::get('/reportes/libro-inventario', [App\Http\Controllers\LibroInventarioController::class, 'index'])->name('reportes.libro-inventario');
+Route::get('/reportes/libro-inventario/export', [App\Http\Controllers\LibroInventarioController::class, 'exportResumen'])->name('reportes.libro-inventario.export');
+Route::get('/reportes/libro-inventario/pdf', [App\Http\Controllers\LibroInventarioController::class, 'pdf'])->name('reportes.libro-inventario.pdf');
+Route::get('/reportes/libro-inventario/movimientos/export', [App\Http\Controllers\LibroInventarioController::class, 'exportMovimientos'])->name('reportes.libro-inventario.movimientos.export');
+Route::get('/reportes/libro-inventario/entradas', [App\Http\Controllers\LibroInventarioController::class, 'entradas'])->name('reportes.libro-inventario.entradas');
+Route::get('/reportes/libro-inventario/entradas/export', [App\Http\Controllers\LibroInventarioController::class, 'exportEntradas'])->name('reportes.libro-inventario.entradas.export');
+Route::get('/reportes/libro-inventario/producto/{id}', [App\Http\Controllers\LibroInventarioController::class, 'producto'])->name('reportes.libro-inventario.producto');
 Route::get('/reportes/cuadre-diario/validacion', [App\Http\Controllers\CuadreReportController::class, 'validacion'])->name('reportes.cuadre-diario.validacion');
 
 // NOTA: Las rutas API de garantías se movieron a routes/api.php para mejor organización
