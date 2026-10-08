@@ -17,7 +17,7 @@
 </head>
 <body>
     <h1>Descargas completas</h1>
-    <p class="nota">Todas las facturas en PDF, un ZIP por mes (carpetas Año-Mes y dentro una carpeta por día), y un ZIP con todo.</p>
+    <p class="nota">Todas las facturas en PDF, un ZIP por mes (carpetas Año-Mes y dentro una carpeta por día), un ZIP con todo, y los libros de inventario completos en PDF.</p>
     @if(session('error'))<p style="color:#c00">{{ session('error') }}</p>@endif
     @if(empty($archivos))
         <p>Las descargas se están preparando. Vuelva a abrir esta página en unos minutos.</p>

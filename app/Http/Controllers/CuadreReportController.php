@@ -775,7 +775,7 @@ class CuadreReportController extends Controller
     {
         $dir = storage_path('app/descargas_cuadre/zips');
         $archivos = [];
-        foreach (glob($dir . '/*.zip') ?: [] as $f) {
+        foreach (glob($dir . '/*.{zip,pdf}', GLOB_BRACE) ?: [] as $f) {
             $archivos[] = ['nombre' => basename($f), 'mb' => round(filesize($f) / 1048576, 1), 'fecha' => date('Y-m-d H:i', filemtime($f))];
         }
         usort($archivos, fn ($a, $b) => strcmp($a['nombre'], $b['nombre']));
@@ -785,11 +785,11 @@ class CuadreReportController extends Controller
     public function descargarCompleta(string $archivo)
     {
         $ruta = storage_path('app/descargas_cuadre/zips/' . basename($archivo));
-        if (!preg_match('/^[A-Za-z0-9_\-]+\.zip$/', $archivo) || !is_file($ruta)) {
+        if (!preg_match('/^[A-Za-z0-9_\-]+\.(zip|pdf)$/', $archivo) || !is_file($ruta)) {
             return redirect()->route('reportes.cuadre-diario.descargas-completas')->with('error', 'Archivo no disponible.');
         }
         set_time_limit(0);
-        return response()->download($ruta, $archivo, ['Content-Type' => 'application/zip', 'Cache-Control' => 'no-store']);
+        return response()->download($ruta, $archivo, ['Content-Type' => str_ends_with($archivo, '.pdf') ? 'application/pdf' : 'application/zip', 'Cache-Control' => 'no-store']);
     }
 
     protected function dirDescarga(string $token): string

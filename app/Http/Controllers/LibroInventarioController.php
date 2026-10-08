@@ -138,6 +138,11 @@ class LibroInventarioController extends Controller
         [$desde, $hasta, $tipos] = $this->filtros($r, $svc);
         $libro = $svc->construir($desde, $hasta, $tipos, null, false);
         $productos = $this->filtrarProductos($libro['productos'], $r);
+        // PHP-FPM tiene 512 MB fijos y DomPDF no cabe con miles de filas: el PDF completo se genera con inventario:libro-pdf.
+        if (count($productos) > 1500) {
+            return response('<p style="font-family:Arial;margin:30px">El PDF en línea admite hasta 1.500 productos (este filtro devuelve ' . number_format(count($productos), 0, ',', '.') . '). '
+                . 'Acote el período o la búsqueda, o genere el libro completo con <code>php artisan inventario:libro-pdf</code>: el archivo queda en «Descargas completas».</p>', 413);
+        }
         $html = view('reportes.libro-inventario-pdf', compact('libro', 'productos') + ['empresa' => DB::table('sucursals')->first()])->render();
         $pdf = Pdf::loadHTML($html)->setPaper('letter', 'landscape')->setOptions(['isHtml5ParserEnabled' => true, 'defaultFont' => 'Helvetica', 'isFontSubsettingEnabled' => true, 'margin_left' => 8, 'margin_right' => 8, 'margin_top' => 8, 'margin_bottom' => 8]);
         return $pdf->download("libro-inventario-{$libro['desde']}-a-{$libro['hasta']}.pdf");
