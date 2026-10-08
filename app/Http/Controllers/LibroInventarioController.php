@@ -134,12 +134,12 @@ class LibroInventarioController extends Controller
     public function pdf(Request $r, LibroInventarioService $svc)
     {
         set_time_limit(600);
-        ini_set('memory_limit', '1024M');
+        ini_set('memory_limit', '2048M');
         [$desde, $hasta, $tipos] = $this->filtros($r, $svc);
         $libro = $svc->construir($desde, $hasta, $tipos, null, false);
         $productos = $this->filtrarProductos($libro['productos'], $r);
         $html = view('reportes.libro-inventario-pdf', compact('libro', 'productos') + ['empresa' => DB::table('sucursals')->first()])->render();
-        $pdf = Pdf::loadHTML($html)->setPaper('letter', 'landscape')->setOptions(['isHtml5ParserEnabled' => true, 'margin_left' => 8, 'margin_right' => 8, 'margin_top' => 8, 'margin_bottom' => 8]);
+        $pdf = Pdf::loadHTML($html)->setPaper('letter', 'landscape')->setOptions(['isHtml5ParserEnabled' => true, 'defaultFont' => 'Helvetica', 'isFontSubsettingEnabled' => true, 'margin_left' => 8, 'margin_right' => 8, 'margin_top' => 8, 'margin_bottom' => 8]);
         return $pdf->download("libro-inventario-{$libro['desde']}-a-{$libro['hasta']}.pdf");
     }
 
