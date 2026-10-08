@@ -641,9 +641,11 @@ class CuadreCsvReader
                 $mapa['cliente'] = $c;
             } elseif ($mapa['cedula'] === null && (strpos($norm, 'CI/RIF') !== false || strpos($norm, 'C I') !== false || strpos($norm, 'RIF') !== false || strpos($norm, 'CEDULA') !== false)) {
                 $mapa['cedula'] = $c;
-            } elseif ($mapa['serie'] === null && strpos($norm, 'SERIE') !== false) {
+            } elseif ($mapa['serie'] === null && (strpos($norm, 'SERIE') !== false || $norm === 'FACTURA')) {
+                // "FACTURA" a secas (sin Nº) es la columna de las facturas manuales (SERIE R, SERIE K…); la del rango es "Nº FACTURA".
                 $mapa['serie'] = $c;
-            } elseif ($mapa['nc'] === null && (strpos($norm, 'CREDITO') !== false || strpos($norm, 'NOTA') !== false)) {
+            } elseif ($mapa['nc'] === null && (strpos($norm, 'CREDITO') !== false || (strpos($norm, 'NOTA') !== false && strpos($norm, 'DEBITO') === false))) {
+                // La de nota de DÉBITO (algunos libros la ponen antes) no es nota de crédito.
                 $mapa['nc'] = $c;
             } elseif ($mapa['afectada'] === null && strpos($norm, 'AFECTADA') !== false) {
                 $mapa['afectada'] = $c;
