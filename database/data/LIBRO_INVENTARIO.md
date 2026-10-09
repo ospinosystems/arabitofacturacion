@@ -31,7 +31,10 @@ ventas sin factura de compra previa registrada: traslados o notas no incluidos, 
 2. **Consultar**: `/reportes/libro-inventario` (resumen por producto con filtros de período, tipos de entrada, búsqueda
    y existencia negativa), `/reportes/libro-inventario/producto/{id}` (kardex), `/reportes/libro-inventario/entradas`
    (facturas de compra). Exportaciones: resumen CSV, movimientos CSV (todo el período o un producto), entradas CSV y
-   el libro en PDF (membrete con razón social, RIF, sucursal y período).
+   el libro en PDF (membrete con razón social, RIF, sucursal y período). El PDF lo escribe `LibroInventarioPdf` directamente (sin DomPDF):
+   cualquier período, miles de productos, segundos y pocos MB de memoria, tanto en la web como con
+   `php artisan inventario:libro-pdf` (deja el archivo en «Descargas completas»). Identidad por período:
+   existencia final = inicial + entradas − salidas + devoluciones; la inicial es la acumulada antes de «Desde».
 
 Tablas: `inventario_entradas` (cabecera por pedido de central) e `inventario_entrada_items`
 (migración `2026_10_08_120000_create_inventario_entradas_tables`, ejecutar con `--path`).

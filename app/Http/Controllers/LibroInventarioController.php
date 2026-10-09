@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Inventario\LibroInventarioPdf;
 use App\Services\Inventario\LibroInventarioService;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -131,21 +131,16 @@ class LibroInventarioController extends Controller
         });
     }
 
-    public function pdf(Request $r, LibroInventarioService $svc)
+    /** Libro en PDF para cualquier período: generador propio (sin DomPDF), cabe en la memoria de PHP-FPM con miles de productos. */
+    public function pdf(Request $r, LibroInventarioService $svc, LibroInventarioPdf $generador)
     {
-        set_time_limit(600);
-        ini_set('memory_limit', '2048M');
+        set_time_limit(300);
         [$desde, $hasta, $tipos] = $this->filtros($r, $svc);
         $libro = $svc->construir($desde, $hasta, $tipos, null, false);
         $productos = $this->filtrarProductos($libro['productos'], $r);
-        // PHP-FPM tiene 512 MB fijos y DomPDF no cabe con miles de filas: el PDF completo se genera con inventario:libro-pdf.
-        if (count($productos) > 1500) {
-            return response('<p style="font-family:Arial;margin:30px">El PDF en línea admite hasta 1.500 productos (este filtro devuelve ' . number_format(count($productos), 0, ',', '.') . '). '
-                . 'Acote el período o la búsqueda, o genere el libro completo con <code>php artisan inventario:libro-pdf</code>: el archivo queda en «Descargas completas».</p>', 413);
-        }
-        $html = view('reportes.libro-inventario-pdf', compact('libro', 'productos') + ['empresa' => DB::table('sucursals')->first()])->render();
-        $pdf = Pdf::loadHTML($html)->setPaper('letter', 'landscape')->setOptions(['isHtml5ParserEnabled' => true, 'defaultFont' => 'Helvetica', 'isFontSubsettingEnabled' => true, 'margin_left' => 8, 'margin_right' => 8, 'margin_top' => 8, 'margin_bottom' => 8]);
-        return $pdf->download("libro-inventario-{$libro['desde']}-a-{$libro['hasta']}.pdf");
+        $pdf = $generador->generar($libro, $productos, DB::table('sucursals')->first());
+        $nombre = "libro-inventario-{$libro['desde']}-a-{$libro['hasta']}.pdf";
+        return response($pdf, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'attachment; filename="' . $nombre . '"', 'Content-Length' => strlen($pdf), 'Cache-Control' => 'no-store']);
     }
 
     protected function csv(string $nombre, array $cabecera, callable $filas): StreamedResponse

@@ -131,7 +131,7 @@ class LibroInventarioService
         unset($p);
 
         $productos = [];
-        $tot = ['productos' => 0, 'ini_valor' => 0.0, 'ent_qty' => 0.0, 'ent_valor' => 0.0, 'sal_qty' => 0.0, 'sal_valor' => 0.0, 'dev_qty' => 0.0, 'dev_valor' => 0.0, 'fin_qty' => 0.0, 'fin_valor' => 0.0, 'venta_usd' => 0.0, 'negativos' => 0, 'sin_ficha' => 0];
+        $tot = ['productos' => 0, 'ini_qty' => 0.0, 'ini_valor' => 0.0, 'ent_qty' => 0.0, 'ent_valor' => 0.0, 'sal_qty' => 0.0, 'sal_valor' => 0.0, 'dev_qty' => 0.0, 'dev_valor' => 0.0, 'fin_qty' => 0.0, 'fin_valor' => 0.0, 'venta_usd' => 0.0, 'negativos' => 0, 'sin_ficha' => 0];
         foreach ($prod as $k => $p) {
             $f = is_int($k) ? ($fichas[$k] ?? null) : null;
             $origen = null;
@@ -147,7 +147,7 @@ class LibroInventarioService
                 'venta_usd' => $p['venta_usd'], 'negativo' => $p['negativo'], 'movs' => $p['movs'],
             ];
             $tot['productos']++;
-            foreach (['ini_valor', 'ent_qty', 'ent_valor', 'sal_qty', 'sal_valor', 'dev_qty', 'dev_valor', 'venta_usd'] as $c) $tot[$c] += $productos[$k][$c];
+            foreach (['ini_qty', 'ini_valor', 'ent_qty', 'ent_valor', 'sal_qty', 'sal_valor', 'dev_qty', 'dev_valor', 'venta_usd'] as $c) $tot[$c] += $productos[$k][$c];
             $tot['fin_qty'] += $p['qty'];
             $tot['fin_valor'] += $p['qty'] * $p['prom'];
             if ($p['negativo']) $tot['negativos']++;

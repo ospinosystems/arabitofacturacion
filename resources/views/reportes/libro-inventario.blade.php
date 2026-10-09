@@ -62,17 +62,19 @@
 @php $t = $libro['totales']; @endphp
 <div class="totales">
     <div class="tot"><div class="l">Productos</div><div class="v">{{ $fmt($t['productos'], 0) }}</div></div>
+    <div class="tot"><div class="l">Existencia inicial (unid.)</div><div class="v">{{ $fmt($t['ini_qty'], 2) }}</div></div>
     <div class="tot"><div class="l">Entradas (unid.)</div><div class="v">{{ $fmt($t['ent_qty'], 2) }}</div></div>
     <div class="tot"><div class="l">Entradas (USD costo)</div><div class="v">{{ $fmt($t['ent_valor']) }}</div></div>
     <div class="tot"><div class="l">Salidas (unid.)</div><div class="v">{{ $fmt($t['sal_qty'], 2) }}</div></div>
     <div class="tot"><div class="l">Salidas (USD costo)</div><div class="v">{{ $fmt($t['sal_valor']) }}</div></div>
-    <div class="tot"><div class="l">Devoluciones (unid.)</div><div class="v">{{ $fmt($t['dev_qty'], 2) }}</div></div>
+    <div class="tot"><div class="l">Devoluciones (unid., reingresan)</div><div class="v">{{ $fmt($t['dev_qty'], 2) }}</div></div>
     <div class="tot"><div class="l">Existencia final (unid.)</div><div class="v">{{ $fmt($t['fin_qty'], 2) }}</div></div>
     <div class="tot"><div class="l">Valor inventario final</div><div class="v">$ {{ $fmt($t['fin_valor']) }} · Bs {{ $fmt($t['fin_valor_bs']) }}</div></div>
     <div class="tot"><div class="l">Ventas del período (USD)</div><div class="v">{{ $fmt($t['venta_usd']) }}</div></div>
     <div class="tot"><div class="l">Productos con existencia negativa</div><div class="v {{ $t['negativos'] ? 'neg' : '' }}">{{ $fmt($t['negativos'], 0) }}</div></div>
     @if($t['sin_ficha'])<div class="tot"><div class="l">Sin ficha local</div><div class="v neg">{{ $fmt($t['sin_ficha'], 0) }}</div></div>@endif
 </div>
+<p class="subtitulo">Existencia final = existencia inicial + entradas &minus; salidas + devoluciones. La existencia inicial es la acumulada por los documentos anteriores a la fecha «Desde» (el libro parte del primer documento registrado, sin stock histórico).</p>
 
 <p>{{ $fmt($totalFilas, 0) }} producto(s) · página {{ $pagina }} de {{ max(1, (int) ceil($totalFilas / $porPagina)) }}
     @if($totalFilas > $porPagina)
@@ -117,7 +119,7 @@
     <tfoot>
         <tr class="total-row">
             <td class="l" colspan="3">Totales del período (todos los productos)</td>
-            <td></td><td>{{ $fmt($t['ent_qty'], 2) }}</td><td>{{ $fmt($t['ent_valor']) }}</td><td>{{ $fmt($t['sal_qty'], 2) }}</td><td>{{ $fmt($t['sal_valor']) }}</td><td>{{ $fmt($t['dev_qty'], 2) }}</td>
+            <td>{{ $fmt($t['ini_qty'], 2) }}</td><td>{{ $fmt($t['ent_qty'], 2) }}</td><td>{{ $fmt($t['ent_valor']) }}</td><td>{{ $fmt($t['sal_qty'], 2) }}</td><td>{{ $fmt($t['sal_valor']) }}</td><td>{{ $fmt($t['dev_qty'], 2) }}</td>
             <td>{{ $fmt($t['fin_qty'], 2) }}</td><td></td><td>{{ $fmt($t['fin_valor']) }}</td><td>{{ $fmt($t['fin_valor_bs']) }}</td><td></td>
         </tr>
     </tfoot>
