@@ -84,3 +84,14 @@ huella MD5 de ítems y pagos: tras el reset quedan idénticos al respaldo previo
 
 Por grupo: 2 consultas (pedidos y suma de ítems) y la búsqueda acotada en tiempo. Medido: ~0,35 s por grupo con
 tolerancia 1 Bs; peor caso `--max-segundos` por grupo. Ver `RUNBOOK_CUADRE_ANACO.md` para la estimación completa.
+
+## 8. Exportaciones para auditoria
+
+En `/reportes/cuadre-diario`: **Exportar CSV (resumen)** (una fila por dia y maquina fiscal) y **Exportar CSV detallado
+(lineas)** (`/reportes/cuadre-diario/export-detalle`: una fila por producto vendido, con FECHA, MAQUINA_FISCAL,
+NUMERO_FACTURA, HORA, TIPO (VENTA/DEVOLUCION), codigos, DESCRIPCION, CANTIDAD, PRECIO_UNIT_USD = monto/cantidad,
+IMPORTE_USD, TASA_BS_USD, PRECIO_UNIT_BS, IMPORTE_BS y el total de la factura repetido en cada fila). Respeta
+`fecha_desde`/`fecha_hasta`/`maquina_fiscal`; `formato=excel` (por defecto: separador `;` y decimal coma, para Excel en
+espanol) o `formato=plano` (`,` y punto). Se transmite en streaming con cursor. Para el periodo completo de una sucursal
+grande, `php artisan cuadre:ventas-detalle-csv` genera el mismo archivo en consola y lo deja en «Descargas completas»
+(`storage/app/descargas_cuadre/zips/`), igual que los ZIP de facturas y el libro de inventario en PDF.

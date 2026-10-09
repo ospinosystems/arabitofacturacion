@@ -17,7 +17,7 @@
 </head>
 <body>
     <h1>Descargas completas</h1>
-    <p class="nota">Todas las facturas en PDF, un ZIP por mes (carpetas Año-Mes y dentro una carpeta por día), un ZIP con todo, y los libros de inventario completos en PDF.</p>
+    <p class="nota">Todas las facturas en PDF, un ZIP por mes (carpetas Año-Mes y dentro una carpeta por día), un ZIP con todo, los libros de inventario completos en PDF y el CSV detallado de ventas (una fila por producto vendido, con fecha, máquina fiscal, factura, código, cantidad, precio y tasa) para auditar en Excel.</p>
     @if(session('error'))<p style="color:#c00">{{ session('error') }}</p>@endif
     @if(empty($archivos))
         <p>Las descargas se están preparando. Vuelva a abrir esta página en unos minutos.</p>

@@ -11,6 +11,7 @@ use App\Models\pedidos;
 use App\Models\items_pedidos;
 use App\Models\pago_pedidos;
 use App\Services\CuadrePdfService;
+use App\Services\Cuadre\VentasDetalleExporter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Str;
 use ZipArchive;
@@ -145,6 +146,33 @@ class CuadreReportController extends Controller
         }, $filename, [
             'Content-Type' => 'text/csv; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    /**
+     * CSV detallado para auditoria en Excel: una fila por linea de factura (producto vendido), dia por dia y por maquina
+     * fiscal, con codigo, cantidad, precio cobrado (monto/cantidad), tasa e importes en USD y Bs. Se transmite en
+     * streaming con cursor, sin limite de tiempo, para que pueda bajarse completo aunque sea grande. Acepta
+     * fecha_desde, fecha_hasta, maquina_fiscal y formato (excel: separador ; y decimal coma | plano: , y punto).
+     */
+    public function exportDetalle(Request $request, VentasDetalleExporter $exporter): StreamedResponse
+    {
+        set_time_limit(0);
+        $desde = $request->get('fecha_desde') ?: null;
+        $hasta = $request->get('fecha_hasta') ?: null;
+        $maquina = $request->get('maquina_fiscal') ?: null;
+        $formato = $request->get('formato') === 'plano' ? 'plano' : 'excel';
+        $filename = sprintf('ventas-detalle-%s-%s%s%s.csv', $desde ?? 'todo', $hasta ?? 'todo',
+            $maquina ? '-' . preg_replace('/[^A-Za-z0-9]/', '', $maquina) : '', $formato === 'plano' ? '-plano' : '');
+
+        return response()->streamDownload(function () use ($exporter, $desde, $hasta, $maquina, $formato) {
+            $out = fopen('php://output', 'w');
+            $exporter->escribir($out, $exporter->filas($desde, $hasta, $maquina), $formato);
+            fclose($out);
+        }, $filename, [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'X-Accel-Buffering'   => 'no',
         ]);
     }
 
@@ -775,7 +803,7 @@ class CuadreReportController extends Controller
     {
         $dir = storage_path('app/descargas_cuadre/zips');
         $archivos = [];
-        foreach (glob($dir . '/*.{zip,pdf}', GLOB_BRACE) ?: [] as $f) {
+        foreach (glob($dir . '/*.{zip,pdf,csv}', GLOB_BRACE) ?: [] as $f) {
             $archivos[] = ['nombre' => basename($f), 'mb' => round(filesize($f) / 1048576, 1), 'fecha' => date('Y-m-d H:i', filemtime($f))];
         }
         usort($archivos, fn ($a, $b) => strcmp($a['nombre'], $b['nombre']));
@@ -785,11 +813,11 @@ class CuadreReportController extends Controller
     public function descargarCompleta(string $archivo)
     {
         $ruta = storage_path('app/descargas_cuadre/zips/' . basename($archivo));
-        if (!preg_match('/^[A-Za-z0-9_\-]+\.(zip|pdf)$/', $archivo) || !is_file($ruta)) {
+        if (!preg_match('/^[A-Za-z0-9_\-]+\.(zip|pdf|csv)$/', $archivo) || !is_file($ruta)) {
             return redirect()->route('reportes.cuadre-diario.descargas-completas')->with('error', 'Archivo no disponible.');
         }
         set_time_limit(0);
-        return response()->download($ruta, $archivo, ['Content-Type' => str_ends_with($archivo, '.pdf') ? 'application/pdf' : 'application/zip', 'Cache-Control' => 'no-store']);
+        return response()->download($ruta, $archivo, ['Content-Type' => ['pdf' => 'application/pdf', 'csv' => 'text/csv; charset=UTF-8'][pathinfo($archivo, PATHINFO_EXTENSION)] ?? 'application/zip', 'Cache-Control' => 'no-store']);
     }
 
     protected function dirDescarga(string $token): string
