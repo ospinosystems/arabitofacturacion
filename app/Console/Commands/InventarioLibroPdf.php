@@ -17,7 +17,7 @@ class InventarioLibroPdf extends Command
     protected $signature = 'inventario:libro-pdf
                             {--desde= : inicio del período (default: primer documento)}
                             {--hasta= : fin del período (default: último documento)}
-                            {--tipos=FACTURA,NOTA,TRANSFERENCIA : tipos de entrada a considerar}
+                            {--tipos=FACTURA,NOTA,TRANSFERENCIA,AJUSTE : tipos de entrada a considerar}
                             {--solo-con-movimientos : omitir los productos sin movimientos en el período}
                             {--salida= : ruta del PDF (default storage/app/descargas_cuadre/zips/libro_inventario_<sucursal>_<desde>_a_<hasta>.pdf)}';
 

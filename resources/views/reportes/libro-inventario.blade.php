@@ -41,7 +41,7 @@
 <form method="get" class="filtro">
     <label>Desde: <input type="date" name="desde" value="{{ $desde }}" min="{{ $min }}" max="{{ $max }}"></label>
     <label>Hasta: <input type="date" name="hasta" value="{{ $hasta }}" min="{{ $min }}" max="{{ $max }}"></label>
-    @foreach(['FACTURA' => 'Facturas fiscales', 'NOTA' => 'Notas (sin factura)', 'TRANSFERENCIA' => 'Traslados'] as $t => $et)
+    @foreach(['FACTURA' => 'Facturas fiscales', 'NOTA' => 'Notas (sin factura)', 'TRANSFERENCIA' => 'Traslados', 'AJUSTE' => 'Ajustes de inventario'] as $t => $et)
         <label><input type="checkbox" name="tipos[]" value="{{ $t }}" {{ in_array($t, $tipos) ? 'checked' : '' }}> {{ $et }}</label>
     @endforeach
     <label>Buscar: <input type="text" name="q" value="{{ $q }}" placeholder="código o descripción"></label>
@@ -68,13 +68,14 @@
     <div class="tot"><div class="l">Salidas (unid.)</div><div class="v">{{ $fmt($t['sal_qty'], 2) }}</div></div>
     <div class="tot"><div class="l">Salidas (USD costo)</div><div class="v">{{ $fmt($t['sal_valor']) }}</div></div>
     <div class="tot"><div class="l">Devoluciones (unid., reingresan)</div><div class="v">{{ $fmt($t['dev_qty'], 2) }}</div></div>
+    <div class="tot"><div class="l">Ajustes de inventario (unid., ±)</div><div class="v">{{ $fmt($t['aj_qty'], 2) }}</div></div>
     <div class="tot"><div class="l">Existencia final (unid.)</div><div class="v">{{ $fmt($t['fin_qty'], 2) }}</div></div>
     <div class="tot"><div class="l">Valor inventario final</div><div class="v">$ {{ $fmt($t['fin_valor']) }} · Bs {{ $fmt($t['fin_valor_bs']) }}</div></div>
     <div class="tot"><div class="l">Ventas del período (USD)</div><div class="v">{{ $fmt($t['venta_usd']) }}</div></div>
     <div class="tot"><div class="l">Productos con existencia negativa</div><div class="v {{ $t['negativos'] ? 'neg' : '' }}">{{ $fmt($t['negativos'], 0) }}</div></div>
     @if($t['sin_ficha'])<div class="tot"><div class="l">Sin ficha local</div><div class="v neg">{{ $fmt($t['sin_ficha'], 0) }}</div></div>@endif
 </div>
-<p class="subtitulo">Existencia final = existencia inicial + entradas &minus; salidas + devoluciones. La existencia inicial es la acumulada por los documentos anteriores a la fecha «Desde» (el libro parte del primer documento registrado, sin stock histórico).</p>
+<p class="subtitulo">Existencia final = existencia inicial + entradas &minus; salidas + devoluciones + ajustes. Ajustes = movimientos del equipo de inventario (revisiones del DICI, ajustes en TitanioPOS, garantías y fusiones de fichas) y saldos iniciales de apertura registrados en marzo. La existencia inicial es la acumulada por los documentos anteriores a la fecha «Desde».</p>
 
 <p>{{ $fmt($totalFilas, 0) }} producto(s) · página {{ $pagina }} de {{ max(1, (int) ceil($totalFilas / $porPagina)) }}
     @if($totalFilas > $porPagina)
@@ -89,7 +90,7 @@
     <thead>
         <tr>
             <th>Código</th><th>Descripción</th><th>Unid.</th>
-            <th>Exist. inicial</th><th>Entradas</th><th>Costo entradas USD</th><th>Salidas</th><th>Costo salidas USD</th><th>Devol.</th>
+            <th>Exist. inicial</th><th>Entradas</th><th>Costo entradas USD</th><th>Salidas</th><th>Costo salidas USD</th><th>Devol.</th><th>Ajustes</th>
             <th>Existencia</th><th>Costo prom. USD</th><th>Valor USD</th><th>Valor Bs</th><th></th>
         </tr>
     </thead>
@@ -105,6 +106,7 @@
             <td>{{ $fmt($p['sal_qty'], 2) }}</td>
             <td>{{ $fmt($p['sal_valor']) }}</td>
             <td>{{ $fmt($p['dev_qty'], 2) }}</td>
+            <td>{{ $fmt($p['aj_qty'], 2) }}</td>
             <td class="{{ $p['fin_qty'] < -0.00001 ? 'neg' : '' }}">{{ $fmt($p['fin_qty'], 2) }}</td>
             <td>{{ $fmt($p['prom'], 4) }}</td>
             <td>{{ $fmt($p['fin_valor']) }}</td>
@@ -112,14 +114,14 @@
             <td class="l"><a href="{{ route('reportes.libro-inventario.producto', ['id' => $p['id']] + $qs) }}">Kardex</a></td>
         </tr>
     @empty
-        <tr><td colspan="14" class="l">No hay productos con movimientos para estos filtros.</td></tr>
+        <tr><td colspan="15" class="l">No hay productos con movimientos para estos filtros.</td></tr>
     @endforelse
     </tbody>
     @if($totalFilas)
     <tfoot>
         <tr class="total-row">
             <td class="l" colspan="3">Totales del período (todos los productos)</td>
-            <td>{{ $fmt($t['ini_qty'], 2) }}</td><td>{{ $fmt($t['ent_qty'], 2) }}</td><td>{{ $fmt($t['ent_valor']) }}</td><td>{{ $fmt($t['sal_qty'], 2) }}</td><td>{{ $fmt($t['sal_valor']) }}</td><td>{{ $fmt($t['dev_qty'], 2) }}</td>
+            <td>{{ $fmt($t['ini_qty'], 2) }}</td><td>{{ $fmt($t['ent_qty'], 2) }}</td><td>{{ $fmt($t['ent_valor']) }}</td><td>{{ $fmt($t['sal_qty'], 2) }}</td><td>{{ $fmt($t['sal_valor']) }}</td><td>{{ $fmt($t['dev_qty'], 2) }}</td><td>{{ $fmt($t['aj_qty'], 2) }}</td>
             <td>{{ $fmt($t['fin_qty'], 2) }}</td><td></td><td>{{ $fmt($t['fin_valor']) }}</td><td>{{ $fmt($t['fin_valor_bs']) }}</td><td></td>
         </tr>
     </tfoot>

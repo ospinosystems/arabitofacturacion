@@ -29,12 +29,12 @@ class LibroInventarioPdf
 
     /** [título, ancho, alineación (l|r), clave] */
     private const COLUMNAS = [
-        ['Código', 58, 'l', 'codigo'], ['Descripción', 190, 'l', 'descripcion'], ['Unid.', 26, 'l', 'unidad'],
+        ['Código', 52, 'l', 'codigo'], ['Descripción', 160, 'l', 'descripcion'], ['Unid.', 26, 'l', 'unidad'],
         ['Exist. inicial', 44, 'r', 'ini_qty'], ['Entradas', 44, 'r', 'ent_qty'], ['Costo entradas USD', 52, 'r', 'ent_valor'],
-        ['Salidas', 44, 'r', 'sal_qty'], ['Costo salidas USD', 52, 'r', 'sal_valor'], ['Devol.', 34, 'r', 'dev_qty'],
-        ['Existencia final', 48, 'r', 'fin_qty'], ['Costo prom. USD', 46, 'r', 'prom'], ['Valor final USD', 52, 'r', 'fin_valor'], ['Valor final Bs', 62, 'r', 'fin_valor_bs'],
+        ['Salidas', 44, 'r', 'sal_qty'], ['Costo salidas USD', 52, 'r', 'sal_valor'], ['Devol.', 34, 'r', 'dev_qty'], ['Ajustes', 40, 'r', 'aj_qty'],
+        ['Existencia final', 48, 'r', 'fin_qty'], ['Costo prom. USD', 46, 'r', 'prom'], ['Valor final USD', 52, 'r', 'fin_valor'], ['Valor final Bs', 58, 'r', 'fin_valor_bs'],
     ];
-    private const DECIMALES = ['ini_qty' => 2, 'ent_qty' => 2, 'ent_valor' => 2, 'sal_qty' => 2, 'sal_valor' => 2, 'dev_qty' => 2, 'fin_qty' => 2, 'prom' => 4, 'fin_valor' => 2, 'fin_valor_bs' => 2];
+    private const DECIMALES = ['ini_qty' => 2, 'ent_qty' => 2, 'ent_valor' => 2, 'sal_qty' => 2, 'sal_valor' => 2, 'dev_qty' => 2, 'aj_qty' => 2, 'fin_qty' => 2, 'prom' => 4, 'fin_valor' => 2, 'fin_valor_bs' => 2];
 
     /** @var string[] contenido (operadores PDF) de cada página */
     private array $paginas = [];
@@ -96,8 +96,9 @@ class LibroInventarioPdf
 
         // Pie explicativo
         $this->y -= 6;
-        $pie = 'Existencia final = existencia inicial + entradas - salidas + devoluciones. La existencia inicial es la acumulada por los documentos '
-            . 'anteriores al inicio del período (el libro parte del primer documento registrado, sin stock histórico). Entradas: documentos de compra '
+        $pie = 'Existencia final = existencia inicial + entradas - salidas + devoluciones + ajustes. La existencia inicial es la acumulada por los documentos '
+            . 'anteriores al inicio del período. Ajustes: movimientos del equipo de inventario (revisiones de inventario, ajustes en el punto de venta, garantías y '
+            . 'fusiones de fichas) y saldos iniciales de apertura registrados en marzo, valorados al costo promedio. Entradas: documentos de compra '
             . 'recibidos en la sucursal según los tipos indicados (facturas fiscales con su N° de factura del proveedor, notas de entrega y traslados entre '
             . 'sucursales). Salidas: facturas de venta (número de factura y máquina fiscal); las devoluciones reingresan al mismo costo. Las salidas se '
             . 'valoran al costo promedio ponderado de las entradas de cada producto. Los productos con existencia negativa indican ventas sin factura de '

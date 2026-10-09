@@ -90,9 +90,9 @@ class LibroInventarioController extends Controller
         $libro = $svc->construir($desde, $hasta, $tipos, null, false);
         $productos = $this->filtrarProductos($libro['productos'], $r);
         $nombre = "libro-inventario-resumen-{$libro['desde']}-a-{$libro['hasta']}.csv";
-        return $this->csv($nombre, ['ID', 'CODIGO', 'COD_PROVEEDOR', 'DESCRIPCION', 'UNIDAD', 'EXIST_INICIAL', 'VALOR_INICIAL_USD', 'ENTRADAS', 'COSTO_ENTRADAS_USD', 'SALIDAS', 'COSTO_SALIDAS_USD', 'DEVOLUCIONES', 'EXISTENCIA', 'COSTO_PROMEDIO_USD', 'VALOR_USD', 'VALOR_BS', 'VENTA_USD', 'NEGATIVO'], function () use ($productos) {
+        return $this->csv($nombre, ['ID', 'CODIGO', 'COD_PROVEEDOR', 'DESCRIPCION', 'UNIDAD', 'EXIST_INICIAL', 'VALOR_INICIAL_USD', 'ENTRADAS', 'COSTO_ENTRADAS_USD', 'SALIDAS', 'COSTO_SALIDAS_USD', 'DEVOLUCIONES', 'AJUSTES', 'EXISTENCIA', 'COSTO_PROMEDIO_USD', 'VALOR_USD', 'VALOR_BS', 'VENTA_USD', 'NEGATIVO'], function () use ($productos) {
             foreach ($productos as $p) {
-                yield [$p['id'], $p['codigo'], $p['codigo_proveedor'], $p['descripcion'], $p['unidad'], $this->n($p['ini_qty'], 4), $this->n($p['ini_valor']), $this->n($p['ent_qty'], 4), $this->n($p['ent_valor']), $this->n($p['sal_qty'], 4), $this->n($p['sal_valor']), $this->n($p['dev_qty'], 4), $this->n($p['fin_qty'], 4), $this->n($p['prom'], 4), $this->n($p['fin_valor']), $this->n($p['fin_valor_bs']), $this->n($p['venta_usd']), $p['negativo'] ? 'SI' : ''];
+                yield [$p['id'], $p['codigo'], $p['codigo_proveedor'], $p['descripcion'], $p['unidad'], $this->n($p['ini_qty'], 4), $this->n($p['ini_valor']), $this->n($p['ent_qty'], 4), $this->n($p['ent_valor']), $this->n($p['sal_qty'], 4), $this->n($p['sal_valor']), $this->n($p['dev_qty'], 4), $this->n($p['aj_qty'], 4), $this->n($p['fin_qty'], 4), $this->n($p['prom'], 4), $this->n($p['fin_valor']), $this->n($p['fin_valor_bs']), $this->n($p['venta_usd']), $p['negativo'] ? 'SI' : ''];
             }
         });
     }

@@ -3,6 +3,7 @@
 namespace App\Services\Inventario;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Libro (registro) de entradas y salidas de inventario, reconstruido únicamente con documentos:
@@ -13,26 +14,34 @@ use Illuminate\Support\Facades\DB;
  * primer documento. Las salidas se valoran al costo promedio ponderado móvil (USD) de las entradas de cada producto;
  * los Bs de cada movimiento usan la tasa del propio documento (tasa de la factura de compra / tasa de la venta).
  * Un ítem de venta con cantidad negativa (devolución dentro de un cambio) vuelve al inventario al costo promedio.
+ *  - AJUSTES (tabla inventario_ajustes, 09-oct-2026): movimientos del equipo de inventario importados de central
+ *    (ediciones del DICI, ajustes de TitanioPOS, garantías, fusiones de fichas) con cantidad con signo, valorados al
+ *    costo promedio vigente; y SALDOS INICIALES de apertura fechados en marzo (inventario:saldos-iniciales) para los
+ *    productos que de otro modo quedarían con existencia negativa. Identidad: final = inicial + entradas - salidas
+ *    + devoluciones + ajustes.
  */
 class LibroInventarioService
 {
-    public const TIPOS = ['FACTURA', 'NOTA', 'TRANSFERENCIA'];
+    public const TIPOS = ['FACTURA', 'NOTA', 'TRANSFERENCIA', 'AJUSTE'];
 
-    /** Criterio oficial (decisión del usuario, 09-oct-2026): facturas fiscales, notas y traslados cuentan como entradas. */
-    public const TIPOS_DEFECTO = ['FACTURA', 'NOTA', 'TRANSFERENCIA'];
+    /** Criterio oficial (decisión del usuario, 09-oct-2026): facturas fiscales, notas, traslados y ajustes del equipo de inventario. */
+    public const TIPOS_DEFECTO = ['FACTURA', 'NOTA', 'TRANSFERENCIA', 'AJUSTE'];
+
+    /** Tipos que son documentos de entrada (tabla inventario_entradas). */
+    public const TIPOS_ENTRADA = ['FACTURA', 'NOTA', 'TRANSFERENCIA'];
 
     /**
      * @param string[] $tipos tipos de entrada a considerar
      * @return array{productos: array<int|string, array>, movimientos: array<int, array>, totales: array, tasa_cierre: float, desde: string, hasta: string}
      */
-    public function construir(?string $desde, ?string $hasta, array $tipos = self::TIPOS_DEFECTO, $soloProducto = null, bool $conMovimientos = true): array
+    public function construir(?string $desde, ?string $hasta, array $tipos = self::TIPOS_DEFECTO, $soloProducto = null, bool $conMovimientos = true, bool $conSaldosIniciales = true): array
     {
         $hasta = $hasta ?: date('Y-m-d');
         $tipos = array_values(array_intersect(self::TIPOS, array_map('strtoupper', $tipos))) ?: self::TIPOS_DEFECTO;
 
         // ── Entradas ───────────────────────────────────────────────────────────────────────────────
         $qe = DB::table('inventario_entrada_items as ei')->join('inventario_entradas as e', 'e.id', '=', 'ei.entrada_id')
-            ->where('e.anulado', 0)->whereIn('e.tipo', $tipos)->where('e.fecha_recepcion', '<=', $hasta)
+            ->where('e.anulado', 0)->whereIn('e.tipo', array_values(array_intersect($tipos, self::TIPOS_ENTRADA)))->where('e.fecha_recepcion', '<=', $hasta)
             ->select('ei.id as item_id', 'e.id as entrada_id', 'e.tipo', 'e.numero_documento', 'e.numero_nota', 'e.proveedor', 'e.origen_sucursal',
                 'e.fecha_recepcion as fecha', 'e.tasa_bs', 'ei.central_id_producto', 'ei.id_producto', 'ei.cantidad', 'ei.costo_unitario_usd', 'ei.descripcion_origen', 'ei.codigo_barras_origen', 'ei.mapeo');
         $sinFicha = is_string($soloProducto) && str_starts_with($soloProducto, 'c'); // clave 'c<id central>' = sin ficha local
@@ -55,6 +64,21 @@ class LibroInventarioService
         }
         $salidas = $qs->orderByRaw('COALESCE(p.fecha_factura, p.created_at), p.id, i.id')->get();
 
+        // ── Ajustes del equipo de inventario y saldos iniciales de apertura ────────────────────────
+        $ajustes = collect();
+        if (Schema::hasTable('inventario_ajustes') && ($conSaldosIniciales || in_array('AJUSTE', $tipos, true))) {
+            $qa = DB::table('inventario_ajustes as a')->where('a.fecha', '<=', $hasta)
+                ->where(function ($w) use ($tipos, $conSaldosIniciales) {
+                    if ($conSaldosIniciales) $w->orWhere('a.tipo', 'SALDO_INICIAL');
+                    if (in_array('AJUSTE', $tipos, true)) $w->orWhere('a.tipo', 'AJUSTE');
+                })
+                ->select('a.id', 'a.tipo', 'a.subtipo', 'a.fecha', 'a.id_producto', 'a.cantidad', 'a.usuario', 'a.referencia');
+            if ($soloProducto !== null) {
+                $sinFicha ? $qa->whereRaw('1 = 0') : $qa->where('a.id_producto', (int) $soloProducto);
+            }
+            $ajustes = $qa->orderBy('a.fecha')->orderBy('a.id')->get();
+        }
+
         // ── Un solo flujo cronológico (las entradas de un día van antes que las ventas de ese día) ──
         $movs = [];
         $seq = 0;
@@ -71,6 +95,12 @@ class LibroInventarioService
                 'documento' => 'Factura ' . trim((string) $s->maquina_fiscal) . ' ' . $s->numero_factura, 'tercero' => '',
                 'cantidad' => abs($cant), 'costo' => null, 'tasa' => (float) ($s->tasa ?: 0), 'venta_usd' => (float) $s->monto];
         }
+        foreach ($ajustes as $a) {
+            // Los saldos iniciales van antes que todo en su fecha; los ajustes, después de las entradas y antes de las ventas del día.
+            $movs[] = ['k' => (int) $a->id_producto, 'orden' => sprintf('%s|%s|%010d', $a->fecha, $a->tipo === 'SALDO_INICIAL' ? '0|' : '0|zz|', $seq++), 'fecha' => $a->fecha, 'tipo' => 'AJUSTE', 'subtipo' => $a->subtipo,
+                'documento' => ($a->tipo === 'SALDO_INICIAL' ? 'Saldo inicial' : 'Ajuste') . ' #' . $a->id . ($a->referencia ? ' · ' . $a->referencia : ''), 'tercero' => $a->usuario ?: '',
+                'cantidad' => (float) $a->cantidad, 'costo' => null, 'tasa' => 0.0];
+        }
         usort($movs, fn ($a, $b) => strcmp($a['orden'], $b['orden']));
 
         // ── Fichas de producto ─────────────────────────────────────────────────────────────────────
@@ -86,7 +116,12 @@ class LibroInventarioService
         $prod = [];
         $out = [];
         $tasaCierre = 0.0;
-        $nuevo = fn () => ['qty' => 0.0, 'valor' => 0.0, 'prom' => 0.0, 'ini_qty' => 0.0, 'ini_valor' => 0.0, 'ent_qty' => 0.0, 'ent_valor' => 0.0, 'sal_qty' => 0.0, 'sal_valor' => 0.0, 'dev_qty' => 0.0, 'dev_valor' => 0.0, 'venta_usd' => 0.0, 'negativo' => false, 'movs' => 0];
+        $nuevo = fn () => ['qty' => 0.0, 'valor' => 0.0, 'prom' => 0.0, 'ini_qty' => 0.0, 'ini_valor' => 0.0, 'ent_qty' => 0.0, 'ent_valor' => 0.0, 'sal_qty' => 0.0, 'sal_valor' => 0.0, 'dev_qty' => 0.0, 'dev_valor' => 0.0, 'aj_qty' => 0.0, 'aj_valor' => 0.0, 'venta_usd' => 0.0, 'negativo' => false, 'movs' => 0];
+        // Costo de la primera entrada de cada producto: valora los saldos iniciales y los ajustes previos a cualquier compra.
+        $primerCosto = [];
+        foreach ($movs as $m) {
+            if ($m['tipo'] === 'ENTRADA' && (float) $m['costo'] > 0 && !isset($primerCosto[$m['k']])) $primerCosto[$m['k']] = (float) $m['costo'];
+        }
         foreach ($movs as $m) {
             $k = $m['k'];
             $p = &$prod[$k];
@@ -106,6 +141,16 @@ class LibroInventarioService
                 $p['valor'] += $m['cantidad'] * $costo;
                 $total = $m['cantidad'] * $costo;
                 if ($enPeriodo) { $p['dev_qty'] += $m['cantidad']; $p['dev_valor'] += $total; $p['venta_usd'] -= abs($m['venta_usd'] ?? 0); }
+            } elseif ($m['tipo'] === 'AJUSTE') {
+                $cant = $m['cantidad']; // con signo
+                $costo = $p['prom'] > 0 ? $p['prom'] : ($primerCosto[$k] ?? 0.0);
+                $p['qty'] += $cant;
+                $p['valor'] += $cant * $costo;
+                if ($p['qty'] > 0 && $p['valor'] > 0) $p['prom'] = $p['valor'] / $p['qty'];
+                if ($p['qty'] < -0.00001) $p['negativo'] = true;
+                $total = abs($cant) * $costo;
+                $m['tasa'] = $tasaCierre;
+                if ($enPeriodo) { $p['aj_qty'] += $cant; $p['aj_valor'] += $cant * $costo; }
             } else {
                 $costo = $p['prom'];
                 $p['qty'] -= $m['cantidad'];
@@ -122,7 +167,7 @@ class LibroInventarioService
             $p['movs']++;
             if ($conMovimientos) {
                 $out[] = ['producto' => $k, 'fecha' => $m['fecha'], 'tipo' => $m['tipo'], 'subtipo' => $m['subtipo'], 'documento' => $m['documento'], 'tercero' => $m['tercero'],
-                    'entrada' => $m['tipo'] === 'SALIDA' ? 0.0 : $m['cantidad'], 'salida' => $m['tipo'] === 'SALIDA' ? $m['cantidad'] : 0.0,
+                    'entrada' => $m['tipo'] === 'SALIDA' ? 0.0 : max($m['cantidad'], 0.0), 'salida' => $m['tipo'] === 'SALIDA' ? $m['cantidad'] : max(-$m['cantidad'], 0.0),
                     'costo_unit' => $costo, 'total_usd' => $total, 'tasa' => $m['tasa'], 'total_bs' => $total * $m['tasa'],
                     'saldo_qty' => $p['qty'], 'saldo_prom' => $p['prom'], 'saldo_valor' => $p['qty'] * $p['prom']];
             }
@@ -131,7 +176,7 @@ class LibroInventarioService
         unset($p);
 
         $productos = [];
-        $tot = ['productos' => 0, 'ini_qty' => 0.0, 'ini_valor' => 0.0, 'ent_qty' => 0.0, 'ent_valor' => 0.0, 'sal_qty' => 0.0, 'sal_valor' => 0.0, 'dev_qty' => 0.0, 'dev_valor' => 0.0, 'fin_qty' => 0.0, 'fin_valor' => 0.0, 'venta_usd' => 0.0, 'negativos' => 0, 'sin_ficha' => 0];
+        $tot = ['productos' => 0, 'ini_qty' => 0.0, 'ini_valor' => 0.0, 'ent_qty' => 0.0, 'ent_valor' => 0.0, 'sal_qty' => 0.0, 'sal_valor' => 0.0, 'dev_qty' => 0.0, 'dev_valor' => 0.0, 'aj_qty' => 0.0, 'aj_valor' => 0.0, 'fin_qty' => 0.0, 'fin_valor' => 0.0, 'venta_usd' => 0.0, 'negativos' => 0, 'sin_ficha' => 0];
         foreach ($prod as $k => $p) {
             $f = is_int($k) ? ($fichas[$k] ?? null) : null;
             $origen = null;
@@ -142,12 +187,12 @@ class LibroInventarioService
                 'id' => $k, 'codigo' => $f->codigo_barras ?? ($origen['cb_origen'] ?? ''), 'codigo_proveedor' => $f->codigo_proveedor ?? '',
                 'descripcion' => $f->descripcion ?? ($origen['desc_origen'] ?? '(sin ficha local)'), 'unidad' => $f->unidad ?? 'UND', 'sin_ficha' => !$f,
                 'ini_qty' => $p['ini_qty'], 'ini_valor' => $p['ini_valor'], 'ent_qty' => $p['ent_qty'], 'ent_valor' => $p['ent_valor'],
-                'sal_qty' => $p['sal_qty'], 'sal_valor' => $p['sal_valor'], 'dev_qty' => $p['dev_qty'], 'dev_valor' => $p['dev_valor'],
+                'sal_qty' => $p['sal_qty'], 'sal_valor' => $p['sal_valor'], 'dev_qty' => $p['dev_qty'], 'dev_valor' => $p['dev_valor'], 'aj_qty' => $p['aj_qty'], 'aj_valor' => $p['aj_valor'],
                 'fin_qty' => $p['qty'], 'prom' => $p['prom'], 'fin_valor' => $p['qty'] * $p['prom'], 'fin_valor_bs' => $p['qty'] * $p['prom'] * $tasaCierre,
                 'venta_usd' => $p['venta_usd'], 'negativo' => $p['negativo'], 'movs' => $p['movs'],
             ];
             $tot['productos']++;
-            foreach (['ini_qty', 'ini_valor', 'ent_qty', 'ent_valor', 'sal_qty', 'sal_valor', 'dev_qty', 'dev_valor', 'venta_usd'] as $c) $tot[$c] += $productos[$k][$c];
+            foreach (['ini_qty', 'ini_valor', 'ent_qty', 'ent_valor', 'sal_qty', 'sal_valor', 'dev_qty', 'dev_valor', 'aj_qty', 'aj_valor', 'venta_usd'] as $c) $tot[$c] += $productos[$k][$c];
             $tot['fin_qty'] += $p['qty'];
             $tot['fin_valor'] += $p['qty'] * $p['prom'];
             if ($p['negativo']) $tot['negativos']++;
@@ -174,6 +219,8 @@ class LibroInventarioService
         $s1 = DB::table('pedidos')->where('valido', 1)->selectRaw('MIN(DATE(COALESCE(fecha_factura, created_at))) d')->value('d');
         $s2 = DB::table('pedidos')->where('valido', 1)->selectRaw('MAX(DATE(COALESCE(fecha_factura, created_at))) d')->value('d');
         $e2 = DB::table('inventario_entradas')->where('anulado', 0)->max('fecha_recepcion');
-        return [min(array_filter([$e1, $s1])) ?: date('Y-m-d'), max(array_filter([$e2, $s2])) ?: date('Y-m-d')];
+        $a1 = Schema::hasTable('inventario_ajustes') ? DB::table('inventario_ajustes')->min('fecha') : null;
+        $a2 = Schema::hasTable('inventario_ajustes') ? DB::table('inventario_ajustes')->max('fecha') : null;
+        return [min(array_filter([$e1, $s1, $a1])) ?: date('Y-m-d'), max(array_filter([$e2, $s2, $a2])) ?: date('Y-m-d')];
     }
 }

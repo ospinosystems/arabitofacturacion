@@ -33,6 +33,7 @@
     Entradas <strong>{{ $fmt($producto['ent_qty'], 2) }}</strong> ($ {{ $fmt($producto['ent_valor']) }}) ·
     Salidas <strong>{{ $fmt($producto['sal_qty'], 2) }}</strong> ($ {{ $fmt($producto['sal_valor']) }} al costo; venta $ {{ $fmt($producto['venta_usd']) }}) ·
     Devoluciones <strong>{{ $fmt($producto['dev_qty'], 2) }}</strong> ·
+    Ajustes <strong>{{ $fmt($producto['aj_qty'], 2) }}</strong> ($ {{ $fmt($producto['aj_valor']) }}) ·
     Existencia final <strong class="{{ $producto['fin_qty'] < -0.00001 ? 'neg' : '' }}">{{ $fmt($producto['fin_qty'], 2) }}</strong> · costo promedio $ {{ $fmt($producto['prom'], 4) }} · valor $ {{ $fmt($producto['fin_valor']) }} / Bs {{ $fmt($producto['fin_valor_bs']) }}
     @if($producto['negativo'])<span class="neg"> · la existencia fue negativa en algún momento (salidas sin entrada previa)</span>@endif
 </p>
