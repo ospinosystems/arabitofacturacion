@@ -29,7 +29,7 @@ class LibroInventarioPdf
 
     /** [título, ancho, alineación (l|r), clave] */
     private const COLUMNAS = [
-        ['Código', 52, 'l', 'codigo'], ['Descripción', 160, 'l', 'descripcion'], ['Unid.', 26, 'l', 'unidad'],
+        ['Código', 56, 'l', 'codigo'], ['Descripción', 156, 'l', 'descripcion'], ['Unid.', 26, 'l', 'unidad'],
         ['Exist. inicial', 44, 'r', 'ini_qty'], ['Entradas', 44, 'r', 'ent_qty'], ['Costo entradas USD', 52, 'r', 'ent_valor'],
         ['Salidas', 44, 'r', 'sal_qty'], ['Costo salidas USD', 52, 'r', 'sal_valor'], ['Devol.', 34, 'r', 'dev_qty'], ['Ajustes', 40, 'r', 'aj_qty'],
         ['Existencia final', 48, 'r', 'fin_qty'], ['Costo prom. USD', 46, 'r', 'prom'], ['Valor final USD', 52, 'r', 'fin_valor'], ['Valor final Bs', 58, 'r', 'fin_valor_bs'],
