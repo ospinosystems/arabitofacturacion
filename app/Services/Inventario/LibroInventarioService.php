@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Libro (registro) de entradas y salidas de inventario, reconstruido únicamente con documentos:
  *  - ENTRADAS: facturas fiscales de compra recibidas en la sucursal (tabla inventario_entradas, importada de central);
- *    opcionalmente NOTA y TRANSFERENCIA.
+ *    y también las notas (CxP sin factura fiscal) y los traslados entre sucursales (criterio oficial desde el 09-oct-2026).
  *  - SALIDAS: las facturas de venta (pedidos con valido = 1 y número de factura).
  * No parte de ningún stock inicial ni actual: la existencia es la suma algebraica de entradas y salidas desde el
  * primer documento. Las salidas se valoran al costo promedio ponderado móvil (USD) de las entradas de cada producto;
@@ -18,14 +18,17 @@ class LibroInventarioService
 {
     public const TIPOS = ['FACTURA', 'NOTA', 'TRANSFERENCIA'];
 
+    /** Criterio oficial (decisión del usuario, 09-oct-2026): facturas fiscales, notas y traslados cuentan como entradas. */
+    public const TIPOS_DEFECTO = ['FACTURA', 'NOTA', 'TRANSFERENCIA'];
+
     /**
      * @param string[] $tipos tipos de entrada a considerar
      * @return array{productos: array<int|string, array>, movimientos: array<int, array>, totales: array, tasa_cierre: float, desde: string, hasta: string}
      */
-    public function construir(?string $desde, ?string $hasta, array $tipos = ['FACTURA'], $soloProducto = null, bool $conMovimientos = true): array
+    public function construir(?string $desde, ?string $hasta, array $tipos = self::TIPOS_DEFECTO, $soloProducto = null, bool $conMovimientos = true): array
     {
         $hasta = $hasta ?: date('Y-m-d');
-        $tipos = array_values(array_intersect(self::TIPOS, array_map('strtoupper', $tipos))) ?: ['FACTURA'];
+        $tipos = array_values(array_intersect(self::TIPOS, array_map('strtoupper', $tipos))) ?: self::TIPOS_DEFECTO;
 
         // ── Entradas ───────────────────────────────────────────────────────────────────────────────
         $qe = DB::table('inventario_entrada_items as ei')->join('inventario_entradas as e', 'e.id', '=', 'ei.entrada_id')

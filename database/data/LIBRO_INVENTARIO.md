@@ -5,7 +5,7 @@ sin stock inicial ni stock actual:
 
 | | Fuente | Documento | Cantidad | Costo |
 |---|---|---|---|---|
-| **Entradas** | `pedidos` de central con destino la sucursal → `cuentasporpagars` con `tipo_documento = FACTURA` (factura fiscal de compra). Opcionales: `NOTA` (CxP sin factura fiscal) y `TRANSFERENCIA` (pedidos sin CxP: traslados entre sucursales) | N° de factura del proveedor (`numfact`) y nota de entrega (`numnota`) | `items_pedidos.cantidad` (la facturada; `ct_real` se guarda aparte) | `items_pedidos.base` (USD) y `tasa_bs` de la factura |
+| **Entradas** | `pedidos` de central con destino la sucursal: `FACTURA` (CxP con factura fiscal), `NOTA` (CxP sin factura fiscal) y `TRANSFERENCIA` (pedidos sin CxP: traslados entre sucursales). Los tres cuentan por defecto (criterio del usuario, 09-oct-2026); la vista permite acotar a solo FACTURA | N° de factura del proveedor (`numfact`) y nota de entrega (`numnota`) | `items_pedidos.cantidad` (la facturada; `ct_real` se guarda aparte) | `items_pedidos.base` (USD) y `tasa_bs` de la factura |
 | **Salidas** | Facturas de venta cuadradas (`pedidos.valido = 1`) | N° de factura + máquina fiscal | `items_pedidos.cantidad` (negativa = devolución dentro de un cambio) | Costo promedio ponderado móvil del producto; Bs a la tasa de la venta |
 
 Existencia de cada producto = Σ entradas − Σ salidas desde el primer documento. Si queda negativa, se marca (hubo

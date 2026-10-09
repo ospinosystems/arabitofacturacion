@@ -20,7 +20,7 @@ class LibroInventarioController extends Controller
         [$min, $max] = $svc->rangoDisponible();
         $desde = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $r->input('desde')) ? $r->input('desde') : null;
         $hasta = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $r->input('hasta')) ? $r->input('hasta') : $max;
-        $tipos = array_values(array_intersect(LibroInventarioService::TIPOS, array_map('strtoupper', (array) $r->input('tipos', ['FACTURA'])))) ?: ['FACTURA'];
+        $tipos = array_values(array_intersect(LibroInventarioService::TIPOS, array_map('strtoupper', (array) $r->input('tipos', LibroInventarioService::TIPOS_DEFECTO)))) ?: LibroInventarioService::TIPOS_DEFECTO;
         return [$desde, $hasta, $tipos, $min, $max];
     }
 

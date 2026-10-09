@@ -17,7 +17,7 @@ class InventarioLibroPdf extends Command
     protected $signature = 'inventario:libro-pdf
                             {--desde= : inicio del período (default: primer documento)}
                             {--hasta= : fin del período (default: último documento)}
-                            {--tipos=FACTURA : tipos de entrada: FACTURA,NOTA,TRANSFERENCIA}
+                            {--tipos=FACTURA,NOTA,TRANSFERENCIA : tipos de entrada a considerar}
                             {--solo-con-movimientos : omitir los productos sin movimientos en el período}
                             {--salida= : ruta del PDF (default storage/app/descargas_cuadre/zips/libro_inventario_<sucursal>_<desde>_a_<hasta>.pdf)}';
 
@@ -38,7 +38,7 @@ class InventarioLibroPdf extends Command
         $pdf = Pdf::loadHTML($html)->setPaper('letter', 'landscape')
             ->setOptions(['isHtml5ParserEnabled' => true, 'defaultFont' => 'Helvetica', 'isFontSubsettingEnabled' => true, 'margin_left' => 8, 'margin_right' => 8, 'margin_top' => 8, 'margin_bottom' => 8]);
         $salida = $this->option('salida') ?: storage_path(sprintf('app/descargas_cuadre/zips/libro_inventario_%s_%s_a_%s%s.pdf',
-            strtolower((string) ($empresa->codigo ?? 'sucursal')), $libro['desde'], $libro['hasta'], count($tipos) > 1 ? '_' . strtolower(implode('-', $libro['tipos'])) : ''));
+            strtolower((string) ($empresa->codigo ?? 'sucursal')), $libro['desde'], $libro['hasta'], $libro['tipos'] != LibroInventarioService::TIPOS_DEFECTO ? '_' . strtolower(implode('-', $libro['tipos'])) : ''));
         @mkdir(dirname($salida), 0775, true);
         file_put_contents($salida, $pdf->output());
         $this->info(sprintf('PDF: %s (%.1f MB) en %.0f s | memoria pico %.0f MB', $salida, filesize($salida) / 1048576, microtime(true) - $t0, memory_get_peak_usage(true) / 1048576));
