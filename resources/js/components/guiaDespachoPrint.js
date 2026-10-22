@@ -6,8 +6,8 @@
 // ya renderizadas (mismo ancho que la hoja impresa), las reparte en páginas según la altura útil
 // y arma cada página con su encabezado (espacio superior en blanco para la forma libre preimpresa,
 // bloque Cliente/Origen a la izquierda, número y emisión a la derecha) y la fila de columnas.
-// La nota de traslado y las firmas van solo en la última hoja (miden juntas como bloque final,
-// así que el reparto de filas les reserva su lugar y la hoja nunca supera el alto útil).
+// La nota de traslado va en TODAS las hojas, debajo de la tabla; las firmas solo en la última.
+// Ambas se miden y se descuentan del alto de cada hoja, así que ninguna supera el alto útil.
 //
 // Tamaños: la tabla de productos puede imprimirse en varios tamaños de letra (el encabezado de la
 // hoja no cambia). En modo "automatico" se elige la letra más grande con la que TODA la orden entra
@@ -87,7 +87,7 @@ ${cssTamanos}
 .enc{position:relative;height:180px;line-height:1.25;}
 .enc .header{position:absolute;left:0;bottom:1rem;margin:0;}
 .enc .titulo-guia{position:absolute;right:0;bottom:1rem;margin:0;text-align:right;font-weight:bold;}
-.firmas-wrap{overflow:hidden;} .nota-guia{margin-top:1rem;font-weight:bold;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;}
+.firmas-wrap{overflow:hidden;} .nota-wrap{overflow:hidden;} .nota-guia{margin-top:1rem;font-weight:bold;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;}
 .medir{position:absolute;left:-10000px;top:0;visibility:hidden;}
 </style></head><body>
 <template id="tpl-enc">
@@ -103,10 +103,9 @@ ${cssTamanos}
 </div>
 </template>
 <template id="tpl-cols"><tr><th>#</th><th>Código</th><th>Cód. proveedor</th><th>Descripción</th><th style="text-align:right">Cantidad</th></tr></template>
+<template id="tpl-nota"><div class="nota-wrap"><div class="nota-guia">Nota: Traslado a depósitos propios para su distribución</div></div></template>
 <template id="tpl-firmas">
-<div class="firmas-wrap">
-<div class="nota-guia">Nota: Traslado a depósitos propios para su distribución</div>
-<div class="firmas">
+<div class="firmas-wrap"><div class="firmas">
     <div><div style="border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;">Firma del Despachador</div></div>
     <div><div style="border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;">Firma del Receptor</div></div>
 </div></div>
@@ -125,6 +124,7 @@ ${cssTamanos}
     }
     var tplEnc = document.getElementById('tpl-enc').innerHTML;
     var cols = document.getElementById('tpl-cols').innerHTML;
+    var nota = document.getElementById('tpl-nota').innerHTML;
     var firmas = document.getElementById('tpl-firmas').innerHTML;
     function enc(nroHoja) { return tplEnc.replace('__PAG__', String(nroHoja)); }
     // Anchos de columna fijos (px). Sin esto cada hoja repartiría las columnas según sus propias
@@ -161,15 +161,17 @@ ${cssTamanos}
         }
 
         // 2) Alturas reales con esos anchos fijos (igual que saldrá cada hoja).
-        medidor.innerHTML = enc(1) + tabla(todasHtml, anchosCol) + firmas;
+        medidor.innerHTML = enc(1) + tabla(todasHtml, anchosCol) + nota + firmas;
         var hEnc = medidor.querySelector('.enc').offsetHeight;
+        var hNota = medidor.querySelector('.nota-wrap').offsetHeight;
         var hCols = medidor.querySelector('thead').offsetHeight;
         var hFirmas = medidor.querySelector('.firmas-wrap').offsetHeight;
         var alturas = Array.prototype.map.call(medidor.querySelectorAll('tbody tr'), function (tr) { return tr.offsetHeight; });
         document.body.removeChild(medidor);
 
-        // 3) Repartir filas en páginas. La última página debe dejar lugar para las firmas.
-        var presupuesto = ALTO_UTIL - hEnc - hCols - SEGURIDAD;
+        // 3) Repartir filas en páginas. Toda hoja reserva lugar para la nota; la última además
+        //    para las firmas.
+        var presupuesto = ALTO_UTIL - hEnc - hCols - hNota - SEGURIDAD;
         var paginas = [];
         var actual = [];
         var usado = 0;
@@ -200,7 +202,7 @@ ${cssTamanos}
     for (var p = 0; p < elegido.paginas.length; p++) {
         var filasHtml = elegido.paginas[p].map(function (idx) { return fila(FILAS[idx], idx); }).join('');
         var esUltima = (p === elegido.paginas.length - 1);
-        html += '<div class="pagina t-' + elegido.tam + '">' + enc(p + 1) + tabla(filasHtml, elegido.anchosCol) + (esUltima ? firmas : '') + '</div>';
+        html += '<div class="pagina t-' + elegido.tam + '">' + enc(p + 1) + tabla(filasHtml, elegido.anchosCol) + nota + (esUltima ? firmas : '') + '</div>';
     }
     document.getElementById('hojas').innerHTML = html;
     window.__guiaPaginada = { hojas: elegido.paginas.length, tamano: elegido.tam };
