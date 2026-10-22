@@ -105,7 +105,7 @@ ${cssTamanos}
 <template id="tpl-cols"><tr><th>#</th><th>Código</th><th>Cód. proveedor</th><th>Descripción</th><th style="text-align:right">Cantidad</th></tr></template>
 <template id="tpl-firmas">
 <div class="firmas-wrap">
-<div class="nota-guia">Traslado a depósitos propios para su distribución</div>
+<div class="nota-guia">Nota: Traslado a depósitos propios para su distribución</div>
 <div class="firmas">
     <div><div style="border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;">Firma del Despachador</div></div>
     <div><div style="border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;">Firma del Receptor</div></div>
