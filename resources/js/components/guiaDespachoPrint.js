@@ -6,7 +6,8 @@
 // ya renderizadas (mismo ancho que la hoja impresa), las reparte en páginas según la altura útil
 // y arma cada página con su encabezado (espacio superior en blanco para la forma libre preimpresa,
 // bloque Cliente/Origen a la izquierda, número y emisión a la derecha) y la fila de columnas.
-// Las firmas van solo en la última hoja.
+// La nota de traslado y las firmas van solo en la última hoja (miden juntas como bloque final,
+// así que el reparto de filas les reserva su lugar y la hoja nunca supera el alto útil).
 //
 // Tamaños: la tabla de productos puede imprimirse en varios tamaños de letra (el encabezado de la
 // hoja no cambia). En modo "automatico" se elige la letra más grande con la que TODA la orden entra
@@ -86,7 +87,7 @@ ${cssTamanos}
 .enc{position:relative;height:180px;line-height:1.25;}
 .enc .header{position:absolute;left:0;bottom:1rem;margin:0;}
 .enc .titulo-guia{position:absolute;right:0;bottom:1rem;margin:0;text-align:right;font-weight:bold;}
-.firmas-wrap{overflow:hidden;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;}
+.firmas-wrap{overflow:hidden;} .nota-guia{margin-top:1rem;font-weight:bold;} .firmas{margin-top:2rem;display:flex;gap:2rem;justify-content:center;width:100%;}
 .medir{position:absolute;left:-10000px;top:0;visibility:hidden;}
 </style></head><body>
 <template id="tpl-enc">
@@ -103,7 +104,9 @@ ${cssTamanos}
 </template>
 <template id="tpl-cols"><tr><th>#</th><th>Código</th><th>Cód. proveedor</th><th>Descripción</th><th style="text-align:right">Cantidad</th></tr></template>
 <template id="tpl-firmas">
-<div class="firmas-wrap"><div class="firmas">
+<div class="firmas-wrap">
+<div class="nota-guia">Traslado a depósitos propios para su distribución</div>
+<div class="firmas">
     <div><div style="border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;">Firma del Despachador</div></div>
     <div><div style="border-top:1px solid #333;padding-top:4px;width:140px;text-align:center;">Firma del Receptor</div></div>
 </div></div>
