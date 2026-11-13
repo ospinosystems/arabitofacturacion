@@ -715,7 +715,37 @@ function imprimirTicketBarcode({ codigo_barras, codigo_proveedor, descripcion, m
     document.body.removeChild(form);
 }
 
-const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, index, totalItems, mostrarRevisado = false, onToggleRevisado }) => {
+// ── En cuál orden está montado ──
+// Las órdenes en preparación no descuentan inventario pero sí comprometen el stock. El backend
+// manda en `comprometido_en` EN CUÁLES órdenes está montado cada producto y cuánto en cada una
+// ([{id, id_orden_distribucion, id_destino, cantidad}]) para que el usuario sepa dónde está la
+// mercancía que le falta, en vez de un "ya está comprometido en otras órdenes" sin decir cuál.
+const fmtCantCorta = (n) => {
+    const v = Math.round((parseFloat(n) || 0) * 100) / 100;
+    return Number.isInteger(v) ? String(v) : v.toFixed(2);
+};
+const etiquetaOrdenComprometida = (o, sucursales) => {
+    const suc = (sucursales || []).find(s => String(s.id) === String(o.id_destino));
+    const destino = (suc && suc.codigo) || (o.id_destino != null ? 'ID ' + o.id_destino : null);
+    return 'Orden #' + o.id
+        + (o.id_orden_distribucion ? ' · Redist. #' + o.id_orden_distribucion : '')
+        + (destino ? ' → ' + destino : '');
+};
+const ComprometidoEnOrdenes = ({ ordenes, sucursales, className = '' }) => {
+    if (!Array.isArray(ordenes) || !ordenes.length) return null;
+    const texto = ordenes.map(o => fmtCantCorta(o.cantidad) + ' en ' + etiquetaOrdenComprometida(o, sucursales)).join('\n');
+    return (
+        <div className={`text-[10px] text-amber-700 leading-tight ${className}`} title={'Montado en otras órdenes en preparación:\n' + texto}>
+            {ordenes.map(o => (
+                <div key={o.id} className="truncate">
+                    <i className="fas fa-lock mr-0.5"></i>{fmtCantCorta(o.cantidad)} en <b>{etiquetaOrdenComprometida(o, sucursales)}</b>
+                </div>
+            ))}
+        </div>
+    );
+};
+
+const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, index, totalItems, mostrarRevisado = false, onToggleRevisado, sucursales = [] }) => {
     // Resalta la fila mientras el input de cantidad tiene foco (para no perder dónde vas).
     const [focused, setFocused] = useState(false);
     // Stock disponible del producto en inventario (tope para la cantidad a enviar).
@@ -788,7 +818,10 @@ const SelectedProductItem = ({ item, onRemove, onQuantityChange, isEditable, ind
                 </td>
             )}
             <td className="px-2 py-1 text-center text-xs text-gray-400 whitespace-nowrap">{index + 1}</td>
-            <td className="px-2 py-1 text-sm text-gray-800 truncate" title={item.descripcion_real || item.producto?.descripcion || ''}>{item.descripcion_real || item.producto?.descripcion || '—'}</td>
+            <td className="px-2 py-1 text-sm text-gray-800">
+                <div className="truncate" title={item.descripcion_real || item.producto?.descripcion || ''}>{item.descripcion_real || item.producto?.descripcion || '—'}</div>
+                <ComprometidoEnOrdenes ordenes={item.comprometido_en} sucursales={sucursales} />
+            </td>
             <td className="px-2 py-1 text-xs font-mono text-gray-600 truncate" title={item.barras_real || item.producto?.codigo_barras || ''}>{item.barras_real || item.producto?.codigo_barras || '—'}</td>
             <td className="px-2 py-1 text-xs font-mono text-gray-600 truncate" title={item.alterno_real || item.producto?.codigo_proveedor || ''}>{item.alterno_real || item.producto?.codigo_proveedor || '—'}</td>
             <td className={`px-2 py-1 text-center text-xs font-semibold whitespace-nowrap ${excedeStock ? 'text-red-600' : 'text-gray-600'}`} title={excedeStock ? 'Estás pidiendo más de lo disponible en inventario' : 'Stock disponible en inventario'}>
@@ -925,6 +958,8 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                     cantidad_original_stock_inventario: itemAPI?.cantidad || 0,
                     // Stock disponible ACTUAL del producto en inventario (lo manda ordenConDetalle).
                     stock_disponible: itemAPI.stock_disponible != null ? parseFloat(itemAPI.stock_disponible) : null,
+                    // En cuáles OTRAS órdenes en preparación está montado (lo que le resta al disponible).
+                    comprometido_en: Array.isArray(itemAPI.comprometido_en) ? itemAPI.comprometido_en : [],
                     // Cantidad ORIGINAL de la orden al abrir el editor (antes de tocar nada).
                     cantidad_original_orden: parseFloat(itemAPI.cantidad) || 0,
                     revisado: !!itemAPI.revisado, // marca de picking (Plan B)
@@ -1087,6 +1122,16 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                     onSave(res);
                     setTimeout(() => setMensajeExito(''), 4000);
                 } else {
+                    // Falta de cantidades: marcar en la tabla cada producto que no alcanza, con su
+                    // disponible real y EN CUÁL orden está montado lo que falta.
+                    if (Array.isArray(res?.excedidos_detalle) && res.excedidos_detalle.length) {
+                        const porProducto = {};
+                        res.excedidos_detalle.forEach(d => { porProducto[d.id_producto] = d; });
+                        setItemsTransferencia(prev => prev.map(it => {
+                            const d = porProducto[it.id_producto_insucursal];
+                            return d ? { ...it, stock_disponible: parseFloat(d.disponible) || 0, comprometido_en: d.comprometido_en || [] } : it;
+                        }));
+                    }
                     throw new Error(res?.msj || 'No se pudo guardar el borrador.');
                 }
             } catch (err) {
@@ -1201,7 +1246,7 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                     )}
                 </div>
             </div>
-            {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 px-3 py-2 text-sm"><p>{error}</p></div>}
+            {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 px-3 py-2 text-sm"><p className="whitespace-pre-line">{error}</p></div>}
             {mensajeExito && <div className="bg-green-100 border-l-4 border-green-500 text-green-700 px-3 py-2 text-sm"><p>{mensajeExito}</p></div>}
 
             {/* Contenedor con posición relativa para el área de búsqueda y lista */}
@@ -1299,6 +1344,7 @@ const TransferenciaForm = ({ onSave, onCancel, sucursalActualId, transferenciaTo
                                             totalItems={itemsTransferencia.length}
                                             mostrarRevisado={esBorrador}
                                             onToggleRevisado={toggleRevisado}
+                                            sucursales={sucursales}
                                         />
                                     ))}
                                 </tbody>
@@ -1788,7 +1834,7 @@ const TransferenciaList = ({
 //   • no existe localmente → se excluye (no se puede enviar lo que no tenés en sistema)
 //   • existe pero la cantidad no alcanza → se avisa y el usuario ajusta la cantidad
 // El usuario ajusta/excluye y recién ahí se crea la orden en preparación (sin descontar).
-const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, onCancelar, onImprimir, procesando }) => {
+const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, onCancelar, onImprimir, procesando, sucursales = [] }) => {
     const [rows, setRows] = useState([]);
     useEffect(() => {
         setRows((filas || []).map(f => ({
@@ -1882,9 +1928,13 @@ const ResolverConflictosPremonta = ({ prem, filas, destinoBadge, onConfirmar, on
                                             <>
                                                 <span className={stock > 0 ? 'text-gray-700' : 'text-red-600 font-semibold'} title={r.comprometido > 0 ? `Físico ${parseFloat(r.stockFisico || 0).toFixed(2)} − ${parseFloat(r.comprometido).toFixed(2)} comprometido en otras órdenes en preparación` : 'Stock disponible'}>{stock.toFixed(2)}</span>
                                                 {r.comprometido > 0 && (
-                                                    <div className="text-[10px] text-amber-600 leading-tight" title="Unidades reservadas por otras órdenes en preparación">
-                                                        <i className="fas fa-lock mr-0.5"></i>{parseFloat(r.comprometido).toFixed(2)} en otras órdenes
-                                                    </div>
+                                                    (r.comprometidoEn && r.comprometidoEn.length)
+                                                        ? <ComprometidoEnOrdenes ordenes={r.comprometidoEn} sucursales={sucursales} className="text-left whitespace-nowrap" />
+                                                        : (
+                                                            <div className="text-[10px] text-amber-600 leading-tight" title="Unidades reservadas por otras órdenes en preparación">
+                                                                <i className="fas fa-lock mr-0.5"></i>{parseFloat(r.comprometido).toFixed(2)} en otras órdenes
+                                                            </div>
+                                                        )
                                                 )}
                                             </>
                                         ) : <span className="text-red-500">—</span>}
@@ -2311,6 +2361,8 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
                 stockLocal: local ? (local.disponible != null ? local.disponible : local.cantidad) : null,
                 stockFisico: local ? local.cantidad : null,
                 comprometido: local ? (parseFloat(local.comprometido) || 0) : 0,
+                // En cuáles órdenes en preparación está montado (orden, redistribución, destino, cantidad).
+                comprometidoEn: local && Array.isArray(local.comprometido_en) ? local.comprometido_en : [],
             };
         });
     };
@@ -3105,6 +3157,7 @@ const TransferenciasModule = ({ sucursalActualId, readOnly = false }) => {
                         onCancelar={handleCancelForm}
                         onImprimir={abrirPrintModal}
                         procesando={procesando === 'crear-conflictos'}
+                        sucursales={sucursales}
                     />
                 )}
                 {vistaActual === 'detail' && (

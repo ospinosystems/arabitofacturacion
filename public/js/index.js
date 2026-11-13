@@ -2078,7 +2078,7 @@ module.exports = {
 /***/ ((module) => {
 
 "use strict";
-module.exports = /*#__PURE__*/JSON.parse('{"name":"axios","version":"0.21.4","description":"Promise based HTTP client for the browser and node.js","main":"index.js","scripts":{"test":"grunt test","start":"node ./sandbox/server.js","build":"NODE_ENV=production grunt build","preversion":"npm test","version":"npm run build && grunt version && git add -A dist && git add CHANGELOG.md bower.json package.json","postversion":"git push && git push --tags","examples":"node ./examples/server.js","coveralls":"cat coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js","fix":"eslint --fix lib/**/*.js"},"repository":{"type":"git","url":"https://github.com/axios/axios.git"},"keywords":["xhr","http","ajax","promise","node"],"author":"Matt Zabriskie","license":"MIT","bugs":{"url":"https://github.com/axios/axios/issues"},"homepage":"https://axios-http.com","devDependencies":{"coveralls":"^3.0.0","es6-promise":"^4.2.4","grunt":"^1.3.0","grunt-banner":"^0.6.0","grunt-cli":"^1.2.0","grunt-contrib-clean":"^1.1.0","grunt-contrib-watch":"^1.0.0","grunt-eslint":"^23.0.0","grunt-karma":"^4.0.0","grunt-mocha-test":"^0.13.3","grunt-ts":"^6.0.0-beta.19","grunt-webpack":"^4.0.2","istanbul-instrumenter-loader":"^1.0.0","jasmine-core":"^2.4.1","karma":"^6.3.2","karma-chrome-launcher":"^3.1.0","karma-firefox-launcher":"^2.1.0","karma-jasmine":"^1.1.1","karma-jasmine-ajax":"^0.1.13","karma-safari-launcher":"^1.0.0","karma-sauce-launcher":"^4.3.6","karma-sinon":"^1.0.5","karma-sourcemap-loader":"^0.3.8","karma-webpack":"^4.0.2","load-grunt-tasks":"^3.5.2","minimist":"^1.2.0","mocha":"^8.2.1","sinon":"^4.5.0","terser-webpack-plugin":"^4.2.3","typescript":"^4.0.5","url-search-params":"^0.10.0","webpack":"^4.44.2","webpack-dev-server":"^3.11.0"},"browser":{"./lib/adapters/http.js":"./lib/adapters/xhr.js"},"jsdelivr":"dist/axios.min.js","unpkg":"dist/axios.min.js","typings":"./index.d.ts","dependencies":{"follow-redirects":"^1.14.0"},"bundlesize":[{"path":"./dist/axios.min.js","threshold":"5kB"}]}');
+module.exports = /*#__PURE__*/JSON.parse('{"_from":"axios@0.21.4","_id":"axios@0.21.4","_inBundle":false,"_integrity":"sha512-ut5vewkiu8jjGBdqpM44XxjuCjq9LAKeHVmoVfHVzy8eHgxxq8SbAVQNovDA8mVi05kP0Ea/n/UzcSHcTJQfNg==","_location":"/axios","_phantomChildren":{},"_requested":{"type":"version","registry":true,"raw":"axios@0.21.4","name":"axios","escapedName":"axios","rawSpec":"0.21.4","saveSpec":null,"fetchSpec":"0.21.4"},"_requiredBy":["#DEV:/","/localtunnel"],"_resolved":"https://registry.npmjs.org/axios/-/axios-0.21.4.tgz","_shasum":"c67b90dc0568e5c1cf2b0b858c43ba28e2eda575","_spec":"axios@0.21.4","_where":"C:\\\\Users\\\\alvar\\\\Documentos\\\\GitHub\\\\arabitofacturacion","author":{"name":"Matt Zabriskie"},"browser":{"./lib/adapters/http.js":"./lib/adapters/xhr.js"},"bugs":{"url":"https://github.com/axios/axios/issues"},"bundleDependencies":false,"bundlesize":[{"path":"./dist/axios.min.js","threshold":"5kB"}],"dependencies":{"follow-redirects":"^1.14.0"},"deprecated":false,"description":"Promise based HTTP client for the browser and node.js","devDependencies":{"coveralls":"^3.0.0","es6-promise":"^4.2.4","grunt":"^1.3.0","grunt-banner":"^0.6.0","grunt-cli":"^1.2.0","grunt-contrib-clean":"^1.1.0","grunt-contrib-watch":"^1.0.0","grunt-eslint":"^23.0.0","grunt-karma":"^4.0.0","grunt-mocha-test":"^0.13.3","grunt-ts":"^6.0.0-beta.19","grunt-webpack":"^4.0.2","istanbul-instrumenter-loader":"^1.0.0","jasmine-core":"^2.4.1","karma":"^6.3.2","karma-chrome-launcher":"^3.1.0","karma-firefox-launcher":"^2.1.0","karma-jasmine":"^1.1.1","karma-jasmine-ajax":"^0.1.13","karma-safari-launcher":"^1.0.0","karma-sauce-launcher":"^4.3.6","karma-sinon":"^1.0.5","karma-sourcemap-loader":"^0.3.8","karma-webpack":"^4.0.2","load-grunt-tasks":"^3.5.2","minimist":"^1.2.0","mocha":"^8.2.1","sinon":"^4.5.0","terser-webpack-plugin":"^4.2.3","typescript":"^4.0.5","url-search-params":"^0.10.0","webpack":"^4.44.2","webpack-dev-server":"^3.11.0"},"homepage":"https://axios-http.com","jsdelivr":"dist/axios.min.js","keywords":["xhr","http","ajax","promise","node"],"license":"MIT","main":"index.js","name":"axios","repository":{"type":"git","url":"git+https://github.com/axios/axios.git"},"scripts":{"build":"NODE_ENV=production grunt build","coveralls":"cat coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js","examples":"node ./examples/server.js","fix":"eslint --fix lib/**/*.js","postversion":"git push && git push --tags","preversion":"npm test","start":"node ./sandbox/server.js","test":"grunt test","version":"npm run build && grunt version && git add -A dist && git add CHANGELOG.md bower.json package.json"},"typings":"./index.d.ts","unpkg":"dist/axios.min.js","version":"0.21.4"}');
 
 /***/ }),
 
@@ -136898,17 +136898,60 @@ function imprimirTicketBarcode() {
   form.submit();
   document.body.removeChild(form);
 }
-var SelectedProductItem = function SelectedProductItem(_ref8) {
+
+// ── En cuál orden está montado ──
+// Las órdenes en preparación no descuentan inventario pero sí comprometen el stock. El backend
+// manda en `comprometido_en` EN CUÁLES órdenes está montado cada producto y cuánto en cada una
+// ([{id, id_orden_distribucion, id_destino, cantidad}]) para que el usuario sepa dónde está la
+// mercancía que le falta, en vez de un "ya está comprometido en otras órdenes" sin decir cuál.
+var fmtCantCorta = function fmtCantCorta(n) {
+  var v = Math.round((parseFloat(n) || 0) * 100) / 100;
+  return Number.isInteger(v) ? String(v) : v.toFixed(2);
+};
+var etiquetaOrdenComprometida = function etiquetaOrdenComprometida(o, sucursales) {
+  var suc = (sucursales || []).find(function (s) {
+    return String(s.id) === String(o.id_destino);
+  });
+  var destino = suc && suc.codigo || (o.id_destino != null ? 'ID ' + o.id_destino : null);
+  return 'Orden #' + o.id + (o.id_orden_distribucion ? ' · Redist. #' + o.id_orden_distribucion : '') + (destino ? ' → ' + destino : '');
+};
+var ComprometidoEnOrdenes = function ComprometidoEnOrdenes(_ref8) {
+  var ordenes = _ref8.ordenes,
+    sucursales = _ref8.sucursales,
+    _ref8$className = _ref8.className,
+    className = _ref8$className === void 0 ? '' : _ref8$className;
+  if (!Array.isArray(ordenes) || !ordenes.length) return null;
+  var texto = ordenes.map(function (o) {
+    return fmtCantCorta(o.cantidad) + ' en ' + etiquetaOrdenComprometida(o, sucursales);
+  }).join('\n');
+  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("div", {
+    className: "text-[10px] text-amber-700 leading-tight ".concat(className),
+    title: 'Montado en otras órdenes en preparación:\n' + texto,
+    children: ordenes.map(function (o) {
+      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsxs)("div", {
+        className: "truncate",
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("i", {
+          className: "fas fa-lock mr-0.5"
+        }), fmtCantCorta(o.cantidad), " en ", /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("b", {
+          children: etiquetaOrdenComprometida(o, sucursales)
+        })]
+      }, o.id);
+    })
+  });
+};
+var SelectedProductItem = function SelectedProductItem(_ref9) {
   var _item$producto, _item$producto2, _item$producto3, _item$producto4, _item$producto5, _item$producto6;
-  var item = _ref8.item,
-    onRemove = _ref8.onRemove,
-    onQuantityChange = _ref8.onQuantityChange,
-    isEditable = _ref8.isEditable,
-    index = _ref8.index,
-    totalItems = _ref8.totalItems,
-    _ref8$mostrarRevisado = _ref8.mostrarRevisado,
-    mostrarRevisado = _ref8$mostrarRevisado === void 0 ? false : _ref8$mostrarRevisado,
-    onToggleRevisado = _ref8.onToggleRevisado;
+  var item = _ref9.item,
+    onRemove = _ref9.onRemove,
+    onQuantityChange = _ref9.onQuantityChange,
+    isEditable = _ref9.isEditable,
+    index = _ref9.index,
+    totalItems = _ref9.totalItems,
+    _ref9$mostrarRevisado = _ref9.mostrarRevisado,
+    mostrarRevisado = _ref9$mostrarRevisado === void 0 ? false : _ref9$mostrarRevisado,
+    onToggleRevisado = _ref9.onToggleRevisado,
+    _ref9$sucursales = _ref9.sucursales,
+    sucursales = _ref9$sucursales === void 0 ? [] : _ref9$sucursales;
   // Resalta la fila mientras el input de cantidad tiene foco (para no perder dónde vas).
   var _useState17 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false),
     _useState18 = _slicedToArray(_useState17, 2),
@@ -136982,10 +137025,16 @@ var SelectedProductItem = function SelectedProductItem(_ref8) {
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("td", {
       className: "px-2 py-1 text-center text-xs text-gray-400 whitespace-nowrap",
       children: index + 1
-    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("td", {
-      className: "px-2 py-1 text-sm text-gray-800 truncate",
-      title: item.descripcion_real || ((_item$producto = item.producto) === null || _item$producto === void 0 ? void 0 : _item$producto.descripcion) || '',
-      children: item.descripcion_real || ((_item$producto2 = item.producto) === null || _item$producto2 === void 0 ? void 0 : _item$producto2.descripcion) || '—'
+    }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsxs)("td", {
+      className: "px-2 py-1 text-sm text-gray-800",
+      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("div", {
+        className: "truncate",
+        title: item.descripcion_real || ((_item$producto = item.producto) === null || _item$producto === void 0 ? void 0 : _item$producto.descripcion) || '',
+        children: item.descripcion_real || ((_item$producto2 = item.producto) === null || _item$producto2 === void 0 ? void 0 : _item$producto2.descripcion) || '—'
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)(ComprometidoEnOrdenes, {
+        ordenes: item.comprometido_en,
+        sucursales: sucursales
+      })]
     }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("td", {
       className: "px-2 py-1 text-xs font-mono text-gray-600 truncate",
       title: item.barras_real || ((_item$producto3 = item.producto) === null || _item$producto3 === void 0 ? void 0 : _item$producto3.codigo_barras) || '',
@@ -137061,18 +137110,18 @@ var SelectedProductItem = function SelectedProductItem(_ref8) {
     })]
   });
 };
-var TransferenciaForm = function TransferenciaForm(_ref9) {
-  var onSave = _ref9.onSave,
-    onCancel = _ref9.onCancel,
-    sucursalActualId = _ref9.sucursalActualId,
-    _ref9$transferenciaTo = _ref9.transferenciaToEdit,
-    transferenciaToEdit = _ref9$transferenciaTo === void 0 ? null : _ref9$transferenciaTo,
-    sucursales = _ref9.sucursales,
-    cargarTransferencias = _ref9.cargarTransferencias,
-    _ref9$modoBorrador = _ref9.modoBorrador,
-    modoBorrador = _ref9$modoBorrador === void 0 ? false : _ref9$modoBorrador,
-    onGuardarBorrador = _ref9.onGuardarBorrador,
-    onImprimir = _ref9.onImprimir;
+var TransferenciaForm = function TransferenciaForm(_ref0) {
+  var onSave = _ref0.onSave,
+    onCancel = _ref0.onCancel,
+    sucursalActualId = _ref0.sucursalActualId,
+    _ref0$transferenciaTo = _ref0.transferenciaToEdit,
+    transferenciaToEdit = _ref0$transferenciaTo === void 0 ? null : _ref0$transferenciaTo,
+    sucursales = _ref0.sucursales,
+    cargarTransferencias = _ref0.cargarTransferencias,
+    _ref0$modoBorrador = _ref0.modoBorrador,
+    modoBorrador = _ref0$modoBorrador === void 0 ? false : _ref0$modoBorrador,
+    onGuardarBorrador = _ref0.onGuardarBorrador,
+    onImprimir = _ref0.onImprimir;
   // Una premonta (orden de redistribución traída de central) se arma como transferencia NUEVA,
   // no como edición de una transferencia local existente.
   var esPremonta = !!(transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.es_premontada);
@@ -137196,6 +137245,8 @@ var TransferenciaForm = function TransferenciaForm(_ref9) {
           cantidad_original_stock_inventario: (itemAPI === null || itemAPI === void 0 ? void 0 : itemAPI.cantidad) || 0,
           // Stock disponible ACTUAL del producto en inventario (lo manda ordenConDetalle).
           stock_disponible: itemAPI.stock_disponible != null ? parseFloat(itemAPI.stock_disponible) : null,
+          // En cuáles OTRAS órdenes en preparación está montado (lo que le resta al disponible).
+          comprometido_en: Array.isArray(itemAPI.comprometido_en) ? itemAPI.comprometido_en : [],
           // Cantidad ORIGINAL de la orden al abrir el editor (antes de tocar nada).
           cantidad_original_orden: parseFloat(itemAPI.cantidad) || 0,
           revisado: !!itemAPI.revisado,
@@ -137300,8 +137351,8 @@ var TransferenciaForm = function TransferenciaForm(_ref9) {
     });
   };
   var handleSubmit = /*#__PURE__*/function () {
-    var _ref0 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee3(e) {
-      var validSubmission, excedidos, datosTransferencia, res, _res;
+    var _ref1 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee3(e) {
+      var validSubmission, excedidos, datosTransferencia, res, porProducto, _res;
       return _regeneratorRuntime().wrap(function _callee3$(_context3) {
         while (1) switch (_context3.prev = _context3.next) {
           case 0:
@@ -137378,7 +137429,7 @@ var TransferenciaForm = function TransferenciaForm(_ref9) {
 
             // ── Modo borrador (Plan B): guardar la orden "en preparación" SIN descontar inventario ──
             if (!esBorrador) {
-              _context3.next = 41;
+              _context3.next = 42;
               break;
             }
             if (transferenciaToEdit !== null && transferenciaToEdit !== void 0 && transferenciaToEdit.id) datosTransferencia.id = transferenciaToEdit.id;
@@ -137397,38 +137448,55 @@ var TransferenciaForm = function TransferenciaForm(_ref9) {
             setTimeout(function () {
               return setMensajeExito('');
             }, 4000);
-            _context3.next = 32;
+            _context3.next = 33;
             break;
           case 31:
+            // Falta de cantidades: marcar en la tabla cada producto que no alcanza, con su
+            // disponible real y EN CUÁL orden está montado lo que falta.
+            if (Array.isArray(res === null || res === void 0 ? void 0 : res.excedidos_detalle) && res.excedidos_detalle.length) {
+              porProducto = {};
+              res.excedidos_detalle.forEach(function (d) {
+                porProducto[d.id_producto] = d;
+              });
+              setItemsTransferencia(function (prev) {
+                return prev.map(function (it) {
+                  var d = porProducto[it.id_producto_insucursal];
+                  return d ? _objectSpread(_objectSpread({}, it), {}, {
+                    stock_disponible: parseFloat(d.disponible) || 0,
+                    comprometido_en: d.comprometido_en || []
+                  }) : it;
+                });
+              });
+            }
             throw new Error((res === null || res === void 0 ? void 0 : res.msj) || 'No se pudo guardar el borrador.');
-          case 32:
-            _context3.next = 37;
+          case 33:
+            _context3.next = 38;
             break;
-          case 34:
-            _context3.prev = 34;
+          case 35:
+            _context3.prev = 35;
             _context3.t0 = _context3["catch"](21);
             setError(_context3.t0.message || 'Error al guardar el borrador.');
-          case 37:
-            _context3.prev = 37;
+          case 38:
+            _context3.prev = 38;
             setEstaCargando(false);
-            return _context3.finish(37);
-          case 40:
-            return _context3.abrupt("return");
+            return _context3.finish(38);
           case 41:
+            return _context3.abrupt("return");
+          case 42:
             setEstaCargando(true);
-            _context3.prev = 42;
-            _context3.next = 45;
+            _context3.prev = 43;
+            _context3.next = 46;
             return _database_database__WEBPACK_IMPORTED_MODULE_1__["default"].settransferenciaDici(datosTransferencia);
-          case 45:
+          case 46:
             _res = _context3.sent;
             if (!_res.data.estado) {
-              _context3.next = 55;
+              _context3.next = 56;
               break;
             }
             setMensajeExito("Transferencia ".concat(esEdicion ? 'actualizada' : 'creada', " exitosamente."));
-            _context3.next = 50;
+            _context3.next = 51;
             return cargarTransferencias();
-          case 50:
+          case 51:
             // Recargar la lista
 
             if (!esEdicion) {
@@ -137445,29 +137513,29 @@ var TransferenciaForm = function TransferenciaForm(_ref9) {
             setTimeout(function () {
               return setMensajeExito('');
             }, 5000);
-            _context3.next = 56;
+            _context3.next = 57;
             break;
-          case 55:
-            throw new Error(_res.data.mensaje || 'Error al procesar la transferencia');
           case 56:
-            _context3.next = 61;
+            throw new Error(_res.data.mensaje || 'Error al procesar la transferencia');
+          case 57:
+            _context3.next = 62;
             break;
-          case 58:
-            _context3.prev = 58;
-            _context3.t1 = _context3["catch"](42);
+          case 59:
+            _context3.prev = 59;
+            _context3.t1 = _context3["catch"](43);
             setError(_context3.t1.message || "Error al ".concat(esEdicion ? 'actualizar' : 'crear', " transferencia."));
-          case 61:
-            _context3.prev = 61;
+          case 62:
+            _context3.prev = 62;
             setEstaCargando(false);
-            return _context3.finish(61);
-          case 64:
+            return _context3.finish(62);
+          case 65:
           case "end":
             return _context3.stop();
         }
-      }, _callee3, null, [[21, 34, 37, 40], [42, 58, 61, 64]]);
+      }, _callee3, null, [[21, 35, 38, 41], [43, 59, 62, 65]]);
     }));
     return function handleSubmit(_x3) {
-      return _ref0.apply(this, arguments);
+      return _ref1.apply(this, arguments);
     };
   }();
 
@@ -137561,6 +137629,7 @@ var TransferenciaForm = function TransferenciaForm(_ref9) {
     }), error && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("div", {
       className: "bg-red-100 border-l-4 border-red-500 text-red-700 px-3 py-2 text-sm",
       children: /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("p", {
+        className: "whitespace-pre-line",
         children: error
       })
     }), mensajeExito && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("div", {
@@ -137706,7 +137775,8 @@ var TransferenciaForm = function TransferenciaForm(_ref9) {
                   index: itemsTransferencia.indexOf(item),
                   totalItems: itemsTransferencia.length,
                   mostrarRevisado: esBorrador,
-                  onToggleRevisado: toggleRevisado
+                  onToggleRevisado: toggleRevisado,
+                  sucursales: sucursales
                 }, item.id_producto_insucursal);
               })
             })]
@@ -137816,10 +137886,10 @@ var TransferenciaForm = function TransferenciaForm(_ref9) {
     })]
   });
 };
-var TransferenciaDetailView = function TransferenciaDetailView(_ref1) {
-  var transferencia = _ref1.transferencia,
-    onBack = _ref1.onBack,
-    sucursales = _ref1.sucursales;
+var TransferenciaDetailView = function TransferenciaDetailView(_ref10) {
+  var transferencia = _ref10.transferencia,
+    onBack = _ref10.onBack,
+    sucursales = _ref10.sucursales;
   if (!transferencia) return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("p", {
     children: "Cargando detalles..."
   });
@@ -138006,29 +138076,29 @@ var TransferenciaDetailView = function TransferenciaDetailView(_ref1) {
     })]
   });
 };
-var TransferenciaList = function TransferenciaList(_ref10) {
-  var sucursalActualId = _ref10.sucursalActualId,
-    onRequireRefresh = _ref10.onRequireRefresh,
-    onEdit = _ref10.onEdit,
-    onViewDetails = _ref10.onViewDetails,
-    sucursales = _ref10.sucursales,
-    cargarTransferencias = _ref10.cargarTransferencias,
-    _ref10$readOnly = _ref10.readOnly,
-    readOnly = _ref10$readOnly === void 0 ? false : _ref10$readOnly,
-    transferencias = _ref10.transferencias,
-    setTransferencias = _ref10.setTransferencias,
-    estaCargando = _ref10.estaCargando,
-    setEstaCargando = _ref10.setEstaCargando,
-    error = _ref10.error,
-    setError = _ref10.setError,
-    filtros = _ref10.filtros,
-    setFiltros = _ref10.setFiltros,
-    filtrosActivos = _ref10.filtrosActivos,
-    setFiltrosActivos = _ref10.setFiltrosActivos,
-    paginacion = _ref10.paginacion,
-    setPaginacion = _ref10.setPaginacion,
-    mostrarFiltros = _ref10.mostrarFiltros,
-    setMostrarFiltros = _ref10.setMostrarFiltros;
+var TransferenciaList = function TransferenciaList(_ref11) {
+  var sucursalActualId = _ref11.sucursalActualId,
+    onRequireRefresh = _ref11.onRequireRefresh,
+    onEdit = _ref11.onEdit,
+    onViewDetails = _ref11.onViewDetails,
+    sucursales = _ref11.sucursales,
+    cargarTransferencias = _ref11.cargarTransferencias,
+    _ref11$readOnly = _ref11.readOnly,
+    readOnly = _ref11$readOnly === void 0 ? false : _ref11$readOnly,
+    transferencias = _ref11.transferencias,
+    setTransferencias = _ref11.setTransferencias,
+    estaCargando = _ref11.estaCargando,
+    setEstaCargando = _ref11.setEstaCargando,
+    error = _ref11.error,
+    setError = _ref11.setError,
+    filtros = _ref11.filtros,
+    setFiltros = _ref11.setFiltros,
+    filtrosActivos = _ref11.filtrosActivos,
+    setFiltrosActivos = _ref11.setFiltrosActivos,
+    paginacion = _ref11.paginacion,
+    setPaginacion = _ref11.setPaginacion,
+    mostrarFiltros = _ref11.mostrarFiltros,
+    setMostrarFiltros = _ref11.setMostrarFiltros;
   // Eliminamos el useEffect de carga de datos ya que ahora está en el componente padre
 
   var handleFilterChange = function handleFilterChange(e) {
@@ -138041,7 +138111,7 @@ var TransferenciaList = function TransferenciaList(_ref10) {
     cargarTransferencias();
   };
   var handleDelete = /*#__PURE__*/function () {
-    var _ref11 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee4(t) {
+    var _ref12 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee4(t) {
       var res;
       return _regeneratorRuntime().wrap(function _callee4$(_context4) {
         while (1) switch (_context4.prev = _context4.next) {
@@ -138077,7 +138147,7 @@ var TransferenciaList = function TransferenciaList(_ref10) {
       }, _callee4, null, [[2, 9]]);
     }));
     return function handleDelete(_x4) {
-      return _ref11.apply(this, arguments);
+      return _ref12.apply(this, arguments);
     };
   }();
   if (estaCargando && transferencias.length === 0) return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("div", {
@@ -138460,14 +138530,16 @@ var TransferenciaList = function TransferenciaList(_ref10) {
 //   • no existe localmente → se excluye (no se puede enviar lo que no tenés en sistema)
 //   • existe pero la cantidad no alcanza → se avisa y el usuario ajusta la cantidad
 // El usuario ajusta/excluye y recién ahí se crea la orden en preparación (sin descontar).
-var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref12) {
-  var prem = _ref12.prem,
-    filas = _ref12.filas,
-    destinoBadge = _ref12.destinoBadge,
-    onConfirmar = _ref12.onConfirmar,
-    onCancelar = _ref12.onCancelar,
-    onImprimir = _ref12.onImprimir,
-    procesando = _ref12.procesando;
+var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref13) {
+  var prem = _ref13.prem,
+    filas = _ref13.filas,
+    destinoBadge = _ref13.destinoBadge,
+    onConfirmar = _ref13.onConfirmar,
+    onCancelar = _ref13.onCancelar,
+    onImprimir = _ref13.onImprimir,
+    procesando = _ref13.procesando,
+    _ref13$sucursales = _ref13.sucursales,
+    sucursales = _ref13$sucursales === void 0 ? [] : _ref13$sucursales;
   var _useState45 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)([]),
     _useState46 = _slicedToArray(_useState45, 2),
     rows = _useState46[0],
@@ -138660,13 +138732,17 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref12) {
                     className: stock > 0 ? 'text-gray-700' : 'text-red-600 font-semibold',
                     title: r.comprometido > 0 ? "F\xEDsico ".concat(parseFloat(r.stockFisico || 0).toFixed(2), " \u2212 ").concat(parseFloat(r.comprometido).toFixed(2), " comprometido en otras \xF3rdenes en preparaci\xF3n") : 'Stock disponible',
                     children: stock.toFixed(2)
-                  }), r.comprometido > 0 && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsxs)("div", {
+                  }), r.comprometido > 0 && (r.comprometidoEn && r.comprometidoEn.length ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)(ComprometidoEnOrdenes, {
+                    ordenes: r.comprometidoEn,
+                    sucursales: sucursales,
+                    className: "text-left whitespace-nowrap"
+                  }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsxs)("div", {
                     className: "text-[10px] text-amber-600 leading-tight",
                     title: "Unidades reservadas por otras \xF3rdenes en preparaci\xF3n",
                     children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("i", {
                       className: "fas fa-lock mr-0.5"
                     }), parseFloat(r.comprometido).toFixed(2), " en otras \xF3rdenes"]
-                  })]
+                  }))]
                 }) : /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("span", {
                   className: "text-red-500",
                   children: "\u2014"
@@ -138809,9 +138885,9 @@ var ResolverConflictosPremonta = function ResolverConflictosPremonta(_ref12) {
 };
 
 // Modal de opciones para imprimir la lista de picking: ordenar y dividir en varias sublistas.
-var PrintPickingModal = function PrintPickingModal(_ref13) {
-  var payload = _ref13.payload,
-    onClose = _ref13.onClose;
+var PrintPickingModal = function PrintPickingModal(_ref14) {
+  var payload = _ref14.payload,
+    onClose = _ref14.onClose;
   var _useState47 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('descripcion'),
     _useState48 = _slicedToArray(_useState47, 2),
     campo = _useState48[0],
@@ -139013,11 +139089,11 @@ var PrintPickingModal = function PrintPickingModal(_ref13) {
     })
   });
 };
-var TransferenciasModule = function TransferenciasModule(_ref14) {
+var TransferenciasModule = function TransferenciasModule(_ref15) {
   var _conflictosPremonta$p;
-  var sucursalActualId = _ref14.sucursalActualId,
-    _ref14$readOnly = _ref14.readOnly,
-    readOnly = _ref14$readOnly === void 0 ? false : _ref14$readOnly;
+  var sucursalActualId = _ref15.sucursalActualId,
+    _ref15$readOnly = _ref15.readOnly,
+    readOnly = _ref15$readOnly === void 0 ? false : _ref15$readOnly;
   var _useState57 = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)('list'),
     _useState58 = _slicedToArray(_useState57, 2),
     vistaActual = _useState58[0],
@@ -139246,7 +139322,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
     setBultosIframeUrl = _useState120[1];
   var refIframeBultos = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
   var cargarTransferencias = (0,react__WEBPACK_IMPORTED_MODULE_0__.useCallback)(/*#__PURE__*/function () {
-    var _ref15 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5(filtros) {
+    var _ref16 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee5(filtros) {
       var response;
       return _regeneratorRuntime().wrap(function _callee5$(_context5) {
         while (1) switch (_context5.prev = _context5.next) {
@@ -139271,14 +139347,14 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       }, _callee5, null, [[0, 7]]);
     }));
     return function (_x5) {
-      return _ref15.apply(this, arguments);
+      return _ref16.apply(this, arguments);
     };
   }(), []);
 
   // useEffect movido desde TransferenciaList
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     var fetchData = /*#__PURE__*/function () {
-      var _ref16 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee6() {
+      var _ref17 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee6() {
         var _yield$cargarTransfer, nuevasTransferencias, nuevaPaginacion;
         return _regeneratorRuntime().wrap(function _callee6$(_context6) {
           while (1) switch (_context6.prev = _context6.next) {
@@ -139312,14 +139388,14 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
         }, _callee6, null, [[2, 12, 16, 19]]);
       }));
       return function fetchData() {
-        return _ref16.apply(this, arguments);
+        return _ref17.apply(this, arguments);
       };
     }();
     fetchData();
   }, [cargarTransferencias, filtrosActivos, refreshListKey]);
   (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(function () {
     var cargarSucursales = /*#__PURE__*/function () {
-      var _ref17 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee7() {
+      var _ref18 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee7() {
         var _res$data, res, data;
         return _regeneratorRuntime().wrap(function _callee7$(_context7) {
           while (1) switch (_context7.prev = _context7.next) {
@@ -139346,7 +139422,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
         }, _callee7, null, [[0, 8]]);
       }));
       return function cargarSucursales() {
-        return _ref17.apply(this, arguments);
+        return _ref18.apply(this, arguments);
       };
     }();
     cargarSucursales();
@@ -139522,7 +139598,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
   // (antes se hacía 1 request por producto → lentísimo con cientos de ítems). Arma las filas de
   // conflicto: existe/no existe, stock local, cantidad solicitada.
   var construirFilasConflicto = /*#__PURE__*/function () {
-    var _ref20 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(prem) {
+    var _ref21 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee0(prem) {
       var items, _yield$resolverLocale, porId, porBarras, porProveedor;
       return _regeneratorRuntime().wrap(function _callee0$(_context0) {
         while (1) switch (_context0.prev = _context0.next) {
@@ -139553,7 +139629,9 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
                 // preparación). Es el tope contra el que se ajustan y validan las cantidades.
                 stockLocal: local ? local.disponible != null ? local.disponible : local.cantidad : null,
                 stockFisico: local ? local.cantidad : null,
-                comprometido: local ? parseFloat(local.comprometido) || 0 : 0
+                comprometido: local ? parseFloat(local.comprometido) || 0 : 0,
+                // En cuáles órdenes en preparación está montado (orden, redistribución, destino, cantidad).
+                comprometidoEn: local && Array.isArray(local.comprometido_en) ? local.comprometido_en : []
               };
             }));
           case 8:
@@ -139563,13 +139641,13 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       }, _callee0);
     }));
     return function construirFilasConflicto(_x6) {
-      return _ref20.apply(this, arguments);
+      return _ref21.apply(this, arguments);
     };
   }();
 
   // Imprime la lista de picking de una premonta resolviendo la ubicación de almacén (1 petición).
   var imprimirPremonta = /*#__PURE__*/function () {
-    var _ref21 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(prem) {
+    var _ref22 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee1(prem) {
       var _d$id, items, res, porId, porBarras, porProveedor, filas, conUbic, detalle, d;
       return _regeneratorRuntime().wrap(function _callee1$(_context1) {
         while (1) switch (_context1.prev = _context1.next) {
@@ -139618,14 +139696,14 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       }, _callee1, null, [[1,, 12, 15]]);
     }));
     return function imprimirPremonta(_x7) {
-      return _ref21.apply(this, arguments);
+      return _ref22.apply(this, arguments);
     };
   }();
 
   // "Crear orden" desde una redistribución: primero abre el paso de resolución de conflictos
   // (ajustar cantidades / excluir inexistentes). La creación real ocurre en confirmarOrdenConflictos.
   var abrirResolucionPremonta = /*#__PURE__*/function () {
-    var _ref22 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(prem) {
+    var _ref23 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee10(prem) {
       var filas;
       return _regeneratorRuntime().wrap(function _callee10$(_context10) {
         while (1) switch (_context10.prev = _context10.next) {
@@ -139658,14 +139736,14 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       }, _callee10, null, [[1, 9, 12, 15]]);
     }));
     return function abrirResolucionPremonta(_x8) {
-      return _ref22.apply(this, arguments);
+      return _ref23.apply(this, arguments);
     };
   }();
 
   // Fusiona en central las redistribuciones seleccionadas (mismo destino) en una sola, sumando
   // cantidades de productos duplicados. Deja auditoría en central. Recarga las premontas.
   var fusionarSeleccionadas = /*#__PURE__*/function () {
-    var _ref23 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(ids) {
+    var _ref24 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee11(ids) {
       var _res$data8, res, _res$data9;
       return _regeneratorRuntime().wrap(function _callee11$(_context11) {
         while (1) switch (_context11.prev = _context11.next) {
@@ -139717,14 +139795,14 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       }, _callee11, null, [[6, 13, 16, 19]]);
     }));
     return function fusionarSeleccionadas(_x9) {
-      return _ref23.apply(this, arguments);
+      return _ref24.apply(this, arguments);
     };
   }();
 
   // Crea la orden en preparación (estado 0, SIN descontar) con los ítems ya resueltos por el
   // usuario, ligada a la redistribución. La redistribución original de central queda intacta.
   var confirmarOrdenConflictos = /*#__PURE__*/function () {
-    var _ref24 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee12(items) {
+    var _ref25 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee12(items) {
       var prem, _prem$sucursal_destin5, _res$data0, res, _res$data1;
       return _regeneratorRuntime().wrap(function _callee12$(_context12) {
         while (1) switch (_context12.prev = _context12.next) {
@@ -139790,7 +139868,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       }, _callee12, null, [[7, 22, 25, 28]]);
     }));
     return function confirmarOrdenConflictos(_x0) {
-      return _ref24.apply(this, arguments);
+      return _ref25.apply(this, arguments);
     };
   }();
 
@@ -139809,7 +139887,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
 
   // Guarda el borrador (crear/actualizar) sin descontar. Devuelve {estado, msj, orden}.
   var guardarBorrador = /*#__PURE__*/function () {
-    var _ref25 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee13(datos) {
+    var _ref26 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee13(datos) {
       var res;
       return _regeneratorRuntime().wrap(function _callee13$(_context13) {
         while (1) switch (_context13.prev = _context13.next) {
@@ -139829,13 +139907,13 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       }, _callee13);
     }));
     return function guardarBorrador(_x1) {
-      return _ref25.apply(this, arguments);
+      return _ref26.apply(this, arguments);
     };
   }();
 
   // Dar salida a un borrador: descuenta inventario + crea el espejo en central.
   var darSalida = /*#__PURE__*/function () {
-    var _ref26 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee14(borrador) {
+    var _ref27 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee14(borrador) {
       var nItems, _res$data10, res, _res$data11;
       return _regeneratorRuntime().wrap(function _callee14$(_context14) {
         while (1) switch (_context14.prev = _context14.next) {
@@ -139890,13 +139968,13 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       }, _callee14, null, [[4, 18, 21, 24]]);
     }));
     return function darSalida(_x10) {
-      return _ref26.apply(this, arguments);
+      return _ref27.apply(this, arguments);
     };
   }();
 
   // Eliminar un borrador (no tocó inventario).
   var eliminarBorrador = /*#__PURE__*/function () {
-    var _ref27 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee15(borrador) {
+    var _ref28 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee15(borrador) {
       var _res$data12, res, _res$data13;
       return _regeneratorRuntime().wrap(function _callee15$(_context15) {
         while (1) switch (_context15.prev = _context15.next) {
@@ -139947,14 +140025,14 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       }, _callee15, null, [[3, 16, 19, 22]]);
     }));
     return function eliminarBorrador(_x11) {
-      return _ref27.apply(this, arguments);
+      return _ref28.apply(this, arguments);
     };
   }();
 
   // Reenviar a central una despachada cuyo envío no se completó (sin Nº de Guía). Reusa
   // darSalidaSimple: para estado=1 sin central, solo reintenta el envío (NO re-descuenta).
   var reenviarACentral = /*#__PURE__*/function () {
-    var _ref28 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee16(d) {
+    var _ref29 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee16(d) {
       var _res$data14, res, _res$data15;
       return _regeneratorRuntime().wrap(function _callee16$(_context16) {
         while (1) switch (_context16.prev = _context16.next) {
@@ -140000,14 +140078,14 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       }, _callee16, null, [[1, 15, 18, 21]]);
     }));
     return function reenviarACentral(_x12) {
-      return _ref28.apply(this, arguments);
+      return _ref29.apply(this, arguments);
     };
   }();
 
   // Reversar una orden despachada: reintegra inventario, quita el espejo en central y la vuelve
   // a "en preparación" (estado 0) para corregir y volver a dar salida.
   var reversarSalida = /*#__PURE__*/function () {
-    var _ref29 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee17(d) {
+    var _ref30 = _asyncToGenerator(/*#__PURE__*/_regeneratorRuntime().mark(function _callee17(d) {
       var _res$data16, res, _res$data17;
       return _regeneratorRuntime().wrap(function _callee17$(_context17) {
         while (1) switch (_context17.prev = _context17.next) {
@@ -140059,7 +140137,7 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
       }, _callee17, null, [[3, 17, 20, 23]]);
     }));
     return function reversarSalida(_x13) {
-      return _ref29.apply(this, arguments);
+      return _ref30.apply(this, arguments);
     };
   }();
 
@@ -140798,10 +140876,10 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
                     return setTamanoGuia(e.target.value);
                   },
                   className: "px-1.5 py-1 text-xs border border-emerald-300 rounded bg-white",
-                  children: Object.entries(_guiaDespachoPrint__WEBPACK_IMPORTED_MODULE_2__.TAMANOS_GUIA).map(function (_ref30) {
-                    var _ref31 = _slicedToArray(_ref30, 2),
-                      k = _ref31[0],
-                      t = _ref31[1];
+                  children: Object.entries(_guiaDespachoPrint__WEBPACK_IMPORTED_MODULE_2__.TAMANOS_GUIA).map(function (_ref31) {
+                    var _ref32 = _slicedToArray(_ref31, 2),
+                      k = _ref32[0],
+                      t = _ref32[1];
                     return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)("option", {
                       value: k,
                       children: t.etiqueta
@@ -141057,7 +141135,8 @@ var TransferenciasModule = function TransferenciasModule(_ref14) {
         onConfirmar: confirmarOrdenConflictos,
         onCancelar: handleCancelForm,
         onImprimir: abrirPrintModal,
-        procesando: procesando === 'crear-conflictos'
+        procesando: procesando === 'crear-conflictos',
+        sucursales: sucursales
       }), vistaActual === 'detail' && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_3__.jsx)(TransferenciaDetailView, {
         transferencia: transferenciaSeleccionada,
         onBack: handleCancelForm,

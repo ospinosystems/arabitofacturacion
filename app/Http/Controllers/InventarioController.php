@@ -1315,18 +1315,13 @@ class InventarioController extends Controller
 
             // Cantidad ya COMPROMETIDA en órdenes en preparación (estado 0). Los borradores NO
             // descuentan inventario, así que el disponible real = cantidad − comprometido. Sin esto
-            // se pueden armar 8 unidades entre varias órdenes teniendo solo 4 físicas. BLINDADO.
+            // se pueden armar 8 unidades entre varias órdenes teniendo solo 4 físicas. Se trae orden
+            // por orden para decirle al usuario EN CUÁL está montada la mercancía. BLINDADO.
             $comprometido = [];
+            $comprometidoEn = [];
             try {
-                $borradores = \App\Models\transferencias_inventario::where('estado', 0)->select('id');
-                $comprometido = \App\Models\transferencias_inventario_items::query()
-                    ->select('id_producto', DB::raw('SUM(cantidad) as total'))
-                    ->whereIn('id_producto', $productos->pluck('id')->all())
-                    ->whereIn('id_transferencia', $borradores)
-                    ->groupBy('id_producto')
-                    ->pluck('total', 'id_producto')
-                    ->map(fn ($v) => (float) $v)
-                    ->all();
+                $comprometidoEn = TransferenciaDespachoController::comprometidoPorOrden($productos->pluck('id')->all());
+                $comprometido = array_map(fn ($ords) => (float) array_sum(array_column($ords, 'cantidad')), $comprometidoEn);
             } catch (\Throwable $e) {
                 \Log::warning('resolverProductosPorCodigos: comprometido en borradores no disponible: ' . $e->getMessage());
             }
@@ -1341,6 +1336,7 @@ class InventarioController extends Controller
                 'precio' => $p->precio,
                 'cantidad' => $p->cantidad, // stock físico
                 'comprometido' => (float) ($comprometido[$p->id] ?? 0),
+                'comprometido_en' => $comprometidoEn[$p->id] ?? [], // [{id, id_orden_distribucion, id_destino, cantidad}]
                 'disponible' => max(0, (float) $p->cantidad - (float) ($comprometido[$p->id] ?? 0)),
                 'ubicacion' => $ubic[$p->id] ?? null,
             ])->values();

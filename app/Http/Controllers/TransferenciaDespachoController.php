@@ -86,34 +86,75 @@ class TransferenciaDespachoController extends Controller
     }
 
     /**
-     * Cantidad ya COMPROMETIDA por producto en órdenes que están en preparación (estado 0).
+     * Cantidad ya COMPROMETIDA por producto en órdenes que están en preparación (estado 0), y EN
+     * CUÁLES órdenes (cuánto en cada una).
      *
      * Los borradores NO descuentan inventario, así que sin esto se pueden comprometer 8 unidades
      * cuando físicamente hay 4: cada orden ve el stock completo. El disponible REAL de un producto
      * para una orden es: `inventarios.cantidad − comprometido en las OTRAS órdenes en preparación`.
+     * Se devuelve orden por orden porque el aviso "ya está comprometido en otras órdenes" no le
+     * decía al usuario en cuál estaba montada la mercancía que le faltaba.
+     *
+     * Público y estático porque InventarioController lo usa en la pantalla de premontaje.
      *
      * @param  int[]     $idsProducto
      * @param  int|null  $excluirOrden  Orden que se está editando (su propia reserva no cuenta).
-     * @return array<int,float>  [id_producto => cantidad comprometida]
+     * @return array<int, array<int, array{id:int, id_orden_distribucion:?int, id_destino:?int, cantidad:float, created_at:?string}>>
+     *         [id_producto => [ {orden}, ... ]] ordenadas por id de orden.
      */
-    private function comprometidoEnBorradores(array $idsProducto, ?int $excluirOrden = null): array
+    public static function comprometidoPorOrden(array $idsProducto, ?int $excluirOrden = null): array
     {
         $idsProducto = array_values(array_unique(array_filter(array_map('intval', $idsProducto))));
         if (empty($idsProducto)) {
             return [];
         }
-        $borradores = transferencias_inventario::where('estado', 0)->select('id');
-        if ($excluirOrden) {
-            $borradores->where('id', '!=', $excluirOrden);
+        $filas = transferencias_inventario_items::query()
+            ->join('transferencias_inventarios as t', 't.id', '=', 'transferencias_inventario_items.id_transferencia')
+            ->where('t.estado', 0)
+            ->when($excluirOrden, fn ($q) => $q->where('t.id', '!=', $excluirOrden))
+            ->whereIn('transferencias_inventario_items.id_producto', $idsProducto)
+            ->groupBy('transferencias_inventario_items.id_producto', 't.id', 't.id_orden_distribucion', 't.id_destino', 't.created_at')
+            ->orderBy('t.id')
+            ->get([
+                'transferencias_inventario_items.id_producto',
+                't.id as id_orden',
+                't.id_orden_distribucion',
+                't.id_destino',
+                't.created_at',
+                DB::raw('SUM(transferencias_inventario_items.cantidad) as total'),
+            ]);
+
+        $out = [];
+        foreach ($filas as $f) {
+            if ((float) $f->total <= 0) {
+                continue;
+            }
+            $out[(int) $f->id_producto][] = [
+                'id' => (int) $f->id_orden,
+                'id_orden_distribucion' => $f->id_orden_distribucion ? (int) $f->id_orden_distribucion : null,
+                'id_destino' => $f->id_destino !== null ? (int) $f->id_destino : null,
+                'cantidad' => (float) $f->total,
+                'created_at' => $f->created_at ? (string) $f->created_at : null,
+            ];
         }
-        return transferencias_inventario_items::query()
-            ->select('id_producto', DB::raw('SUM(cantidad) as total'))
-            ->whereIn('id_producto', $idsProducto)
-            ->whereIn('id_transferencia', $borradores)
-            ->groupBy('id_producto')
-            ->pluck('total', 'id_producto')
-            ->map(fn ($v) => (float) $v)
-            ->all();
+        return $out;
+    }
+
+    /** "orden #12 (Redistribución #1821): 3 · orden #15: 1" — para los avisos de falta de cantidad. */
+    private function describirOrdenesComprometidas(array $ordenes): string
+    {
+        return implode(' · ', array_map(function ($o) {
+            return 'orden #' . $o['id']
+                . ($o['id_orden_distribucion'] ? ' (Redistribución #' . $o['id_orden_distribucion'] . ')' : '')
+                . ': ' . $this->fmtCant($o['cantidad']);
+        }, $ordenes));
+    }
+
+    /** 3 → "3", 2.5 → "2.5" (sin ceros de más en los avisos). */
+    private function fmtCant($n): string
+    {
+        $n = round((float) $n, 2);
+        return rtrim(rtrim(number_format($n, 2, '.', ''), '0'), '.');
     }
 
     // ───────────────────── Fase 0: orden pendiente ─────────────────────
@@ -154,19 +195,35 @@ class TransferenciaDespachoController extends Controller
             // sobre-comprometer. Con el lock se serializan y la segunda ve lo que reservó la primera.
             $productosLock = inventario::whereIn('id', array_unique($idsProd))
                 ->orderBy('id')->lockForUpdate()->get()->keyBy('id');
-            $comprometido = $this->comprometidoEnBorradores($idsProd, $req->id ? (int) $req->id : null);
+            $porOrden = self::comprometidoPorOrden($idsProd, $req->id ? (int) $req->id : null);
             $excedidos = [];
+            $excedidosDetalle = [];
+            $hayComprometido = false;
             foreach ($pedidoPorProducto as $idp => $cant) {
                 $producto = $productosLock[$idp] ?? null;
                 if (!$producto) {
                     continue;
                 }
-                $comp = (float) ($comprometido[$producto->id] ?? 0);
+                $ordenesProd = $porOrden[$producto->id] ?? [];
+                $comp = (float) array_sum(array_column($ordenesProd, 'cantidad'));
                 $disp = (float) $producto->cantidad - $comp;
                 if ($cant > $disp + 0.0001) {
-                    $excedidos[] = trim(($producto->codigo_barras ? $producto->codigo_barras . ' ' : '') . $producto->descripcion)
-                        . ": pedís {$cant}, disponible " . max(0, $disp)
-                        . " (stock {$producto->cantidad}" . ($comp > 0 ? ", {$comp} ya comprometido en otras órdenes en preparación" : '') . ')';
+                    $nombre = trim(($producto->codigo_barras ? $producto->codigo_barras . ' ' : '') . $producto->descripcion);
+                    $linea = "{$nombre}: pedís " . $this->fmtCant($cant) . ', disponible ' . $this->fmtCant(max(0, $disp))
+                        . ' (stock ' . $this->fmtCant($producto->cantidad);
+                    if ($comp > 0) {
+                        $hayComprometido = true;
+                        $linea .= ', ' . $this->fmtCant($comp) . ' ya comprometido en ' . $this->describirOrdenesComprometidas($ordenesProd);
+                    }
+                    $excedidos[] = $linea . ')';
+                    $excedidosDetalle[] = [
+                        'id_producto' => (int) $producto->id,
+                        'descripcion' => $nombre,
+                        'pedido' => (float) $cant,
+                        'stock' => (float) $producto->cantidad,
+                        'disponible' => max(0, $disp),
+                        'comprometido_en' => $ordenesProd,
+                    ];
                 }
             }
             if (!empty($excedidos)) {
@@ -174,8 +231,11 @@ class TransferenciaDespachoController extends Controller
                 return Response::json([
                     'estado' => false,
                     'msj' => "No es posible preparar esta orden por falta de cantidades:\n\n• " . implode("\n• ", $excedidos)
-                        . "\n\nEsas unidades ya están comprometidas en otras órdenes en preparación. Ajustá o eliminá esas órdenes para continuar.",
+                        . ($hayComprometido
+                            ? "\n\nEsas unidades ya están montadas en las órdenes en preparación indicadas. Ajustá o eliminá esas órdenes para continuar."
+                            : "\n\nNo hay stock suficiente en inventario para esas cantidades."),
                     'excedidos' => $excedidos,
+                    'excedidos_detalle' => $excedidosDetalle,
                 ]);
             }
 
@@ -388,9 +448,10 @@ class TransferenciaDespachoController extends Controller
             \Log::warning('ordenConDetalle: ubicaciones warehouse no disponibles: ' . $e->getMessage());
         }
         // Disponible REAL = stock físico − lo comprometido en las OTRAS órdenes en preparación
-        // (los borradores no descuentan inventario; ver comprometidoEnBorradores()).
-        $comprometido = $this->comprometidoEnBorradores($orden->items->pluck('id_producto')->all(), $orden->id);
-        $items = $orden->items->map(function ($it) use ($ubic, $comprometido) {
+        // (los borradores no descuentan inventario; ver comprometidoPorOrden()).
+        $porOrden = self::comprometidoPorOrden($orden->items->pluck('id_producto')->all(), $orden->id);
+        $comprometido = array_map(fn ($ords) => (float) array_sum(array_column($ords, 'cantidad')), $porOrden);
+        $items = $orden->items->map(function ($it) use ($ubic, $comprometido, $porOrden) {
             return [
                 'id' => $it->id,
                 'id_producto' => $it->id_producto,
@@ -405,6 +466,8 @@ class TransferenciaDespachoController extends Controller
                 'stock_disponible' => max(0, (float) ($it->producto->cantidad ?? 0) - (float) ($comprometido[$it->id_producto] ?? 0)),
                 'stock_fisico' => (float) ($it->producto->cantidad ?? 0),
                 'comprometido_otros' => (float) ($comprometido[$it->id_producto] ?? 0),
+                // En cuáles otras órdenes en preparación está montado y cuánto en cada una.
+                'comprometido_en' => $porOrden[$it->id_producto] ?? [],
                 'revisado' => (bool) $it->revisado,
                 'recolectado' => $this->recolectadoPorItem($it->id),
                 'empacado' => $this->empacadoPorItem($it->id),
